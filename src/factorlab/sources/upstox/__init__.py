@@ -3,6 +3,7 @@
 from factorlab.sources.upstox.auth import (
     ensure_token,
     exchange_code,
+    fetch_remote_token,
     get_auth_url,
     login_interactive,
     open_auth_in_browser,
@@ -23,6 +24,7 @@ from factorlab.sources.upstox.instruments import (
 __all__ = [
     "ensure_token",
     "exchange_code",
+    "fetch_remote_token",
     "get_auth_url",
     "login_interactive",
     "open_auth_in_browser",

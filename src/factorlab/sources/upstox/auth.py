@@ -187,8 +187,40 @@ def save_token(token: str) -> None:
     os.environ["UPSTOX_ACCESS_TOKEN"] = token
 
 
+def fetch_remote_token() -> str | None:
+    """Fetch a valid token from the Railway auth server.
+
+    Requires ``AUTH_SERVER_URL`` and ``AUTH_SERVER_PIN`` in .env.
+    Returns the token string if the server has one, None otherwise.
+    """
+    load_dotenv(find_dotenv(usecwd=True))
+    server_url = os.environ.get("AUTH_SERVER_URL", "").strip().rstrip("/")
+    pin = os.environ.get("AUTH_SERVER_PIN", "").strip()
+
+    if not server_url:
+        return None
+
+    url = f"{server_url}/token"
+    if pin:
+        url += f"?pin={pin}"
+
+    try:
+        resp = requests.get(url, timeout=10)
+        if resp.status_code != 200:
+            log.info("Remote token fetch: HTTP %d — %s", resp.status_code, resp.text[:100])
+            return None
+        data = resp.json()
+        token = data.get("access_token")
+        if token:
+            log.info("Fetched valid token from %s (user=%s)", server_url, data.get("user", "?"))
+            return token
+    except Exception as exc:
+        log.info("Remote token fetch failed: %s", exc)
+    return None
+
+
 def _load_existing_token() -> str | None:
-    """Try to load a token from token file or env var. Returns None if not found."""
+    """Try to load a token from token file, env var, or remote server."""
     # 1. Token file (written by Railway auth server)
     token = read_token_file()
     if token:
@@ -197,7 +229,16 @@ def _load_existing_token() -> str | None:
     # 2. Env var / .env
     load_dotenv(find_dotenv(usecwd=True))
     token = os.environ.get("UPSTOX_ACCESS_TOKEN", "").strip()
-    return token or None
+    if token:
+        return token
+
+    # 3. Remote auth server (Railway)
+    token = fetch_remote_token()
+    if token:
+        save_token(token)  # cache locally
+        return token
+
+    return None
 
 
 def login_interactive() -> str:

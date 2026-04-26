@@ -212,6 +212,33 @@ def callback():
     return _handle_callback(code)
 
 
+@app.route("/token")
+def token_endpoint():
+    """Return the raw access token. Protected by PIN.
+
+    Used by local scripts to fetch the token from Railway:
+      curl -s 'https://your-app.up.railway.app/token?pin=1234'
+    """
+    err = _check_pin()
+    if err:
+        return err, 403
+
+    token = read_token_file()
+    if not token:
+        return {"error": "no_token", "message": "No token on server. Login first."}, 404
+
+    try:
+        profile = validate_token(token)
+        return {
+            "access_token": token,
+            "user": profile.get("user_name", "?"),
+            "email": profile.get("email", "?"),
+            "status": "valid",
+        }, 200
+    except RuntimeError as exc:
+        return {"error": "expired", "message": str(exc)}, 401
+
+
 @app.route("/status")
 def status():
     """Show token status. Protected by PIN."""
