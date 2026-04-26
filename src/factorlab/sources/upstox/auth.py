@@ -33,6 +33,7 @@ _TOKEN_URL = "https://api.upstox.com/v2/login/authorization/token"
 # Token file — shared between auth server and scripts on Railway
 _TOKEN_DIR = Path("data/upstox")
 _TOKEN_FILE = _TOKEN_DIR / ".token"
+_AUTH_CODE_FILE = _TOKEN_DIR / ".auth_code"
 
 # ── Credential helpers ──────────────────────────────────────────────────────
 
@@ -77,6 +78,22 @@ def write_token_file(token: str) -> None:
     _TOKEN_DIR.mkdir(parents=True, exist_ok=True)
     _TOKEN_FILE.write_text(token)
     log.info("Token written to %s", _TOKEN_FILE)
+
+
+def read_auth_code_file() -> str | None:
+    """Read auth code from file. Returns None if not found."""
+    if _AUTH_CODE_FILE.exists():
+        code = _AUTH_CODE_FILE.read_text().strip()
+        if code:
+            return code
+    return None
+
+
+def write_auth_code_file(code: str) -> None:
+    """Write auth code to file."""
+    _TOKEN_DIR.mkdir(parents=True, exist_ok=True)
+    _AUTH_CODE_FILE.write_text(code)
+    log.info("Auth code written to %s", _AUTH_CODE_FILE)
 
 
 # ── Core auth functions ─────────────────────────────────────────────────────
@@ -173,9 +190,13 @@ def validate_token(token: str) -> dict:
 
 
 def save_token(token: str, *, auth_code: str | None = None) -> None:
-    """Persist token (and optionally auth code) to .env and token file."""
+    """Persist token (and optionally auth code) to files and .env."""
     # Token file (for Railway / cross-process sharing)
     write_token_file(token)
+
+    # Auth code file
+    if auth_code:
+        write_auth_code_file(auth_code)
 
     # .env (for local development)
     env_path = find_dotenv(usecwd=True)

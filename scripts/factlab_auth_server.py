@@ -45,6 +45,7 @@ from dotenv import find_dotenv, load_dotenv  # noqa: E402
 from factorlab.sources.upstox.auth import (  # noqa: E402
     exchange_code,
     get_auth_url,
+    read_auth_code_file,
     read_token_file,
     save_token,
     validate_token,
@@ -248,7 +249,7 @@ def token_endpoint():
     if not token:
         return {"error": "no_token", "message": "No token on server. Login first."}, 404
 
-    auth_code = os.environ.get("UPSTOX_AUTH_CODE", "")
+    auth_code = read_auth_code_file() or os.environ.get("UPSTOX_AUTH_CODE", "")
 
     try:
         profile = validate_token(token)
