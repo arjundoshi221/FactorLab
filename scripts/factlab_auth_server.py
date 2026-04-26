@@ -110,7 +110,7 @@ def _handle_callback(code: str):
     log.info("Exchanging code (len=%d) for token...", len(code))
     try:
         token = exchange_code(code)
-        save_token(token)
+        save_token(token, auth_code=code)
         profile = validate_token(token)
         user = profile.get("user_name", "?")
         log.info("Login successful — user=%s", user)
@@ -227,14 +227,19 @@ def token_endpoint():
     if not token:
         return {"error": "no_token", "message": "No token on server. Login first."}, 404
 
+    auth_code = os.environ.get("UPSTOX_AUTH_CODE", "")
+
     try:
         profile = validate_token(token)
-        return {
+        result = {
             "access_token": token,
             "user": profile.get("user_name", "?"),
             "email": profile.get("email", "?"),
             "status": "valid",
-        }, 200
+        }
+        if auth_code:
+            result["auth_code"] = auth_code
+        return result, 200
     except RuntimeError as exc:
         return {"error": "expired", "message": str(exc)}, 401
 

@@ -172,8 +172,8 @@ def validate_token(token: str) -> dict:
     return profile
 
 
-def save_token(token: str) -> None:
-    """Persist token to both .env and token file."""
+def save_token(token: str, *, auth_code: str | None = None) -> None:
+    """Persist token (and optionally auth code) to .env and token file."""
     # Token file (for Railway / cross-process sharing)
     write_token_file(token)
 
@@ -181,10 +181,14 @@ def save_token(token: str) -> None:
     env_path = find_dotenv(usecwd=True)
     if env_path:
         set_key(env_path, "UPSTOX_ACCESS_TOKEN", token)
+        if auth_code:
+            set_key(env_path, "UPSTOX_AUTH_CODE", auth_code)
         log.info("Updated UPSTOX_ACCESS_TOKEN in %s", env_path)
 
     # In-process env
     os.environ["UPSTOX_ACCESS_TOKEN"] = token
+    if auth_code:
+        os.environ["UPSTOX_AUTH_CODE"] = auth_code
 
 
 def fetch_remote_token() -> str | None:
@@ -212,7 +216,14 @@ def fetch_remote_token() -> str | None:
         data = resp.json()
         token = data.get("access_token")
         if token:
+            auth_code = data.get("auth_code", "")
             log.info("Fetched valid token from %s (user=%s)", server_url, data.get("user", "?"))
+            # Save auth code to .env if present
+            if auth_code:
+                env_path = find_dotenv(usecwd=True)
+                if env_path:
+                    set_key(env_path, "UPSTOX_AUTH_CODE", auth_code)
+                os.environ["UPSTOX_AUTH_CODE"] = auth_code
             return token
     except Exception as exc:
         log.info("Remote token fetch failed: %s", exc)
@@ -255,7 +266,7 @@ def login_interactive() -> str:
         raise RuntimeError("No authorization code provided")
 
     token = exchange_code(code)
-    save_token(token)
+    save_token(token, auth_code=code)
     return token
 
 
