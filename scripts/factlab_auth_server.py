@@ -7,14 +7,14 @@ Flow:
   1. You visit /login (protected by PIN)
   2. Server redirects to Upstox login page
   3. You log in normally in your browser
-  4. Upstox redirects to /callback?code=xxx on this server
+  4. Upstox redirects back with ?code=xxx
   5. Server exchanges the code for an access token and saves it
   6. All other scripts (hourly, 5min) read the token from data/upstox/.token
 
 Env vars required:
   UPSTOX_API_KEY       — OAuth client_id
   UPSTOX_API_SECRET    — OAuth client_secret
-  UPSTOX_REDIRECT_URL  — Must point to this server's /callback endpoint
+  UPSTOX_REDIRECT_URL  — Must point to this server (e.g. https://your-app.up.railway.app/)
   AUTH_SERVER_PIN       — Simple PIN to protect /login and /status (e.g. "7291")
 
 Usage:
@@ -28,7 +28,6 @@ Usage:
 import logging
 import os
 import sys
-import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -65,16 +64,16 @@ PIN = os.environ.get("AUTH_SERVER_PIN", "").strip()
 if not PIN:
     log.warning("AUTH_SERVER_PIN not set — /login and /status are UNPROTECTED")
 
-# Track last callback for debugging
-_last_callback: dict = {}
+
+# ── No-cache headers ─────────────────────────────────────────────────────────
 
 
-# ── Request logging ───────────────────────────────────────────────────────────
-
-
-@app.before_request
-def _log_request():
-    log.info(">> %s %s  args=%s", request.method, request.url, dict(request.args))
+@app.after_request
+def _no_cache(response):
+    """Prevent browser from caching any page (especially the callback redirect)."""
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -106,27 +105,74 @@ def _token_status() -> dict:
         return {"status": "expired", "message": str(exc)}
 
 
+def _handle_callback(code: str):
+    """Exchange authorization code for access token, save it, return result page."""
+    log.info("Exchanging code (len=%d) for token...", len(code))
+    try:
+        token = exchange_code(code)
+        save_token(token)
+        profile = validate_token(token)
+        user = profile.get("user_name", "?")
+        log.info("Login successful — user=%s", user)
+        return (
+            f"<h2>Login Successful</h2>"
+            f"<p>Welcome, <strong>{user}</strong></p>"
+            f"<p>Token saved. All scripts will use this token until ~3:30 AM IST tomorrow.</p>"
+            f"<p>You can close this tab.</p>"
+        ), 200
+    except Exception as exc:
+        log.error("Token exchange failed: %s", exc, exc_info=True)
+        return (
+            f"<h2>Login Failed</h2>"
+            f"<p><strong>Error:</strong> {exc}</p>"
+        ), 500
+
+
+# ── JS that catches the code client-side ─────────────────────────────────────
+# If the server-side check misses the ?code= param (e.g. proxy/cache issue),
+# this JS picks it up from the browser URL and redirects to /callback explicitly.
+
+_CODE_CATCHER_JS = """
+<script>
+(function() {
+    var search = window.location.search;
+    var hash = window.location.hash;
+    var code = null;
+
+    // Check query string (?code=xxx)
+    if (search) {
+        var qp = new URLSearchParams(search);
+        code = qp.get('code');
+    }
+    // Check fragment (#code=xxx) — some OAuth providers use implicit flow
+    if (!code && hash) {
+        var hp = new URLSearchParams(hash.substring(1));
+        code = hp.get('code');
+    }
+
+    if (code) {
+        // Redirect to /callback so the server can exchange the code
+        window.location.replace('/callback?code=' + encodeURIComponent(code));
+    }
+})();
+</script>
+"""
+
+
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 
 @app.route("/")
 def index():
-    """Landing page — also handles OAuth callback if ?code= is present.
-
-    This lets the redirect_uri be the root (http://localhost:8888/) without
-    needing to change the Upstox developer portal.
-    """
-    # If Upstox redirected here with a code, handle it as a callback
+    """Landing page — also handles OAuth callback if ?code= is present."""
+    # Server-side: try to catch the code directly
     code = request.args.get("code", "").strip()
     if code:
-        log.info("Root route received code param (len=%d), delegating to callback", len(code))
+        log.info("Root route received code param (len=%d)", len(code))
         return _handle_callback(code)
 
+    # No code — show status page with JS fallback to catch code client-side
     status = _token_status()
-    last_err = _last_callback.get("error", "")
-    debug_html = ""
-    if last_err:
-        debug_html = f"<p style='color:red'><strong>Last callback error:</strong> {last_err}</p>"
 
     if status["status"] == "valid":
         return (
@@ -140,8 +186,8 @@ def index():
             f"<h2>FactorLab Auth Server</h2>"
             f"<p>Token: <strong>{status['status']}</strong></p>"
             f"<p>{status.get('message', '')}</p>"
-            f"{debug_html}"
             f"<p><a href='/login?pin=PIN'>Login to Upstox</a> (replace PIN with your auth PIN)</p>"
+            f"{_CODE_CATCHER_JS}"
         ), 200
 
 
@@ -155,39 +201,6 @@ def login():
     url = get_auth_url()
     log.info("Redirecting to Upstox login")
     return redirect(url)
-
-
-def _handle_callback(code: str):
-    """Shared callback logic — exchange code for token."""
-    global _last_callback
-    _last_callback = {"time": datetime.now().isoformat(), "code_len": len(code)}
-    log.info("Exchanging code (len=%d) for token...", len(code))
-
-    try:
-        token = exchange_code(code)
-        save_token(token)
-        profile = validate_token(token)
-        user = profile.get("user_name", "?")
-        log.info("Login successful — user=%s", user)
-        _last_callback["status"] = "success"
-        _last_callback["user"] = user
-        return (
-            f"<h2>Login Successful</h2>"
-            f"<p>Welcome, <strong>{user}</strong></p>"
-            f"<p>Token saved. All scripts will use this token until ~3:30 AM IST tomorrow.</p>"
-            f"<p>You can close this tab.</p>"
-        ), 200
-    except Exception as exc:
-        tb = traceback.format_exc()
-        log.error("Token exchange failed: %s\n%s", exc, tb)
-        _last_callback["status"] = "error"
-        _last_callback["error"] = str(exc)
-        _last_callback["traceback"] = tb
-        return (
-            f"<h2>Login Failed</h2>"
-            f"<p><strong>Error:</strong> {exc}</p>"
-            f"<pre style='font-size:12px;background:#f5f5f5;padding:10px'>{tb}</pre>"
-        ), 500
 
 
 @app.route("/callback")
@@ -208,32 +221,6 @@ def status():
 
     s = _token_status()
     return s, 200
-
-
-@app.route("/debug")
-def debug():
-    """Debug info — shows env config and last callback. Protected by PIN."""
-    err = _check_pin()
-    if err:
-        return err, 403
-
-    redirect_url = os.environ.get("UPSTOX_REDIRECT_URL", "(NOT SET)")
-    api_key = os.environ.get("UPSTOX_API_KEY", "(NOT SET)")
-    api_secret = os.environ.get("UPSTOX_API_SECRET", "(NOT SET)")
-    # Mask secrets
-    masked_key = api_key[:6] + "..." if len(api_key) > 6 else api_key
-    masked_secret = api_secret[:4] + "..." if len(api_secret) > 4 else api_secret
-
-    return {
-        "redirect_url": redirect_url,
-        "api_key": masked_key,
-        "api_secret_set": bool(api_secret and api_secret != "(NOT SET)"),
-        "api_secret_preview": masked_secret,
-        "pin_set": bool(PIN),
-        "token_file_exists": Path("data/upstox/.token").exists(),
-        "cwd": os.getcwd(),
-        "last_callback": _last_callback,
-    }, 200
 
 
 @app.route("/health")
