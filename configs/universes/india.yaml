@@ -1,0 +1,148 @@
+# India equity + derivatives universes
+region: in
+source: upstox
+currency: INR
+default_universe: demo
+
+exchanges:
+  nse_eq:
+    calendar: XBOM  # NSE/BSE share holiday calendar; exchange_calendars uses XBOM
+    trading_hours: "09:15-15:30"
+    timezone: "Asia/Kolkata"
+    segment: NSE_EQ
+    instrument_type: EQ
+    key_format: "NSE_EQ|{isin}"
+  bse_eq:
+    calendar: XBOM
+    trading_hours: "09:15-15:30"
+    timezone: "Asia/Kolkata"
+    segment: BSE_EQ
+    instrument_type: EQ
+    key_format: "BSE_EQ|{exchange_token}"
+  nse_fo:
+    calendar: XBOM
+    trading_hours: "09:15-15:30"
+    timezone: "Asia/Kolkata"
+    segment: NSE_FO
+    instrument_type: FUT
+    key_format: "NSE_FO|{exchange_token}"
+  mcx_fo:
+    calendar: XBOM
+    trading_hours: "09:00-23:30"
+    timezone: "Asia/Kolkata"
+    segment: MCX_FO
+    instrument_type: FUT
+    key_format: "MCX_FO|{exchange_token}"
+
+# SEBI market-cap classification (AMFI semi-annual reclassification)
+sebi_classification:
+  large_cap: "Top 100 by full market capitalization"
+  mid_cap: "101-250 by full market capitalization"
+  small_cap: "251+"
+
+# ── Universes ────────────────────────────────────────────────────────────────
+# Inline universes list symbols directly.
+# File-based universes reference CSVs at data/in/universes/ (gitignored).
+# Each universe is tagged with the recommended rollout phase.
+
+universes:
+
+  # ── Development / testing ──────────────────────────────────────────────────
+  demo:
+    exchange: nse_eq
+    symbols: [RELIANCE, HDFCBANK, TCS, INFY, ICICIBANK]
+
+  # ── Phase 1: Large-cap, liquid, cross-sectional factor work ────────────────
+  nifty50:
+    exchange: nse_eq
+    source_file: data/in/universes/nifty50_latest.csv
+    sebi_class: large_cap
+    phase: 1
+    note: "Top 50 by free-float m-cap. Benchmark index."
+
+  nifty_next50:
+    exchange: nse_eq
+    source_file: data/in/universes/nifty_next50_latest.csv
+    sebi_class: large_cap
+    phase: 1
+    note: "Ranks 51-100. Less analyst coverage, more momentum/earnings-surprise edge."
+
+  nifty100:
+    exchange: nse_eq
+    source_file: data/in/universes/nifty100_latest.csv
+    sebi_class: large_cap
+    phase: 1
+    note: "Union of nifty50 + nifty_next50. Primary Phase 1 universe."
+
+  # ── Phase 2: F&O eligible, systematic long/short ───────────────────────────
+  fo_eligible:
+    exchange: nse_eq
+    source_file: data/in/universes/fo_eligible_latest.csv
+    phase: 2
+    note: >
+      ~200 names approved for single-stock F&O by SEBI/NSE.
+      Required for short-side strategies — cannot short cash equities
+      outside intraday. Rebuild monthly from NSE circulars.
+
+  nifty500_fo:
+    exchange: nse_eq
+    source_file: data/in/universes/nifty500_fo_latest.csv
+    phase: 2
+    note: "Intersection of nifty500 and fo_eligible. ~200 names for long/short."
+
+  midcap150:
+    exchange: nse_eq
+    source_file: data/in/universes/midcap150_latest.csv
+    sebi_class: mid_cap
+    phase: 2
+    note: "Ranks 101-250 by m-cap."
+
+  # ── Phase 3: Full breadth, long-only mid/small ─────────────────────────────
+  smallcap250:
+    exchange: nse_eq
+    source_file: data/in/universes/smallcap250_latest.csv
+    sebi_class: small_cap
+    phase: 3
+    note: "Ranks 251-500."
+
+  nifty500:
+    exchange: nse_eq
+    source_file: data/in/universes/nifty500_latest.csv
+    phase: 3
+    note: >
+      Full Nifty 500 — top 500 by m-cap, ~95% of total NSE m-cap.
+      For 5-min polling: 500 symbols exceeds rate limit.
+      Use 10-min intervals or split into batches.
+
+  microcap250:
+    exchange: nse_eq
+    source_file: data/in/universes/microcap250_latest.csv
+    sebi_class: small_cap
+    phase: skip
+    note: "Ranks 501-750. Illiquid, wide bid-ask. For screening only."
+
+  # ── Derivatives ────────────────────────────────────────────────────────────
+  nifty_futures:
+    exchange: nse_fo
+    underlyings: [NIFTY, BANKNIFTY]
+    resolution: nearest_expiry  # resolved at runtime from instruments master
+
+  equity_futures:
+    exchange: nse_fo
+    source_file: data/in/universes/fo_eligible_latest.csv
+    resolution: nearest_expiry
+    phase: 2
+    note: "Individual stock futures for F&O-eligible names."
+
+# ── Rate limit budget at 5-min polling (2,000 calls per 30 min) ─────────────
+# demo (5):       30/2000
+# nifty50 (50):  300/2000
+# nifty100 (100): 600/2000
+# fo_eligible (~200): 1,200/2000
+# nifty500 (500): 3,000/2000 ← exceeds, needs 10-min or batch split
+
+instruments_master:
+  url_template: "https://assets.upstox.com/market-quote/instruments/exchange/{exchange}.json.gz"
+  refresh: daily  # download at 06:30 IST
+  cache_dir: data/upstox/instruments
+  exchanges: [NSE, BSE, MCX]

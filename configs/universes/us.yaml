@@ -1,0 +1,27 @@
+# US equity universes — symbol format: {TICKER}.{EXCHANGE}
+region: us
+source: eodhd
+currency: USD
+exchange_calendar: XNYS  # NYSE calendar key for exchange_calendars lib
+default_universe: mega_cap
+
+universes:
+  demo:
+    symbols: [AAPL.US, TSLA.US, AMZN.US, VTI.US]
+  mega_cap:
+    symbols:
+      - AAPL.US
+      - MSFT.US
+      - GOOGL.US
+      - AMZN.US
+      - NVDA.US
+      - META.US
+      - BRK-B.US
+      - JPM.US
+      - JNJ.US
+      - V.US
+  # File-based universes (built by scripts/build_universe.py):
+  # russell3000:
+  #   source_file: data/us/universes/russell3000_latest.csv
+  # us_common_stocks:
+  #   source_file: data/us/universes/us_common_stocks_latest.csv

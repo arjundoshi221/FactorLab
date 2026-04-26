@@ -1,0 +1,22 @@
+# EODHD API source configuration
+name: eodhd
+vendor_key: eodhd  # matches ref.security_aliases.vendor
+
+api:
+  base_url: https://eodhd.com/api
+  auth_type: api_key_param
+  key_env: EODHD_API_KEY
+  key_param: api_token
+
+rate_limits:
+  requests_per_second: 5.0
+  daily_limit_free: 20
+
+endpoints:
+  eod: "/eod/{symbol}?from={from_date}&to={to_date}&fmt=json"
+  fundamentals: "/fundamentals/{symbol}?fmt=json"
+  bulk: "/eod-bulk-last-day/{exchange}?fmt=json"
+
+symbol_format: "{ticker}.{exchange}"
+default_exchange: US
+bulk_exchange: US  # for eod-bulk-last-day endpoint

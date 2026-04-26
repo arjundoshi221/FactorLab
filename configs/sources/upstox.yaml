@@ -1,0 +1,43 @@
+# Upstox API source configuration
+name: upstox
+vendor_key: upstox  # matches ref.security_aliases.vendor
+
+api:
+  base_url: https://api.upstox.com
+  version: v3
+  auth_type: oauth2_bearer
+  token_env: UPSTOX_ACCESS_TOKEN
+  token_expiry: "04:30 IST"  # daily expiry
+
+rate_limits:
+  per_second: 50
+  per_minute: 500
+  per_30_minutes: 2000
+  safe_sleep: 0.05  # seconds between calls
+
+endpoints:
+  historical_candle:
+    v3: "/v3/historical-candle/{instrument_key}/{unit}/{interval}/{to_date}/{from_date}"
+    v2: "/v2/historical-candle/{instrument_key}/{interval}/{end_date}/{start_date}"
+  intraday:
+    v3: "/v3/historical-candle/intraday/{instrument_key}/{unit}/{interval}"
+  profile: "/v2/user/profile"
+
+data_limits:
+  minutes_1_15:
+    max_range_days: 31
+    history_from: "2022-01-01"
+  minutes_16_300:
+    max_range_days: 92
+    history_from: "2022-01-01"
+  hours:
+    max_range_days: 92
+    history_from: "2022-01-01"
+  days:
+    max_range_days: 3650
+    history_from: "2000-01-01"
+
+response:
+  candle_columns: [timestamp, open, high, low, close, volume, oi]
+  order: newest_first  # must reverse to chronological
+  oi_note: "0 for equities, populated for futures/options"
