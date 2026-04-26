@@ -8,8 +8,9 @@ Flow:
   2. Server redirects to Upstox login page
   3. You log in normally in your browser
   4. Upstox redirects back with ?code=xxx
-  5. Server exchanges the code for an access token and saves it
-  6. All other scripts (hourly, 5min) read the token from data/upstox/.token
+  5. JS on the page captures the code and sends it to /callback via fetch()
+  6. Server exchanges the code for an access token and saves it
+  7. All other scripts (hourly, 5min) read the token from data/upstox/.token
 
 Env vars required:
   UPSTOX_API_KEY       — OAuth client_id
@@ -25,6 +26,7 @@ Usage:
   web: python scripts/factlab_auth_server.py
 """
 
+import json
 import logging
 import os
 import sys
@@ -70,7 +72,7 @@ if not PIN:
 
 @app.after_request
 def _no_cache(response):
-    """Prevent browser from caching any page (especially the callback redirect)."""
+    """Prevent browser from caching any page."""
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     return response
@@ -82,7 +84,7 @@ def _no_cache(response):
 def _check_pin() -> str | None:
     """Return an error message if PIN check fails, None if OK."""
     if not PIN:
-        return None  # no PIN configured = no protection
+        return None
     provided = request.args.get("pin", "")
     if provided != PIN:
         return "Unauthorized. Append ?pin=YOUR_PIN to the URL."
@@ -105,8 +107,102 @@ def _token_status() -> dict:
         return {"status": "expired", "message": str(exc)}
 
 
+# ── HTML page template ────────────────────────────────────────────────────────
+# Every page includes JS that checks the URL for ?code= or #code= and sends
+# it to /callback via fetch(). This is the PRIMARY code capture mechanism
+# because Railway's proxy strips query params from the root route before they
+# reach Flask.
+
+_PAGE_TEMPLATE = """<!DOCTYPE html>
+<html><head><title>FactorLab Auth</title></head>
+<body>
+<div id="content">{body}</div>
+<script>
+(function() {{
+    var search = window.location.search;
+    var hash = window.location.hash;
+    var code = null;
+
+    if (search) {{
+        var qp = new URLSearchParams(search);
+        code = qp.get('code');
+    }}
+    if (!code && hash) {{
+        var hp = new URLSearchParams(hash.substring(1));
+        code = hp.get('code');
+    }}
+
+    if (code) {{
+        document.getElementById('content').innerHTML =
+            '<h2>Processing login...</h2><p>Exchanging authorization code...</p>';
+
+        fetch('/callback?code=' + encodeURIComponent(code))
+            .then(function(r) {{ return r.text().then(function(t) {{ return {{status: r.status, body: t}}; }}); }})
+            .then(function(res) {{
+                document.getElementById('content').innerHTML = res.body;
+            }})
+            .catch(function(err) {{
+                document.getElementById('content').innerHTML =
+                    '<h2>Error</h2><p>' + err + '</p>';
+            }});
+    }}
+}})();
+</script>
+</body></html>
+"""
+
+
+def _render(body: str, status_code: int = 200):
+    """Render HTML page with code-catcher JS included."""
+    return _PAGE_TEMPLATE.format(body=body), status_code
+
+
+# ── Routes ───────────────────────────────────────────────────────────────────
+
+
+@app.route("/")
+def index():
+    """Landing page — JS captures ?code= from URL if present."""
+    # Server-side: try to catch the code directly (works locally, not on Railway)
+    code = request.args.get("code", "").strip()
+    if code:
+        log.info("Root route received code param (len=%d)", len(code))
+        return _handle_callback(code)
+
+    # Show status page — JS will handle code capture if present in URL
+    status = _token_status()
+
+    if status["status"] == "valid":
+        body = (
+            f"<h2>FactorLab Auth Server</h2>"
+            f"<p>Token: <strong>valid</strong></p>"
+            f"<p>User: {status['user']} ({status['email']})</p>"
+            f"<p><small>Last checked: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</small></p>"
+        )
+    else:
+        body = (
+            f"<h2>FactorLab Auth Server</h2>"
+            f"<p>Token: <strong>{status['status']}</strong></p>"
+            f"<p>{status.get('message', '')}</p>"
+            f"<p><a href='/login?pin=PIN'>Login to Upstox</a> (replace PIN with your auth PIN)</p>"
+        )
+    return _render(body)
+
+
+@app.route("/login")
+def login():
+    """Redirect to Upstox authorization page. Protected by PIN."""
+    err = _check_pin()
+    if err:
+        return err, 403
+
+    url = get_auth_url()
+    log.info("Redirecting to Upstox login")
+    return redirect(url)
+
+
 def _handle_callback(code: str):
-    """Exchange authorization code for access token, save it, return result page."""
+    """Exchange authorization code for access token, save it, return result."""
     log.info("Exchanging code (len=%d) for token...", len(code))
     try:
         token = exchange_code(code)
@@ -128,84 +224,9 @@ def _handle_callback(code: str):
         ), 500
 
 
-# ── JS that catches the code client-side ─────────────────────────────────────
-# If the server-side check misses the ?code= param (e.g. proxy/cache issue),
-# this JS picks it up from the browser URL and redirects to /callback explicitly.
-
-_CODE_CATCHER_JS = """
-<script>
-(function() {
-    var search = window.location.search;
-    var hash = window.location.hash;
-    var code = null;
-
-    // Check query string (?code=xxx)
-    if (search) {
-        var qp = new URLSearchParams(search);
-        code = qp.get('code');
-    }
-    // Check fragment (#code=xxx) — some OAuth providers use implicit flow
-    if (!code && hash) {
-        var hp = new URLSearchParams(hash.substring(1));
-        code = hp.get('code');
-    }
-
-    if (code) {
-        // Redirect to /callback so the server can exchange the code
-        window.location.replace('/callback?code=' + encodeURIComponent(code));
-    }
-})();
-</script>
-"""
-
-
-# ── Routes ───────────────────────────────────────────────────────────────────
-
-
-@app.route("/")
-def index():
-    """Landing page — also handles OAuth callback if ?code= is present."""
-    # Server-side: try to catch the code directly
-    code = request.args.get("code", "").strip()
-    if code:
-        log.info("Root route received code param (len=%d)", len(code))
-        return _handle_callback(code)
-
-    # No code — show status page with JS fallback to catch code client-side
-    status = _token_status()
-
-    if status["status"] == "valid":
-        return (
-            f"<h2>FactorLab Auth Server</h2>"
-            f"<p>Token: <strong>valid</strong></p>"
-            f"<p>User: {status['user']} ({status['email']})</p>"
-            f"<p><small>Last checked: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</small></p>"
-        ), 200
-    else:
-        return (
-            f"<h2>FactorLab Auth Server</h2>"
-            f"<p>Token: <strong>{status['status']}</strong></p>"
-            f"<p>{status.get('message', '')}</p>"
-            f"<p><a href='/login?pin=PIN'>Login to Upstox</a> (replace PIN with your auth PIN)</p>"
-            f"{_CODE_CATCHER_JS}"
-        ), 200
-
-
-@app.route("/login")
-def login():
-    """Redirect to Upstox authorization page. Protected by PIN."""
-    err = _check_pin()
-    if err:
-        return err, 403
-
-    url = get_auth_url()
-    log.info("Redirecting to Upstox login")
-    return redirect(url)
-
-
 @app.route("/callback")
 def callback():
-    """OAuth2 callback — Upstox redirects here with ?code=xxx."""
+    """OAuth2 callback — exchange ?code=xxx for access token."""
     code = request.args.get("code", "").strip()
     if not code:
         return "Missing 'code' parameter in callback.", 400
@@ -214,7 +235,7 @@ def callback():
 
 @app.route("/token")
 def token_endpoint():
-    """Return the raw access token. Protected by PIN.
+    """Return the raw access token + auth code. Protected by PIN.
 
     Used by local scripts to fetch the token from Railway:
       curl -s 'https://your-app.up.railway.app/token?pin=1234'
