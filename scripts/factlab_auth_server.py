@@ -4,7 +4,7 @@ Deploy on Railway (or run locally). Handles the Upstox OAuth2 redirect so you
 never have to copy-paste authorization codes.
 
 Flow:
-  1. You visit /login (protected by PIN)
+  1. You visit /login (protected by PIN via X-Auth-Pin header or ?pin= param)
   2. Server redirects to Upstox login page
   3. You log in normally in your browser
   4. Upstox redirects back with ?code=xxx
@@ -26,14 +26,17 @@ Usage:
   web: python scripts/factlab_auth_server.py
 """
 
-import json
+import hmac
 import logging
 import os
+import secrets
 import sys
 from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, redirect, request
+from markupsafe import escape
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ── Project root ─────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -62,20 +65,46 @@ logging.basicConfig(
 log = logging.getLogger("factlab_auth_server")
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
+
+# Trust Railway's reverse proxy headers (X-Forwarded-Proto, X-Forwarded-Host)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 PIN = os.environ.get("AUTH_SERVER_PIN", "").strip()
 if not PIN:
     log.warning("AUTH_SERVER_PIN not set — /login and /status are UNPROTECTED")
 
+# ── Rate limiting ────────────────────────────────────────────────────────────
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
 
-# ── No-cache headers ─────────────────────────────────────────────────────────
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=[],
+        storage_uri="memory://",
+    )
+    _pin_limit = limiter.limit("5 per minute")
+    log.info("Rate limiting enabled (5 req/min on protected endpoints)")
+except ImportError:
+    log.warning("flask-limiter not installed — rate limiting DISABLED")
+    # No-op decorator fallback
+    def _pin_limit(f):
+        return f
+
+
+# ── Security headers ────────────────────────────────────────────────────────
 
 
 @app.after_request
-def _no_cache(response):
-    """Prevent browser from caching any page."""
+def _security_headers(response):
+    """Add security and cache-control headers to every response."""
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
     return response
 
 
@@ -83,12 +112,17 @@ def _no_cache(response):
 
 
 def _check_pin() -> str | None:
-    """Return an error message if PIN check fails, None if OK."""
+    """Return an error message if PIN check fails, None if OK.
+
+    Accepts PIN from X-Auth-Pin header (preferred) or ?pin= query param (browser fallback).
+    Uses timing-safe comparison to prevent timing oracle attacks.
+    """
     if not PIN:
         return None
-    provided = request.args.get("pin", "")
-    if provided != PIN:
-        return "Unauthorized. Append ?pin=YOUR_PIN to the URL."
+    # Prefer header, fall back to query param (for browser /login redirects)
+    provided = request.headers.get("X-Auth-Pin", "") or request.args.get("pin", "")
+    if not hmac.compare_digest(provided, PIN):
+        return "Unauthorized."
     return None
 
 
@@ -134,17 +168,19 @@ _PAGE_TEMPLATE = """<!DOCTYPE html>
     }}
 
     if (code) {{
-        document.getElementById('content').innerHTML =
-            '<h2>Processing login...</h2><p>Exchanging authorization code...</p>';
+        document.getElementById('content').innerText = 'Processing login... Exchanging authorization code...';
 
         fetch('/callback?code=' + encodeURIComponent(code))
             .then(function(r) {{ return r.text().then(function(t) {{ return {{status: r.status, body: t}}; }}); }})
             .then(function(res) {{
-                document.getElementById('content').innerHTML = res.body;
+                if (res.status >= 200 && res.status < 300) {{
+                    document.getElementById('content').innerHTML = res.body;
+                }} else {{
+                    document.getElementById('content').innerText = 'Login failed. Status: ' + res.status;
+                }}
             }})
             .catch(function(err) {{
-                document.getElementById('content').innerHTML =
-                    '<h2>Error</h2><p>' + err + '</p>';
+                document.getElementById('content').innerText = 'Error: ' + err;
             }});
     }}
 }})();
@@ -177,20 +213,21 @@ def index():
         body = (
             f"<h2>FactorLab Auth Server</h2>"
             f"<p>Token: <strong>valid</strong></p>"
-            f"<p>User: {status['user']} ({status['email']})</p>"
+            f"<p>User: {escape(status['user'])} ({escape(status['email'])})</p>"
             f"<p><small>Last checked: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</small></p>"
         )
     else:
         body = (
             f"<h2>FactorLab Auth Server</h2>"
-            f"<p>Token: <strong>{status['status']}</strong></p>"
-            f"<p>{status.get('message', '')}</p>"
+            f"<p>Token: <strong>{escape(status['status'])}</strong></p>"
+            f"<p>{escape(status.get('message', ''))}</p>"
             f"<p><a href='/login?pin=PIN'>Login to Upstox</a> (replace PIN with your auth PIN)</p>"
         )
     return _render(body)
 
 
 @app.route("/login")
+@_pin_limit
 def login():
     """Redirect to Upstox authorization page. Protected by PIN."""
     err = _check_pin()
@@ -213,15 +250,15 @@ def _handle_callback(code: str):
         log.info("Login successful — user=%s", user)
         return (
             f"<h2>Login Successful</h2>"
-            f"<p>Welcome, <strong>{user}</strong></p>"
+            f"<p>Welcome, <strong>{escape(user)}</strong></p>"
             f"<p>Token saved. All scripts will use this token until ~3:30 AM IST tomorrow.</p>"
             f"<p>You can close this tab.</p>"
         ), 200
     except Exception as exc:
-        log.error("Token exchange failed: %s", exc, exc_info=True)
+        log.error("Token exchange failed: %s", exc)
         return (
             f"<h2>Login Failed</h2>"
-            f"<p><strong>Error:</strong> {exc}</p>"
+            f"<p><strong>Error:</strong> {escape(str(exc))}</p>"
         ), 500
 
 
@@ -235,11 +272,12 @@ def callback():
 
 
 @app.route("/token")
+@_pin_limit
 def token_endpoint():
     """Return the raw access token + auth code. Protected by PIN.
 
-    Used by local scripts to fetch the token from Railway:
-      curl -s 'https://your-app.up.railway.app/token?pin=1234'
+    Accepts PIN via X-Auth-Pin header (preferred) or ?pin= query param.
+    Used by local scripts to fetch the token from Railway.
     """
     err = _check_pin()
     if err:
@@ -267,6 +305,7 @@ def token_endpoint():
 
 
 @app.route("/status")
+@_pin_limit
 def status():
     """Show token status. Protected by PIN."""
     err = _check_pin()
@@ -288,5 +327,5 @@ def health():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8888))
     log.info("Starting auth server on port %d", port)
-    log.info("Login URL: http://localhost:%d/login%s", port, f"?pin={PIN}" if PIN else "")
+    log.info("Login URL: http://localhost:%d/login", port)
     app.run(host="0.0.0.0", port=port, debug=False)

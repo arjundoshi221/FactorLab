@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     Table,
     func,
@@ -30,6 +31,10 @@ securities = Table(
     Column("asset_class", String(20), nullable=False, comment="equity, future, index, etf, option, commodity"),
     Column("sector", String(100), nullable=True, comment="GICS sector or equivalent"),
     Column("status", String(20), nullable=False, server_default="active", comment="active, delisted, merged, suspended"),
+    Column("segment", String(20), nullable=True, comment="NSE_EQ, NSE_FO, BSE_EQ, etc."),
+    Column("underlying_symbol", String(50), nullable=True, comment="For derivatives: underlying equity symbol (e.g. RELIANCE)"),
+    Column("expiry", Date, nullable=True, comment="Contract expiry date (NULL for equities)"),
+    Column("lot_size", Integer, nullable=True, comment="F&O lot size (NULL for equities)"),
     Column("market", String(10), nullable=False, comment="us, in, eu, gb, ..."),
     Column("currency", String(3), nullable=False, comment="Primary listing currency (ISO 4217)"),
     col_created_at(),
@@ -41,6 +46,8 @@ Index("ix_securities_market", securities.c.market)
 Index("ix_securities_asset_class", securities.c.asset_class)
 Index("ix_securities_status", securities.c.status)
 Index("ix_securities_country", securities.c.country)
+Index("ix_securities_segment", securities.c.segment)
+Index("ix_securities_underlying", securities.c.underlying_symbol)
 
 # ---------------------------------------------------------------------------
 # ref.security_aliases — vendor-specific ID mapping

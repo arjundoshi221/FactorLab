@@ -38,6 +38,7 @@ research = [
 ]
 server = [
     "flask>=3.0",
+    "flask-limiter>=3.0",
     "gunicorn>=22.0",
 ]
 

@@ -67,6 +67,8 @@ price_bars_minute = Table(
     metadata,
     Column("id", UUID(as_uuid=True), server_default=text("gen_random_uuid()")),
     Column("security_id", UUID(as_uuid=True), ForeignKey(SEC_FK), nullable=False),
+    Column("instrument_key", String(100), nullable=True, comment="Vendor canonical key e.g. NSE_FO|67003"),
+    Column("segment", String(20), nullable=True, comment="NSE_EQ, NSE_FO — differentiates equity vs futures bars"),
     Column("bar_time", DateTime(timezone=True), nullable=False),
     Column("open", Numeric(18, 6)),
     Column("high", Numeric(18, 6)),
@@ -86,6 +88,8 @@ price_bars_minute = Table(
 
 Index("ix_price_minute_security_time", price_bars_minute.c.security_id, price_bars_minute.c.bar_time.desc(), unique=True)
 Index("ix_price_minute_time", price_bars_minute.c.bar_time)
+Index("ix_price_minute_segment", price_bars_minute.c.segment)
+Index("ix_price_minute_instrument", price_bars_minute.c.instrument_key)
 
 # ---------------------------------------------------------------------------
 # market.fundamentals — point-in-time (restatements = multiple as_of rows)

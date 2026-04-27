@@ -2,6 +2,8 @@
 
 Published daily at ~6 AM IST by Upstox CDN.  No auth needed to download.
 Cache directory: data/upstox/instruments/ (from india.yaml instruments_master.cache_dir)
+
+Universe building has moved to ``universes.py``.
 """
 
 import gzip
@@ -16,7 +18,7 @@ log = logging.getLogger(__name__)
 _URL_TEMPLATE = (
     "https://assets.upstox.com/market-quote/instruments/exchange/{exchange}.json.gz"
 )
-_DEFAULT_EXCHANGES = ("NSE", "BSE", "MCX")
+_DEFAULT_EXCHANGES = ("NSE",)
 
 
 def download_instruments(exchange: str, cache_dir: Path) -> list[dict]:

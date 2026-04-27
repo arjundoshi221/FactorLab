@@ -17,6 +17,7 @@ Token storage (checked in order):
 
 import logging
 import os
+import stat
 import webbrowser
 from pathlib import Path
 from urllib.parse import urlencode
@@ -74,9 +75,13 @@ def read_token_file() -> str | None:
 
 
 def write_token_file(token: str) -> None:
-    """Write token to the shared token file."""
+    """Write token to the shared token file (owner-only permissions)."""
     _TOKEN_DIR.mkdir(parents=True, exist_ok=True)
     _TOKEN_FILE.write_text(token)
+    try:
+        os.chmod(_TOKEN_FILE, stat.S_IRUSR | stat.S_IWUSR)  # 0o600
+    except OSError:
+        pass  # Windows doesn't support Unix permissions
     log.info("Token written to %s", _TOKEN_FILE)
 
 
@@ -90,9 +95,13 @@ def read_auth_code_file() -> str | None:
 
 
 def write_auth_code_file(code: str) -> None:
-    """Write auth code to file."""
+    """Write auth code to file (owner-only permissions)."""
     _TOKEN_DIR.mkdir(parents=True, exist_ok=True)
     _AUTH_CODE_FILE.write_text(code)
+    try:
+        os.chmod(_AUTH_CODE_FILE, stat.S_IRUSR | stat.S_IWUSR)  # 0o600
+    except OSError:
+        pass  # Windows doesn't support Unix permissions
     log.info("Auth code written to %s", _AUTH_CODE_FILE)
 
 
@@ -226,11 +235,12 @@ def fetch_remote_token() -> str | None:
         return None
 
     url = f"{server_url}/token"
+    headers = {}
     if pin:
-        url += f"?pin={pin}"
+        headers["X-Auth-Pin"] = pin
 
     try:
-        resp = requests.get(url, timeout=10)
+        resp = requests.get(url, headers=headers, timeout=10)
         if resp.status_code != 200:
             log.info("Remote token fetch: HTTP %d — %s", resp.status_code, resp.text[:100])
             return None
@@ -239,12 +249,8 @@ def fetch_remote_token() -> str | None:
         if token:
             auth_code = data.get("auth_code", "")
             log.info("Fetched valid token from %s (user=%s)", server_url, data.get("user", "?"))
-            # Save auth code to .env if present
-            if auth_code:
-                env_path = find_dotenv(usecwd=True)
-                if env_path:
-                    set_key(env_path, "UPSTOX_AUTH_CODE", auth_code)
-                os.environ["UPSTOX_AUTH_CODE"] = auth_code
+            # Save token + auth code locally (file, .env, env var)
+            save_token(token, auth_code=auth_code if auth_code else None)
             return token
     except Exception as exc:
         log.info("Remote token fetch failed: %s", exc)
@@ -294,24 +300,36 @@ def login_interactive() -> str:
 def ensure_token(interactive: bool = True) -> str:
     """Return a valid access token.
 
-    Checks token file and .env first. If expired and *interactive* is True,
-    prompts for browser login. If *interactive* is False (headless/Railway),
-    raises RuntimeError instead of prompting.
+    Resolution order:
+      1. Local token file / env var → validate
+      2. Railway auth server (``fetch_remote_token``) → validate + save locally
+      3. Interactive browser login (if *interactive* is True)
 
     Args:
-        interactive: If True, prompt for manual login when token is expired.
+        interactive: If True, prompt for manual login when all else fails.
                      If False, raise RuntimeError (for cron jobs / Railway workers).
     """
+    # 1. Try local sources (token file, env var)
     existing = _load_existing_token()
-
     if existing:
         try:
             validate_token(existing)
             log.info("Existing token is valid")
             return existing
         except RuntimeError as exc:
-            log.info("Existing token invalid (%s)", exc)
+            log.info("Local token invalid (%s) — trying Railway", exc)
 
+    # 2. Try Railway auth server (fresh token from daily browser login)
+    remote = fetch_remote_token()
+    if remote:
+        try:
+            validate_token(remote)
+            log.info("Railway token is valid")
+            return remote
+        except RuntimeError as exc:
+            log.info("Railway token also invalid (%s)", exc)
+
+    # 3. Interactive login as last resort
     if interactive:
         return login_interactive()
 

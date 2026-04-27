@@ -1,22 +1,22 @@
 """factlab_india_5min — Long-running 5-minute poller for near-real-time 1-min candles.
 
-Run model:  Long-running process (APScheduler internal loop).
+Run model:  Long-running process (internal sleep loop).
 Duration:   Alive from ~09:10 to ~15:35 IST, polls every 5 minutes.
 Deployment: Local machine, Railway, or any always-on environment.
 
-Every 5 minutes during market hours, fetches intraday candles for all
-symbols in the configured universe, deduplicates against previously-seen
-timestamps, and appends only new candles to per-symbol Parquet files.
+Staggered polling (rate limit: 2,000 calls per 30 min):
+  - Equity candles: every 5 min
+  - Futures candles: every 10 min (nearest-expiry FUT per F&O symbol)
 
-Rate limit math (Upstox: 2,000 calls per 30 min):
-  - Nifty 50 at 5-min:   50 × 6 =   300/2000 ✓
-  - Nifty 100 at 5-min: 100 × 6 =   600/2000 ✓
-  - Nifty 200 at 5-min: 200 × 6 = 1,200/2000 ✓
+Rate budget at fo_eligible (~200 symbols):
+  - Equity:  200 x 6 polls/30min = 1,200
+  - Futures: 200 x 3 polls/30min =   600
+  - Total:   1,800/2,000 = 90%
 
 Usage:
   python scripts/factlab_india_5min.py                        # demo, exit after market
   python scripts/factlab_india_5min.py --universe nifty50
-  python scripts/factlab_india_5min.py --universe nifty100 --daemon
+  python scripts/factlab_india_5min.py --universe fo_eligible --daemon
   python scripts/factlab_india_5min.py --universe nifty50 --headless  # Railway (no prompt)
 """
 
@@ -29,7 +29,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
-import yaml
 from zoneinfo import ZoneInfo
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -39,7 +38,12 @@ import exchange_calendars as xcals  # noqa: E402
 
 from factorlab.sources.upstox.auth import ensure_token, validate_token  # noqa: E402
 from factorlab.sources.upstox.client import get_session  # noqa: E402
-from factorlab.sources.upstox.instruments import find_equities, load_or_download  # noqa: E402
+from factorlab.sources.upstox.instruments import (  # noqa: E402
+    find_equities,
+    find_nearest_future,
+    load_or_download,
+)
+from factorlab.sources.upstox.universes import load_universe  # noqa: E402
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 LOG_DIR = PROJECT_ROOT / "logs"
@@ -63,6 +67,7 @@ INSTRUMENTS_CACHE_DIR = PROJECT_ROOT / "data" / "upstox" / "instruments"
 LIVE_OUTPUT_DIR = PROJECT_ROOT / "data" / "in" / "live"
 SLEEP_BETWEEN_CALLS = 0.05
 POLL_INTERVAL_SECONDS = 300  # 5 minutes
+FUT_POLL_INTERVAL = 600  # 10 minutes — staggered to stay under rate limit
 TOKEN_REVALIDATE_INTERVAL = 1800  # 30 minutes
 
 INTRADAY_URL = "https://api.upstox.com/v3/historical-candle/intraday/{key}/minutes/1"
@@ -85,40 +90,13 @@ signal.signal(signal.SIGINT, _handle_signal)
 signal.signal(signal.SIGTERM, _handle_signal)
 
 
-# ── Universe loader ──────────────────────────────────────────────────────────
-
-
-def load_universe(name: str) -> list[str]:
-    """Load symbol list from configs/universes/india.yaml."""
-    cfg_path = PROJECT_ROOT / "configs" / "universes" / "india.yaml"
-    with open(cfg_path) as f:
-        cfg = yaml.safe_load(f)
-
-    universe = cfg.get("universes", {}).get(name)
-    if not universe:
-        raise ValueError(f"Universe '{name}' not found in {cfg_path}")
-
-    if "symbols" in universe:
-        return universe["symbols"]
-
-    src = universe.get("source_file")
-    if src:
-        src_path = PROJECT_ROOT / src
-        if not src_path.exists():
-            raise FileNotFoundError(f"Universe file {src_path} does not exist.")
-        df = pd.read_csv(src_path)
-        col = "symbol" if "symbol" in df.columns else df.columns[0]
-        return df[col].tolist()
-
-    raise ValueError(f"Universe '{name}' has no symbols or source_file")
-
-
 # ── Data fetch ───────────────────────────────────────────────────────────────
 
 
 def fetch_intraday(sess, instrument_key: str) -> pd.DataFrame | None:
     """Fetch today's intraday 1-min candles for *instrument_key*."""
-    url = INTRADAY_URL.format(key=instrument_key)
+    # URL-encode pipe in FUT keys (e.g. NSE_FO|67003 -> NSE_FO%7C67003)
+    url = INTRADAY_URL.format(key=instrument_key.replace("|", "%7C"))
     resp = sess.get(url, timeout=15)
 
     if resp.status_code == 401:
@@ -138,30 +116,37 @@ def fetch_intraday(sess, instrument_key: str) -> pd.DataFrame | None:
     return df
 
 
-def save_incremental(
+def _save_candles(
     df: pd.DataFrame,
     symbol: str,
+    suffix: str,
     today: str,
     watermarks: dict[str, datetime],
 ) -> int:
-    """Append only new candles (after watermark) to Parquet. Returns count of new candles."""
-    last_seen = watermarks.get(symbol)
+    """Save candles to parquet with dedup. Returns count of new candles."""
+    wm_key = f"{symbol}_{suffix}"
+    last_seen = watermarks.get(wm_key)
     if last_seen:
-        df = df[df["timestamp"] > last_seen]
-    if df.empty:
+        new_df = df[df["timestamp"] > last_seen]
+    else:
+        new_df = df
+
+    if new_df.empty:
         return 0
 
     out_dir = LIVE_OUTPUT_DIR / today
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{symbol}_1min.parquet"
+    out_path = out_dir / f"{symbol}_{suffix}.parquet"
 
     if out_path.exists():
         existing = pd.read_parquet(out_path)
-        df = pd.concat([existing, df]).drop_duplicates(subset="timestamp").sort_values("timestamp")
+        merged = pd.concat([existing, new_df]).drop_duplicates(subset="timestamp").sort_values("timestamp")
+    else:
+        merged = new_df.sort_values("timestamp")
 
-    df.to_parquet(out_path, index=False)
-    watermarks[symbol] = df["timestamp"].max()
-    return len(df) - (len(pd.read_parquet(out_path)) if out_path.exists() else 0)
+    merged.to_parquet(out_path, index=False)
+    watermarks[wm_key] = df["timestamp"].max()
+    return len(new_df)
 
 
 # ── Polling loop ─────────────────────────────────────────────────────────────
@@ -171,10 +156,17 @@ def poll_once(
     sess,
     symbols: list[str],
     eq_lookup: dict[str, dict],
+    instruments: list[dict],
     today: str,
     watermarks: dict[str, datetime],
+    *,
+    fetch_futures: bool = False,
 ) -> tuple[int, int]:
-    """Run one polling sweep. Returns (symbols_fetched, new_candles)."""
+    """Run one polling sweep. Returns (symbols_fetched, new_candles).
+
+    When *fetch_futures* is True, also fetches nearest-expiry FUT candles
+    for each symbol that has an F&O contract.
+    """
     total_new = 0
     fetched = 0
 
@@ -186,40 +178,23 @@ def poll_once(
         if not rec:
             continue
 
+        # ── Equity candles (always) ──
         df = fetch_intraday(sess, rec["instrument_key"])
-        if df is None or df.empty:
-            time.sleep(SLEEP_BETWEEN_CALLS)
-            continue
-
-        # Filter only new candles past watermark
-        last_seen = watermarks.get(symbol)
-        if last_seen:
-            new_df = df[df["timestamp"] > last_seen]
-        else:
-            new_df = df
-
-        if new_df.empty:
-            time.sleep(SLEEP_BETWEEN_CALLS)
-            continue
-
-        # Save all candles (dedup handles overlaps)
-        out_dir = LIVE_OUTPUT_DIR / today
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / f"{symbol}_1min.parquet"
-
-        if out_path.exists():
-            existing = pd.read_parquet(out_path)
-            merged = pd.concat([existing, new_df]).drop_duplicates(subset="timestamp").sort_values("timestamp")
-        else:
-            merged = new_df.sort_values("timestamp")
-
-        merged.to_parquet(out_path, index=False)
-        watermarks[symbol] = df["timestamp"].max()
-
-        new_count = len(new_df)
-        total_new += new_count
-        fetched += 1
+        if df is not None and not df.empty:
+            new = _save_candles(df, symbol, "1min", today, watermarks)
+            total_new += new
+            fetched += 1
         time.sleep(SLEEP_BETWEEN_CALLS)
+
+        # ── Futures candles (staggered) ──
+        if fetch_futures and not _shutdown:
+            fut = find_nearest_future(instruments, symbol)
+            if fut:
+                fut_df = fetch_intraday(sess, fut["instrument_key"])
+                if fut_df is not None and not fut_df.empty:
+                    new = _save_candles(fut_df, symbol, "fut_1min", today, watermarks)
+                    total_new += new
+                time.sleep(SLEEP_BETWEEN_CALLS)
 
     return fetched, total_new
 
@@ -244,15 +219,16 @@ def main() -> int:
     sess = get_session(token)
 
     # Load universe + instruments
-    symbols = load_universe(args.universe)
+    symbols = load_universe(args.universe, PROJECT_ROOT)
     log.info("Universe '%s': %d symbols", args.universe, len(symbols))
 
     instruments = load_or_download("NSE", INSTRUMENTS_CACHE_DIR)
     eq_lookup = find_equities(instruments)
 
-    # Watermarks: {symbol: last_seen_timestamp}
+    # Watermarks: {symbol_suffix: last_seen_timestamp}
     watermarks: dict[str, datetime] = {}
     last_token_check = time.monotonic()
+    last_fut_poll = 0.0  # monotonic timestamp of last futures poll
 
     while not _shutdown:
         now = now_ist()
@@ -280,13 +256,15 @@ def main() -> int:
 
         # Market closed for today
         if now.time() > MARKET_CLOSE:
-            # Final sweep
+            # Final sweep (include futures)
             log.info("Market closed — running final sweep")
-            fetched, new = poll_once(sess, symbols, eq_lookup, today, watermarks)
+            fetched, new = poll_once(
+                sess, symbols, eq_lookup, instruments, today, watermarks,
+                fetch_futures=True,
+            )
             log.info("Final sweep: %d symbols, %d new candles", fetched, new)
 
             if args.daemon:
-                # Sleep until next day 09:10
                 tomorrow_open = datetime.combine(
                     now.date() + timedelta(days=1),
                     datetime.strptime("09:10", "%H:%M").time(),
@@ -307,9 +285,20 @@ def main() -> int:
                 return 0
 
         # ── Poll ─────────────────────────────────────────────────────────
-        log.info("Polling %d symbols at %s", len(symbols), now.strftime("%H:%M:%S"))
-        fetched, new = poll_once(sess, symbols, eq_lookup, today, watermarks)
-        log.info("  → %d symbols fetched, %d new candles", fetched, new)
+        # Staggered: equity every 5 min, futures every 10 min
+        mono_now = time.monotonic()
+        do_futures = (mono_now - last_fut_poll) >= FUT_POLL_INTERVAL
+
+        mode = "equity+futures" if do_futures else "equity"
+        log.info("Polling %d symbols at %s (%s)", len(symbols), now.strftime("%H:%M:%S"), mode)
+        fetched, new = poll_once(
+            sess, symbols, eq_lookup, instruments, today, watermarks,
+            fetch_futures=do_futures,
+        )
+        log.info("  -> %d symbols fetched, %d new candles", fetched, new)
+
+        if do_futures:
+            last_fut_poll = mono_now
 
         # Periodic token re-validation
         elapsed = time.monotonic() - last_token_check
@@ -324,7 +313,7 @@ def main() -> int:
             last_token_check = time.monotonic()
 
         # Sleep until next poll
-        sleep_target = POLL_INTERVAL_SECONDS - (time.monotonic() - last_token_check) % POLL_INTERVAL_SECONDS
+        sleep_target = POLL_INTERVAL_SECONDS
         if sleep_target > 0 and not _shutdown:
             next_poll = now_ist() + timedelta(seconds=sleep_target)
             log.info("Next poll at %s (sleeping %.0fs)", next_poll.strftime("%H:%M:%S"), sleep_target)

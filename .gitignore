@@ -18,6 +18,8 @@ credentials/
 .eodhd_token
 *_token.txt
 *_credentials.json
+data/upstox/.token
+data/upstox/.auth_code
 
 # ---- Data files (NEVER commit raw or processed data) ------------------------
 data/

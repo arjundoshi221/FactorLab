@@ -15,7 +15,7 @@
 - NSE and BSE share the same holiday calendar (`XBOM` in `exchange_calendars`)
 - `XNSE` does **not** exist in the library — always use `XBOM`
 - Trading hours: 09:15–15:30 IST (375 one-minute candles per session)
-- MCX: 09:00–23:30 IST (commodity futures, extended hours)
+- MCX: 09:00–23:30 IST (commodity futures, extended hours) — **not used** in FactorLab (equities focus)
 - Pre-open auction: 09:00–09:08 IST (price discovery), random close 09:08–09:12
 - Post-close session: 15:40–16:00 IST (at closing price only)
 
@@ -248,6 +248,63 @@ Sectors with enough breadth for within-sector factor portfolios:
 | **PSUs** (cross-sector) | Separate factor structure. Policy-driven, periodic re-rating cycles |
 
 **PSU vs Private** is itself a meaningful factor split — they trade on structurally different valuation regimes.
+
+---
+
+## 13. Automation Pipeline
+
+### Scripts
+
+| Script | Frequency | Schedule | Purpose |
+|--------|-----------|----------|---------|
+| `factlab_india_premarket.py` | Daily | 08:00–08:30 IST | Token sync from Railway, instruments download, universe build |
+| `factlab_india_5min.py` | Long-running | 09:10–15:35 IST | Live 1-min equity + futures candles (staggered polling) |
+| `factlab_india_hourly.py` | Hourly | 10:15, 11:15, ..., 15:28 IST | Historical candle backfill (safety net for 5min gaps) |
+
+### Auth flow
+
+1. **Daily login** on Railway auth server (`factlab_auth_server.py`) — browser OAuth2
+2. Token stored in `data/upstox/.token` on Railway
+3. **Premarket script** calls `ensure_token()` which tries: local file → env var → Railway server → interactive login
+4. Token expires daily ~3:30 AM IST. No refresh tokens.
+5. Auth server protected by PIN via `X-Auth-Pin` header, rate-limited (5 req/min)
+
+### Instrument key formats
+
+| Segment | Format | Example |
+|---------|--------|---------|
+| NSE equities | `NSE_EQ\|{ISIN}` | `NSE_EQ\|INE002A01018` |
+| NSE F&O futures | `NSE_FO\|{exchange_token}` | `NSE_FO\|67003` |
+
+- Pipe (`|`) must be URL-encoded as `%7C` in API calls
+- `find_nearest_future(instruments, symbol)` returns the nearest-expiry FUT contract
+- Equities and futures share the same Upstox intraday candle endpoint
+
+### Rate limit budget (Upstox: 2,000 calls per 30 min)
+
+| Universe | Count | Equity (5-min) | Futures (10-min) | Total/30min | Budget |
+|----------|-------|---------------|-----------------|-------------|--------|
+| demo | 5 | 30 | 15 | 45 | 2% |
+| nifty50 | 50 | 300 | 150 | 450 | 23% |
+| nifty100 | 100 | 600 | 300 | 900 | 45% |
+| fo_eligible | ~200 | 1,200 | 600 | 1,800 | **90%** |
+| nifty500 | 500 | 3,000 | 1,500 | 4,500 | **225%** — exceeds, needs batch split |
+
+### Universe management
+
+- **Format**: YAML files at `data/in/universes/{name}_latest.yaml`
+- **Append-only**: `build_universes()` never removes symbols, only adds new ones
+- **fo_eligible**: auto-derived daily from instruments master (~200 F&O stocks)
+- **Index universes** (nifty50, nifty100, etc.): seeded once, manually refreshed quarterly
+- **Config**: `configs/universes/india.yaml` — exchanges set to `[NSE]` only
+- Shared loader: `load_universe(name, project_root)` from `universes.py` (replaces duplicated code in scripts)
+
+### Futures data
+
+- Nearest-expiry rolling: `find_nearest_future()` sorts by `expiry` ascending
+- Staggered polling: equity candles every 5 min, futures every 10 min
+- Output files: `data/in/live/{date}/{SYMBOL}_1min.parquet` (equity) and `{SYMBOL}_fut_1min.parquet` (futures)
+- DB schema: `market.price_bars_minute` has `segment` column (`NSE_EQ` or `NSE_FO`) and `instrument_key`
 
 ---
 

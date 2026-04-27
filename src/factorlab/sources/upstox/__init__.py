@@ -1,4 +1,4 @@
-"""Upstox data source — India equities, F&O, commodities via Upstox API."""
+"""Upstox data source — India equities, F&O via Upstox API."""
 
 from factorlab.sources.upstox.auth import (
     ensure_token,
@@ -21,6 +21,12 @@ from factorlab.sources.upstox.instruments import (
     load_or_download,
     refresh_all,
 )
+from factorlab.sources.upstox.universes import (
+    build_fo_eligible,
+    build_universes,
+    load_universe,
+    seed_index_universe,
+)
 
 __all__ = [
     "ensure_token",
@@ -40,4 +46,8 @@ __all__ = [
     "find_nearest_future",
     "load_or_download",
     "refresh_all",
+    "build_fo_eligible",
+    "build_universes",
+    "load_universe",
+    "seed_index_universe",
 ]

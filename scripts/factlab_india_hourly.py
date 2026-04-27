@@ -21,7 +21,6 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
-import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
@@ -31,6 +30,7 @@ import exchange_calendars as xcals  # noqa: E402
 from factorlab.sources.upstox.auth import ensure_token  # noqa: E402
 from factorlab.sources.upstox.client import get_session  # noqa: E402
 from factorlab.sources.upstox.instruments import find_equities, load_or_download  # noqa: E402
+from factorlab.sources.upstox.universes import load_universe  # noqa: E402
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 LOG_DIR = PROJECT_ROOT / "logs"
@@ -55,36 +55,6 @@ SLEEP_BETWEEN_CALLS = 0.05
 
 V3_URL = "https://api.upstox.com/v3/historical-candle/{key}/minutes/1/{to_date}/{from_date}"
 COLUMNS = ["timestamp", "open", "high", "low", "close", "volume", "oi"]
-
-
-def load_universe(name: str) -> list[str]:
-    """Load symbol list from configs/universes/india.yaml."""
-    cfg_path = PROJECT_ROOT / "configs" / "universes" / "india.yaml"
-    with open(cfg_path) as f:
-        cfg = yaml.safe_load(f)
-
-    universe = cfg.get("universes", {}).get(name)
-    if not universe:
-        raise ValueError(f"Universe '{name}' not found in {cfg_path}")
-
-    # Inline symbols
-    if "symbols" in universe:
-        return universe["symbols"]
-
-    # File-based universe
-    src = universe.get("source_file")
-    if src:
-        src_path = PROJECT_ROOT / src
-        if not src_path.exists():
-            raise FileNotFoundError(
-                f"Universe file {src_path} does not exist. "
-                f"Download the {name} constituent list first."
-            )
-        df = pd.read_csv(src_path)
-        col = "symbol" if "symbol" in df.columns else df.columns[0]
-        return df[col].tolist()
-
-    raise ValueError(f"Universe '{name}' has no symbols or source_file")
 
 
 def fetch_candles(
@@ -152,7 +122,7 @@ def main() -> int:
     sess = get_session(token)
 
     # Load universe + instruments
-    symbols = load_universe(args.universe)
+    symbols = load_universe(args.universe, PROJECT_ROOT)
     log.info("Universe '%s': %d symbols", args.universe, len(symbols))
 
     instruments = load_or_download("NSE", INSTRUMENTS_CACHE_DIR)
