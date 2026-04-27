@@ -3,6 +3,7 @@
 ## Behavioral Rules (Always Enforced)
 
 - Do what has been asked; nothing more, nothing less
+- NEVER edit or modify code unless the user explicitly asks for a change
 - NEVER create files unless they're absolutely necessary for achieving your goal
 - ALWAYS prefer editing an existing file to creating a new one
 - NEVER proactively create documentation files (*.md) or README files unless explicitly requested

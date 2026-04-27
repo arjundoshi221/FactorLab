@@ -143,7 +143,6 @@ def main() -> int:
     )
     parser.add_argument("--force", action="store_true", help="Run even on non-trading days")
     parser.add_argument("--auth-only", action="store_true", help="Skip instruments download")
-    parser.add_argument("--headless", action="store_true", help="No interactive login (Railway mode)")
     args = parser.parse_args()
 
     log.info("=" * 60)
@@ -164,7 +163,7 @@ def main() -> int:
     # 2. Authenticate
     #    ensure_token() tries: local .token → .env → Railway auth server → browser login
     try:
-        token = ensure_token(interactive=not args.headless)
+        token = ensure_token(interactive=False)
         log.info("Auth succeeded")
     except Exception as exc:
         msg = f"Auth FAILED: {exc}"

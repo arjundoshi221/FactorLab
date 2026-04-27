@@ -10,7 +10,7 @@ Usage:
   python scripts/factlab_india_hourly.py                    # default 'demo' universe
   python scripts/factlab_india_hourly.py --universe nifty50
   python scripts/factlab_india_hourly.py --universe nifty100 --force
-  python scripts/factlab_india_hourly.py --universe nifty50 --headless  # Railway (no prompt)
+  python scripts/factlab_india_hourly.py --universe nifty100 --force
 """
 
 import argparse
@@ -104,7 +104,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="India hourly candle backfill")
     parser.add_argument("--universe", default="demo", help="Universe name from india.yaml")
     parser.add_argument("--force", action="store_true", help="Skip trading-day check")
-    parser.add_argument("--headless", action="store_true", help="No interactive prompts (Railway)")
     args = parser.parse_args()
 
     log.info("factlab_india_hourly starting — universe=%s", args.universe)
@@ -118,7 +117,7 @@ def main() -> int:
             return 10
 
     # Auth
-    token = ensure_token(interactive=not args.headless)
+    token = ensure_token(interactive=False)
     sess = get_session(token)
 
     # Load universe + instruments

@@ -17,7 +17,7 @@ Usage:
   python scripts/factlab_india_5min.py                        # demo, exit after market
   python scripts/factlab_india_5min.py --universe nifty50
   python scripts/factlab_india_5min.py --universe fo_eligible --daemon
-  python scripts/factlab_india_5min.py --universe nifty50 --headless  # Railway (no prompt)
+  python scripts/factlab_india_5min.py --universe nifty50 --daemon
 """
 
 import argparse
@@ -207,7 +207,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="India 5-min live candle poller")
     parser.add_argument("--universe", default="demo", help="Universe name from india.yaml")
     parser.add_argument("--daemon", action="store_true", help="Keep alive across trading days")
-    parser.add_argument("--headless", action="store_true", help="No interactive prompts (Railway)")
     args = parser.parse_args()
 
     log.info("=" * 60)
@@ -215,7 +214,7 @@ def main() -> int:
     log.info("=" * 60)
 
     # Auth
-    token = ensure_token(interactive=not args.headless)
+    token = ensure_token(interactive=False)
     sess = get_session(token)
 
     # Load universe + instruments
@@ -275,7 +274,7 @@ def main() -> int:
                 watermarks.clear()
                 time.sleep(max(sleep_sec, 1))
                 # Refresh token + instruments for new day
-                token = ensure_token(interactive=not args.headless)
+                token = ensure_token(interactive=False)
                 sess = get_session(token)
                 instruments = load_or_download("NSE", INSTRUMENTS_CACHE_DIR)
                 eq_lookup = find_equities(instruments)
@@ -308,7 +307,7 @@ def main() -> int:
                 log.info("Token re-validated (every %ds)", TOKEN_REVALIDATE_INTERVAL)
             except Exception:
                 log.warning("Token expired mid-session — re-authenticating")
-                token = ensure_token(interactive=not args.headless)
+                token = ensure_token(interactive=False)
                 sess = get_session(token)
             last_token_check = time.monotonic()
 
