@@ -1,0 +1,94 @@
+# Interactive Brokers TWS API source configuration
+name: ibkr
+vendor_key: ibkr  # matches ref.security_aliases.vendor
+
+api:
+  protocol: tcp_socket                # NOT REST — connects to local Gateway
+  auth_type: local_gateway            # interactive login + 2FA on running process
+  host_env: IBKR_HOST                 # default 127.0.0.1
+  port_paper_env: IBKR_PORT_PAPER     # default 4002
+  port_live_env: IBKR_PORT_LIVE       # default 4001
+  mode_env: IBKR_TRADING_MODE        # 'paper' or 'live'
+  library: ib_async                   # pip install ib_async
+
+auth:
+  method: local_gateway_login
+  # IB Gateway or TWS must be running locally, logged in with 2FA
+  # Daily auto-logout; weekly forced re-login
+  # IBC (github.com/IbcAlpha/IBC) for auto-restart
+  client_ids:
+    master: 0                         # monitoring/admin — sees all orders
+    research: 1                       # notebooks
+    ingester: 2                       # market data pipeline
+    signal: 3                         # signal generator
+    order: 4                          # order manager
+    reconciler: 5                     # portfolio reconciliation
+
+# CRITICAL: IBKR has the strictest rate limits of any retail API
+rate_limits:
+  historical:
+    max_per_10_minutes: 60            # HARD LIMIT — Error 162 on violation
+    safe_per_10_minutes: 50           # leave headroom
+    identical_request_cooldown: 15    # seconds between identical requests
+    same_contract_max_per_2s: 6       # same contract/exchange/tickType
+    max_concurrent: 50                # simultaneous open historical requests
+    bid_ask_counts_double: true       # BID_ASK = 2 requests toward all limits
+  streaming:
+    base_lines: 100                   # concurrent symbols (scales with equity)
+    # $0-500K equity: 100 lines
+    # $500K-2M: up to 300
+    # $2M+: up to 500+
+  contract_lookup:
+    cache_aggressively: true          # qualifyContracts() is rate-limited
+
+# Practical backfill estimates (at safe rate of 50/10min = 5/min)
+backfill_estimates:
+  "500 stocks daily 1Y": "100 minutes"
+  "200 stocks daily 5Y": "40 minutes"
+  "200 stocks 5min 3M": "200+ minutes (chunked)"
+
+endpoints:
+  # Not REST endpoints — these are ib_async method calls
+  historical_data: "ib.reqHistoricalData(contract, ...)"
+  market_data: "ib.reqMktData(contract, ...)"
+  contract_details: "ib.reqContractDetails(contract)"
+  head_timestamp: "ib.reqHeadTimeStamp(contract, ...)"
+  positions: "ib.positions()"
+  account_values: "ib.accountValues()"
+  executions: "ib.reqExecutions()"
+
+# Historical data bar sizes (all supported)
+bar_sizes:
+  sub_minute: ["1 secs", "5 secs", "10 secs", "15 secs", "30 secs"]
+  minute: ["1 min", "2 mins", "3 mins", "5 mins", "10 mins", "15 mins", "20 mins", "30 mins"]
+  hour: ["1 hour", "2 hours", "3 hours", "4 hours", "8 hours"]
+  day_plus: ["1 day", "1 week", "1 month"]
+
+# whatToShow options for reqHistoricalData
+what_to_show:
+  - TRADES              # OHLC of executed trades (default for equities)
+  - ADJUSTED_LAST       # split/dividend-adjusted (US equities only)
+  - MIDPOINT            # bid-ask midpoint (FX, illiquid)
+  - BID
+  - ASK
+  - BID_ASK             # both + min/max (counts as 2 requests!)
+  - HISTORICAL_VOLATILITY
+  - OPTION_IMPLIED_VOLATILITY
+
+symbol_format: conid                  # integer contract ID (e.g., 265598 for AAPL)
+# Resolve via: Stock('AAPL', 'SMART', 'USD') → qualifyContracts() → contract.conId
+
+# Market data subscriptions required (non-professional)
+subscriptions:
+  us_snapshot_bundle:
+    cost: 10.00                       # per month
+    waiver_commissions: 30.00         # waived if commissions >= $30/mo
+    includes: "Real-time NBBO US equities + futures"
+  us_streaming_addon:
+    cost: 4.50
+    waiver_commissions: 5.00
+    includes: "Real-time level-1 streaming"
+
+response:
+  bar_columns: [date, open, high, low, close, volume, barCount, average]
+  timestamp_timezone: exchange_local  # US/Eastern for US contracts — normalize to UTC!

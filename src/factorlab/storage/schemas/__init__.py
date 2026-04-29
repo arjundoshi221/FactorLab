@@ -10,4 +10,5 @@ from factorlab.storage.schemas import (  # noqa: F401
     ref,
     market,
     universe,
+    alt_political,
 )

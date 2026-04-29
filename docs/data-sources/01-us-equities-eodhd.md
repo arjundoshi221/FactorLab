@@ -1,9 +1,27 @@
 # US Equities — EODHD
 
-> Status: `[scaffold]`
+> Status: `[active]` — client, instruments, daily candles implemented (April 2026)
 
 ## Purpose
-Daily price bars, adjusted history, fundamentals, corporate actions, and reference data for US-listed equities and ETFs. Phase 1 anchor source.
+Daily price bars, adjusted history, fundamentals, corporate actions, and reference data for US-listed equities and ETFs. Phase 1 anchor source for fundamentals and corporate actions. Also covers global equities (60+ exchanges) at no extra cost.
+
+## Pricing (as of April 2026)
+
+| Plan | Monthly | Annual | Key Features |
+|------|---------|--------|-------------|
+| Free | $0 | $0 | 20 calls/day, 1yr history, demo tickers only |
+| EOD All World | $19.99 | $199 | 100K calls/day, 30yr+ EOD, splits/dividends |
+| EOD + Intraday | $29.99 | $299.90 | + intraday (1m/5m/1h), WebSocket (US only) |
+| **Fundamentals** | **$59.99** | **$599.90** | + full financials, insider trades, screener |
+| All-In-One | $99.99 | $999.90 | Everything: tick data, options, news, bonds |
+
+**No per-exchange fees.** All 60+ exchanges included in every paid plan.
+
+**API call costs (not 1:1):**
+- Most endpoints: 1 call. Fundamentals: **10 calls**. Screener: **5 calls**. Bulk exchange: **1 call**.
+- 100K daily budget → 500-stock fundamentals refresh = 5,000 calls (5% of budget)
+
+**Recommended plan:** Fundamentals ($60/mo) for Phase 1. Upgrade to All-In-One ($100/mo) when intraday/tick/options needed.
 
 ## Source
 **EOD Historical Data (eodhd.com)** — REST API, JSON responses, all major US exchanges (NYSE, NASDAQ, AMEX, OTC).
@@ -14,9 +32,38 @@ Daily price bars, adjusted history, fundamentals, corporate actions, and referen
 - All requests carry `?api_token=<key>` query parameter
 
 ## Rate limits
-- Plan-dependent. Free tier: 20 calls/day (functionally a smoke-test budget).
-- Paid plans count fundamentals at **10 API calls each** — budget accordingly.
-- Adapter must implement: token-bucket rate limiter, exponential backoff on 429, daily-quota awareness.
+
+### Hard limits
+| Limit | Value | Scope |
+|-------|-------|-------|
+| Requests per minute | **1,000** | All plans |
+| Daily API calls (free) | 20 | Resets midnight GMT |
+| Daily API calls (paid) | **100,000** | Resets midnight GMT |
+
+### Call cost multipliers (not 1:1!)
+| Endpoint | Cost per request |
+|----------|-----------------|
+| EOD, live, dividends, splits | 1 call |
+| Technical indicators | **5 calls** |
+| Fundamentals, options, bonds | **10 calls** |
+| Screener | **5 calls** |
+| Bulk exchange (all tickers) | **100 calls** |
+| Bulk with specific symbols | 100 + N calls |
+
+### Budget math (500-stock US universe)
+- Daily EOD pull (bulk): 1 call (returns entire exchange)
+- Daily incremental (per-symbol): 500 calls
+- Weekly fundamentals refresh: 5,000 calls (500 × 10)
+- **Headroom:** ~94,500 calls/day remaining
+
+### Response headers
+- `X-RateLimit-Remaining` — monitor this to avoid 429s
+
+### Adapter requirements
+- Token-bucket rate limiter (~16 req/sec safe ceiling)
+- Exponential backoff on HTTP 429
+- Daily-quota awareness (track call costs, not just request count)
+- Spread requests evenly — bursts near 1,000/min trigger throttling
 
 ## Endpoints (subset)
 | Endpoint | Use |
@@ -38,7 +85,7 @@ EODHD daily bar response:
   "close": ..., "adjusted_close": ..., "volume": ... }
 ```
 
-Maps to `market.price_bars_daily`:
+Maps to `market.candles_daily`:
 
 | EODHD field | Canonical column |
 |-------------|------------------|
@@ -49,34 +96,50 @@ Maps to `market.price_bars_daily`:
 | (request time) | `as_of_time` |
 | `'eodhd'` | `source` |
 
-`security_id` resolved via `ref.security_aliases` lookup keyed on `(vendor='eodhd', vendor_id='AAPL.US')`.
+`instrument_id` resolved via `ref.instruments` lookup on `instrument_key = 'AAPL.US'`.
+
+## Implemented modules
+
+| Module | Path | Purpose |
+|--------|------|---------|
+| Client | `src/factorlab/sources/eodhd/client.py` | Rate-limited HTTP client, API key auth via `EODHD_API_KEY` |
+| Instruments | `src/factorlab/sources/eodhd/instruments.py` | Fetch `/exchange-symbol-list/US` → `ref.instruments` upsert |
+| Candles | `src/factorlab/sources/eodhd/candles.py` | Fetch `/eod/{symbol}` → clean DataFrame |
+| Ingest | `src/factorlab/storage/ingest.py:write_candles_daily()` | DataFrame → `market.candles_daily` upsert |
+| Demo script | `scripts/factlab_us_daily.py` | CLI: fetch bars, print summary, save Parquet, optionally write DB |
+
+### Free-tier constraints
+- 20 API calls/day (resets midnight GMT)
+- Demo tickers (`AAPL.US`, `TSLA.US`, `AMZN.US`, `VTI.US`) work without burning quota
+- Script prints calls used vs budget remaining
 
 ## Pipeline
 
 ```
-schedule (daily 22:00 UTC, after US close)
+scripts/factlab_us_daily.py [--demo | --symbols SYM1 SYM2] [--db]
         │
         ▼
-list current universe (configs/settings.yaml: eodhd_us_universe)
+load universe (configs/universes/us.yaml or --symbols)
         │
         ▼
 for each symbol:
-    GET /api/eod/{symbol}?from=<last_trade_date>
+    GET /api/eod/{symbol}?from=<from_date>
         │
         ▼
-    write raw payload → market.raw_eodhd
+    parse → DataFrame (trade_date, OHLCV, adj_close, source='eodhd')
         │
         ▼
-    parse → market.price_bars_daily (UPSERT on PK)
+    save Parquet → data/eodhd/{SYMBOL}.parquet
         │
         ▼
-    record ingest_log row
+    [--db] upsert → market.candles_daily (ON CONFLICT DO NOTHING)
 ```
 
 ## Storage
-- Raw: `market.raw_eodhd` (jsonb payload + url + fetched_at)
-- Fact: `market.price_bars_daily` (partitioned yearly)
-- Reference: `ref.securities`, `ref.security_aliases (vendor='eodhd')`
+- Cache: `data/eodhd/*.parquet` (local Parquet per symbol)
+- Raw audit: `market.raw_responses` (jsonb payload + url + fetched_at)
+- Fact: `market.candles_daily` (TimescaleDB hypertable, chunk=1month)
+- Reference: `ref.instruments` (keyed on `instrument_key = 'AAPL.US'`)
 
 ## Edge cases & gotchas
 - **Adjusted vs. raw close** — EODHD adjusts retroactively for splits/dividends. Always store `close` (raw) AND `adj_close`. Never overwrite raw.
@@ -86,16 +149,8 @@ for each symbol:
 - **Symbol changes** — ticker mergers/renames must trigger a `ref.security_aliases` row insert, not an update of the existing row.
 - **Half-day sessions** — handled by exchange calendars (use `exchange_calendars` lib).
 
-## Existing code (prior to docs)
-Per memory, prior repo states had:
-- `src/factorlab/api/eodhd/parsers.py` — vendor field mapping
-- `src/factorlab/compute/metrics.py` — ROIC, FCF, margins
-- `src/factorlab/compute/quality.py` — Sloan accruals
-
-When restoring/rewriting, port these against the new Postgres schema rather than the prior Parquet/LocalStore setup.
-
 ## Open questions
-- [ ] Universe file: hard-coded list, or queried from `/api/exchange-symbol-list/US`? (likely the latter, with manual curation overrides)
+- [x] Universe file: hard-coded list, or queried from `/api/exchange-symbol-list/US`? → Both. Demo/mega_cap in `configs/universes/us.yaml`; full exchange list via `fetch_us_instruments()`.
 - [ ] How often to re-pull full history vs. incremental? (default: incremental daily; full on schema change or vendor restatement notification)
-- [ ] Fundamentals storage cost — at 10 calls each, full quarterly refresh of 500 names is 5,000 calls. Plan tier dependency.
-- [ ] Do we want intraday bars from EODHD, or use IBKR for US intraday once it's wired up?
+- [ ] Fundamentals storage cost — at 10 calls each, full quarterly refresh of 500 names is 5,000 calls. Requires Fundamentals plan ($60/mo).
+- [ ] Upgrade path: free → EOD All World ($20/mo) → Fundamentals ($60/mo) as usage grows.

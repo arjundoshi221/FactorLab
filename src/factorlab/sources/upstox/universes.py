@@ -19,7 +19,7 @@ Load pipeline (called from 5min / hourly):
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -41,7 +41,7 @@ def load_universe(name: str, project_root: Path) -> list[str]:
       - ``source_file:`` pointing to a ``.yaml`` or ``.csv`` file
     """
     cfg_path = project_root / "configs" / "universes" / "india.yaml"
-    with open(cfg_path) as f:
+    with open(cfg_path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
     universe = cfg.get("universes", {}).get(name)
@@ -70,7 +70,7 @@ def _read_universe_file(path: Path) -> list[str]:
     """Read symbols from a .yaml or .csv universe file."""
     suffix = path.suffix.lower()
     if suffix in (".yaml", ".yml"):
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         symbols = data.get("symbols", [])
         if not symbols:
@@ -160,7 +160,7 @@ def _read_existing_yaml(path: Path) -> list[str]:
     if not path.exists():
         return []
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         return data.get("symbols", []) if data else []
     except Exception:
@@ -170,10 +170,10 @@ def _read_existing_yaml(path: Path) -> list[str]:
 def _write_universe_yaml(path: Path, symbols: list[str]) -> None:
     """Write universe YAML with metadata header."""
     data = {
-        "generated": datetime.now().strftime("%Y-%m-%d"),
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "count": len(symbols),
         "symbols": symbols,
     }
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)
     log.info("Wrote %s (%d symbols)", path.name, len(symbols))

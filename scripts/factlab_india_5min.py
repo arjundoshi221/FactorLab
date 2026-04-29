@@ -1,7 +1,7 @@
 """factlab_india_5min — Long-running 5-minute poller for near-real-time 1-min candles.
 
 Run model:  Long-running process (internal sleep loop).
-Duration:   Alive from ~09:10 to ~15:35 IST, polls every 5 minutes.
+Duration:   Alive from ~03:40 to ~10:05 UTC (09:10 to 15:35 IST), polls every 5 minutes.
 Deployment: Local machine, Railway, or any always-on environment.
 
 Staggered polling (rate limit: 2,000 calls per 30 min):
@@ -31,6 +31,8 @@ from pathlib import Path
 import pandas as pd
 from zoneinfo import ZoneInfo
 
+UTC = ZoneInfo("UTC")
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
@@ -44,12 +46,14 @@ from factorlab.sources.upstox.instruments import (  # noqa: E402
     load_or_download,
 )
 from factorlab.sources.upstox.universes import load_universe  # noqa: E402
+from factorlab.storage.db import get_engine  # noqa: E402
+from factorlab.storage.ingest import sync_contracts, sync_instruments, write_candles  # noqa: E402
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 LOG_DIR = PROJECT_ROOT / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
-log_file = LOG_DIR / f"factlab_india_5min_{datetime.now().strftime('%Y%m%d')}.log"
+log_file = LOG_DIR / f"factlab_india_5min_{datetime.now(UTC).strftime('%Y%m%d')}.log"
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
@@ -61,7 +65,6 @@ logging.basicConfig(
 log = logging.getLogger("factlab_india_5min")
 
 # ── Config ───────────────────────────────────────────────────────────────────
-IST = ZoneInfo("Asia/Kolkata")
 CALENDAR_KEY = "XBOM"
 INSTRUMENTS_CACHE_DIR = PROJECT_ROOT / "data" / "upstox" / "instruments"
 LIVE_OUTPUT_DIR = PROJECT_ROOT / "data" / "in" / "live"
@@ -73,8 +76,9 @@ TOKEN_REVALIDATE_INTERVAL = 1800  # 30 minutes
 INTRADAY_URL = "https://api.upstox.com/v3/historical-candle/intraday/{key}/minutes/1"
 COLUMNS = ["timestamp", "open", "high", "low", "close", "volume", "oi"]
 
-MARKET_OPEN = datetime.strptime("09:15", "%H:%M").time()
-MARKET_CLOSE = datetime.strptime("15:30", "%H:%M").time()
+MARKET_OPEN_UTC = datetime.strptime("03:45", "%H:%M").time()   # 09:15 IST
+MARKET_CLOSE_UTC = datetime.strptime("10:00", "%H:%M").time()  # 15:30 IST
+PRE_OPEN_UTC = datetime.strptime("03:40", "%H:%M").time()      # 09:10 IST
 
 # Graceful shutdown flag
 _shutdown = False
@@ -123,7 +127,7 @@ def _save_candles(
     today: str,
     watermarks: dict[str, datetime],
 ) -> int:
-    """Save candles to parquet with dedup. Returns count of new candles."""
+    """Save candles to Arrow IPC (.arrow) with dedup. Returns count of new candles."""
     wm_key = f"{symbol}_{suffix}"
     last_seen = watermarks.get(wm_key)
     if last_seen:
@@ -136,15 +140,15 @@ def _save_candles(
 
     out_dir = LIVE_OUTPUT_DIR / today
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{symbol}_{suffix}.parquet"
+    out_path = out_dir / f"{symbol}_{suffix}.arrow"
 
     if out_path.exists():
-        existing = pd.read_parquet(out_path)
+        existing = pd.read_feather(out_path)
         merged = pd.concat([existing, new_df]).drop_duplicates(subset="timestamp").sort_values("timestamp")
     else:
         merged = new_df.sort_values("timestamp")
 
-    merged.to_parquet(out_path, index=False)
+    merged.reset_index(drop=True).to_feather(out_path)
     watermarks[wm_key] = df["timestamp"].max()
     return len(new_df)
 
@@ -161,9 +165,13 @@ def poll_once(
     watermarks: dict[str, datetime],
     *,
     fetch_futures: bool = False,
+    db_engine=None,
+    inst_lookup: dict[str, object] | None = None,
+    contract_lookup: dict[str, object] | None = None,
 ) -> tuple[int, int]:
     """Run one polling sweep. Returns (symbols_fetched, new_candles).
 
+    Writes to DB first (canonical), then Arrow IPC cache (secondary).
     When *fetch_futures* is True, also fetches nearest-expiry FUT candles
     for each symbol that has an F&O contract.
     """
@@ -181,6 +189,12 @@ def poll_once(
         # ── Equity candles (always) ──
         df = fetch_intraday(sess, rec["instrument_key"])
         if df is not None and not df.empty:
+            # DB write (canonical)
+            inst_id = inst_lookup.get(symbol) if inst_lookup else None
+            if inst_id and db_engine:
+                write_candles(df, inst_id, None, "upstox", db_engine)
+
+            # Arrow IPC cache (secondary)
             new = _save_candles(df, symbol, "1min", today, watermarks)
             total_new += new
             fetched += 1
@@ -192,6 +206,13 @@ def poll_once(
             if fut:
                 fut_df = fetch_intraday(sess, fut["instrument_key"])
                 if fut_df is not None and not fut_df.empty:
+                    # DB write (canonical)
+                    inst_id = inst_lookup.get(symbol) if inst_lookup else None
+                    contract_id = contract_lookup.get(fut["instrument_key"]) if contract_lookup else None
+                    if inst_id and contract_id and db_engine:
+                        write_candles(fut_df, inst_id, contract_id, "upstox", db_engine)
+
+                    # Arrow IPC cache (secondary)
                     new = _save_candles(fut_df, symbol, "fut_1min", today, watermarks)
                     total_new += new
                 time.sleep(SLEEP_BETWEEN_CALLS)
@@ -199,8 +220,8 @@ def poll_once(
     return fetched, total_new
 
 
-def now_ist() -> datetime:
-    return datetime.now(IST)
+def now_utc() -> datetime:
+    return datetime.now(UTC)
 
 
 def main() -> int:
@@ -224,13 +245,21 @@ def main() -> int:
     instruments = load_or_download("NSE", INSTRUMENTS_CACHE_DIR)
     eq_lookup = find_equities(instruments)
 
+    # DB sync: instruments + contracts
+    db_engine = get_engine()
+    inst_lookup = sync_instruments(instruments, db_engine)
+    log.info("DB sync: %d instruments", len(inst_lookup))
+    contract_lookup = sync_contracts(instruments, inst_lookup, db_engine)
+    log.info("DB sync: %d contracts", len(contract_lookup))
+
     # Watermarks: {symbol_suffix: last_seen_timestamp}
     watermarks: dict[str, datetime] = {}
     last_token_check = time.monotonic()
     last_fut_poll = 0.0  # monotonic timestamp of last futures poll
 
     while not _shutdown:
-        now = now_ist()
+        now = now_utc()
+        # During market hours (03:40-10:00 UTC), UTC date == IST date
         today = now.strftime("%Y-%m-%d")
 
         # Check if trading day
@@ -245,39 +274,42 @@ def main() -> int:
                 return 10
 
         # Wait for market open
-        if now.time() < MARKET_OPEN:
+        if now.time() < MARKET_OPEN_UTC:
             wait_sec = (
-                datetime.combine(now.date(), MARKET_OPEN, tzinfo=IST) - now
+                datetime.combine(now.date(), MARKET_OPEN_UTC, tzinfo=UTC) - now
             ).total_seconds()
-            log.info("Waiting %.0f seconds for market open (09:15 IST)", wait_sec)
+            log.info("Waiting %.0f seconds for market open (03:45 UTC)", wait_sec)
             time.sleep(max(wait_sec, 1))
             continue
 
         # Market closed for today
-        if now.time() > MARKET_CLOSE:
+        if now.time() > MARKET_CLOSE_UTC:
             # Final sweep (include futures)
             log.info("Market closed — running final sweep")
             fetched, new = poll_once(
                 sess, symbols, eq_lookup, instruments, today, watermarks,
                 fetch_futures=True,
+                db_engine=db_engine, inst_lookup=inst_lookup, contract_lookup=contract_lookup,
             )
             log.info("Final sweep: %d symbols, %d new candles", fetched, new)
 
             if args.daemon:
                 tomorrow_open = datetime.combine(
                     now.date() + timedelta(days=1),
-                    datetime.strptime("09:10", "%H:%M").time(),
-                    tzinfo=IST,
+                    PRE_OPEN_UTC,
+                    tzinfo=UTC,
                 )
                 sleep_sec = (tomorrow_open - now).total_seconds()
-                log.info("Daemon mode — sleeping %.0f seconds until tomorrow 09:10", sleep_sec)
+                log.info("Daemon mode — sleeping %.0f seconds until tomorrow 03:40 UTC", sleep_sec)
                 watermarks.clear()
                 time.sleep(max(sleep_sec, 1))
-                # Refresh token + instruments for new day
+                # Refresh token + instruments + DB sync for new day
                 token = ensure_token(interactive=False)
                 sess = get_session(token)
                 instruments = load_or_download("NSE", INSTRUMENTS_CACHE_DIR)
                 eq_lookup = find_equities(instruments)
+                inst_lookup = sync_instruments(instruments, db_engine)
+                contract_lookup = sync_contracts(instruments, inst_lookup, db_engine)
                 continue
             else:
                 log.info("Market closed. Session complete.")
@@ -289,10 +321,11 @@ def main() -> int:
         do_futures = (mono_now - last_fut_poll) >= FUT_POLL_INTERVAL
 
         mode = "equity+futures" if do_futures else "equity"
-        log.info("Polling %d symbols at %s (%s)", len(symbols), now.strftime("%H:%M:%S"), mode)
+        log.info("Polling %d symbols at %s UTC (%s)", len(symbols), now.strftime("%H:%M:%S"), mode)
         fetched, new = poll_once(
             sess, symbols, eq_lookup, instruments, today, watermarks,
             fetch_futures=do_futures,
+            db_engine=db_engine, inst_lookup=inst_lookup, contract_lookup=contract_lookup,
         )
         log.info("  -> %d symbols fetched, %d new candles", fetched, new)
 
@@ -314,8 +347,8 @@ def main() -> int:
         # Sleep until next poll
         sleep_target = POLL_INTERVAL_SECONDS
         if sleep_target > 0 and not _shutdown:
-            next_poll = now_ist() + timedelta(seconds=sleep_target)
-            log.info("Next poll at %s (sleeping %.0fs)", next_poll.strftime("%H:%M:%S"), sleep_target)
+            next_poll = now_utc() + timedelta(seconds=sleep_target)
+            log.info("Next poll at %s UTC (sleeping %.0fs)", next_poll.strftime("%H:%M:%S"), sleep_target)
             time.sleep(sleep_target)
 
     log.info("Shutdown complete.")

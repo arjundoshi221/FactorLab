@@ -31,7 +31,7 @@ import logging
 import os
 import secrets
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, redirect, request
@@ -214,7 +214,7 @@ def index():
             f"<h2>FactorLab Auth Server</h2>"
             f"<p>Token: <strong>valid</strong></p>"
             f"<p>User: {escape(status['user'])} ({escape(status['email'])})</p>"
-            f"<p><small>Last checked: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</small></p>"
+            f"<p><small>Last checked: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC</small></p>"
         )
     else:
         body = (

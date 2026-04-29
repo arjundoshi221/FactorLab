@@ -1,0 +1,58 @@
+# House Clerk PTR asset type codes
+# Source: https://fd.house.gov/reference/asset-type-codes.aspx
+# Fetched: 2026-04-29
+#
+# `equity_ticker_likely` flags codes where a public US equity ticker is expected
+# in the asset name (e.g. "BlackRock, Inc. Common Stock (BLK) [ST]"). Used by
+# the parser/enricher to know when a missing ticker is a real ticker-resolution
+# failure vs. a structurally-tickerless asset.
+
+codes:
+  "4K": { name: "401K and Other Non-Federal Retirement Accounts", equity_ticker_likely: false }
+  "5C": { name: "529 College Savings Plan", equity_ticker_likely: false }
+  "5F": { name: "529 Portfolio", equity_ticker_likely: false }
+  "5P": { name: "529 Prepaid Tuition Plan", equity_ticker_likely: false }
+  "AB": { name: "Asset-Backed Securities", equity_ticker_likely: false }
+  "BA": { name: "Bank Accounts, Money Market Accounts and CDs", equity_ticker_likely: false }
+  "BK": { name: "Brokerage Accounts", equity_ticker_likely: false }
+  "CO": { name: "Collectibles", equity_ticker_likely: false }
+  "CS": { name: "Corporate Securities (Bonds and Notes)", equity_ticker_likely: false }
+  "CT": { name: "Cryptocurrency", equity_ticker_likely: false }
+  "DB": { name: "Defined Benefit Pension", equity_ticker_likely: false }
+  "DO": { name: "Debts Owed to the Filer", equity_ticker_likely: false }
+  "DS": { name: "Delaware Statutory Trust", equity_ticker_likely: false }
+  "EF": { name: "Exchange Traded Funds (ETF)", equity_ticker_likely: true }
+  "EQ": { name: "Excepted/Qualified Blind Trust", equity_ticker_likely: false }
+  "ET": { name: "Exchange Traded Notes", equity_ticker_likely: true }
+  "FA": { name: "Farms", equity_ticker_likely: false }
+  "FE": { name: "Foreign Exchange Position (Currency)", equity_ticker_likely: false }
+  "FN": { name: "Fixed Annuity", equity_ticker_likely: false }
+  "FU": { name: "Futures", equity_ticker_likely: false }
+  "GS": { name: "Government Securities and Agency Debt", equity_ticker_likely: false }
+  "HE": { name: "Hedge Funds & Private Equity Funds (EIF)", equity_ticker_likely: false }
+  "HN": { name: "Hedge Funds & Private Equity Funds (non-EIF)", equity_ticker_likely: false }
+  "IC": { name: "Investment Club", equity_ticker_likely: false }
+  "IH": { name: "IRA (Held in Cash)", equity_ticker_likely: false }
+  "IP": { name: "Intellectual Property & Royalties", equity_ticker_likely: false }
+  "IR": { name: "IRA", equity_ticker_likely: false }
+  "MA": { name: "Managed Accounts (e.g., SMA and UMA)", equity_ticker_likely: false }
+  "MF": { name: "Mutual Funds", equity_ticker_likely: true }
+  "MO": { name: "Mineral/Oil/Solar Energy Rights", equity_ticker_likely: false }
+  "OI": { name: "Ownership Interest (Holding Investments)", equity_ticker_likely: false }
+  "OL": { name: "Ownership Interest (Engaged in a Trade or Business)", equity_ticker_likely: false }
+  "OP": { name: "Options", equity_ticker_likely: true }
+  "OT": { name: "Other", equity_ticker_likely: false }
+  "PE": { name: "Pensions", equity_ticker_likely: false }
+  "PM": { name: "Precious Metals", equity_ticker_likely: false }
+  "PS": { name: "Stock (Not Publicly Traded)", equity_ticker_likely: false }
+  "RE": { name: "Real Estate Invest. Trust (REIT)", equity_ticker_likely: true }
+  "RF": { name: "REIT (EIF)", equity_ticker_likely: true }
+  "RN": { name: "REIT (non-EIF)", equity_ticker_likely: false }
+  "RP": { name: "Real Property", equity_ticker_likely: false }
+  "RS": { name: "Restricted Stock Units (RSUs)", equity_ticker_likely: true }
+  "SA": { name: "Stock Appreciation Right", equity_ticker_likely: true }
+  "ST": { name: "Stocks (including ADRs)", equity_ticker_likely: true }
+  "TR": { name: "Trust", equity_ticker_likely: false }
+  "VA": { name: "Variable Annuity", equity_ticker_likely: false }
+  "VI": { name: "Variable Insurance", equity_ticker_likely: false }
+  "WU": { name: "Whole/Universal Insurance", equity_ticker_likely: false }

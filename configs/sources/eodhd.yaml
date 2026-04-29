@@ -9,14 +9,41 @@ api:
   key_param: api_token
 
 rate_limits:
-  requests_per_second: 5.0
+  requests_per_minute: 1000          # hard limit, all plans
+  requests_per_second: 16.0          # safe ceiling (1000/min ÷ 60)
   daily_limit_free: 20
+  daily_limit_paid: 100000
+  reset_time: "00:00 UTC"            # midnight GMT for subscription plans
+
+# API call costs (not 1:1 — budget accordingly)
+call_costs:
+  default: 1
+  fundamentals: 10
+  insider_transactions: 10
+  options: 10
+  tick_data: 10
+  technical: 5
+  screener: 5
+  bulk_exchange: 100                  # but returns ALL tickers
+  bulk_with_symbols: "100 + N"        # 100 base + 1 per symbol
 
 endpoints:
   eod: "/eod/{symbol}?from={from_date}&to={to_date}&fmt=json"
   fundamentals: "/fundamentals/{symbol}?fmt=json"
-  bulk: "/eod-bulk-last-day/{exchange}?fmt=json"
+  bulk_eod: "/eod-bulk-last-day/{exchange}?fmt=json"
+  bulk_dividends: "/div-bulk/{exchange}?fmt=json"
+  bulk_splits: "/splits-bulk/{exchange}?fmt=json"
+  dividends: "/div/{symbol}?from={from_date}&to={to_date}&fmt=json"
+  splits: "/splits/{symbol}?from={from_date}&to={to_date}&fmt=json"
+  exchange_symbols: "/exchange-symbol-list/{exchange}?fmt=json"
+  search: "/search/{query}?fmt=json"
+  screener: "/screener?api_token={key}&fmt=json"
 
 symbol_format: "{ticker}.{exchange}"
 default_exchange: US
 bulk_exchange: US  # for eod-bulk-last-day endpoint
+
+response:
+  format: json                        # also supports csv via fmt=csv
+  eod_columns: [date, open, high, low, close, adjusted_close, volume]
+  rate_limit_header: X-RateLimit-Remaining

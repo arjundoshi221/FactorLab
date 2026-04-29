@@ -1,0 +1,64 @@
+# Charles Schwab Trader API source configuration
+name: schwab
+vendor_key: schwab  # matches ref.security_aliases.vendor
+
+api:
+  base_url: https://api.schwabapi.com
+  auth_type: oauth2_code_grant
+  token_path_env: SCHWAB_TOKEN_PATH   # path to token JSON file
+  app_key_env: SCHWAB_APP_KEY
+  app_secret_env: SCHWAB_APP_SECRET
+  callback_url_env: SCHWAB_CALLBACK_URL
+
+auth:
+  authorize_url: https://api.schwabapi.com/v1/oauth/authorize
+  token_url: https://api.schwabapi.com/v1/oauth/token
+  access_token_ttl: 1800              # 30 minutes
+  refresh_token_ttl: 604800           # 7 days — must re-login weekly
+  callback_url: "https://127.0.0.1:8182"  # HTTPS required, even localhost
+  library: schwab-py                  # pip install schwab-py
+  # schwab-py handles token refresh automatically within 7-day window
+  # After 7 days: must delete token file + re-run browser OAuth + MFA
+
+rate_limits:
+  requests_per_minute: 120            # approximate, not officially documented
+  requests_per_second: 2.0            # safe sustained rate
+  streaming_connections: 1            # one WebSocket per account
+  # HTTP 429 on throttle, check Retry-After header
+
+endpoints:
+  quotes: "/marketdata/v1/quotes?symbols={symbols}"
+  quote_single: "/marketdata/v1/{symbol}/quotes"
+  price_history: "/marketdata/v1/pricehistory?symbol={symbol}"
+  options_chain: "/marketdata/v1/chains?symbol={symbol}"
+  instruments: "/marketdata/v1/instruments?symbol={symbol}&projection={projection}"
+  movers: "/marketdata/v1/movers/{index}"
+  market_hours: "/marketdata/v1/markets?markets={markets}"
+
+# Price history parameters
+price_history:
+  # periodType → valid periods → valid frequencyTypes
+  day:
+    periods: [1, 2, 3, 4, 5, 10]
+    frequency_types: [minute]         # 1, 5, 10, 15, 30 min
+    max_lookback: "48 days"           # for minute bars
+  month:
+    periods: [1, 2, 3, 6]
+    frequency_types: [daily, weekly]
+  year:
+    periods: [1, 2, 3, 5, 10, 15, 20]
+    frequency_types: [daily, weekly, monthly]
+    max_lookback: "20+ years"         # some symbols back to 1985
+  ytd:
+    periods: [1]
+    frequency_types: [daily, weekly]
+
+symbol_format: "{ticker}"             # plain ticker, no exchange suffix
+# e.g., AAPL, MSFT, BRK-B
+
+response:
+  price_history_columns: [datetime, open, high, low, close, volume]
+  datetime_format: epoch_ms           # Unix epoch milliseconds
+  prices_adjusted: true               # Schwab returns split-adjusted by default
+  fundamentals_projection: fundamental  # ?projection=fundamental for basic ratios
+  # Fundamentals: P/E, EPS, div yield, market cap, beta — NOT full financials

@@ -1,0 +1,514 @@
+- entity_id: 211
+  name: Access Board
+- entity_id: 131
+  name: Administration for Children & Families (ACF)
+- entity_id: 130
+  name: Administration on Aging
+- entity_id: 214
+  name: Advisory Council on Historic Preservation (ACHP)
+- entity_id: 43
+  name: African Development Foundation
+- entity_id: 132
+  name: Agency for Healthcare Research & Quality (AHRQ)
+- entity_id: 133
+  name: Agency for Toxic Substances & Disease Registry
+- entity_id: 23
+  name: Agriculture, Dept of (USDA)
+- entity_id: 29
+  name: Air Force, Dept of
+- entity_id: 225
+  name: Alcohol & Tobacco Tax & Trade Bureau (TTB)
+- entity_id: 104
+  name: Alternative Agricultural Research & Commercialization Center
+- entity_id: 224
+  name: American Battle Monuments Commission
+- entity_id: 75
+  name: AMTRAK - Natl Railroad Passenger Corporation
+- entity_id: 226
+  name: Appalachian Regional Commission
+- entity_id: 3
+  name: Architect of the Capitol (AOC)
+- entity_id: 227
+  name: Architectural & Transportation Barriers Compliance Board
+- entity_id: 200
+  name: Army, Dept of (Corps of Engineers)
+- entity_id: 30
+  name: Army, Dept of (Other)
+- entity_id: 115
+  name: Ballistic Missile Defense Organization
+- entity_id: 182
+  name: Bureau of Alcohol Tobacco Firearms & Explosives
+- entity_id: 228
+  name: Bureau of Arms Control
+- entity_id: 154
+  name: Bureau of Citizenship & Immigration Services (BCIS)
+- entity_id: 106
+  name: Bureau of Economic Analysis
+- entity_id: 185
+  name: Bureau of Engraving & Printing
+- entity_id: 146
+  name: Bureau of Indian Affairs (BIA)
+- entity_id: 107
+  name: Bureau of Industry and Security (BIS)
+- entity_id: 157
+  name: Bureau of Justice Assistance
+- entity_id: 158
+  name: Bureau of Justice Statistics
+- entity_id: 169
+  name: Bureau of Labor Statistics (BLS)
+- entity_id: 148
+  name: Bureau of Land Management (BLM)
+- entity_id: 151
+  name: Bureau of Prisons (BOP)
+- entity_id: 149
+  name: Bureau of Reclamation
+- entity_id: 105
+  name: Bureau of the Census
+- entity_id: 190
+  name: Bureau of the Public Debt
+- entity_id: 180
+  name: Bureau of Transportation Statistics
+- entity_id: 134
+  name: Centers For Disease Control & Prevention (CDC)
+- entity_id: 136
+  name: Centers For Medicare and Medicaid Services (CMS)
+- entity_id: 44
+  name: Central Intelligence Agency (CIA)
+- entity_id: 24
+  name: Commerce, Dept of (DOC)
+- entity_id: 45
+  name: Commodity Futures Trading Commission (CFTC)
+- entity_id: 8
+  name: Congressional Budget Office (CBO)
+- entity_id: 255
+  name: Consumer Financial Protection Bureau (CFPB)
+- entity_id: 46
+  name: Consumer Product Safety Commission (CPSC)
+- entity_id: 47
+  name: Corporation for Natl & Community Service
+- entity_id: 205
+  name: Corporation for Public Broadcasting
+- entity_id: 164
+  name: Corrections Program Office
+- entity_id: 14
+  name: Council of Economic Advisers (CEA)
+- entity_id: 15
+  name: Council on Environmental Quality (CEQ)
+- entity_id: 116
+  name: Defense Advanced Research Projects Agency (DARPA)
+- entity_id: 229
+  name: Defense Business Transformation Agency (BTA)
+- entity_id: 117
+  name: Defense Commissary Agency
+- entity_id: 118
+  name: Defense Contract Audit Agency (DCAA)
+- entity_id: 28
+  name: Defense Department Field Activities
+- entity_id: 25
+  name: Defense, Dept of (DOD)
+- entity_id: 230
+  name: Defense Finance & Accounting Service (DFAS)
+- entity_id: 119
+  name: Defense Information Systems Agency
+- entity_id: 120
+  name: Defense Intelligence Agency (DIA)
+- entity_id: 121
+  name: Defense Investigative Service (DIS)
+- entity_id: 122
+  name: Defense Legal Services Agency
+- entity_id: 123
+  name: Defense Logistics Agency
+- entity_id: 48
+  name: Defense Nuclear Facilities Safety Board
+- entity_id: 124
+  name: Defense Security Assistance Agency
+- entity_id: 231
+  name: Defense Security Cooperation Agency (DSCA)
+- entity_id: 125
+  name: Defense Special Weapons Agency
+- entity_id: 236
+  name: Defense Threat Reduction Agency (DTRA)
+- entity_id: 215
+  name: Director of National Intelligence (ODNI)
+- entity_id: 163
+  name: Drug Court Program Office
+- entity_id: 155
+  name: Drug Enforcement Administration (DEA)
+- entity_id: 108
+  name: Economic Development Administration
+- entity_id: 32
+  name: Education, Dept of
+- entity_id: 217
+  name: Election Assistance Commission (EAC)
+- entity_id: 166
+  name: Employment Standards Administration
+- entity_id: 232
+  name: Employment & Training Administration
+- entity_id: 33
+  name: Energy, Dept of
+- entity_id: 49
+  name: Environmental Protection Agency (EPA)
+- entity_id: 50
+  name: Equal Employment Opportunity Commission (EEOC)
+- entity_id: 11
+  name: Executive Office of the President (EOP)
+- entity_id: 51
+  name: Export-Import Bank of the United States (EXIM Bank)
+- entity_id: 52
+  name: Farm Credit Administration
+- entity_id: 233
+  name: Federal Accounting Standards Advisory Board (FASAB)
+- entity_id: 172
+  name: Federal Aviation Administration (FAA)
+- entity_id: 150
+  name: Federal Bureau of Investigation (FBI)
+- entity_id: 53
+  name: Federal Communications Commission (FCC)
+- entity_id: 54
+  name: Federal Deposit Insurance Corporation (FDIC)
+- entity_id: 55
+  name: Federal Election Commission (FEC)
+- entity_id: 56
+  name: Federal Emergency Management Agency (FEMA)
+- entity_id: 197
+  name: Federal Energy Regulatory Commission (FERC)
+- entity_id: 173
+  name: Federal Highway Administration (FHA)
+- entity_id: 57
+  name: Federal Housing Finance Agency (FHFA)
+- entity_id: 58
+  name: Federal Labor Relations Authority (FLRA)
+- entity_id: 186
+  name: Federal Law Enforcement Training Center
+- entity_id: 187
+  name: Federal Management Service
+- entity_id: 59
+  name: Federal Maritime Commission
+- entity_id: 60
+  name: Federal Mediation & Conciliation Service
+- entity_id: 234
+  name: Federal Mine Safety Health Review Commission (FMSHRC)
+- entity_id: 218
+  name: Federal Motor Carrier Safety Administration
+- entity_id: 174
+  name: Federal Railroad Administration
+- entity_id: 62
+  name: Federal Reserve System
+- entity_id: 63
+  name: Federal Retirement Thrift Investment Board
+- entity_id: 64
+  name: Federal Trade Commission (FTC)
+- entity_id: 176
+  name: Federal Transit Administration (FTA)
+- entity_id: 235
+  name: Financial Crimes Enforcement Network (FinCEN)
+- entity_id: 237
+  name: Financial Management Service (FMS)
+- entity_id: 135
+  name: Food & Drug Administration (FDA)
+- entity_id: 65
+  name: General Services Administration (GSA)
+- entity_id: 238
+  name: Ginnie Mae
+- entity_id: 5
+  name: Government Accountability Office (GAO)
+- entity_id: 6
+  name: Government Printing Office (GPO)
+- entity_id: 34
+  name: Health & Human Services, Dept of (HHS)
+- entity_id: 137
+  name: Health Resources & Services Administration (HRSA)
+- entity_id: 201
+  name: Homeland Security, Dept of (DHS)
+- entity_id: 2
+  name: HOUSE OF REPRESENTATIVES
+- entity_id: 35
+  name: Housing & Urban Development, Dept of (HUD)
+- entity_id: 138
+  name: Indian Health Service
+- entity_id: 209
+  name: Institute of Museum and Library Services (IMLS)
+- entity_id: 66
+  name: Inter-American Foundation
+- entity_id: 36
+  name: Interior, Dept of (DOI)
+- entity_id: 188
+  name: Internal Revenue Service (IRS)
+- entity_id: 109
+  name: Intl Trade Administration (ITA)
+- entity_id: 239
+  name: Job Corps
+- entity_id: 27
+  name: Joint Chiefs of Staff
+- entity_id: 129
+  name: Joint Service Schools
+- entity_id: 37
+  name: Justice, Dept of (DOJ)
+- entity_id: 38
+  name: Labor, Dept of (DOL)
+- entity_id: 100
+  name: Legal Services Corporation
+- entity_id: 7
+  name: Library of Congress (LOC)
+- entity_id: 216
+  name: Marine Mammal Commission
+- entity_id: 177
+  name: Maritime Administration (MARAD)
+- entity_id: 253
+  name: Medicare Payment Advisory Commission (MedPAC)
+- entity_id: 67
+  name: Merit Systems Protection Board
+- entity_id: 147
+  name: Minerals Management Service
+- entity_id: 168
+  name: Mine Safety & Health Administration (MSHA)
+- entity_id: 61
+  name: Mine Safety & Health Review Commission
+- entity_id: 110
+  name: Minority Business Development Agency
+- entity_id: 68
+  name: Natl Aeronautics & Space Administration (NASA)
+- entity_id: 69
+  name: Natl Archives & Records Administration (NARA)
+- entity_id: 240
+  name: Natl Bioethics Advisory Commission
+- entity_id: 70
+  name: Natl Capital Planning Commission (NCPC)
+- entity_id: 241
+  name: Natl Commission Libraries & Information Science (NCLS)
+- entity_id: 222
+  name: Natl Council on Disability
+- entity_id: 71
+  name: Natl Credit Union Administration (NCUA)
+- entity_id: 198
+  name: Natl Economic Council (NEC)
+- entity_id: 206
+  name: Natl Endowment for the Arts
+- entity_id: 223
+  name: Natl Endowment for the Humanities
+- entity_id: 72
+  name: Natl Foundation on the Arts & Humanities
+- entity_id: 126
+  name: Natl Geospatial Intelligence Agency
+- entity_id: 242
+  name: Natl Guard
+- entity_id: 175
+  name: Natl Highway Traffic Safety Administration (NHTSA)
+- entity_id: 208
+  name: Natl Indian Gaming Commission
+- entity_id: 159
+  name: Natl Institute of Justice
+- entity_id: 243
+  name: Natl Institute of Mental Health (NIMH)
+- entity_id: 219
+  name: Natl Institute of Standards & Technology (NIST)
+- entity_id: 193
+  name: Natl Institute on Alcohol Abuse & Alcoholism (NIAA)
+- entity_id: 139
+  name: Natl Institutes of Health (NIH)
+- entity_id: 73
+  name: Natl Labor Relations Board (NLRB)
+- entity_id: 74
+  name: Natl Mediation Board
+- entity_id: 111
+  name: Natl Oceanic & Atmospheric Administration (NOAA)
+- entity_id: 143
+  name: Natl Park Service (NPS)
+- entity_id: 76
+  name: Natl Science Foundation (NSF)
+- entity_id: 127
+  name: Natl Security Agency (NSA)
+- entity_id: 16
+  name: Natl Security Council (NSC)
+- entity_id: 244
+  name: Natl Technical Information Service
+- entity_id: 112
+  name: Natl Telecommunications & Information Administration (NTIA)
+- entity_id: 77
+  name: Natl Transportation Safety Board (NTSB)
+- entity_id: 31
+  name: Navy, Dept of
+- entity_id: 195
+  name: NONE
+- entity_id: 78
+  name: Nuclear Regulatory Commission (NRC)
+- entity_id: 167
+  name: Occupational Safety & Health Administration (OSHA)
+- entity_id: 79
+  name: Occupational Safety & Health Review Commission
+- entity_id: 161
+  name: Office for Victims of Crime
+- entity_id: 17
+  name: Office of Administration
+- entity_id: 202
+  name: Office of Faith-Based & Community Initiatives
+- entity_id: 80
+  name: Office of Government Ethics (OGE)
+- entity_id: 156
+  name: Office of Justice Program
+- entity_id: 160
+  name: Office of Juvenile Justice & Delinquency Prevention
+- entity_id: 18
+  name: Office of Management & Budget (OMB)
+- entity_id: 245
+  name: Office of Natl AIDS Policy
+- entity_id: 19
+  name: Office of Natl Drug Control Policy (NDCP)
+- entity_id: 81
+  name: Office of Personnel Management (OPM)
+- entity_id: 20
+  name: Office of Policy Development
+- entity_id: 21
+  name: Office of Science & Technology Policy (OSTP)
+- entity_id: 82
+  name: Office of Special Counsel
+- entity_id: 145
+  name: Office of Surface Mining Reclamation & Enforcement
+- entity_id: 256
+  name: Office of Technology Policy (OTP)
+- entity_id: 183
+  name: Office of the Comptroller of the Currency (OCC)
+- entity_id: 26
+  name: Office of the Secretary of Defense
+- entity_id: 13
+  name: Office of the Vice President of the United States
+- entity_id: 192
+  name: Office of Thrift Supervision (OTS)
+- entity_id: 162
+  name: Office on Violence Against Women
+- entity_id: 128
+  name: On-Site Inspection Agency
+- entity_id: 203
+  name: Overseas Private Investment Corp (OPIC)
+- entity_id: 83
+  name: Panama Canal Commission
+- entity_id: 113
+  name: Patent & Trademark Office (PTO)
+- entity_id: 84
+  name: Peace Corps
+- entity_id: 85
+  name: Pension Benefit Guaranty Corporation (PBGC)
+- entity_id: 165
+  name: Pension & Welfare Benefits Administration
+- entity_id: 246
+  name: Pentagon Force Protection Agency
+- entity_id: 247
+  name: Pipeline & Hazardous Materials Safety Administration
+- entity_id: 194
+  name: PLEASE DO NOT USE THIS ONE
+- entity_id: 86
+  name: Postal Rate Commission
+- entity_id: 213
+  name: Postal Regulatory Commission
+- entity_id: 9
+  name: President of the U.S.
+- entity_id: 140
+  name: Program Support Center
+- entity_id: 87
+  name: Railroad Retirement Board
+- entity_id: 179
+  name: Research & Special Programs Administration
+- entity_id: 248
+  name: Risk Management Agency
+- entity_id: 88
+  name: Securities & Exchange Commission (SEC)
+- entity_id: 89
+  name: Selective Service System
+- entity_id: 1
+  name: SENATE
+- entity_id: 90
+  name: Small Business Administration (SBA)
+- entity_id: 101
+  name: Smithsonian Institution
+- entity_id: 91
+  name: Social Security Administration (SSA)
+- entity_id: 39
+  name: State, Dept of (DOS)
+- entity_id: 102
+  name: State Justice Institute
+- entity_id: 178
+  name: St. Lawrence Seaway Development Corporation
+- entity_id: 141
+  name: Substance Abuse & Mental Health Services Administration (SAMHSA)
+- entity_id: 181
+  name: Surface Transportation Board (STB)
+- entity_id: 114
+  name: Technology Administration
+- entity_id: 92
+  name: Tennessee Valley Authority (TVA)
+- entity_id: 40
+  name: Transportation, Dept of (DOT)
+- entity_id: 204
+  name: Transportation Security Administration (TSA)
+- entity_id: 41
+  name: Treasury, Dept of
+- entity_id: 300
+  name: UNDETERMINED
+- entity_id: 249
+  name: USA Freedom Corps
+- entity_id: 196
+  name: U.S. Agency for International Development (USAID)
+- entity_id: 199
+  name: U.S. Architectural & Transportation Barriers Compliance Board (ACCESS)
+- entity_id: 94
+  name: U.S. Arms Control & Disarmament Agency
+- entity_id: 4
+  name: U.S. Botanic Garden
+- entity_id: 221
+  name: U.S. Chemical Safety & Hazard Investigation Board
+- entity_id: 171
+  name: U.S. Coast Guard (USCG)
+- entity_id: 250
+  name: U.S. Commission of Fine Arts
+- entity_id: 95
+  name: U.S. Commission on Civil Rights
+- entity_id: 220
+  name: U.S. Commission on International Religious Freedom
+- entity_id: 207
+  name: U.S. Copyright Office
+- entity_id: 184
+  name: U.S. Customs & Border Protection
+- entity_id: 142
+  name: U.S. Fish & Wildlife Service (USFWS)
+- entity_id: 212
+  name: U.S. Forest Service
+- entity_id: 144
+  name: U.S. Geological Survey (USGS)
+- entity_id: 251
+  name: U.S. Immigration & Customs Enforcement (ICE)
+- entity_id: 96
+  name: U.S. Information Agency (USIA)
+- entity_id: 103
+  name: U.S. Institute of Peace
+- entity_id: 97
+  name: U.S. International Development Cooperation Agency
+- entity_id: 301
+  name: U.S. International Development Finance Corporation (DFC)
+- entity_id: 98
+  name: U.S. International Trade Commission (ITC)
+- entity_id: 210
+  name: U.S. Marines
+- entity_id: 152
+  name: U.S. Marshals Service
+- entity_id: 189
+  name: U.S. Mint
+- entity_id: 153
+  name: U.S. Natl Central Bureau - Intl Criminal Police Organization
+- entity_id: 99
+  name: U.S. Postal Service (USPS)
+- entity_id: 191
+  name: U.S. Secret Service
+- entity_id: 93
+  name: U.S. Trade & Development Agency (USTDA)
+- entity_id: 22
+  name: U.S. Trade Representative (USTR)
+- entity_id: 42
+  name: Veterans Affairs, Dept of (VA)
+- entity_id: 170
+  name: Veterans Employment & Training Service
+- entity_id: 10
+  name: Vice President of the U.S.
+- entity_id: 252
+  name: Voice of America
+- entity_id: 12
+  name: White House Office

@@ -70,7 +70,7 @@ factorlab=# \dn
         market          ← prices, fundamentals, corporate actions, adjustment factors, raw archives, IBKR mirrors
         universe        ← index definitions, point-in-time membership
         alt_social      ← reddit, twitter posts
-        alt_political   ← senator trades, lobbying, etc.
+        alt_political   ← US Congress trades + lobbying + contracts + donations + bills + hearings (26 tables, see below)
         alt_research    ← arxiv papers
         derived         ← factors, signals, portfolios
         experiments     ← research run registry, backtest results
@@ -205,9 +205,117 @@ notes           text
 result_uri      text
 ```
 
+### `alt_political` schema (26 tables, country-tagged)
+
+Built in migrations 007 + 008 (2026-04-30). Tables grouped into dimensions, trade events, and conjunction-layer events. **Country-tagged**: every dim and event carries `country_code` FK to `ref.countries.code`, defaulting to `'US'`. Same shape generalizes to UK / EU / India later — different country codes, same tables.
+
+**Two stable join keys** that everything fans out from:
+- `bioguide_id` — legislator side
+- `ticker` — company side (denormalized into events; ground truth via `security_id → ref.instruments.id`)
+
+**Dimensions (12 tables):**
+| Table | PK | Source |
+|---|---|---|
+| `legislators` | `bioguide_id` | unitedstates/congress-legislators YAML |
+| `legislator_terms` | `(bioguide_id, term_start)` | YAML terms array |
+| `legislator_fec_ids` | `fec_candidate_id` | YAML + FEC |
+| `committees` | `(country_code, committee_id)` | YAML; subcommittees self-FK to parent |
+| `committee_assignments` | `(country_code, committee_id, bioguide_id, congress_number)` | YAML; SCD with `valid_from/to` |
+| `committee_sector_map` | `(country_code, committee_id, gics_code)` | Manual seed (alpha thesis from docs/04 Part 5) |
+| `asset_type_codes` | `(country_code, code)` | fd.house.gov 48 codes |
+| `lda_issue_codes` | `(country_code, code)` | LDA constants — 79 codes |
+| `lda_government_entities` | `(country_code, entity_id)` | LDA constants — 257 entities |
+| `fec_committees` | `(country_code, committee_id)` | FEC `/committees/` |
+| `contract_aliases` | `(country_code, normalized_name)` | resolver: USASpending recipient → ticker |
+| `lobby_client_aliases` | `(country_code, normalized_name)` | resolver: LDA client → ticker |
+
+**Trade events (1 table):**
+| Table | PK | Notes |
+|---|---|---|
+| `legislator_trades` | `trade_id` (UUID) | Both chambers, same shape; chamber is metadata. UNIQUE dedup on `(country_code, chamber, filing_id, transaction_date, asset_name_raw, transaction_type, amount_str)` |
+
+**Conjunction-layer events (12 tables):**
+| Table | PK |
+|---|---|
+| `gov_contracts` | `contract_id` (USASpending generated_internal_id) |
+| `lobbying_filings` | `filing_uuid` |
+| `lobbying_activities` | `activity_id` (UUID) |
+| `lobbying_activity_targets` | `(activity_id, country_code, entity_id)` — M:N |
+| `lobbying_activity_lobbyists` | `(activity_id, lobbyist_id, last_name, first_name)` — M:N (no canonical lobbyist ID) |
+| `campaign_donations` | `donation_id` (UUID) |
+| `bills` | `bill_uid` (`{country}-{congress}-{type}-{number}`) |
+| `bill_sponsors` | `(bill_uid, bioguide_id, role)` |
+| `bill_committees` | `(bill_uid, country_code, committee_id, activity_date, activity_type)` |
+| `bill_actions` | `action_id` (UUID) |
+| `hearings` | `(country_code, jacket_number)` |
+| `hearing_witnesses` | `(country_code, jacket_number, witness_seq)` |
+
+**Audit (1 table):** `raw_archive` — gzipped response bytes per fetch, source-tagged, source-url-indexed for replay.
+
+#### Conceptual ER — the two join surfaces
+
+```
+                       LEGISLATOR SIDE                         COMPANY SIDE
+                       (bioguide_id)                           (ticker)
+                            │                                    │
+              ┌─────────────┼──────────────┐         ┌───────────┴──────────┐
+              │             │              │         │                      │
+        legislators  legislator_terms  legislator_  ref.instruments     gov_contracts
+              │       (chamber/state/    fec_ids        │                   │
+              │        district SCD)        │           │                   │
+              │             │               │           └─ legislator_      │
+       committee_assignments               (FEC          trades.security_id │
+              │  (per Congress, role)       link)              │            │
+              │             │                                  │       lobbying_filings.
+        committees ←────────┘                                  ↑       client_ticker
+              │                                          ticker is                │
+       committee_sector_map                              denormalized       lobbying_
+              │  (signal_strength × GICS)                into events         activities
+              │                                                                   │
+        bill_committees                                                           │
+              │                                                            (issue_code →
+        bills ← bill_sponsors                                              lda_issue_codes)
+              │                                                                   │
+        bill_actions                                                        lobbying_
+                                                                            activity_targets
+                                                                                  │
+                                                                            (entity_id →
+                                                                            lda_government_
+                                                                            entities)
+
+        campaign_donations  ← bridges both: donor_committee_id (FEC PAC) on the company
+                              side via fec_committees.sponsor_company_ticker;
+                              candidate_id (legislator_fec_ids) on the legislator side.
+```
+
+#### Indexes optimized for common queries
+
+| Query path | Index |
+|---|---|
+| "Recent trades by member X" | `legislator_trades(bioguide_id, transaction_date)` |
+| "Who traded ticker T" | `legislator_trades(ticker, transaction_date)` |
+| "Contract pipeline for ticker T" | `gov_contracts(ticker, action_date DESC)` |
+| "Lobby spend trend for ticker T" | `lobbying_filings(client_ticker, filing_year)` |
+| "Donations to senator X's PAC" | `campaign_donations(recipient_committee_id, date DESC)` |
+| "Employees of X giving in cycle Y" | `campaign_donations(donor_employer, cycle)` |
+| "Member X's committees" | `committee_assignments(bioguide_id)` |
+| "Bills before committee C" | `bill_committees(committee_id, activity_date DESC)` |
+
+#### Key edge cases handled
+
+- **Retired senators** — `legislator_trades.bioguide_id` is nullable; preserves `legislator_name_raw` for re-resolution after `legislators-historical.yaml` ingestion.
+- **Senate Stock Watcher 2014-2019 backfill** — `filing_id` accepts a composite hash since SSW lacks DocIDs.
+- **Paper-filed Senate PTRs (GIF scans)** — viewer HTML + image URLs go to `raw_archive` only; OCR pipeline deferred.
+- **Subsidiary contracts** — both `recipient_legal_name` and `recipient_parent_name` stored; resolver writes to `contract_aliases`.
+- **Finnhub vs USASpending** — `gov_contracts.source` distinguishes; both can coexist for the same logical award.
+- **Bill ID stability** — `bill_uid` deterministic across re-fetches; UPSERT pattern.
+- **Lobbyist identity** — composite PK includes name fields since LDA's `lobbyist_id` may be missing.
+
 ### Raw archive
 
 Each adapter writes to a `raw_<source>` table. Never deleted. Parsers re-run against raw if schemas change.
+
+The `alt_political.raw_archive` table consolidates audit for all eight political-data sources (House Clerk, Senate eFD, LDA, USASpending, Finnhub, FEC, Congress.gov, SEC) — keyed by `raw_id` UUID with `source` tag and `metadata_json` for source-specific tracking (filing_id, recipient_query, country_code, etc.).
 
 ```sql
 CREATE TABLE market.raw_eodhd (

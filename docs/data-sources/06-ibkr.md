@@ -160,6 +160,29 @@ The Postgres tables are append-only history. To know "current" position, query t
 
 This is the part that surprises most people: **IBKR data is not free**, and the matrix is complicated.
 
+### Account type: IBKR Lite vs Pro
+
+| Feature | IBKR Lite | IBKR Pro |
+|---------|-----------|----------|
+| US stock commissions | $0 | $0.005/share ($1 min) |
+| **API access** | **NO** | **YES** |
+| Real-time streaming | Free (included) | Requires subscription |
+| Order routing | PFOF | SmartRouting (best execution) |
+| Minimum deposit | $0 | $0 |
+| Inactivity fee | None | None |
+
+**API requires IBKR Pro.** Upgrade from Lite: Client Portal → Settings → Account Type → Switch to Pro (instant, effective next business day).
+
+### Path from current free account to API access
+
+1. **Switch Lite → Pro** in Client Portal (free, instant)
+2. **Fund account** via ACH ($200-500 recommended to cover data fees)
+3. **Complete non-professional questionnaire** (personal research = non-pro, 5-10x cheaper)
+4. **Subscribe to market data** in Client Portal → Settings → Market Data Subscriptions
+5. **Download IB Gateway** from interactivebrokers.com/en/trading/ibgateway-stable.php
+6. **Enable API** in Gateway: Settings → API → Enable Socket Clients
+7. **Install `ib_async`** and test on paper (port 4002)
+
 ### Subscription model
 - Most non-US data requires a **monthly market-data subscription** (e.g. NYSE depth ~$1.50/mo, Nasdaq TotalView ~$70/mo, Eurex level-2 separate, etc.)
 - Each subscription tier unlocks both *streaming* and *historical* data for that segment
@@ -172,16 +195,25 @@ This is the part that surprises most people: **IBKR data is not free**, and the 
 - Delayed (15-min) data on most US exchanges via `marketDataType=3`
 - US OPRA snapshot (delayed)
 - IBKR's own consolidated tape (limited)
+- Free real-time non-consolidated streaming quotes on US-listed stocks/ETFs
+- 100 free snapshot quotes/month
+- Historical daily bars (available on paper without real-time subscription)
 
-### Paid (relevant for FactorLab US Phase 1)
-| Subscription | ~Cost/mo | What you get |
-|--------------|----------|--------------|
-| US Securities Snapshot and Futures Value Bundle | waivable if commissions ≥ $30/mo | Real-time NBBO US equities + futures |
-| US Equity & Options Add-On Streaming Bundle | $4.50 | Real-time level-1 streaming |
-| Nasdaq TotalView | ~$70 | Level-2 depth |
-| NYSE OpenBook | ~$50 | NYSE depth |
+### Paid (relevant for FactorLab US Phase 1, non-professional prices)
+| Subscription | Cost/mo | Waiver | What you get |
+|--------------|---------|--------|--------------|
+| **US Securities Snapshot and Futures Value Bundle** | **$10.00** | Waived if commissions ≥ $30/mo | Real-time NBBO US equities + futures |
+| US Equity & Options Add-On Streaming Bundle | $4.50 | Waived if commissions ≥ $5/mo | Real-time level-1 streaming |
+| NYSE (Network A/CTA) | $1.50 | — | NYSE-listed top-of-book |
+| NASDAQ (Network C/UTP) | $1.50 | — | NASDAQ-listed top-of-book |
+| NYSE American, BATS, ARCA, IEX | $1.50 | — | Regional exchanges |
+| OPRA US Options | $1.50 | — | US options data |
+| Nasdaq TotalView (Level 2) | ~$24 (non-pro) | — | Level-2 depth |
+| NYSE OpenBook (Level 2) | ~$24-45 (non-pro) | — | NYSE depth |
 
-For research with daily bars, the snapshot bundle is sufficient and often free if you trade enough. For intraday tick-level work, expect real costs.
+**Recommended for FactorLab:** US Securities Snapshot Bundle ($10/mo) — sufficient for daily bar research. Waived if you trade modestly.
+
+**Professional vs non-professional:** Non-pro = personal research, not managing others' money, not registered advisor. Price difference is 5-30x ($10 vs $75 for Snapshot Bundle).
 
 ### Non-US (relevant later)
 - India: IBKR India is a separate entity; **not all symbols cleanly accessible** from a US account. NSE data subscription possible but limited to specific contract universes.
@@ -246,14 +278,22 @@ For factor research on equities, use `TRADES` + `useRTH=True` for daily bars and
 
 ### Pacing limits — the IBKR speed bump
 
-These are notoriously strict. The official rules:
+These are notoriously strict. The official rules (from IBKR docs, verified April 2026):
 
-> 1. **No more than 60 historical-data requests in any 10-minute period.**
-> 2. **No more than 6 identical historical-data requests for the same contract/exchange/tickType within 2 seconds.**
-> 3. **No more than 2 simultaneous historical-data requests for the same contract.**
-> 4. Bars of <30s or unusual aggregation may have additional limits.
+| Rule | Limit | Penalty |
+|------|-------|---------|
+| **Global cap** | **60 requests per any 10-minute window** | Error 162 |
+| **Identical requests** | **15-second cooldown** between identical requests (same contract/exchange/tickType) | Error 162 |
+| **Same contract burst** | Max **6 requests** for same contract/exchange/tickType within **2 seconds** | Error 162 |
+| **Concurrent open requests** | Max **50 simultaneous** historical data requests | Error 162 |
+| **BID_ASK double-count** | Each BID_ASK request counts as **2 requests** toward all limits | — |
+| **Sub-30s bars > 6 months** | Stricter pacing for old fine-grained data | Undocumented soft limits |
 
 If you violate, the response is `Error 162: Historical Market Data Service error message: Pacing violation`. The connection isn't dropped, but the request fails. Persistent abuse can flag your account.
+
+**These limits apply to all clients. IBKR explicitly states they cannot be overcome.**
+
+If a request takes several minutes, cancel it with `ib.cancelHistoricalData()` to avoid throttling and potential API disconnection.
 
 **Practical implication:** building a 5-year daily-bar warehouse for 500 US stocks = 500 requests = 50 minutes minimum, just on pacing. Adapter design must respect this:
 

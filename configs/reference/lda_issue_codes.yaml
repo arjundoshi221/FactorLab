@@ -1,0 +1,158 @@
+- code: ACC
+  name: Accounting
+- code: ADV
+  name: Advertising
+- code: AER
+  name: Aerospace
+- code: AGR
+  name: Agriculture
+- code: ALC
+  name: Alcohol and Drug Abuse
+- code: ANI
+  name: Animals
+- code: APP
+  name: Apparel/Clothing Industry/Textiles
+- code: ART
+  name: Arts/Entertainment
+- code: AUT
+  name: Automotive Industry
+- code: AVI
+  name: Aviation/Airlines/Airports
+- code: BAN
+  name: Banking
+- code: BNK
+  name: Bankruptcy
+- code: BEV
+  name: Beverage Industry
+- code: BUD
+  name: Budget/Appropriations
+- code: CIV
+  name: Civil Rights/Civil Liberties
+- code: CHM
+  name: Chemicals/Chemical Industry
+- code: CAW
+  name: Clean Air and Water (quality)
+- code: CDT
+  name: Commodities (big ticket)
+- code: COM
+  name: Communications/Broadcasting/Radio/TV
+- code: CPI
+  name: Computer Industry
+- code: CON
+  name: Constitution
+- code: CSP
+  name: Consumer Issues/Safety/Products
+- code: CPT
+  name: Copyright/Patent/Trademark
+- code: DEF
+  name: Defense
+- code: DIS
+  name: Disaster Planning/Emergencies
+- code: DOC
+  name: District of Columbia
+- code: ECN
+  name: Economics/Economic Development
+- code: EDU
+  name: Education
+- code: ENG
+  name: Energy/Nuclear
+- code: ENV
+  name: Environment/Superfund
+- code: FAM
+  name: Family issues/Abortion/Adoption
+- code: FIN
+  name: Financial Institutions/Investments/Securities
+- code: FIR
+  name: Firearms/Guns/Ammunition
+- code: FOO
+  name: Food Industry (safety, labeling, etc.)
+- code: FOR
+  name: Foreign Relations
+- code: FUE
+  name: Fuel/Gas/Oil
+- code: GAM
+  name: Gaming/Gambling/Casino
+- code: GOV
+  name: Government Issues
+- code: HCR
+  name: Health Issues
+- code: HOM
+  name: Homeland Security
+- code: HOU
+  name: Housing
+- code: IMM
+  name: Immigration
+- code: IND
+  name: Indian/Native American Affairs
+- code: INS
+  name: Insurance
+- code: INT
+  name: Intelligence
+- code: LBR
+  name: Labor Issues/Antitrust/Workplace
+- code: LAW
+  name: Law Enforcement/Crime/Criminal Justice
+- code: MAN
+  name: Manufacturing
+- code: MAR
+  name: Marine/Maritime/Boating/Fisheries
+- code: MIA
+  name: Media (information/publishing)
+- code: MED
+  name: Medical/Disease Research/Clinical Labs
+- code: MMM
+  name: Medicare/Medicaid
+- code: MON
+  name: Minting/Money/Gold Standard
+- code: NAT
+  name: Natural Resources
+- code: PHA
+  name: Pharmacy
+- code: POS
+  name: Postal
+- code: RRR
+  name: Railroads
+- code: RES
+  name: Real Estate/Land Use/Conservation
+- code: REL
+  name: Religion
+- code: RET
+  name: Retirement
+- code: ROD
+  name: Roads/Highway
+- code: SCI
+  name: Science/Technology
+- code: SMB
+  name: Small Business
+- code: SPO
+  name: Sports/Athletics
+- code: TAR
+  name: Tariff (miscellaneous tariff bills)
+- code: TAX
+  name: Taxation/Internal Revenue Code
+- code: TEC
+  name: Telecommunications
+- code: TOB
+  name: Tobacco
+- code: TOR
+  name: Torts
+- code: TRD
+  name: Trade (domestic/foreign)
+- code: TRA
+  name: Transportation
+- code: TOU
+  name: Travel/Tourism
+- code: TRU
+  name: Trucking/Shipping
+- code: URB
+  name: Urban Development/Municipalities
+- code: UNM
+  name: Unemployment
+- code: UTI
+  name: Utilities
+- code: VET
+  name: Veterans
+- code: WAS
+  name: Waste (hazardous/solid/interstate/nuclear)
+- code: WEL
+  name: Welfare

@@ -33,7 +33,7 @@ import argparse
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # ── Project root ─────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ from factorlab.sources.upstox.universes import build_universes  # noqa: E402
 LOG_DIR = PROJECT_ROOT / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
-log_file = LOG_DIR / f"factlab_india_premarket_{datetime.now().strftime('%Y%m%d')}.log"
+log_file = LOG_DIR / f"factlab_india_premarket_{datetime.now(timezone.utc).strftime('%Y%m%d')}.log"
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
@@ -75,7 +75,7 @@ UNIVERSES_DIR = PROJECT_ROOT / "data" / "in" / "universes"
 def is_trading_day() -> bool:
     """Return True if today is a valid session on the XBOM calendar."""
     cal = xcals.get_calendar(CALENDAR_KEY)
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return len(cal.sessions_in_range(today, today)) > 0
 
 

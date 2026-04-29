@@ -1,0 +1,100 @@
+- code: RR
+  name: Registration
+- code: RA
+  name: Registration - Amendment
+- code: Q1
+  name: 1st Quarter - Report
+- code: Q1Y
+  name: 1st Quarter - Report (No Activity)
+- code: 1T
+  name: 1st Quarter - Termination
+- code: 1TY
+  name: 1st Quarter - Termination (No Activity)
+- code: 1A
+  name: 1st Quarter - Amendment
+- code: 1AY
+  name: 1st Quarter - Amendment (No Activity)
+- code: 1@
+  name: 1st Quarter - Termination Amendment
+- code: 1@Y
+  name: 1st Quarter - Termination Amendment (No Activity)
+- code: Q2
+  name: 2nd Quarter - Report
+- code: Q2Y
+  name: 2nd Quarter - Report (No Activity)
+- code: 2T
+  name: 2nd Quarter - Termination
+- code: 2TY
+  name: 2nd Quarter - Termination (No Activity)
+- code: 2A
+  name: 2nd Quarter - Amendment
+- code: 2AY
+  name: 2nd Quarter - Amendment (No Activity)
+- code: 2@
+  name: 2nd Quarter - Termination Amendment
+- code: 2@Y
+  name: 2nd Quarter - Termination Amendment (No Activity)
+- code: Q3
+  name: 3rd Quarter - Report
+- code: Q3Y
+  name: 3rd Quarter - Report (No Activity)
+- code: 3T
+  name: 3rd Quarter - Termination
+- code: 3TY
+  name: 3rd Quarter - Termination (No Activity)
+- code: 3A
+  name: 3rd Quarter - Amendment
+- code: 3AY
+  name: 3rd Quarter - Amendment (No Activity)
+- code: 3@
+  name: 3rd Quarter - Termination Amendment
+- code: 3@Y
+  name: 3rd Quarter - Termination Amendment (No Activity)
+- code: Q4
+  name: 4th Quarter - Report
+- code: Q4Y
+  name: 4th Quarter - Report (No Activity)
+- code: 4T
+  name: 4th Quarter - Termination
+- code: 4TY
+  name: 4th Quarter - Termination (No Activity)
+- code: 4A
+  name: 4th Quarter - Amendment
+- code: 4AY
+  name: 4th Quarter - Amendment (No Activity)
+- code: 4@
+  name: 4th Quarter - Termination Amendment
+- code: 4@Y
+  name: 4th Quarter - Termination Amendment (No Activity)
+- code: MM
+  name: Mid-Year Report
+- code: MMY
+  name: Mid-Year Report (No Activity)
+- code: MT
+  name: Mid-Year Termination
+- code: MTY
+  name: Mid-Year Termination (No Activity)
+- code: MA
+  name: Mid-Year Amendment
+- code: MAY
+  name: Mid-Year Amendment (No Activity)
+- code: M@
+  name: Mid-Year Termination Amendment
+- code: M@Y
+  name: Mid-Year Termination Amendment (No Activity)
+- code: YY
+  name: Year-End Report
+- code: YYY
+  name: Year-End Report (No Activity)
+- code: YT
+  name: Year-End Termination
+- code: YTY
+  name: Year-End Termination (No Activity)
+- code: YA
+  name: Year-End Amendment
+- code: YAY
+  name: Year-End Amendment (No Activity)
+- code: Y@
+  name: Year-End Termination Amendment
+- code: Y@Y
+  name: Year-End Termination Amendment (No Activity)

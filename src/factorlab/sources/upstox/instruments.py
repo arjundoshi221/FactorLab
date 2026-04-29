@@ -10,7 +10,7 @@ import gzip
 import json
 import logging
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -41,8 +41,8 @@ def load_or_download(exchange: str, cache_dir: Path) -> list[dict]:
     """Return cached instruments if fresh (same calendar date), otherwise download."""
     cache_path = cache_dir / f"instruments_{exchange.lower()}.json"
     if cache_path.exists():
-        mtime = datetime.fromtimestamp(cache_path.stat().st_mtime)
-        if mtime.date() == datetime.now().date():
+        mtime = datetime.fromtimestamp(cache_path.stat().st_mtime, tz=timezone.utc)
+        if mtime.date() == datetime.now(timezone.utc).date():
             with open(cache_path) as f:
                 data = json.load(f)
             log.info(
