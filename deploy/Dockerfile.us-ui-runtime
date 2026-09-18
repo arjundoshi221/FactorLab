@@ -1,0 +1,4 @@
+FROM factorlab:us-listed-v1-20260915
+
+COPY dist /app/web-dist
+COPY us.py /usr/local/lib/python3.12/site-packages/factorlab/api/us.py

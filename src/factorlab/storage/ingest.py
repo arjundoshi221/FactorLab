@@ -1,6 +1,7 @@
-"""DB-first ingestion: sync instruments/contracts, write candles.
+"""Legacy Postgres-first ingestion helpers.
 
-All writes go to Postgres (canonical). Callers save Arrow IPC as secondary cache.
+These functions reflect the normalized SQLAlchemy storage path being replaced by
+the ClickHouse architecture in docs/architecture/02-database-clickhouse.md.
 """
 
 import logging
@@ -14,7 +15,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger(__name__)
 
 
-# ── Instrument sync ──────────────────────────────────────────────────────────
+# ── Instrument sync ───────────────────────────────────────────────────────────
 
 
 def sync_instruments(
@@ -42,7 +43,6 @@ def sync_instruments(
     today = date.today()
 
     with engine.begin() as conn:
-        # Lookup exchange_id once
         exchange_id = conn.execute(
             text("SELECT id FROM ref.exchanges WHERE code = :code"),
             {"code": exchange_code},
@@ -105,9 +105,6 @@ def sync_instruments(
     return lookup
 
 
-# ── Contract sync ────────────────────────────────────────────────────────────
-
-
 def sync_contracts(
     instruments: list[dict],
     instrument_lookup: dict[str, UUID],
@@ -167,7 +164,6 @@ def sync_contracts(
             if not inst_id:
                 continue
 
-            # Convert epoch ms → date
             expiry_ms = rec.get("expiry", 0)
             expiry_date = datetime.fromtimestamp(expiry_ms / 1000, tz=timezone.utc).date()
 
@@ -193,9 +189,6 @@ def sync_contracts(
 
     log.info("Synced %d contracts to ref.contracts", len(lookup))
     return lookup
-
-
-# ── Candle writer ────────────────────────────────────────────────────────────
 
 
 def write_candles(
@@ -242,9 +235,6 @@ def write_candles(
             inserted += result.rowcount
 
     return inserted
-
-
-# ── Daily candle writer ─────────────────────────────────────────────────────
 
 
 def write_candles_daily(

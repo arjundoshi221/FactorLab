@@ -1,0 +1,7 @@
+{
+  "name": "factorlab-upstox-oauth-callback-worker",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": { "check": "tsc --noEmit" },
+  "devDependencies": { "@cloudflare/workers-types": "^5.20260726.1", "typescript": "^7.0.2", "wrangler": "^4.114.0" }
+}

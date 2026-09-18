@@ -1,0 +1,19 @@
+<clickhouse>
+    <storage_configuration>
+        <disks>
+            <raw_archive>
+                <type>local</type>
+                <path>/var/lib/clickhouse-raw/</path>
+            </raw_archive>
+        </disks>
+        <policies>
+            <raw_archive>
+                <volumes>
+                    <raw>
+                        <disk>raw_archive</disk>
+                    </raw>
+                </volumes>
+            </raw_archive>
+        </policies>
+    </storage_configuration>
+</clickhouse>

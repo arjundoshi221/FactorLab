@@ -1,0 +1,38 @@
+name = "factorlab-upstox-oauth-callback"
+main = "src/index.ts"
+compatibility_date = "2026-07-26"
+workers_dev = true
+preview_urls = false
+
+[[kv_namespaces]]
+binding = "RUNTIME_STATE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[[secrets_store_secrets]]
+binding = "UPSTOX_API_KEY"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "UPSTOX_API_KEY"
+
+[[secrets_store_secrets]]
+binding = "UPSTOX_API_SECRET"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "UPSTOX_API_SECRET"
+
+[[secrets_store_secrets]]
+binding = "SCHWAB_APP_KEY"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "SCHWAB_APP_KEY"
+
+[[secrets_store_secrets]]
+binding = "SCHWAB_APP_SECRET"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "SCHWAB_APP_SECRET"
+
+[[secrets_store_secrets]]
+binding = "TOKEN_ENCRYPTION_KEY"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "TOKEN_ENCRYPTION_KEY"
+
+[vars]
+MANAGEMENT_URL = "https://factorlab-upstox-auth.YOUR_SUBDOMAIN.workers.dev/"
+SCHWAB_CALLBACK_URL = "https://factorlab-upstox-oauth-callback.YOUR_SUBDOMAIN.workers.dev/oauth/schwab/callback"

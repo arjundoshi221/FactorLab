@@ -12,6 +12,7 @@ import logging
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable, Mapping
 
 log = logging.getLogger(__name__)
 
@@ -19,14 +20,23 @@ _URL_TEMPLATE = (
     "https://assets.upstox.com/market-quote/instruments/exchange/{exchange}.json.gz"
 )
 _DEFAULT_EXCHANGES = ("NSE",)
+ResponseObserver = Callable[[str, bytes, int, Mapping[str, str], str], None]
 
 
-def download_instruments(exchange: str, cache_dir: Path) -> list[dict]:
+def download_instruments(
+    exchange: str,
+    cache_dir: Path,
+    *,
+    response_observer: ResponseObserver | None = None,
+) -> list[dict]:
     """Download instruments master for one exchange, decompress, and cache as JSON."""
     url = _URL_TEMPLATE.format(exchange=exchange)
     log.info("Downloading %s instruments from %s", exchange, url)
     with urllib.request.urlopen(url, timeout=60) as resp:
-        data = json.loads(gzip.decompress(resp.read()))
+        response_body = resp.read()
+        if response_observer:
+            response_observer(url, response_body, resp.status, dict(resp.headers.items()), exchange)
+        data = json.loads(gzip.decompress(response_body))
     log.info("Downloaded %s: %d instruments", exchange, len(data))
 
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -56,6 +66,8 @@ def load_or_download(exchange: str, cache_dir: Path) -> list[dict]:
 def refresh_all(
     cache_dir: Path,
     exchanges: tuple[str, ...] = _DEFAULT_EXCHANGES,
+    *,
+    response_observer: ResponseObserver | None = None,
 ) -> dict[str, list[dict]]:
     """Download fresh instruments for all configured exchanges.
 
@@ -63,7 +75,11 @@ def refresh_all(
     """
     result: dict[str, list[dict]] = {}
     for exch in exchanges:
-        result[exch] = download_instruments(exch, cache_dir)
+        result[exch] = download_instruments(
+            exch,
+            cache_dir,
+            response_observer=response_observer,
+        )
     return result
 
 

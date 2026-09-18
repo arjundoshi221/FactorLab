@@ -25,6 +25,8 @@ from urllib.parse import urlencode
 import requests
 from dotenv import find_dotenv, load_dotenv, set_key
 
+from factorlab.core.secrets import get_secret
+
 log = logging.getLogger(__name__)
 
 _PROFILE_URL = "https://api.upstox.com/v2/user/profile"
@@ -45,13 +47,19 @@ _REQUIRED_KEYS = {
 }
 
 
+def _persistence_enabled() -> bool:
+    return os.getenv("FACTORLAB_PERSIST_SECRETS", "true").lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
 def _load_credentials() -> dict[str, str]:
     """Load and validate all required Upstox credentials from environment."""
     load_dotenv(find_dotenv(usecwd=True))
     creds: dict[str, str] = {}
     missing: list[str] = []
     for key, desc in _REQUIRED_KEYS.items():
-        val = os.environ.get(key, "").strip()
+        val = (get_secret(key, "") or "").strip()
         if not val:
             missing.append(f"  {key} — {desc}")
         creds[key] = val
@@ -200,20 +208,19 @@ def validate_token(token: str) -> dict:
 
 def save_token(token: str, *, auth_code: str | None = None) -> None:
     """Persist token (and optionally auth code) to files and .env."""
-    # Token file (for Railway / cross-process sharing)
-    write_token_file(token)
-
-    # Auth code file
-    if auth_code:
-        write_auth_code_file(auth_code)
-
-    # .env (for local development)
-    env_path = find_dotenv(usecwd=True)
-    if env_path:
-        set_key(env_path, "UPSTOX_ACCESS_TOKEN", token)
+    if _persistence_enabled():
+        # Local development and the legacy Railway auth flow may opt into
+        # persistence. Production Vault deployments explicitly disable it.
+        write_token_file(token)
         if auth_code:
-            set_key(env_path, "UPSTOX_AUTH_CODE", auth_code)
-        log.info("Updated UPSTOX_ACCESS_TOKEN in %s", env_path)
+            write_auth_code_file(auth_code)
+
+        env_path = find_dotenv(usecwd=True)
+        if env_path:
+            set_key(env_path, "UPSTOX_ACCESS_TOKEN", token)
+            if auth_code:
+                set_key(env_path, "UPSTOX_AUTH_CODE", auth_code)
+            log.info("Updated UPSTOX_ACCESS_TOKEN in %s", env_path)
 
     # In-process env
     os.environ["UPSTOX_ACCESS_TOKEN"] = token
@@ -228,8 +235,8 @@ def fetch_remote_token() -> str | None:
     Returns the token string if the server has one, None otherwise.
     """
     load_dotenv(find_dotenv(usecwd=True))
-    server_url = os.environ.get("AUTH_SERVER_URL", "").strip().rstrip("/")
-    pin = os.environ.get("AUTH_SERVER_PIN", "").strip()
+    server_url = (get_secret("AUTH_SERVER_URL", "") or "").strip().rstrip("/")
+    pin = (get_secret("AUTH_SERVER_PIN", "") or "").strip()
 
     if not server_url:
         return None
@@ -260,13 +267,14 @@ def fetch_remote_token() -> str | None:
 def _load_existing_token() -> str | None:
     """Try to load a token from token file, env var, or remote server."""
     # 1. Token file (written by Railway auth server)
-    token = read_token_file()
-    if token:
-        return token
+    if _persistence_enabled():
+        token = read_token_file()
+        if token:
+            return token
 
     # 2. Env var / .env
     load_dotenv(find_dotenv(usecwd=True))
-    token = os.environ.get("UPSTOX_ACCESS_TOKEN", "").strip()
+    token = (get_secret("UPSTOX_ACCESS_TOKEN", "") or "").strip()
     if token:
         return token
 

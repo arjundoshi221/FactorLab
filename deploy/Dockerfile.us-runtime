@@ -1,0 +1,3 @@
+FROM factorlab:us-listed-v1-20260915
+
+COPY factlab_us_clickhouse.py /app/scripts/factlab_us_clickhouse.py

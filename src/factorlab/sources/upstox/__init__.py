@@ -13,6 +13,13 @@ from factorlab.sources.upstox.auth import (
     validate_token,
     write_token_file,
 )
+from factorlab.sources.upstox.candles import (
+    UpstoxFetchError,
+    UpstoxRateLimiter,
+    fetch_historical_candles,
+    fetch_intraday_candles,
+    historical_windows,
+)
 from factorlab.sources.upstox.client import get_session
 from factorlab.sources.upstox.instruments import (
     download_instruments,
@@ -29,25 +36,30 @@ from factorlab.sources.upstox.universes import (
 )
 
 __all__ = [
+    "UpstoxFetchError",
+    "UpstoxRateLimiter",
+    "build_fo_eligible",
+    "build_universes",
+    "download_instruments",
     "ensure_token",
     "exchange_code",
+    "fetch_historical_candles",
+    "fetch_intraday_candles",
     "fetch_remote_token",
+    "find_equities",
+    "find_nearest_future",
     "get_auth_url",
+    "get_session",
+    "historical_windows",
+    "load_or_download",
+    "load_universe",
     "login_interactive",
     "open_auth_in_browser",
     "read_auth_code_file",
     "read_token_file",
+    "refresh_all",
     "save_token",
+    "seed_index_universe",
     "validate_token",
     "write_token_file",
-    "get_session",
-    "download_instruments",
-    "find_equities",
-    "find_nearest_future",
-    "load_or_download",
-    "refresh_all",
-    "build_fo_eligible",
-    "build_universes",
-    "load_universe",
-    "seed_index_universe",
 ]

@@ -172,6 +172,11 @@ figures/
 !docs/**/*.jpg
 !docs/**/*.pdf
 
+# ---- Node / Cloudflare Workers ---------------------------------------------
+node_modules/
+.wrangler/
+cloudflare/**/wrangler.toml
+
 # ---- Compute / cache --------------------------------------------------------
 .cache/
 .local/

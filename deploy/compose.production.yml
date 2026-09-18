@@ -1,0 +1,206 @@
+name: factorlab
+
+x-factorlab-service: &factorlab-service
+  image: ${FACTORLAB_IMAGE:-factorlab:latest}
+  restart: unless-stopped
+  networks: [backend]
+  security_opt:
+    - no-new-privileges:true
+
+x-clickhouse-client-env: &clickhouse-client-env
+  CLICKHOUSE_HOST: clickhouse
+  CLICKHOUSE_PORT: "8123"
+  CLICKHOUSE_DATABASE: factorlab
+  CLICKHOUSE_USERNAME: factorlab
+  FACTORLAB_PERSIST_SECRETS: "false"
+
+services:
+  cloudflare-secrets-agent:
+    <<: *factorlab-service
+    user: "0:0"
+    command: ["python", "scripts/cloudflare_secrets_agent.py"]
+    environment:
+      CLOUDFLARE_SECRETS_URL: ${CLOUDFLARE_SECRETS_URL:?Set CLOUDFLARE_SECRETS_URL in production.env}
+      CLOUDFLARE_ACCESS_CLIENT_ID_FILE: /run/identity/cloudflare-access-client-id
+      CLOUDFLARE_ACCESS_CLIENT_SECRET_FILE: /run/identity/cloudflare-access-client-secret
+      CLOUDFLARE_SYNC_INTERVAL_SECONDS: ${CLOUDFLARE_SYNC_INTERVAL_SECONDS:-60}
+    volumes:
+      - ${FACTORLAB_IDENTITY_DIR:-/etc/factorlab/identity}:/run/identity:ro
+      - clickhouse_runtime:/run/secrets/clickhouse
+      - india_runtime:/run/secrets/india
+      - us_runtime:/run/secrets/us
+      - political_runtime:/run/secrets/political
+    read_only: true
+    tmpfs:
+      - /tmp:size=2m,mode=0700
+    cap_drop: [ALL]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -s /run/secrets/clickhouse/.agent-ready &&
+          test -s /run/secrets/clickhouse/runtime-users.xml &&
+          test -s /run/secrets/india/CLICKHOUSE_PASSWORD &&
+          test -s /run/secrets/us/EODHD_API_KEY &&
+          test -s /run/secrets/political/FACTORLAB_API_KEY
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  clickhouse:
+    image: ${CLICKHOUSE_IMAGE:-clickhouse/clickhouse-server:25.3}
+    container_name: factorlab-clickhouse
+    depends_on:
+      cloudflare-secrets-agent:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - /var/lib/factorlab/clickhouse:/var/lib/clickhouse
+      - /mnt/factorlab-data/clickhouse-raw:/var/lib/clickhouse-raw
+      - ./clickhouse/config.d/storage.xml:/etc/clickhouse-server/config.d/storage.xml:ro
+      - ./clickhouse/config.d/log-retention.xml:/etc/clickhouse-server/config.d/log-retention.xml:ro
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - clickhouse_runtime:/etc/clickhouse-server/users.d
+    restart: unless-stopped
+    networks: [backend]
+    mem_limit: 5g
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+
+  bootstrap:
+    <<: *factorlab-service
+    restart: "no"
+    command:
+      - sh
+      - -ec
+      - >-
+        python scripts/bootstrap_clickhouse.py &&
+        python scripts/configure_clickhouse_storage.py
+    environment:
+      <<: *clickhouse-client-env
+      FACTORLAB_SECRETS_DIR: /run/secrets/app
+    volumes:
+      - political_runtime:/run/secrets/app:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  ingest-india:
+    <<: *factorlab-service
+    command:
+      - python
+      - scripts/factlab_india_clickhouse_5min.py
+      - --universe
+      - ${UPSTOX_UNIVERSE:-full_nse_eq}
+      - --daemon
+    environment:
+      <<: *clickhouse-client-env
+      FACTORLAB_SECRETS_DIR: /run/secrets/app
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - india_runtime:/run/secrets/app:ro
+      - /var/lib/factorlab/app-data:/app/data
+      - /var/lib/factorlab/logs:/app/logs
+    mem_limit: 1500m
+
+  ingest-us:
+    <<: *factorlab-service
+    image: ${FACTORLAB_US_IMAGE:-factorlab:latest}
+    command: ["python", "scripts/factlab_us_clickhouse.py", "--universe", "us_listed_equities", "--daemon"]
+    mem_limit: 1g
+    stop_grace_period: 120s
+    environment:
+      <<: *clickhouse-client-env
+      FACTORLAB_SECRETS_DIR: /run/secrets/app
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - us_runtime:/run/secrets/app:ro
+      - /var/lib/factorlab/app-data:/app/data
+
+  ingest-political:
+    <<: *factorlab-service
+    restart: "no"
+    command:
+      - python
+      - scripts/factlab_political_bootstrap.py
+      - --ptr-limit
+      - ${POLITICAL_PTR_LIMIT:-20}
+    environment:
+      <<: *clickhouse-client-env
+      FACTORLAB_SECRETS_DIR: /run/secrets/app
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - political_runtime:/run/secrets/app:ro
+    profiles: [jobs]
+
+  api:
+    <<: *factorlab-service
+    image: ${FACTORLAB_API_IMAGE:-factorlab:latest}
+    command: ["uvicorn", "factorlab.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    read_only: true
+    environment:
+      <<: *clickhouse-client-env
+      FACTORLAB_SECRETS_DIR: /run/secrets/app
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - political_runtime:/run/secrets/app:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+    tmpfs:
+      - /tmp:size=8m,mode=0700
+    mem_limit: 512m
+
+  uptime-kuma:
+    image: ${UPTIME_KUMA_IMAGE:-louislam/uptime-kuma:2}
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - /var/lib/factorlab/uptime-kuma:/app/data
+    restart: unless-stopped
+    networks: [backend]
+    profiles: [ops]
+
+  portainer:
+    image: ${PORTAINER_IMAGE:-portainer/portainer-ce:lts}
+    ports:
+      - "127.0.0.1:9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/factorlab/portainer:/data
+    restart: unless-stopped
+    networks: [backend]
+    profiles: [admin]
+
+networks:
+  backend:
+    name: factorlab-backend
+
+volumes:
+  clickhouse_runtime:
+    driver: local
+    driver_opts: &tmpfs-options
+      type: tmpfs
+      device: tmpfs
+      o: size=2m,mode=0755
+  india_runtime:
+    driver: local
+    driver_opts: *tmpfs-options
+  us_runtime:
+    driver: local
+    driver_opts: *tmpfs-options
+  political_runtime:
+    driver: local
+    driver_opts: *tmpfs-options

@@ -12,7 +12,7 @@ NSE / BSE / MCX coverage: equities, equity F&O, index F&O, commodity F&O, curren
 
 ## 1. Authentication
 
-**OAuth2 flow — token valid daily, expires ~4:30 AM IST next day.**
+**OAuth2 flow — token valid daily, expires at 3:30 AM IST the next day.**
 
 ### Manual token generation
 1. Go to https://account.upstox.com/developer/apps
@@ -39,7 +39,7 @@ Body (form-urlencoded):
 Returns JSON with access_token
 ```
 
-### Credentials (.env)
+### Credentials (local development)
 ```
 UPSTOX_API_KEY=...
 UPSTOX_API_SECRET=...
@@ -47,6 +47,10 @@ UPSTOX_REDIRECT_URL=http://localhost:8888/
 UPSTOX_ACCESS_TOKEN=...
 UPSTOX_AUTH_CODE=...
 ```
+
+Production keeps the static API key and secret in Cloudflare Secrets Store. The
+Cloudflare auth Worker exchanges the single-use code, encrypts the daily access
+token into Workers KV, and the VPS syncs it into a RAM-only Docker tmpfs file.
 
 ### Header on every API call
 ```
@@ -365,7 +369,9 @@ get_fut_key("BANKNIFTY") # → NSE_FO|...
 2. **Pipe `|` in instrument_key** — pass unencoded. Upstox accepts raw pipe characters.
 3. **Same date for single day** — use same date for both `to_date` and `from_date`.
 4. **Candles returned newest-first** — reverse the list for chronological order.
-5. **Token expiry mid-job** — wrap calls in 401-retry-with-refresh logic; otherwise long-running batches die around 4:30 AM IST.
+5. **Token expiry mid-job** — the token expires at 3:30 AM IST. The Upstox
+   session reloads a rotated tmpfs token before each request and retries once on
+   HTTP 401 only when a newer token is available.
 6. **Future expiries** — futures contracts expire; `instrument_key` for a given underlying changes monthly. Always resolve via instruments file at job start.
 7. **Holiday calendar** — NSE has half-days, Muhurat trading sessions, etc. Use `exchange_calendars` with key `XBOM` (NOT `XNSE` — it doesn't exist). NSE and BSE share the same holiday calendar under `XBOM`.
 8. **Currency** — INR throughout; mark currency on every fact row to keep US/IN data joinable.
@@ -377,7 +383,7 @@ get_fut_key("BANKNIFTY") # → NSE_FO|...
 ## 8. Pipeline Design
 
 ```
-daily 04:30 IST  →  refresh access token (manual or scripted browser)
+daily 05:45 IST  →  refresh access token from the Cloudflare-protected webapp
         │
         ▼
 06:30 IST  →  download instruments master (NSE.json.gz)
@@ -396,7 +402,7 @@ weekly  →  pull MCX commodity & currency derivatives history
 
 ### Data flow
 ```
-.env  →  load ACCESS_TOKEN
+Cloudflare Worker/KV  →  VPS sync agent  →  tmpfs ACCESS_TOKEN
         |
 settings.yaml  →  universe (symbol, type) pairs
         |
@@ -412,7 +418,7 @@ DataFrame cleanup:
   - deduplicate timestamps
   - filter to 09:15–15:29 IST
         |
-Storage: Parquet (local) → Postgres (prod)
+Storage: raw HTTP archive + curated one-minute tables in ClickHouse
 ```
 
 ---
@@ -511,9 +517,36 @@ data/upstox/instruments/         ← instruments master (downloaded daily, gitig
 
 ---
 
-## 13. Open Questions
+## 13. Production Full NSE Equity Universe
+
+The production India collector uses the `full_nse_eq` universe. It is dynamic:
+on startup, and once per India calendar day while the daemon remains running,
+it refreshes the Upstox NSE instrument master and selects every active cash
+equity whose segment is `NSE_EQ` and instrument type is `EQ`. Instruments that
+disappear from the current master remain available as inactive historical
+references, but they are not counted as active or shown as "not configured."
+
+During the market session, the collector requests Market Quote OHLC V3 in
+batches of up to 100 instrument keys. It stores `prev_ohlc` plus `live_ohlc`
+only after that minute has ended, deduplicates timestamps, rejects null,
+non-finite, or mathematically invalid OHLC values, and inserts each batch into
+ClickHouse in one operation. A sweep is aligned just after the minute boundary
+and the close grace period runs through 15:32 IST so the final 15:29 candle can
+be finalized.
+
+Full-universe mode intentionally does not run the older per-symbol intraday
+recovery loop: that endpoint accepts one instrument per request and would turn
+each sweep into thousands of calls. Historical backfill for the full universe
+must be operated as a separate throttled job. The live collector is a
+long-running Compose service with `restart: unless-stopped`; it does not need a
+cron entry. A fresh daily Upstox access token is still required.
+
+---
+
+## 14. Open Questions
 
 - [x] Is intraday minute data needed initially, or daily-only? **→ 1-min. Same API cost as 15-min; max flexibility.**
 - [ ] Storage strategy for minute data: Postgres partitioned table vs. Parquet? (1 stock × 1 yr × 1-min ≈ 100k rows; 500 stocks ≈ 50M rows; 5 yrs ≈ 250M)
-- [ ] Auto token refresh — feasible without violating Upstox TOS? (Their docs imply manual flow is expected.)
+- [x] Token refresh — Cloudflare-protected OAuth management page; user performs
+      the Upstox login and the resulting token rotates into VPS tmpfs.
 - [ ] India execution venue — Upstox for orders, or use IBKR India?

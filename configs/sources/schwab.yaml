@@ -4,21 +4,20 @@ vendor_key: schwab  # matches ref.security_aliases.vendor
 
 api:
   base_url: https://api.schwabapi.com
-  auth_type: oauth2_code_grant
-  token_path_env: SCHWAB_TOKEN_PATH   # path to token JSON file
-  app_key_env: SCHWAB_APP_KEY
-  app_secret_env: SCHWAB_APP_SECRET
-  callback_url_env: SCHWAB_CALLBACK_URL
+  auth_type: cloudflare_managed_oauth2_code_grant
+  access_token_env: SCHWAB_ACCESS_TOKEN
 
 auth:
   authorize_url: https://api.schwabapi.com/v1/oauth/authorize
   token_url: https://api.schwabapi.com/v1/oauth/token
   access_token_ttl: 1800              # 30 minutes
   refresh_token_ttl: 604800           # 7 days — must re-login weekly
-  callback_url: "https://127.0.0.1:8182"  # HTTPS required, even localhost
-  library: schwab-py                  # pip install schwab-py
-  # schwab-py handles token refresh automatically within 7-day window
-  # After 7 days: must delete token file + re-run browser OAuth + MFA
+  callback_url: "https://factorlab-upstox-oauth-callback.kairo-jai.workers.dev/oauth/schwab/callback"
+  management_url: "https://factorlab-upstox-auth.kairo-jai.workers.dev/"
+  refresh_strategy: cloudflare_on_runtime_secret_poll
+  # App credentials and the refresh token remain in Cloudflare. The VPS receives
+  # only SCHWAB_ACCESS_TOKEN through its US tmpfs runtime-secret volume.
+  # After 7 days: reauthenticate from the protected management page.
 
 rate_limits:
   requests_per_minute: 120            # approximate, not officially documented

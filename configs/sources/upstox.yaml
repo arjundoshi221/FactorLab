@@ -7,7 +7,7 @@ api:
   version: v3
   auth_type: oauth2_bearer
   token_env: UPSTOX_ACCESS_TOKEN
-  token_expiry: "04:30 IST"  # daily expiry
+  token_expiry: "03:30 IST"  # daily expiry
 
 rate_limits:
   per_second: 50

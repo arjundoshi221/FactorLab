@@ -1,13 +1,15 @@
-"""Database engine, metadata, and schema definitions.
+"""Legacy SQLAlchemy metadata for the pre-ClickHouse normalized design.
 
-Schemas follow docs/architecture/02-database-postgres.md:
-  ref            — securities, calendars, exchanges
-  market         — prices, corporate actions, fundamentals, IBKR mirrors
-  alt_social     — reddit, twitter posts and derived signals
-  alt_political  — senator/house trades, committees
-  alt_research   — arxiv papers, embeddings, summaries
-  derived        — factors, signals, portfolios
-  experiments    — research runs, backtest results, proposed orders
+Current target architecture lives in docs/architecture/02-database-clickhouse.md.
+These schema groupings remain useful as domain boundaries during migration:
+  ref
+  market
+  universe
+  alt_social
+  alt_political
+  alt_research
+  derived
+  experiments
 """
 
 import os
@@ -31,7 +33,7 @@ NAMING_CONVENTION = {
 
 metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
-# Postgres schema names — one per domain
+# Legacy Postgres schema names retained during migration planning
 SCHEMAS = [
     "ref",
     "market",

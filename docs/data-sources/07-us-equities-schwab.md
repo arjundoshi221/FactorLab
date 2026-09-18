@@ -1,6 +1,6 @@
 # US Equities — Charles Schwab
 
-> Status: `[scaffold]`
+> Status: `[auth implemented; data ingestion pending]`
 
 ## Purpose
 Free 20+ year US price history, basic fundamentals (ratios), real-time quotes, and options chains via a funded brokerage account. Supplements EODHD (deep fundamentals) and IBKR (clean exchange-feed data).
@@ -18,11 +18,12 @@ Free 20+ year US price history, basic fundamentals (ratios), real-time quotes, a
 ## Auth
 
 ### Overview
-- **OAuth 2.0 Authorization Code Grant** (same pattern as Upstox)
-- Access token: **30 minutes** (auto-refreshed by `schwab-py`)
+- **OAuth 2.0 Authorization Code Grant** using the existing Cloudflare broker-auth Workers
+- Access token: **30 minutes**, refreshed by the protected Worker during the VPS secret poll
 - Refresh token: **7 days** (must re-login via browser + MFA weekly)
-- Redirect URI: `https://127.0.0.1:8182` (HTTPS required, even localhost)
-- Could deploy Railway callback server (same pattern as Upstox auth server)
+- The refresh token remains AES-256-GCM encrypted in Workers KV and never reaches the VPS
+- The short-lived access token is rendered only into the US container's tmpfs secret volume
+- Redirect URI: `https://factorlab-upstox-oauth-callback.kairo-jai.workers.dev/oauth/schwab/callback`
 
 ### Token endpoints
 ```
@@ -30,13 +31,11 @@ Authorize: https://api.schwabapi.com/v1/oauth/authorize
 Token:     https://api.schwabapi.com/v1/oauth/token
 ```
 
-### .env
-```
-SCHWAB_APP_KEY=...
-SCHWAB_APP_SECRET=...
-SCHWAB_CALLBACK_URL=https://127.0.0.1:8182
-SCHWAB_TOKEN_PATH=data/schwab/.token
-```
+### Runtime credentials
+
+`SCHWAB_APP_KEY` and `SCHWAB_APP_SECRET` are Cloudflare Secrets Store bindings.
+The VPS receives `SCHWAB_ACCESS_TOKEN` from the protected runtime-secrets
+endpoint. No Schwab credential or refresh token is stored in `.env`.
 
 ### Setup steps (one-time)
 1. Open Schwab brokerage at schwab.com (deposit $1)
@@ -45,52 +44,34 @@ SCHWAB_TOKEN_PATH=data/schwab/.token
 4. Create app:
    - API Product: **"Accounts and Trading Production"**
    - Order Limit: **120 requests/minute**
-   - Callback URL: **`https://127.0.0.1:8182`** (must match exactly — case, port, no trailing slash)
+   - Callback URL: **`https://factorlab-upstox-oauth-callback.kairo-jai.workers.dev/oauth/schwab/callback`** (must match exactly)
 5. Wait for approval: status goes from "Approved - Pending" → "Ready For Use" (1-3 days, up to 2-3 weeks)
-6. Save App Key + App Secret (secret shown only once)
+6. Save App Key + App Secret in Cloudflare Secrets Store (secret shown only once)
+7. Bind both secrets to the protected and public callback Workers and deploy them
+8. Open the protected FactorLab broker-auth page and choose **Authenticate Schwab**
 
-### Python auth (schwab-py)
+### Python client
 
-**Recommended: `easy_client()` — handles all flows automatically:**
+The repository session automatically adopts a refreshed tmpfs token before
+each request. Safe reads are retried once if a token rotates after an HTTP 401;
+orders and other mutating requests are never retried automatically.
+
 ```python
-from schwab.auth import easy_client
+from factorlab.sources.schwab import get_session
 
-client = easy_client(
-    api_key=os.getenv('SCHWAB_APP_KEY'),
-    app_secret=os.getenv('SCHWAB_APP_SECRET'),
-    callback_url=os.getenv('SCHWAB_CALLBACK_URL'),
-    token_path=os.getenv('SCHWAB_TOKEN_PATH'),
+client = get_session()
+response = client.get(
+    "https://api.schwabapi.com/marketdata/v1/quotes",
+    params={"symbols": "AAPL,MSFT"},
 )
-# First run: opens browser for OAuth login + MFA
-# Subsequent runs: loads token file, auto-refreshes within 7-day window
-```
-
-**Explicit first-time flow:**
-```python
-from schwab import auth
-
-client = auth.client_from_login_flow(
-    api_key=os.getenv('SCHWAB_APP_KEY'),
-    app_secret=os.getenv('SCHWAB_APP_SECRET'),
-    callback_url=os.getenv('SCHWAB_CALLBACK_URL'),
-    token_path=os.getenv('SCHWAB_TOKEN_PATH'),
-)
-```
-
-**Explicit token-file flow (for cron/scripts):**
-```python
-client = auth.client_from_token_file(
-    token_path=os.getenv('SCHWAB_TOKEN_PATH'),
-    api_key=os.getenv('SCHWAB_APP_KEY'),
-    app_secret=os.getenv('SCHWAB_APP_SECRET'),
-)
+response.raise_for_status()
 ```
 
 ### Auth gotchas
 - **"401 Unauthorized" / "assertion_rejected"** — app is still in "Approved - Pending" state. Wait for "Ready for Use".
-- **Browser SSL warnings** — `client_from_login_flow()` uses self-signed cert for local HTTPS. Safe to ignore if URL matches callback.
-- **Never manually edit token files** — `schwab-py` manages the entire lifecycle. Creating/modifying files yourself causes parsing failures.
-- **Cloud/headless** — no browser? Create token on desktop first, transfer `token.json` to server. Or deploy Railway callback (same as Upstox).
+- **Callback mismatch** — Schwab requires the registered callback to match the Worker URL exactly.
+- **No access token in tmpfs** — inspect the protected management page; `reauth_required` means the seven-day refresh-token lifetime elapsed.
+- **Cloud/headless** — unattended access-token refresh works for seven days; full reauthentication still requires a browser and MFA.
 - **Weekend re-auth** — refresh token expires after exactly 7 days. Re-authenticate on weekends to avoid Monday morning failures.
 
 ## Rate limits
@@ -106,7 +87,7 @@ client = auth.client_from_token_file(
 ### Practical throughput
 - 500-stock daily quote refresh: ~500 requests = ~4 minutes at 2/sec
 - 500-stock 20yr daily backfill: ~500 requests = ~4 minutes (1 req per stock, returns full history)
-- `schwab-py` does NOT auto-retry on 429 — implement backoff yourself
+- The FactorLab session does not auto-retry on 429 — implement backoff in the data client
 
 ### Price history data retention
 | Frequency | Max lookback |
@@ -187,16 +168,6 @@ Maps to `market.price_bars_daily`:
 - **Post-TDA migration** — the API is the successor to TD Ameritrade's API. Some endpoints behave differently from TDA docs.
 - **Exchange agreements** — must sign NYSE/NASDAQ/OPRA agreements on schwab.com before real-time data flows.
 
-## Library
-```bash
-pip install schwab-py
-```
-- GitHub: https://github.com/alexgolec/schwab-py
-- Docs: https://schwab-py.readthedocs.io/
-- Author: Alex Golec (same as the beloved `tda-api`)
-
 ## Open questions
-- [ ] Deploy Railway callback server for Schwab OAuth (same pattern as Upstox)?
-- [ ] Token refresh cadence: cron job every 25 minutes, or on-demand before each API call?
 - [ ] Use Schwab as primary for US daily backfill (free, deep) and EODHD only for fundamentals?
 - [ ] Streaming: worth setting up WebSocket for real-time quotes, or just snapshot polling?

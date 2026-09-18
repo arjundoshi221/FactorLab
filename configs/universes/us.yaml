@@ -3,9 +3,23 @@ region: us
 source: eodhd
 currency: USD
 exchange_calendar: XNYS  # NYSE calendar key for exchange_calendars lib
-default_universe: mega_cap
+default_universe: us_listed_equities
 
 universes:
+  us_listed_equities:
+    selection: eodhd_active_common_stock
+    exchanges: [NASDAQ, NYSE, NYSE_MKT]
+    include_adrs: true
+    exclude: [ETF, preferred_stock, warrant, unit, note, otc, derivative]
+    daily_source: eodhd
+    minute_source: schwab
+    minute_tier: us_liquid_250
+  us_liquid_250:
+    parent: us_listed_equities
+    size: 250
+    ranking: median_dollar_volume_20_sessions
+    minimum_observations: 15
+    rebalance: weekly
   demo:
     symbols: [AAPL.US, TSLA.US, AMZN.US, VTI.US]
   mega_cap:

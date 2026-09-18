@@ -23,6 +23,7 @@ from dotenv import find_dotenv, load_dotenv
 # Ensure src/ is importable when running as script
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+from factorlab.core.secrets import get_secret
 from factorlab.sources.eodhd.candles import fetch_daily_bars
 from factorlab.sources.eodhd.client import EODHDClient
 
@@ -56,7 +57,7 @@ def main() -> None:
     args = parse_args()
     symbols = args.symbols or DEMO_SYMBOLS
 
-    api_key = os.getenv("EODHD_API_KEY", "demo")
+    api_key = get_secret("EODHD_API_KEY", "demo")
     is_demo = api_key == "demo"
     if is_demo:
         log.info("Using demo API key — only AAPL.US, TSLA.US, AMZN.US, VTI.US work")

@@ -1,0 +1,21 @@
+<clickhouse>
+    <!-- Sampling traces and mirrored text logs exhausted the VPS root disk. -->
+    <trace_log remove="1" />
+    <text_log remove="1" />
+
+    <!-- Keep useful operational history bounded on this single-node deployment. -->
+    <query_log>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+    </query_log>
+    <part_log>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+    </part_log>
+    <!-- These high-frequency tables caused >1 GB concurrent merge allocations
+         and starved ingestion on the 5 GB ClickHouse container. Uptime Kuma and
+         the FactorLab observability tables retain the operational signals we use. -->
+    <metric_log remove="1" />
+    <asynchronous_metric_log remove="1" />
+    <error_log>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+    </error_log>
+</clickhouse>

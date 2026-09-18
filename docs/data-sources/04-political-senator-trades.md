@@ -12,7 +12,7 @@ The binding constraint: filings have a **45-day reporting window**, so by the ti
 
 ## Persistent storage — `alt_political` schema (LIVE 2026-04-30)
 
-Schema lives in Postgres `alt_political.*` (26 tables). See [docs/architecture/02-database-postgres.md](../architecture/02-database-postgres.md) for full ER + index map. Migrations: [007_create_alt_political_tables.py](../../migrations/versions/007_create_alt_political_tables.py) + [008_seed_alt_political_reference.py](../../migrations/versions/008_seed_alt_political_reference.py).
+The current target is a denormalized ClickHouse redesign. See [docs/architecture/02-database-clickhouse.md](../architecture/02-database-clickhouse.md) for the new target model. The Postgres `alt_political.*` layout described below is the legacy normalized design represented by migrations [007_create_alt_political_tables.py](../../migrations/versions/007_create_alt_political_tables.py) + [008_seed_alt_political_reference.py](../../migrations/versions/008_seed_alt_political_reference.py).
 
 Every source documented in this file maps to a specific table:
 

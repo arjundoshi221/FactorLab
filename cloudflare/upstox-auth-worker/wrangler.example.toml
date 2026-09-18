@@ -1,0 +1,61 @@
+name = "factorlab-upstox-auth"
+main = "src/index.ts"
+compatibility_date = "2026-07-26"
+workers_dev = true
+preview_urls = false
+
+# Copy this file to wrangler.toml and replace IDs/Access values.
+[[kv_namespaces]]
+binding = "RUNTIME_STATE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[[secrets_store_secrets]]
+binding = "UPSTOX_API_KEY"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "UPSTOX_API_KEY"
+
+[[secrets_store_secrets]]
+binding = "UPSTOX_API_SECRET"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "UPSTOX_API_SECRET"
+
+[[secrets_store_secrets]]
+binding = "SCHWAB_APP_KEY"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "SCHWAB_APP_KEY"
+
+[[secrets_store_secrets]]
+binding = "SCHWAB_APP_SECRET"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "SCHWAB_APP_SECRET"
+
+[[secrets_store_secrets]]
+binding = "TOKEN_ENCRYPTION_KEY"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "TOKEN_ENCRYPTION_KEY"
+
+[[secrets_store_secrets]]
+binding = "CLICKHOUSE_PASSWORD"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "CLICKHOUSE_PASSWORD"
+
+[[secrets_store_secrets]]
+binding = "CLICKHOUSE_PASSWORD_SHA256"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "CLICKHOUSE_PASSWORD_SHA256"
+
+[[secrets_store_secrets]]
+binding = "EODHD_API_KEY"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "EODHD_API_KEY"
+
+[[secrets_store_secrets]]
+binding = "FACTORLAB_API_KEY"
+store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+secret_name = "FACTORLAB_API_KEY"
+
+[vars]
+UPSTOX_REDIRECT_URL = "https://factorlab-upstox-oauth-callback.YOUR_SUBDOMAIN.workers.dev/oauth/callback"
+SCHWAB_CALLBACK_URL = "https://factorlab-upstox-oauth-callback.YOUR_SUBDOMAIN.workers.dev/oauth/schwab/callback"
+CF_ACCESS_TEAM_DOMAIN = "YOUR_TEAM.cloudflareaccess.com"
+CF_ACCESS_AUD = "REPLACE_WITH_ACCESS_APPLICATION_AUD"

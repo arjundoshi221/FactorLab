@@ -2,127 +2,145 @@
 
 > Status: `[design]`
 
-Roadmap is **capability-ordered**, not date-ordered. Each phase hardens the previous; do not start a phase until prior is `[beta]`.
+Roadmap is capability-ordered, not date-ordered. Each phase should harden the previous one before the next layer is treated as real.
 
 ---
 
-## Phase 1 — Foundations `[in progress]`
-**Goal:** US daily prices flowing into Postgres, reproducibly.
+## Phase 1 - Architecture reset `[in progress]`
 
-- [ ] Postgres provisioned (local Docker)
-- [ ] Alembic initialized
-- [ ] `ref.securities` + `ref.security_aliases` tables
-- [ ] EODHD adapter → `raw_eodhd` → `market.price_bars_daily`
-- [ ] Smoke test: 50 large-cap US tickers, 5 years daily, full lifecycle
-- [ ] CI: pytest + ruff on every commit
+**Goal:** Replace the Postgres/Timescale plan with a single-store ClickHouse target.
 
-**Exit criterion:** Reload from raw produces byte-identical fact rows.
+- [ ] ClickHouse table inventory defined by domain
+- [ ] naming convention decided for databases vs table prefixes
+- [ ] denormalized serving strategy documented for `alt_political`
+- [ ] legacy Postgres assumptions marked as deprecated in docs and code
+- [ ] migration sequencing agreed before new storage code lands
 
----
-
-## Phase 2 — Universe & survivorship `[design]`
-**Goal:** Ask "what was in the S&P 500 on 2018-03-15" and get the right answer.
-
-- [ ] Index membership tables (effective-dated)
-- [ ] Delisted-securities ingestion
-- [ ] Corporate actions (splits, dividends, mergers)
-- [ ] Universe API: `get_universe(name, as_of_date) -> list[security_id]`
-
-**Exit criterion:** Backtest of a trivial signal does not show survivorship-bias inflation.
+**Exit criterion:** One coherent target architecture exists and no core doc still describes Postgres as the destination state.
 
 ---
 
-## Phase 3 — Vectorized backtester `[design]`
-**Goal:** Cross-sectional factor backtest with realistic costs.
+## Phase 2 - Local ClickHouse foundation `[design]`
 
-- [ ] Signal → ranking → weighting → constraints → execution layers
-- [ ] Transaction cost model (bid/ask, market impact)
-- [ ] Capacity / turnover analysis
-- [ ] Results land in `experiments.runs` + `experiments.backtest_metrics`
+**Goal:** Stand up ClickHouse locally and make it the new storage baseline.
 
-**Exit criterion:** Reproduce a known factor (e.g. low-vol) with reasonable IR.
+- [ ] Docker Compose ClickHouse service
+- [ ] app config for ClickHouse connectivity
+- [ ] bootstrap script for database, users, and tables
+- [ ] minimal DDL creation path checked into repo
+- [ ] local smoke query from Python client
 
----
-
-## Phase 4 — IBKR paper integration & portfolio system of record `[design]`
-**Goal:** IBKR (paper) is the canonical portfolio store. Every signal that would go live also runs paper.
-
-- [ ] IB Gateway running locally (paper port 4002)
-- [ ] `ib_async` client, deterministic clientIds, reconnect logic
-- [ ] Daily snapshot of paper positions → `market.ibkr_positions_snapshot`
-- [ ] Daily executions pull → `market.ibkr_executions`
-- [ ] Signal-to-order translator with proposed-vs-filled reconciliation
-- [ ] Slippage analysis: backtest vs paper vs (later) live
-
-**Exit criterion:** Two consecutive weeks of signal → paper-fill → reconciliation green.
-
-This phase is intentionally early (before alt-data) because **IBKR paper is the integration test** for the entire signal pipeline. Without it, you don't know if your model survives contact with a real broker API.
+**Exit criterion:** Clean local startup can create and query the ClickHouse layout end to end.
 
 ---
 
-## Phase 5 — Reproducibility infrastructure `[design]`
-**Goal:** Any historical result re-runnable bit-for-bit.
+## Phase 3 - Raw archive first `[design]`
 
-- [ ] `experiments` schema fully populated
-- [ ] Code-SHA tagging in every run
-- [ ] Data snapshot identifiers (raw archive query that defines a snapshot)
-- [ ] Notebook discipline: notebooks call package, never define logic
+**Goal:** Make raw retention the first guaranteed invariant.
 
-**Exit criterion:** Pick a 6-month-old run; reproduce in one command.
+- [ ] generic raw archive table pattern finalized
+- [ ] each fetcher writes raw payload before parsing
+- [ ] replay tooling from raw payload to parser
+- [ ] storage sizing estimates for long-term retention
+- [ ] integrity checks for duplicate fetches and malformed payloads
 
----
-
-## Phase 6 — India integration `[design]`
-**Goal:** NSE/BSE equities and F&O via Upstox, same code paths as US.
-
-- [ ] Upstox adapter (port from `E:\...\upstoxAPI`)
-- [ ] Daily token-refresh job
-- [ ] Instrument-key mapping → `ref.security_aliases`
-- [ ] Minute-bar storage decision (Postgres partitioned vs. Parquet+DuckDB)
-- [ ] Multi-currency, multi-calendar handling
-
-**Exit criterion:** US and IN factors run side-by-side from one config.
+**Exit criterion:** At least one source can be re-parsed entirely from retained raw data.
 
 ---
 
-## Phase 7 — Alternative data ingestion `[design]`
-**Goal:** Reddit, Twitter, Senator trades, arxiv flowing into respective schemas.
+## Phase 4 - Market data migration `[design]`
 
-Subphases (parallelizable):
-- 7a Reddit/Twitter (sentiment, attention)
-- 7b Senate trade disclosures
-- 7c arxiv q-fin/cs.LG papers
+**Goal:** Move canonical market storage to ClickHouse.
 
-Each follows the same adapter/parser/raw-archive pattern. See `docs/data-sources/`.
+- [ ] `ref` instrument model redefined for ClickHouse
+- [ ] daily bars ingestion landed
+- [ ] minute bars ingestion landed
+- [ ] fundamentals and corporate actions model landed
+- [ ] reconciliation against sample historical slices
+- [ ] basic market REST endpoints working
 
-**Exit criterion:** Each source has at least one derived signal feeding into a backtest.
-
----
-
-## Phase 8 — Live signal pipeline `[design]`
-**Goal:** Daily orchestrated job: fetch → compute → write signals → IBKR (paper, eventually live) → notify.
-
-- [ ] Orchestrator chosen (Prefect/Airflow/cron)
-- [ ] Idempotent jobs with retries
-- [ ] Monitoring: data freshness, signal stats, vendor anomaly detection
-- [ ] Deployed to Railway
-- [ ] Live-trading kill-switch + manual `LIVE=1` opt-in
-
-**Exit criterion:** Two consecutive weeks of green daily runs without intervention. Paper portfolio matches expected positions; PnL reconciles to broker statement.
+**Exit criterion:** One market source flows from raw fetch to ClickHouse fact table to API response reproducibly.
 
 ---
 
-## Phase 9 — Event-driven backtester `[design]`
-**Goal:** Execution-sensitive strategies.
+## Phase 5 - `alt_political` denormalized rebuild `[design]`
 
-Postponed deliberately. Vectorized covers cross-sectional factor research, which is the bulk of the work. Build event-driven only when an actual strategy demands it.
+**Goal:** Replace the normalized political schema with serving-oriented ClickHouse tables.
+
+- [ ] legislator, committee, and FEC support dims defined
+- [ ] denormalized trade table landed
+- [ ] denormalized contracts table landed
+- [ ] denormalized lobbying table landed
+- [ ] denormalized donations table landed
+- [ ] denormalized bills and hearings tables landed
+- [ ] alias-resolution workflow for ticker mapping landed
+- [ ] political timeline endpoints working
+
+**Exit criterion:** Common political queries no longer require rebuilding a normalized graph at read time.
 
 ---
 
-## What is explicitly out of scope (for now)
+## Phase 6 - Universe, derived, and experiments `[design]`
+
+**Goal:** Restore research and factor workflows on top of ClickHouse only.
+
+- [ ] point-in-time universe membership model
+- [ ] derived factor tables
+- [ ] signal snapshot tables
+- [ ] experiment and run metadata tables
+- [ ] backtest reads fully from ClickHouse
+
+**Exit criterion:** A full research run can be reproduced without depending on Postgres-era storage.
+
+---
+
+## Phase 7 - API-first product surface `[design]`
+
+**Goal:** Expose the core system through stable REST endpoints.
+
+- [ ] endpoint contracts versioned
+- [ ] pagination and filter strategy standardized
+- [ ] freshness metadata included in responses
+- [ ] auth model chosen for private deployment
+- [ ] benchmark and cache the slowest endpoints
+
+**Exit criterion:** Research clients and local tools can consume the system through API endpoints without direct storage knowledge.
+
+---
+
+## Phase 8 - Deployment and operations `[design]`
+
+**Goal:** Run the single-store platform reliably on one VPS.
+
+- [ ] Dockerized ClickHouse plus app containers
+- [ ] daily backups to off-box storage
+- [ ] disk growth monitoring
+- [ ] ingestion health checks
+- [ ] restore drill from backup
+- [ ] secrets rotation path documented
+
+**Exit criterion:** Two weeks of unattended green ingestion and successful restore verification.
+
+---
+
+## Phase 9 - Broker integration and live pipeline `[design]`
+
+**Goal:** Reconnect signals to paper execution once storage is stable.
+
+- [ ] IBKR paper integration
+- [ ] positions and fills persisted into ClickHouse
+- [ ] proposed-vs-filled reconciliation
+- [ ] daily signal-to-order pipeline
+- [ ] alerting and kill switch
+
+**Exit criterion:** Signals can flow from ClickHouse-derived research outputs into paper execution with daily reconciliation.
+
+---
+
+## What is explicitly out of scope for now
 
 - Public web app
 - Multi-tenant authentication
-- Real-time streaming (sub-daily) for US
-- Options pricing models (until India F&O signal demands it)
-- Custom hardware acceleration
+- Multi-store hybrid architecture
+- Dual-write long-term compatibility layer for Postgres
+- Generic ORM-first storage abstraction

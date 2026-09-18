@@ -33,6 +33,14 @@ sebi_classification:
 
 universes:
 
+  # Dynamic production universe resolved from the daily Upstox NSE master.
+  # It uses batched V3 OHLC quotes rather than one request per symbol.
+  full_nse_eq:
+    exchange: nse_eq
+    selection: all_active_equities
+    phase: 3
+    note: "Every NSE_EQ instrument whose Upstox instrument_type is EQ."
+
   # ── Development / testing ──────────────────────────────────────────────────
   demo:
     exchange: nse_eq
@@ -120,7 +128,8 @@ universes:
     phase: 2
     note: "Individual stock futures for F&O-eligible names."
 
-# ── Rate limit budget at 5-min polling (2,000 calls per 30 min) ─────────────
+# ── Legacy per-symbol rate budget (2,000 calls per 30 min) ──────────────────
+# full_nse_eq uses 100-key V3 OHLC batches (~27 calls/minute for ~2.6K names).
 # demo (5):       30/2000
 # nifty50 (50):  300/2000
 # nifty100 (100): 600/2000
