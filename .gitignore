@@ -176,6 +176,9 @@ figures/
 node_modules/
 .wrangler/
 cloudflare/**/wrangler.toml
+*.tar
+*.gz
+*.tar.gz
 
 # ---- Compute / cache --------------------------------------------------------
 .cache/
