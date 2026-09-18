@@ -1,8 +1,8 @@
 """EODHD data source — US equities daily OHLCV, fundamentals, corporate actions."""
 
-from factorlab.sources.eodhd.candles import fetch_daily_bars, fetch_demo_universe
-from factorlab.sources.eodhd.client import EODHDClient
-from factorlab.sources.eodhd.instruments import fetch_us_instruments, sync_us_instruments
+from factorlab.countries.us.equities.eodhd.candles import fetch_daily_bars, fetch_demo_universe
+from factorlab.countries.us.equities.eodhd.client import EODHDClient
+from factorlab.countries.us.equities.eodhd.instruments import fetch_us_instruments, sync_us_instruments
 
 __all__ = [
     "EODHDClient",

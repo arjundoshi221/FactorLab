@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from factorlab.sources.eodhd.client import EODHDClient
+from factorlab.countries.us.equities.eodhd.client import EODHDClient
 
 log = logging.getLogger(__name__)
 
@@ -56,9 +56,7 @@ def sync_us_instruments(
     engine: Engine,
     *,
     exchange_code: str = "NYSE",
-    country_code: str = "US",
     market_code: str = "USA",
-    currency_code: str = "USD",
 ) -> dict[str, UUID]:
     """Upsert US instruments into ref.instruments.
 
@@ -77,16 +75,16 @@ def sync_us_instruments(
         if not exchange_id:
             raise ValueError(f"Exchange '{exchange_code}' not in ref.exchanges — run seed migration first")
 
+        # country_code + currency_code were dropped in mig 026 — derive via
+        # JOIN to ref.markets using market_code.
         upsert_sql = text("""
             INSERT INTO ref.instruments (
                 exchange_id, instrument_key, trading_symbol, name, isin,
-                segment, instrument_type, asset_class,
-                country_code, market_code, currency_code,
+                segment, instrument_type, asset_class, market_code,
                 lot_size, status, first_seen, last_seen
             ) VALUES (
                 :exchange_id, :instrument_key, :trading_symbol, :name, :isin,
-                :segment, :instrument_type, :asset_class,
-                :country_code, :market_code, :currency_code,
+                :segment, :instrument_type, :asset_class, :market_code,
                 1, 'active', :today, :today
             )
             ON CONFLICT (instrument_key) DO UPDATE SET
@@ -108,9 +106,7 @@ def sync_us_instruments(
                 "segment": rec["segment"],
                 "instrument_type": rec["instrument_type"],
                 "asset_class": rec["asset_class"],
-                "country_code": country_code,
                 "market_code": market_code,
-                "currency_code": currency_code,
                 "today": today,
             }).fetchone()
             if row:

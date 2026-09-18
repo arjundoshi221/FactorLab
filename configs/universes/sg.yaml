@@ -1,0 +1,30 @@
+# Singapore (SGX) equity universe — symbol format: {TICKER}.SG
+# Built 2026-05-02 to capture .SG holdings surfaced in legislator PTRs.
+# Population deferred until EODHD /exchange-symbol-list/SG sweep runs.
+region: sg
+source: eodhd
+currency: SGD
+exchange_calendar: XSES   # SGX calendar key for exchange_calendars
+default_universe: demo
+
+exchanges:
+  sgx:
+    calendar: XSES
+    trading_hours: "09:00-17:00"
+    timezone: "Asia/Singapore"
+    suffix: ".SG"
+
+# ── Universes ────────────────────────────────────────────────────────────────
+# Inline lists for now; full SGX master will populate via:
+#   EODHD GET /exchange-symbol-list/SG  →  data/sg/universes/sgx_all_latest.csv
+universes:
+  demo:
+    symbols:
+      - DBS.SG          # DBS Group Holdings — banking
+      - OCBC.SG         # OCBC Bank
+      - UOB.SG          # United Overseas Bank
+      - SGX.SG          # Singapore Exchange
+      - ST.SG           # Singapore Telecom
+  # File-based (future):
+  # sgx_all:
+  #   source_file: data/sg/universes/sgx_all_latest.csv

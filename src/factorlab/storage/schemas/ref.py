@@ -140,15 +140,16 @@ instruments = Table(
     Column("segment", String(20), nullable=False, comment="NSE_EQ, NSE_INDEX, US_EQ"),
     Column("instrument_type", String(10), nullable=False, comment="EQ, INDEX, ETF"),
     Column("asset_class", String(20), nullable=False, comment="equity, index, etf"),
-    Column("country_code", String(2), ForeignKey(f"{SCHEMA}.countries.code"), nullable=False),
+    # NOTE: country_code + currency_code dropped in mig 026 — derive via JOIN to markets.
     Column("market_code", String(10), ForeignKey(f"{SCHEMA}.markets.code"), nullable=False),
-    Column("currency_code", String(3), ForeignKey(f"{SCHEMA}.currencies.code"), nullable=False),
     Column("lot_size", Integer, nullable=False, server_default="1"),
     Column("tick_size", Numeric(10, 2), nullable=True),
     Column("freeze_quantity", Numeric(12, 1), nullable=True),
     Column("exchange_token", String(20), nullable=True),
     Column("security_type", String(20), nullable=True, comment="NORMAL, etc."),
-    Column("sector", String(100), nullable=True, comment="GICS sector or equivalent"),
+    # GICS classification — populated by US fundamentals backfill (Phase G or later)
+    Column("gics_sector_id", Integer, ForeignKey(f"{SCHEMA}.gics_sectors.id"), nullable=True),
+    Column("gics_industry_id", Integer, ForeignKey(f"{SCHEMA}.gics_industries.id"), nullable=True),
     Column("status", String(20), nullable=False, server_default="active",
            comment="active, delisted, suspended"),
     Column("first_seen", Date, nullable=True),
@@ -161,9 +162,12 @@ instruments = Table(
 Index("ix_instruments_symbol", instruments.c.trading_symbol)
 Index("ix_instruments_segment", instruments.c.segment)
 Index("ix_instruments_isin", instruments.c.isin)
-Index("ix_instruments_country", instruments.c.country_code)
 Index("ix_instruments_market", instruments.c.market_code)
 Index("ix_instruments_status", instruments.c.status)
+Index("ix_instruments_gics_sector_id", instruments.c.gics_sector_id,
+      postgresql_where=instruments.c.gics_sector_id.isnot(None))
+Index("ix_instruments_gics_industry_id", instruments.c.gics_industry_id,
+      postgresql_where=instruments.c.gics_industry_id.isnot(None))
 
 # ---------------------------------------------------------------------------
 # ref.contracts — one row per derivatives contract
@@ -201,6 +205,120 @@ Index("ix_contracts_expiry", contracts.c.expiry)
 Index("ix_contracts_segment", contracts.c.segment)
 Index("ix_contracts_status", contracts.c.status)
 Index("ix_contracts_nearest", contracts.c.instrument_id, contracts.c.expiry, contracts.c.contract_type)
+
+# ---------------------------------------------------------------------------
+# ref.vendors — data providers / source organizations (parent dim)
+# ---------------------------------------------------------------------------
+vendors = Table(
+    "vendors",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("code", String(40), nullable=False, unique=True,
+           comment="Short canonical code: upstox, house_clerk, eodhd, ..."),
+    Column("name", String(200), nullable=False),
+    Column("vendor_type", String(15), nullable=False,
+           comment="api / scrape / file / mirror / official"),
+    Column("homepage_url", String(500), nullable=True),
+    Column("notes", String(2000), nullable=True),
+    Column("active", Boolean, nullable=False, server_default=text("true")),
+    col_created_at(),
+    CheckConstraint(
+        "vendor_type IN ('api','scrape','file','mirror','official')",
+        name="vendor_type",
+    ),
+    schema=SCHEMA,
+    comment="Data providers / source organizations. Parent of data_endpoints.",
+)
+Index("ix_vendors_code", vendors.c.code)
+
+
+# ---------------------------------------------------------------------------
+# ref.data_endpoints — specific feeds / URL patterns (child of vendors)
+# ---------------------------------------------------------------------------
+data_endpoints = Table(
+    "data_endpoints",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("vendor_id", Integer, ForeignKey(f"{SCHEMA}.vendors.id"), nullable=False),
+    Column("code", String(60), nullable=False, unique=True,
+           comment="Endpoint canonical code: house_clerk_ptr, senate_efd_ptr, ..."),
+    Column("name", String(200), nullable=False),
+    Column("endpoint_type", String(15), nullable=False,
+           comment="rest / graphql / scrape / file / yaml / dump"),
+    Column("url_pattern", String(500), nullable=True,
+           comment="Templated URL with {placeholders} where applicable"),
+    Column("notes", String(2000), nullable=True),
+    Column("active", Boolean, nullable=False, server_default=text("true")),
+    col_created_at(),
+    CheckConstraint(
+        "endpoint_type IN ('rest','graphql','scrape','file','yaml','dump')",
+        name="endpoint_type",
+    ),
+    schema=SCHEMA,
+    comment="Specific feeds / URL patterns. Each fact-table row's endpoint_id "
+            "FKs here; the vendor is reached via the FK chain.",
+)
+Index("ix_endpoints_code", data_endpoints.c.code)
+Index("ix_endpoints_vendor", data_endpoints.c.vendor_id)
+
+
+# ---------------------------------------------------------------------------
+# ref.frequencies — bar-frequency dim (FK target for fact tables' freq_id)
+# ---------------------------------------------------------------------------
+frequencies = Table(
+    "frequencies",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("code", String(8), nullable=False, unique=True,
+           comment="Canonical short code: 1m, 5m, 15m, 1h, 1d, 1w, 1M"),
+    Column("name", String(40), nullable=False),
+    Column("seconds", Integer, nullable=False,
+           comment="Approximate bar duration in seconds (1d=86400, 1M=2592000)"),
+    Column("active", Boolean, nullable=False, server_default=text("true")),
+    col_created_at(),
+    CheckConstraint("seconds > 0", name="seconds_positive"),
+    schema=SCHEMA,
+    comment="Bar-frequency dim. FK target for fact tables' freq_id.",
+)
+Index("ix_frequencies_code", frequencies.c.code)
+
+
+# ---------------------------------------------------------------------------
+# ref.gics_sectors — 11 canonical GICS sectors
+# ---------------------------------------------------------------------------
+gics_sectors = Table(
+    "gics_sectors",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("code", String(8), nullable=False, unique=True,
+           comment="GICS 2-digit sector code"),
+    Column("name", String(80), nullable=False),
+    col_created_at(),
+    schema=SCHEMA,
+    comment="GICS top-level sectors (11). FK target for instruments.gics_sector_id.",
+)
+Index("ix_gics_sectors_code", gics_sectors.c.code)
+
+
+# ---------------------------------------------------------------------------
+# ref.gics_industries — GICS industry groups (24), 2-level collapsed
+# ---------------------------------------------------------------------------
+gics_industries = Table(
+    "gics_industries",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("code", String(8), nullable=False, unique=True,
+           comment="GICS 4-digit industry-group code"),
+    Column("name", String(120), nullable=False),
+    Column("sector_id", Integer, ForeignKey(f"{SCHEMA}.gics_sectors.id"),
+           nullable=False),
+    col_created_at(),
+    schema=SCHEMA,
+    comment="GICS industry groups (24). FK target for instruments.gics_industry_id.",
+)
+Index("ix_gics_industries_code", gics_industries.c.code)
+Index("ix_gics_industries_sector", gics_industries.c.sector_id)
+
 
 # ---------------------------------------------------------------------------
 # ref.instrument_daily — SCD for mutable instrument fields

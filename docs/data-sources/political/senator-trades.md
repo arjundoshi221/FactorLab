@@ -1,6 +1,201 @@
 # Political Signals — US Congressional Trades
 
-> Status: `[building, free-tier-only]` · Last updated: 2026-04-29 · Verified empirically end-to-end against live sources
+> Status: `[live, post-redesign]` · Last updated: 2026-05-03 · Verified empirically end-to-end against live sources
+
+## Schema redesign 2026-05-01 — at a glance
+
+The `alt_political` schema was renamed and restructured per
+[`docs/architecture/database.md`](../../architecture/database.md).
+Key changes for operators:
+
+- **Schema rename**: `alt_political` → `alt_political_us`. India political data
+  will land in a future `alt_political_in`. Reference dims stay shared in `ref`.
+- **Audit unification**: the per-schema `raw_archive` table moved to
+  `audit.raw_archive` (single table for ALL sources — political, market,
+  future alt_*). Every row has an `endpoint_id` FK identifying the feed.
+- **Vendor model**: freeform `source` String columns replaced with `endpoint_id`
+  Int FK to `ref.data_endpoints` (which itself FKs to `ref.vendors`).
+  `legislator_trades.source = 'house_clerk_ptr'` is now `endpoint_id = <int>`,
+  reached via `JOIN ref.data_endpoints e ON e.id = lt.endpoint_id`.
+- **`legislator_aliases` table**: manual override curation. The Van Taylor →
+  T000479 mapping that previously lived in a Python script is now a database
+  row. The bioguide matcher consults this table as Stage 0 (highest priority).
+- **Strict-NULL across the board**: `transaction_type`, `filer_type`,
+  `asset_type_code` are nullable on `legislator_trades`. Sources write `None`
+  on unknown rather than fabricating `'purchase'` / `'self'` / `'OT'` defaults.
+- **Daily + weekly orchestrator** registered with Task Scheduler. See the
+  [operations runbook](pipeline.md).
+
+Live row counts (2026-05-03, post-Senate-eFD-historical-backfill):
+
+| Schema.table / view | Rows | Notes |
+|---|---:|---|
+| `alt_political_us.legislator_trades` (raw) | 70,992 | Multi-source append-only: 53,081 House Clerk + 12,685 SSW historical + 5,162 Senate eFD HTML + 64 paper-LLM |
+| `alt_political_us.legislator_trades_dedup` (view) | 69,728 | **Use this for analytics.** Source-deduped — see [Cross-source dedup view](#cross-source-dedup-view-2026-05-03) below. |
+| `alt_political_us.legislators` | 12,766 | current 536 + historical ~12,230 |
+| `alt_political_us.legislator_terms` | 45,530 | every term, every member |
+| `alt_political_us.legislator_aliases` | 1 | Van Taylor seed; grows via curation |
+| `alt_political_us.gov_contracts` | 4,914 | usaspending_direct + finnhub_usa_spending |
+| `alt_political_us.bills` | 15,433 | Congress.gov backfill |
+| `audit.raw_archive` | 19,375 | unified across all political sources |
+
+For day-to-day operations (running the daily/weekly cycle, triaging anomalies,
+adding overrides, adding new sources), see
+[`pipeline.md`](pipeline.md).
+
+---
+
+## Cross-source dedup view (2026-05-03)
+
+> Migration: [028_legislator_trades_dedup_view.py](../../migrations/versions/028_legislator_trades_dedup_view.py) · View: `alt_political_us.legislator_trades_dedup`
+
+### Why it exists
+
+Multiple endpoints land in `legislator_trades` under different `endpoint_id`
+values, so the table-level UNIQUE key cannot collapse logical duplicates
+across sources. In particular:
+
+- **Senate Stock Watcher historical** (`senate_stock_watcher_historical`)
+  covers **2012-01-01 through 2020-12-02** (12,685 rows, 6,217 with ticker).
+- **Senate eFD direct scrape** (`senate_efd_ptr`) covers **2017-12-21 through
+  today** (5,162 rows, 3,858 with ticker), with most volume from 2019 forward.
+
+Where the windows overlap (filings 2019-2020), every ticker'd row in eFD has a
+near-mirror row in SSW. They sit side-by-side in the table with different
+`endpoint_id`. Without dedup, `SUM`/`COUNT` over the overlap window inflates
+by ~50% on the senate side. Same problem at the per-source level: a single
+PTR can be amended (republished under a new `filing_id`), and the amended
+copy lands beside the original.
+
+The view solves both at once: cross-source dedup *and* same-source
+PTR-amendment dedup.
+
+### Data sources contributing to `legislator_trades`
+
+| Source | `data_endpoints.code` | Chamber | Coverage | Rows | Notes |
+|---|---|---|---|---:|---|
+| House Clerk PTR PDFs | `house_clerk_ptr` | house | 2014-today | 53,081 | The only house source — no cross-source overlap risk. PTR amendments handled by the dedup view. |
+| Senate Stock Watcher (frozen 2021 mirror) | `senate_stock_watcher_historical` | senate | 2012 → 2020-12-02 | 12,685 | Third-party historical mirror. Ingested once. Useful for backfill of pre-eFD years. |
+| Senate eFD HTML PTRs | `senate_efd_ptr` | senate | 2019-today (backfilled), 2017+ trades disclosed late | 5,162 | Direct from `efdsearch.senate.gov` via Playwright (residential IP required). Authoritative source. |
+| Senate eFD paper PTRs (LLM-OCR'd) | `senate_efd_paper_llm` | senate | sparse 2021-2022 | 64 | Paper-filed PTRs that were OCR'd. Disjoint from `senate_efd_ptr` by construction. |
+
+### Source precedence (when the same logical trade appears in multiple sources)
+
+1. `senate_efd_ptr` — direct from source.gov, authoritative
+2. `senate_efd_paper_llm` — same source, OCR risk
+3. `senate_stock_watcher_historical` — third-party mirror
+9. anything else — currently just `house_clerk_ptr` (no overlap, no contention)
+
+### Partition key (the "trade fingerprint")
+
+```
+(bioguide_id, transaction_date, UPPER(ticker), transaction_type,
+ filer_type, amount_min, amount_max)
+```
+
+The view applies a `ROW_NUMBER() OVER (PARTITION BY <fingerprint> ORDER BY
+<precedence>, ...)` and keeps `rk = 1`. Tie-breakers within the same source:
+prefer rows with `amount_min` populated, then with `filing_url`, then most
+recent `as_of_time`.
+
+**Rows where any of `bioguide_id`, `ticker`, or `transaction_type` is NULL
+pass through unchanged.** They cannot be safely matched across sources.
+This is critical for paper-PTR placeholders (no ticker, no transaction type),
+unresolved-bioguide rows, and "complex assets" (e.g., partnership interests
+without a ticker symbol).
+
+`filer_type` and `amount_{min,max}` are **part of the fingerprint** so that
+legitimate multi-trade days are not collapsed:
+
+- A representative buying $1,001-$15,000 of DIS *and* $15,001-$50,000 of DIS
+  on the same day = two real trades (different `amount_min`).
+- A senator's `self` and `spouse` accounts both trading AAPL same day = two
+  real trades (different `filer_type`).
+
+### What gets deduped (current state, 2026-05-03)
+
+| Bucket | Raw rows | Dedup rows | Collapsed |
+|---|---:|---:|---:|
+| `house_clerk_ptr` | 53,081 | 52,449 | 632 (PTR amendments + asset_name_raw / amount_str format variants of the same trade) |
+| `senate_stock_watcher_historical` | 12,685 | 12,336 | 349 (mostly within the 2019-2020 boundary where eFD is the higher-precedence winner) |
+| `senate_efd_ptr` | 5,162 | 4,879 | 283 (cross-source dupes against SSW) |
+| `senate_efd_paper_llm` | 64 | 64 | 0 (disjoint by construction) |
+| **TOTAL** | **70,992** | **69,728** | **1,264** |
+
+### Same-source dedup (PTR amendments)
+
+When a representative amends a PTR, the amended copy lands as a separate
+row under a new `filing_id`, often with subtly reformatted `asset_name_raw`
+or `amount_str`. The dedup view treats these as one trade. Of the 632
+collapsed house rows:
+
+- 451 groups had different `filing_id` (true PTR amendments)
+- 391 groups had different `asset_name_raw` (e.g., "Apple Inc." vs "Apple Inc")
+- 85 groups had different `asset_type_code` (`ST` vs `OT` classification flip)
+- 66 groups had different `amount_str` only (formatting whitespace)
+
+### Cross-source dedup (SSW ↔ eFD overlap, 2019-2020)
+
+For 2019 filings: of 167 eFD rows that had bioguide+ticker, 166 (99.4%)
+matched a SSW row exactly on the strict 5-key (bioguide+date+ticker+type+amount_str).
+Of those, eFD won every dedup decision (it has higher precedence). Same
+pattern for 2020.
+
+### How to query
+
+**Always use the view for analytics:**
+
+```sql
+-- Count trades by source — uses the view, sees one row per trade
+SELECT source_code, COUNT(*) FROM alt_political_us.legislator_trades_dedup
+GROUP BY 1;
+
+-- Conjunction query (committee-relevant trade × govt contract)
+-- The original example query in this doc would use ..._dedup, not the raw table.
+```
+
+**Use the raw table only for:**
+
+- Audit trail / provenance (which sources reported a given trade)
+- Re-ingestion idempotency checks
+- Migration / schema work
+
+The view is a regular (non-materialized) view — no `REFRESH` needed; reads
+are cheap given table size.
+
+### Senate eFD historical backfill — year-by-year progress (2026-05-03)
+
+Filing-year breakdown (`senate_efd_ptr` only):
+
+| Filing year | HTML | Paper placeholders | Total |
+|---|---:|---:|---:|
+| 2019 | 305 | 23 | 328 |
+| 2020 | 291 | 23 | 314 |
+| 2021 | 638 | 40 | 678 |
+| 2022 | 711 | 27 | 738 |
+| 2023 | 1,131 | 25 | 1,156 |
+| 2024 | 917 | 20 | 937 |
+| 2025 | 634 | 32 | 666 |
+| 2026 | 341 | 4 | 345 |
+| **Total** | **4,968** | **194** | **5,162** |
+
+Trade-date can lead filing-year by up to ~24 months because PTRs disclose
+trades the legislator made before filing (a few late-disclosure outliers go
+back further). Earliest tx date in `senate_efd_ptr` is 2017-12-21.
+
+Paper-placeholder rows are stand-ins for PTRs that were filed on paper
+(scanned PDFs) where the OCR has not yet been run. They carry NULL ticker
+and NULL transaction_type, so the dedup view passes them through unchanged.
+The `senate_efd_paper_llm` endpoint is where OCR'd paper-PTR trades land
+once the LLM extraction runs — those rows are tagged separately so the
+provenance stays clear.
+
+Backfill years still to run: **2014, 2015, 2016, 2017, 2018**. SSW historical
+already covers those years; running eFD will produce more cross-source
+dupes (the dedup view handles them, but it adds rows + bytes for redundant
+coverage). Decision deferred — likely worth running for the placeholder
+records of paper PTRs and the direct-source provenance, but not the highest
+priority.
 
 ## Purpose
 
@@ -10,9 +205,187 @@ The binding constraint: filings have a **45-day reporting window**, so by the ti
 
 ---
 
-## Persistent storage — `alt_political` schema (LIVE 2026-04-30)
+## Production ingestion — `src/factorlab/sources/political/` (LIVE 2026-04-30)
 
-Schema lives in Postgres `alt_political.*` (26 tables). See [docs/architecture/02-database-postgres.md](../architecture/02-database-postgres.md) for full ER + index map. Migrations: [007_create_alt_political_tables.py](../../migrations/versions/007_create_alt_political_tables.py) + [008_seed_alt_political_reference.py](../../migrations/versions/008_seed_alt_political_reference.py).
+The 8 source modules now have production ingestion code that writes directly into `alt_political_us`. Foundation utilities + 8 fully-implemented sources (legislators, house_clerk, senate_efd, senate_stock_watcher, lda, usaspending, finnhub_contracts, fec, congress_gov).
+
+### Module layout
+
+```
+src/factorlab/sources/political/
+├── _client.py                 # HTTP base: retry/backoff, raw_archive write, disk cache
+├── _db.py                     # fast_upsert: auto-picks ORM / batched / COPY based on row count
+├── _resolver.py               # name → SEC ticker (5-tier match, 11/11 self-test pass)
+├── _state.py                  # checkpoint/resume per-source for long backfills
+├── legislators/               # → 5 dim tables (legislators, terms, fec_ids, committees, assignments)
+├── house_clerk/               # year-ZIPs → 8,150 PTRs → PDF parse → legislator_trades
+├── senate_stock_watcher/      # 8,350 historical 2014-2019 → legislator_trades (one-shot)
+├── senate_efd/                # Playwright (residential IP) → HTML PTRs → legislator_trades
+├── lda/                       # paginated /filings/ → 4 tables (filings + activities + targets + lobbyists)
+├── usaspending/               # POST /spending_by_award/ → gov_contracts (sovereign primary)
+├── finnhub_contracts/         # /stock/usa-spending → gov_contracts (third-party parallel)
+├── fec/                       # STUB (pending FEC_API_KEY)
+├── congress_gov/              # STUB (pending CONGRESS_API_KEY)
+└── orchestrator.py            # Phase 1→4 driver
+```
+
+### Drivers
+
+```
+scripts/us/political/us_political_backfill.py  # one-shot full historical backfill (interactive)
+scripts/us/political/us_political_daily.py     # daily incremental (Task Scheduler hook)
+```
+
+### Backfill commands
+
+```bash
+# Phase 1 — reference dims (~5 min, runs anywhere)
+python scripts/us/political/us_political_backfill.py --phase 1
+
+# Phase 2 — trade events (~1.5h)
+python scripts/us/political/us_political_backfill.py --phase 2 \
+    --house-clerk-years 2014-2026 \
+    --senate-efd-from 2020-01-01 --senate-efd-to 2026-04-30
+
+# Phase 3 — conjunction (~25h, can chunk)
+python scripts/us/political/us_political_backfill.py --phase 3 \
+    --contract-fy-range 2014-2026 \
+    --lda-years 2014-2026
+
+# Phase 4 — verification (instant)
+python scripts/us/political/us_political_backfill.py --phase 4
+
+# All four
+python scripts/us/political/us_political_backfill.py --all
+```
+
+### Runbook — FEC + Congress.gov backfill (verified 2026-05-01)
+
+#### Pre-flight
+
+```bash
+# 1. Verify keys (no values printed)
+python -c "import os; from dotenv import load_dotenv, find_dotenv; load_dotenv(find_dotenv(usecwd=True)); \
+  print('FEC ok=', bool(os.getenv('FEC_API_KEY')) and os.getenv('FEC_API_KEY').isalnum() and len(os.getenv('FEC_API_KEY'))==40); \
+  print('CG  ok=', bool(os.getenv('CONGRESS_API_KEY')) and os.getenv('CONGRESS_API_KEY').isalnum() and len(os.getenv('CONGRESS_API_KEY'))==40)"
+
+# 2. Verify free disk space (need ~10 GB total for raw cache)
+python -c "import shutil; t,u,f=shutil.disk_usage('.'); print(f'free={f/1e9:.1f}GB')"
+
+# 3. Verify schema migrations are caught up
+alembic current     # should show 027 or later
+
+# 4. Status snapshot — baseline before backfill
+python scripts/us/political/us_political_status.py
+```
+
+#### Run — sequential (recommended) or parallel
+
+```bash
+# OPTION A — single end-to-end run (preferred for first backfill)
+# FEC committees + Mode A (590 corp PACs × 7 cycles) + Mode B (1700 PCCs × 5 cycles)
+# + Congress.gov 117/118/119 list + detail + deep + hearings.
+python scripts/us/political/us_political_backfill.py --phase 3
+# Total wall time: ~12-16h depending on Mode B volume + cache state. Resumable.
+
+# OPTION B — split FEC and Congress.gov for parallel terminals
+# Different API keys, different state files, different rate-limit budgets.
+python -m factorlab.sources.political.fec.ingest --committees --mode-a --mode-b &
+python -m factorlab.sources.political.congress_gov.ingest --congress 117 --congress 118 --congress 119 &
+```
+
+#### Mid-run monitoring
+
+```bash
+# Quick status (no DB locks; safe to run while backfill is in flight)
+python scripts/us/political/us_political_status.py
+```
+
+Reports: row counts per table, audit activity per endpoint (last 24h), state-checkpoint progress (PAC-cycles done, bills detailed/deep-fetched), raw cache footprint per source.
+
+#### Recovery — common failure modes
+
+| Symptom | Cause | Action |
+|---|---|---|
+| 429 + `Retry-After: <large>` for FEC | Per-minute burst exceeded 60/min | Throttle at 1.05s already enforced; if persistent, the API umbrella may have flagged the key. Wait the Retry-After window. |
+| FK violation on `campaign_donations.candidate_id` | New committee-shaped ID FEC returned that wasn't in `legislator_fec_ids` | Already handled — `_to_donation_row(raw, valid_candidate_ids)` soft-NULLs. If error reappears, check `legislator_fec_ids` is populated. |
+| `connection aborted` mid-pull | Transient FEC/Congress.gov outage | Retry/backoff in `PoliticalHTTPClient` handles 3 attempts. If exhausted, the loop's `try/except continue` skips that PAC-cycle and moves on. State is NOT marked done; next run retries. |
+| Process crash mid-run | Power, OOM, manual kill | Re-run the same command. State checkpoints flush every 25 PACs / batch-size rows; cached responses on disk. Resume picks up where it left off. |
+| `bill_actions` duplicates after schema change | Migration changed `action_id` semantics | Re-run with deterministic `uuid5(NAMESPACE_BILL_ACTIONS, ...)` (already in place). Old random-UUID rows can be cleaned via `DELETE WHERE substring(action_id::text, 15, 1) = '4'`. |
+| Resolver re-run after alias-file edits | New aliases added | `python -m factorlab.sources.political.fec.ingest --re-resolve` updates `sponsor_company_ticker` in-place. Zero API calls. |
+
+#### Daily / weekly cadence (post-backfill)
+
+```bash
+# Daily — wired in scripts/us/political/us_political_daily.py
+#   - legislators YAML refresh (~30s)
+#   - house_clerk current year (~2 min)
+#   - senate_efd last 7 days (Playwright local; ~10 min)
+#   - lda current year (~5 min)
+#   - congress_gov active-congress Pass A + B + hearings (~3 min)
+python scripts/us/political/us_political_daily.py --mode daily
+
+# Weekly — adds usaspending + finnhub + FEC current cycle + Congress.gov Pass C
+python scripts/us/political/us_political_daily.py --mode weekly
+```
+
+Schedule via Task Scheduler (Windows) or cron (Linux): daily at 06:00 UTC (Mon-Sat); weekly Sun 17:30 IST (12:00 UTC).
+
+### Live-DB row counts (2026-05-03, after Senate eFD 2019-2020 backfill)
+
+| Table / view | Rows | Source breakdown |
+|---|---:|---|
+| `legislators` | 12,766 | current 536 + historical ~12,230 |
+| `legislator_terms` | 45,530 | every term every member ever served |
+| `legislator_fec_ids` | 1,713 | FEC candidate IDs |
+| `committees` | 559 | current + historical incl. subcommittees |
+| `committee_assignments` | 3,879 | 119th Congress |
+| `legislator_trades` (raw) | 70,992 | house_clerk_ptr 53,081 + senate_stock_watcher_historical 12,685 + senate_efd_ptr 5,162 + senate_efd_paper_llm 64 |
+| `legislator_trades_dedup` (view) | 69,728 | Source-deduped per [Cross-source dedup view](#cross-source-dedup-view-2026-05-03). Use for analytics. |
+| `gov_contracts` | 1,933 | usaspending_direct (LMT) + finnhub_usa_spending (LMT+PLTR) |
+| `lobbying_filings` | 25 | smoke sample, full LDA backfill not yet run |
+| `lobbying_activities` | 46 | |
+| `contract_aliases` | 1 | LMT seed |
+| `lobby_client_aliases` | 4 | from LDA smoke run |
+| `raw_archive` | 47 | URL + metadata only; bytes on disk |
+
+### What lands where (source → table mapping)
+
+| Source | Module | Tables it writes |
+|---|---|---|
+| House Clerk PTRs | `house_clerk/` | `legislator_trades` (chamber='house', endpoint=`house_clerk_ptr`) + `raw_archive` |
+| Senate eFD HTML PTRs | `senate_efd/` | `legislator_trades` (chamber='senate', endpoint=`senate_efd_ptr`) + `raw_archive` |
+| Senate eFD paper scans (placeholder rows) | `senate_efd/` | `legislator_trades` (NULL ticker, asset_name_raw='[PAPER PTR — N pages — OCR pending]') + `raw_archive` |
+| Senate eFD paper scans (post-OCR) | `senate_efd/` (LLM pass) | `legislator_trades` (chamber='senate', endpoint=`senate_efd_paper_llm`) |
+| Senate Stock Watcher 2012-2020 | `senate_stock_watcher/` | `legislator_trades` (endpoint=`senate_stock_watcher_historical`). Frozen 2021 mirror — covers the pre-eFD-direct era. |
+| unitedstates/congress-legislators | `legislators/` | `legislators` + `legislator_terms` + `legislator_fec_ids` + `committees` + `committee_assignments` |
+| LDA `/filings/` | `lda/` | `lobbying_filings` + `lobbying_activities` + `lobbying_activity_targets` + `lobbying_activity_lobbyists` + `lobby_client_aliases` |
+| USASpending direct | `usaspending/` | `gov_contracts` (source='usaspending_direct') + `contract_aliases` |
+| Finnhub `/stock/usa-spending` | `finnhub_contracts/` | `gov_contracts` (source='finnhub_usa_spending') |
+| FEC `/committees/` + `/schedule_a/` | `fec/` | `fec_committees` + `campaign_donations` (Mode A: corp-PAC outflows; Mode B: ≥$1K individuals to PCCs) |
+| Congress.gov `/bill/` + `/hearing/` | `congress_gov/` | `bills` + `bill_sponsors` + `bill_committees` + `bill_actions` + `hearings` (3-pass bills + hearings; `hearing_witnesses` deferred) |
+
+### Daily incremental
+
+After backfill validates, wire `scripts/us/political/us_political_daily.py` into Task Scheduler:
+- 06:00 UTC daily
+- Refreshes legislators YAMLs (~30 sec)
+- Pulls current-year House Clerk PTRs (~2 min)
+- Senate eFD last 7 days via Playwright (~10-15 min, must be local)
+- LDA current year (~5-10 min)
+- Contracts toggled via `--skip-contracts` (typically weekly cadence, not daily)
+
+### Storage split
+
+- **Postgres** holds events + dimensions + URLs + metadata (~10 GB target)
+- **Filesystem** under `data/political/raw/{source}/...` (gitignored) holds the fetched bytes — PDFs, HTMLs, JSONs, GIFs (~10 GB target)
+- Total system footprint ~20 GB at MAX historical-mode
+
+---
+
+## Persistent storage — `alt_political_us` schema (LIVE 2026-05-01)
+
+Schema lives in Postgres `alt_political_us.*` (26 tables). See [docs/architecture/database.md](../../architecture/database.md) for full ER + index map. Migrations: [007_create_alt_political_tables.py](../../migrations/versions/007_create_alt_political_tables.py) + [008_seed_alt_political_reference.py](../../migrations/versions/008_seed_alt_political_reference.py).
 
 Every source documented in this file maps to a specific table:
 
@@ -42,7 +415,7 @@ Every source documented in this file maps to a specific table:
 | All sources (raw response bytes) | `raw_archive` | — |
 | Manual seed (docs Part 5) | `committee_sector_map` (21 rows seeded) | — |
 
-**Country tagging**: every dim and event row carries `country_code` FK to `ref.countries.code`, defaulting to `'US'`. Multi-jurisdiction expansion (UK MP register, EU MEPs, India parliamentary disclosures) reuses the same tables — different `country_code`, same shape. See [docs/architecture/04-multi-country-schema.md](../architecture/04-multi-country-schema.md) for the country-tagging convention.
+**Country tagging**: every dim and event row carries `country_code` FK to `ref.countries.code`, defaulting to `'US'`. Multi-jurisdiction expansion (UK MP register, EU MEPs, India parliamentary disclosures) reuses the same tables — different `country_code`, same shape. See [docs/architecture/database.md](../../architecture/database.md) for the country-tagging convention.
 
 **The two stable join keys**:
 - `bioguide_id` — every legislator-side join. Nullable on events until name-resolution succeeds; ingestion never blocks on resolution failure.
@@ -57,16 +430,16 @@ SELECT t.transaction_date, t.filing_date, l.last_name, l.first_name,
        csm.signal_strength, csm.rationale,
        gc.awarding_agency, gc.action_date, gc.total_value,
        lf.client_name, lf.income, lf.expenses
-FROM alt_political.legislator_trades t
-JOIN alt_political.legislators l USING (bioguide_id)
-JOIN alt_political.committee_assignments ca USING (bioguide_id)
-JOIN alt_political.committee_sector_map csm
+FROM alt_political_us.legislator_trades_dedup t   -- ← view, not raw table
+JOIN alt_political_us.legislators l USING (bioguide_id)
+JOIN alt_political_us.committee_assignments ca USING (bioguide_id)
+JOIN alt_political_us.committee_sector_map csm
   ON ca.country_code = csm.country_code AND ca.committee_id = csm.committee_id
-LEFT JOIN alt_political.gov_contracts gc
+LEFT JOIN alt_political_us.gov_contracts gc
   ON gc.ticker = t.ticker
   AND gc.action_date BETWEEN t.transaction_date - INTERVAL '90 days'
                          AND t.transaction_date + INTERVAL '90 days'
-LEFT JOIN alt_political.lobbying_filings lf
+LEFT JOIN alt_political_us.lobbying_filings lf
   ON lf.client_ticker = t.ticker
   AND lf.filing_year = EXTRACT(YEAR FROM t.transaction_date)
 WHERE t.transaction_type = 'purchase'
@@ -74,6 +447,10 @@ WHERE t.transaction_type = 'purchase'
   AND ca.valid_to IS NULL  -- currently serving on the committee
 ORDER BY t.filing_date DESC;
 ```
+
+> **Note**: factor / signal queries should always pull from
+> `legislator_trades_dedup` (the view), not the raw `legislator_trades` table.
+> See [Cross-source dedup view](#cross-source-dedup-view-2026-05-03) for why.
 
 ---
 
@@ -183,59 +560,186 @@ Each transaction line in the PDF text has the shape:
 - Some filer names in XML have honorifics inserted as middle name (`"Marjorie Taylor Mrs Greene"`) — fuzzy match needed against legislators-current
 - Amendments lack parent `DocID` — linkage requires probabilistic matching on `(name, date, asset, type, amount)`
 
-### 1B. Senate eFD (PRIMARY for Senate, free, must build)
+**House Clerk PTR historical load — tiered pipeline (completed 2026-05-01)**
+
+8,155 PTRs across 2014–2026 processed via `scripts/us/political/house_clerk/us_political_house_clerk_historical.py` (multiprocessing, 7 workers). Result: **53,081 rows** in `alt_political_us.legislator_trades`, 386 distinct legislators.
+
+Two PDF format families exist:
+- **Modern (2022+):** trailer delimiter `F S:` / `FILING STATUS:`, explicit `[XX]` asset-type codes, ~83% per-PTR extraction rate
+- **Older (2014–2021):** `FILING STATUS:` only, no `[XX]` codes (all `asset_type_code = NULL`), case-mixed glyph output from pdfplumber (`SBuX` → normalized to `SBUX`)
+
+**Four-tier quality gate:**
+
+| Tier | Condition | Action | Count |
+|------|-----------|--------|------:|
+| 1 — auto-insert | Electronic + valid trades + bioguide resolved | Inserted directly | ~50,500 |
+| 2 — review queue | Trades extracted but quality gate failed (bioguide unresolved, header pollution, no ticker) | Logged to `tier2_review.csv`; 17/20 rescued via `scripts/rescue_house_clerk_tier2.py` | 20 |
+| 3 — paper placeholder | `len(cleaned) < 200 OR anchor_matches == 0` | Placeholder row inserted with bioguide | ~2,560 |
+| 4 — Claude direct-read | Electronic text-rich but parser extracted 0 trades | Read visually via PDF tool; 1 real trade recovered (James French Hill, AAWW) | 1 |
+
+**Strict-NULL policy:** `asset_type_code = NULL` is accepted for older-format PTRs. No fabricated `OT`/`ST` fallbacks. Bioguide resolution: NULL is emitted if the matcher can't achieve a confident first-name overlap — wrong beats no-entry.
+
+**Bioguide resolution improvements (to `_bioguide.StrictBioguideMatcher`):** compound surnames (Hinson Arenholz), middle-name preferred names (C. Scott Franklin), nicknames (Cindy → Cynthia, 80+ pairs), apostrophe normalization (U+2019), diacritics (Barragán), comprehensive 3-stage split-search. Bioguide resolve rate: ~99.8%.
+
+**Manual override:** Nicholas V. Taylor (TX-03) → `T000479` (bioguide stores first="Van"; verified via `2022_20020767.pdf`). Encoded in `scripts/rescue_house_clerk_tier2.py::MANUAL_BIOGUIDE_OVERRIDES`.
+
+### 1B. Senate eFD (PRIMARY for Senate, free, LIVE 2026-04-30)
 
 | Field | Detail |
 |-------|--------|
 | URL | https://efdsearch.senate.gov |
-| Auth | No auth, but requires accepting an agreement page (cookie-based session) |
-| Format | HTML search → individual PDF filings |
+| Auth | No auth, but requires accepting an agreement page (Akamai-protected; residential IP required) |
+| Format | HTML search → HTML PTRs (post-2018) + paper-scan GIFs (older / opt-out senators) |
 | Volume | 100 senators |
-| Difficulty | Higher — PDFs, agreement page, no bulk XML |
+| Difficulty | Playwright + residential IP. Cloud / VPS IPs are Akamai-blocked. |
 
-**⚠ Earlier "v1 shortcut to Senate Stock Watcher" recommendation is dead** (see §2A). Direct eFD scraping is now the only free path to live Senate trades.
+**⚠ Earlier "v1 shortcut to Senate Stock Watcher" recommendation is dead** (see §2A). Direct eFD scraping is the only free path to live Senate trades. SSW remains useful for 2012-2018 historical backfill.
 
-**Agreement page is the #1 scraping failure point.** Session cookie expires on inactivity. Scraper must detect redirect back to `/search/home/` and re-POST the agreement form automatically.
+**Agreement page is the #1 scraping failure point.** Session cookie expires on inactivity. Scraper detects redirect back to `/search/home/` and re-POSTs the agreement form automatically.
 
-**Filing types:** Periodic Transaction Reports (PTRs), Annual Financial Disclosures, Amendments. Filter to PTRs for trades.
+**Module**: `src/factorlab/sources/political/senate_efd/` — 4 files (`scraper.py` Playwright driver, `parser.py` HTML extraction, `ingest.py` upsert pipeline, `__init__.py`).
 
-**PDF structure:**
-- Post-2020: mostly text-extractable structured PDFs → `pdfplumber` works well
-- 2012–2020: mixed quality, some scanned → OCR fallback (`pytesseract` or PyMuPDF + Tesseract)
-- Pre-2012: no electronic filing (STOCK Act signed April 2012)
+**Filing types**: Periodic Transaction Reports (PTRs), Annual Financial Disclosures, Amendments. Filter to PTRs for trades.
 
-**Build approach (planned — see `playground/explore/senate_efd/`):**
-1. POST agreement form → capture session cookie
-2. Search PTRs by date window via `/search/report/` (returns HTML table)
-3. For each result row: fetch individual PTR PDF, parse with same pdfplumber pipeline as House
-4. Schema parity with House: owner, ticker, asset_name_raw, asset_type, tx_type, tx_date, notif_date, amount_min/max/mid
+**Filing format split (2026-05-03 backfilled state):**
+- **HTML PTRs**: 4,968 rows in `legislator_trades`, all from `senate_efd_ptr` endpoint. Standard parse path.
+- **Paper-scan GIFs**: 194 placeholder rows + 64 OCR'd rows. Some senators (notably Blumenthal, Boozman) file on paper; eFD serves these as multi-page GIF scans. Scraper downloads the GIF, writes a placeholder row to `legislator_trades` with `asset_name_raw='[PAPER PTR — N pages — OCR pending]'` and NULL ticker / NULL transaction_type so the dedup view passes them through unchanged. When LLM-OCR runs (separate pipeline, `senate_efd_paper_llm` endpoint), real trade rows get inserted alongside the placeholders.
 
-**Backfill split:**
-- 2014-2019: Senate Stock Watcher GitHub mirror (8,350 rows, frozen 2021) — see §2A
-- 2020-2026: must scrape eFD directly
+**Backfill commands (one year at a time, recommended for headed Playwright runs):**
 
-### 1C. Congress.gov API (committee data + member metadata)
+```bash
+# Headed (visible browser) — required when Akamai serves a CAPTCHA challenge
+python scripts/us/political/us_political_backfill.py --phase 2 \
+  --senate-efd-from 2019-01-01 --senate-efd-to 2019-12-31 \
+  --senate-efd-headed --senate-efd-max-filings 500 2>&1 | Tee-Object logs/senate_efd_2019.log
+
+# Headless — works once a residential IP is warmed
+python scripts/us/political/us_political_backfill.py --phase 2 \
+  --senate-efd-from 2024-01-01 --senate-efd-to 2024-12-31
+```
+
+**Backfill progress (2026-05-03):**
+
+| Filing year | HTML | Paper | Trades inserted (this run) | Total in DB (after dedup) |
+|---|---:|---:|---:|---:|
+| 2019 | 91 | 23 | 328 | 305 |
+| 2020 | 91 | 23 | 314 | 291 |
+| 2021 | 91 | 20 | 442 | 638 |
+| 2022 | 80 | 18 | 595 | 711 |
+| 2023 | 84 | 15 | 812 | 1,131 |
+| 2024 | 105 | 15 | 620 | 917 |
+| (2025, 2026 = continuous incremental, not single backfill batches) | | | | 666 + 341 |
+
+Years 2014-2018 are still to backfill from eFD. SSW historical already
+covers that window. The dedup view will collapse cross-source duplicates
+when those years run; eFD wins precedence so the table grows in size but
+analytics remain correct via the view.
+
+**Critical gotcha: ingest is single-batch.** The eFD ingest builds the full
+`pending` list in memory and `fast_upsert`s once at the very end of the
+parse loop. If the run dies after `[senate_efd] downloaded N filings` but
+before `[senate_efd] done: IngestResult(...)`, **zero rows reach the DB**.
+The downloaded HTML/GIF files do persist to `data/political/raw/senate_efd/`,
+so re-running is fast. See [`src/factorlab/sources/political/senate_efd/ingest.py:242-265`](../../src/factorlab/sources/political/senate_efd/ingest.py#L242-L265).
+
+**Schema parity with House**: owner, ticker, asset_name_raw, asset_type, tx_type, tx_date, notif_date, amount_min/max/mid. All rows tagged `endpoint_id` for the senate_efd_ptr endpoint via `ref.data_endpoints`.
+
+**Backfill split (current):**
+- 2012-2018: Senate Stock Watcher GitHub mirror (12,685 rows, frozen) — see §2A
+- 2019-today: Senate eFD direct (live, ongoing daily incremental)
+
+### 1C. Congress.gov API (bills, hearings, members — verified 2026-05-01)
 
 | Field | Detail |
 |-------|--------|
 | URL | https://api.congress.gov/v3/ |
-| Auth | Free API key (sign up at api.congress.gov/sign-up/, instant) |
-| Rate limit | 5,000 requests/hour per key |
-| Format | JSON (default) or XML |
+| Auth | Free api.data.gov key (sign up at api.congress.gov/sign-up/, instant). Same key works for FEC. |
+| Rate limit | **20,000 req/hour** verified empirically (`X-Ratelimit-Limit: 20000`). Docs claim 5K/hr — we observe higher. ~1.0s sleep between calls leaves comfortable headroom. |
+| Format | JSON (`?format=json`) or XML |
+| Total scope | 117th-119th Congresses: 52,576 bills, 5,115 hearings |
 
-**Key endpoints:**
+**What we ingest from this API**
+
+| Endpoint | Lands in | Pass type |
+|---|---|---|
+| `GET /v3/bill/{c}` (list, paginated) | `bills` skeleton | A — list pull |
+| `GET /v3/bill/{c}/{type}/{n}` (detail) | `bills` enrichment + primary `bill_sponsors` | B — detail enrichment |
+| `GET /v3/bill/{c}/{type}/{n}/cosponsors` | `bill_sponsors` (role='cosponsor') | C — deep fetch (priority only) |
+| `GET /v3/bill/{c}/{type}/{n}/committees` | `bill_committees` | C — deep fetch (priority only) |
+| `GET /v3/bill/{c}/{type}/{n}/actions` | `bill_actions` | C — deep fetch (priority only) |
+| `GET /v3/hearing/{c}` (list) | discover jacket numbers | one-shot |
+| `GET /v3/hearing/{c}/{chamber}/{jacket}` | `hearings` | one-shot |
+
+**Member metadata** is sourced from `unitedstates/congress-legislators` YAML, NOT this API — see §1A's legislators ingestion. Congress.gov member endpoints provide overlapping but less complete data (no historical terms, sparse cross-system IDs).
+
+**⚠ CRITICAL — `policyArea` is NOT in list-mode.** The list endpoint returns only `{congress, type, number, title, originChamber, latestAction, updateDate, url}`. To filter bills by policy area we MUST detail-fetch every bill. This drives the 3-pass design.
+
+**Three-pass bill ingestion**
+
 ```
-GET /v3/member                              # All members (current + historical)
-GET /v3/member/{bioguideId}                 # Single member detail
-GET /v3/member/{bioguideId}/committees      # Member's committee assignments
-GET /v3/committee/{chamber}/{committeeCode} # Committee membership lists
+Pass A — list pull         210 calls       3 congresses × ~70 pages of 250
+Pass B — detail enrich   52,576 calls       every bill, get policyArea + primary sponsor
+Pass C — deep fetch      ~63,000 calls       only priority-policy-area bills (3 sub-endpoints each)
+                       ──────────
+Total                   ~115,800 calls      ~6 hours at 20K/hr
 ```
 
-**Bioguide ID** is the canonical cross-reference identifier. Other IDs: Thomas ID, GovTrack ID, OpenSecrets CID, FEC ID. Full crosswalk available in `unitedstates/congress-legislators` YAML files.
+Each pass writes to its own `_state.State` checkpoint and is independently resumable.
 
-**Limitation:** Current committee assignments only. For **historical** committee assignments (critical for point-in-time analysis), use:
-- `github.com/unitedstates/congress-legislators` → `committee-membership-current.yaml` + git history snapshots
-- This is a **genuinely open research gap** — no provider solves historical point-in-time committee membership well
+**Priority `policyArea` filter** (bills passing this set get Pass C deep-fetch — covers all market-moving legislation):
+
+```
+Armed Forces and National Security      Public Lands and Natural Resources
+Health                                   Agriculture and Food
+Finance and Financial Sector             Labor and Employment
+Energy                                   Housing and Community Development
+Science, Technology, Communications      Economics and Public Finance
+Taxation                                 Commerce
+Foreign Trade and International Finance  Environmental Protection
+Transportation and Public Works
+```
+
+Skipped (procedural / non-market): Government Operations, Congressional Operations, Civil Rights, Education, Families, Native Americans, Sports and Recreation, Social Welfare, Arts/Culture/Religion, Emergency Management.
+
+**Hearings** — also two-pass (list → detail). 5,115 hearings × 1 detail call ≈ 15 min.
+
+**Field mapping** (full mapping including sub-resources in `playground/explore/congress_gov/NOTES.md`):
+
+| Schema column (`alt_political_us.bills`) | Source (detail) |
+|---|---|
+| `bill_uid` | `f'US-{congress}-{type}-{number}'` (constructed) |
+| `congress` / `bill_type` / `bill_number` | direct |
+| `policy_area` | `policyArea.name` (detail-only) |
+| `introduced_date` | `introducedDate` (detail-only) |
+| `latest_action_date` | `latestAction.actionDate` |
+| `latest_action_text` | `latestAction.text` |
+| `update_date` | `updateDate` |
+
+| Schema column (`alt_political_us.bill_committees`) | Source |
+|---|---|
+| `committee_id` | `committees[].systemCode.upper()` ⚠ |
+
+| Schema column (`alt_political_us.hearings`) | Source (detail) |
+|---|---|
+| `jacket_number` | `jacketNumber` |
+| `title` / `citation` / `chamber` / `congress` | direct |
+| `date_held` | `dates[0].date` |
+| `committee_id` | `committees[0].systemCode.upper()` ⚠ |
+
+**Gotchas (verified 2026-05-01):**
+
+1. **`policyArea` only in detail** — biggest cost driver; ~52K calls just to learn which bills to deep-fetch.
+2. **`hearing_witnesses` table will be empty in v1.** Witness lists are not exposed as structured fields — they live in the formatted transcript PDF/HTML at `formats[].url`. Schema is preserved; population deferred until we add a transcript parser.
+3. **`committees[].systemCode` is lowercase + `00`-suffixed for full committees** (`hssy00`, `hsif03`); our `committees.committee_id` is Thomas-style 4-char (`HSSY`, `HSIF`) with no suffix for full committees. The `_normalize_committee_id` helper strips trailing `00` and uppercases. For unknown committees (select committees, new committees not in our YAML snapshot), Pass C pre-loads the valid set and FK-filters writes to `bill_committees`; hearings soft-NULL the `committee_id`.
+4. **Bill detail URL must use lowercase type**: `/bill/119/hr/1`, NOT `/bill/119/HR/1`.
+5. **`bill_actions.action_id` uses deterministic `uuid5(NAMESPACE_BILL_ACTIONS, f"{bill_uid}|{action_date}|{action_text[:500]}")`**. Same input → same UUID → idempotent on re-run without a DB unique-constraint migration. Critical for resumable Pass C.
+6. **Bills can have `policy_area = null`** — happens for very recent bills before Library of Congress tagging. Schema already nullable.
+7. **`sponsors[].district` is null for senators.** Schema already nullable.
+8. **`bill_sponsors` writes use `fast_upsert` (not `bulk_insert_ignore`)** so cosponsor `withdrawn_date` updates after first ingest. `bulk_insert_ignore` would silently lose withdrawals.
+9. **Use `updateDateIncludingText` for incremental** — catches text revisions, not just metadata changes. `updateDate` alone misses re-introductions.
+10. **HR 1 example** (verified 2026-05-01): 119th-congress reconciliation bill, `policyArea = "Economics and Public Finance"`, 1 sponsor, 0 cosponsors, 1 committee, 59 actions, 240 subjects, 5 summaries.
+
+**Reference**: full probe results in `playground/explore/congress_gov/NOTES.md` (gitignored, mirrored here as system-of-record).
 
 ### 1D. Government Contracts — TWO PATHS, both verified
 
@@ -438,15 +942,162 @@ GET /api/v1/constants/filing/filingtypes/                 # filing-type code lis
 5. **Quarterly cadence** — the freshest filing tells you what they were lobbying on UP TO 30-90 days ago. Less timely than PTRs but more timely than quarterly earnings.
 6. **Termination filings (`TR`)** — when a registrant stops representing a client. Useful negative signal.
 
+### 1F. FEC OpenAPI (campaign finance — REST API, free, verified 2026-05-01)
+
+| Field | Detail |
+|-------|--------|
+| URL | https://api.open.fec.gov/v1/ |
+| Auth | Free api.data.gov key (sign up at api.open.fec.gov/developers, instant). Same key works for Congress.gov. |
+| Rate limit | **60 req/min** per key (verified empirically — `X-Ratelimit-Limit: 60`). NOT the 7,200/hr or 1K/hr that older sources claim — it's a per-MINUTE bucket. ≥1.0s sleep between calls in production. |
+| Format | JSON. Pagination is `page`+`per_page` for first ~10K results, then **cursor-based** (`last_indexes`) for deeper pulls. |
+| Total scope | Schedule A: ~3.6M ≥$1K contributions/cycle nationwide; ~50M raw rows/cycle. Schedule B: similar order. |
+
+**Endpoints we use:**
+```
+GET /v1/committees/?q=NAME                              # name lookup for corporate-PAC discovery
+GET /v1/committees/?committee_type=Q&organization_type=C  # corp-PAC sweep (Qualified-PAC, Corporate-sponsored)
+GET /v1/candidate/{cand_id}/committees/                 # resolve candidate → Principal Campaign Committee
+GET /v1/schedules/schedule_a/?contributor_id=PAC_ID     # Mode A: PAC outflows to candidate committees
+GET /v1/schedules/schedule_a/?committee_id=PCC&min_amount=1000  # Mode B: ≥$1K individuals to a candidate
+```
+
+**⚠ CRITICAL — `candidate_id` filter on `/schedule_a/` is silently dropped.** Verified 2026-05-01:
+
+| Filter | `pagination.count` |
+|---|---:|
+| `two_year_transaction_period=2024 & min_amount=1000` (no cand) | 3,636,694 |
+| `+ candidate_id=ZZZZ99999` (bogus)                              | 3,636,694 (filter dropped) |
+| `+ candidate_id=H8CA05035` (Pelosi, real)                       | 3,636,694 (filter dropped) |
+| `committee_id=C00213512` (Pelosi's PCC, no cand filter)         | **1,267 ← real** |
+
+**Implication for Mode B**: cannot pull "donations to candidate X" with `candidate_id`. Must resolve candidate → **Principal Campaign Committee** first, then filter by `committee_id`.
+
+**Candidate → PCC resolution** (the extra step Mode B needs):
+
+```
+GET /candidate/{cand_id}/committees/
+→ filter results where designation == 'P'  (Principal Campaign Committee)
+→ use that committee_id for /schedule_a/?committee_id=...
+```
+
+Designation codes: `P`=principal campaign, `J`=joint fundraiser, `U`=unauthorized PAC, `A`=authorized. Verified for Pelosi (`H8CA05035` → 4 committees, 1 with `P`).
+
+**Cursor pagination** (deeper than ~10K results):
+
+```python
+# pagination.last_indexes from any response
+{"last_contribution_receipt_date": "2024-11-04", "last_index": "4011520251130612027"}
+# pass these as query params on the next request — NOT page=N
+```
+
+`page`+`offset` returns errors past 10,000 rows. Cursor is returned on every page; use it from page 1.
+
+**Two ingestion modes (decided 2026-05-01):**
+
+| Mode | What | Filter | Volume (empirical) |
+|---|---|---|---:|
+| **A — PAC → candidate** | Corporate-PAC outflows to all recipient committees | `/schedule_a/?contributor_id=PAC_ID&two_year_transaction_period=YYYY` | ~50 corp PACs × 1,000 rows × 6 cycles ≈ **300K rows** |
+| **B — Individual ≥$1K → candidate** | Large individual donations to sitting members' PCCs | `/schedule_a/?committee_id=PCC&two_year_transaction_period=YYYY&min_amount=1000` | 1,713 candidates × ~500 rows × 4 cycles (2018-24) ≈ **3.4M rows** |
+
+Per-PAC verified counts (cycle=2024): Lockheed (`C00303024`)=1,574, Microsoft (`C00227546`)=531, Pfizer (`C00016683`)=573, Raytheon (`C00035683`)=6 (low — name-lookup variance). Per-PCC verified: Pelosi (`C00213512`)=1,267 ≥$1K donations.
+
+**Field mapping — Schedule A row → `alt_political_us.campaign_donations`** (verified against `playground/explore/fec/NOTES_payload_individual.json`):
+
+| Schema column | Schedule A field | Notes |
+|---|---|---|
+| `sub_id` | `sub_id` | Unique-constraint key |
+| `cycle` | `two_year_transaction_period` | int |
+| `donor_name` | `contributor_name` | |
+| `donor_employer` | `contributor_employer` | individual-donor signal source |
+| `donor_occupation` | `contributor_occupation` | |
+| `donor_state` | `contributor_state` | |
+| `donor_zip` | `contributor_zip` | trim to ≤10 |
+| `donor_city` | `contributor_city` | |
+| `donor_committee_id` | `contributor_id` | non-null when `entity_type='COM'` (Mode A) |
+| `amount` | `contribution_receipt_amount` | float → Numeric(15,2) |
+| `date` | `contribution_receipt_date` | ISO date |
+| `transaction_type` | `receipt_type` | code (e.g. `"15"`, `"17"`) |
+| `recipient_committee_id` | `committee_id` | filer's committee |
+| `recipient_committee_name` | `committee.name` | nested dict |
+| `candidate_id` | `candidate_id` | usually null on individual donations |
+| `candidate_name` | `candidate_name` | |
+| `filing_url` | `pdf_url` | |
+
+Useful but not currently captured: `entity_type` (IND/ORG/COM), `is_individual` (bool), `fec_election_year`. Add columns only if signal warrants.
+
+**Schedule B (PAC outflows) — NOT used.** Mixes vendor payments + event sponsorships + candidate giving (Lockheed PAC has rows like "ALABAMA STATE SOCIETY $10K"). For PAC→candidate flow, use Schedule A with `contributor_id`.
+
+**Gotchas (verified 2026-05-01):**
+1. **`candidate_id` filter on `/schedule_a/` is dropped silently** — see table above. Always use `committee_id` (the PCC). The bogus-ID test is the canonical confirmation.
+2. **`candidate_id` field in Schedule A response sometimes contains committee-shaped IDs** (e.g. `C00484535`). The schema FK `campaign_donations.candidate_id → legislator_fec_ids.fec_candidate_id` rejects these. Production ingest pre-loads the valid candidate-id set (~1,713) and soft-NULLs unknown values in `_to_donation_row`. See `valid_candidate_ids` in `fec/ingest.py`.
+3. **Rate limit is per-minute** — 60/min, not 7,200/hr. Bursting 100 calls in 30s triggers 429 even if hourly budget unused. Throttle is enforced inside `PoliticalHTTPClient` and only fires on actual network calls (cache hits skip — see migration 015 + `_client.py`).
+4. **Old `legislator_fec_ids` rows are historical** — a member can have multiple FEC candidate IDs across cycles (e.g. Pelosi has 4 committees from 1986→2024). Mode B should iterate ALL of a member's candidate IDs, not just the most recent.
+4. **`min_amount` is dollar-rounded** — pass `1000` not `1000.00`. `min_amount=999` returns same row count as `min_amount=1000` for the $1K-aggregation threshold.
+5. **PAC name lookup is fragile** — "BOEING COMPANY POLITICAL ACTION" returns nothing; "BOEING COMPANY PAC" works. The `_resolver` ticker→PAC map needs multiple alias attempts per ticker (or use the corporate-PAC sweep: `committee_type=Q&organization_type=C`).
+6. **Cursor params are stringly-typed** — `last_index` is a 19-digit string, not an int. Don't cast.
+7. **Pelosi's PCC `C00213512` shows cycles `[1986, 1988, 1990]`** in `/candidate/.../committees/` despite still receiving donations in 2024 — the `cycles` field reflects when the committee was first created, not its activity. Don't filter committees by `cycles` for live PCC selection; filter by `designation='P'`.
+
+**Reference**: full probe results in `playground/explore/fec/NOTES.md` (gitignored, but mirrored here as the system-of-record).
+
+#### FEC corp-PAC ticker resolution (verified 2026-05-01)
+
+The resolver normalizes `committee.name` → SEC ticker via a **conservative cascade tuned for FEC PAC names**. Wrong classification corrupts the alpha signal worse than no classification, so the cascade prefers no-match over guessing.
+
+**Pre-normalization** (`normalize_pac_name`) strips PAC vocabulary BEFORE running the standard SEC normalizer:
+- Parentheticals `(LMPAC)`, `(AAPAC)`, `(MSVPAC)`
+- Tokens ending in `pac` (FEDPAC, MSVPAC, ARTPAC, GOPAC) — but NOT words merely containing `pac` like `pacific`, `impact`
+- Core PAC vocabulary: `political action committee fund foundation`
+- Sponsorship descriptors: `employees stakeholders members voluntary sponsored associates partners`
+- Governance descriptors: `good government federal nonpartisan bipartisan partisan`
+- Vehicle types: `trust trustees connect forward activity activities leadership`
+- Aliasing markers: `fka aka nka formerly known as`
+- Common short tokens in PAC titles: `for to with by us usa`
+
+**Cascade** (stops at first hit):
+
+| Step | Confidence | Description |
+|---|---:|---|
+| 1. Manual alias (full PAC-stripped name) | 1.00 | `configs/reference/contractor_aliases.yaml` exact match |
+| 2. SEC exact normalized name | 0.95 | PAC-stripped == SEC company normalized |
+| 3. **Longest-prefix alias hit** (try 3, 2, then 1 leading tokens) | 0.90 | Catches "BLACKROCK FUNDS SERVICES GROUP" → BLK. Single-token aliases require ≥4 chars to prevent "ge"/"f" collisions. |
+| 4. Verified prefix match | 0.85 | 2-token prefix matches AND **all SEC-name tokens are present** in the PAC-stripped name (prevents "First Interstate Texas" → FIBK) |
+| 5. No match | — | Logged to `data/political/_state/_learn_queue.csv` for manual or LLM review |
+
+**Dropped from earlier resolver**: loose 2-token prefix (without token-coverage check), fuzzy Jaccard. Both produced too many false positives on FEC PAC names.
+
+**Empirical results (2026-05-01)** on a 3,473-row corp-PAC sweep:
+
+| Match kind | Count | Examples |
+|---|---:|---|
+| `exact` | 347 | LOCKHEED MARTIN, COCA-COLA, AT&T |
+| `alias` | 102 | MICROSOFT (manual), CHEVRON (manual), TESLA-aliases |
+| `alias_prefix` | 83 | BLACKROCK FUNDS SERVICES GROUP → BLK; METLIFE EMPLOYEES PARTICIPATION → MET |
+| `verified_prefix` | 58 | DEERE & COMPANY ILLINOIS → DE (full SEC tokens "deere" present in PAC-norm) |
+| `none` | 2,730 | private companies, foreign parents, defunct entities, trade associations |
+| **Total resolved** | **590** | |
+
+**Priority-ticker coverage**: 71/77 alpha-relevant tickers represented. The 6 not represented (AAPL, NVDA, SLB, TSLA, BABA, PGR) are **genuinely absent** — those companies don't run federal corporate PACs (or use non-`Q+C` classifications). Verified via raw name-search across the unmatched 2,730 rows.
+
+**Re-resolution mode**: `python -m factorlab.sources.political.fec.ingest --re-resolve` re-runs the resolver over `fec_committees` in-place without API calls. Use after tuning the alias file or normalizer to update `sponsor_company_ticker` without re-fetching.
+
 ---
 
 ## Part 2 — Aggregator Providers (Pros/Cons)
 
-### 2A. Senate Stock Watcher (DEAD — historical 2014-2019 only)
+### 2A. Senate Stock Watcher (FROZEN MIRROR — historical 2012-2020 only)
 
-> **Verified dead 2026-04-29.** S3 buckets return HTTP 403 across all known regions/paths. `senatestockwatcher.com` DNS does not resolve. GitHub data mirror frozen with last commit 2021-03-16; transaction data ends 2019-12-31. Upstream creator moved to AnythingLLM. **Do NOT use as a live source.**
+> **Verified frozen 2026-04-29.** S3 buckets return HTTP 403 across all known regions/paths. `senatestockwatcher.com` DNS does not resolve. GitHub data mirror frozen with last commit 2021-03-16. Upstream creator moved to AnythingLLM. **Do NOT use as a live source.** Use as a one-time historical backfill for the pre-eFD-direct era; once ingested, the daily/weekly orchestrator should not re-pull it.
 
-The `senate-stock-watcher-data` GitHub mirror is still accessible at `raw.githubusercontent.com/timothycarambat/senate-stock-watcher-data/master/aggregate/all_transactions.json` and gives **8,350 rows covering 2014-01-01 → 2019-12-31** — useful only for historical backfill of currently-serving senators.
+**Live-DB row count (2026-05-03): 12,685 rows, 2012-06-14 → 2020-12-02.**
+6,217 of those (49%) have a resolved ticker. The mirror covers more years
+than the doc historically claimed — earliest tx date is 2012-06, latest is
+2020-12-02. The Senate eFD direct scrape (`senate_efd_ptr`) takes over
+from 2019 onward. The 2019-2020 overlap window produces ~330 logical
+duplicates which are collapsed by the
+[`legislator_trades_dedup`](#cross-source-dedup-view-2026-05-03) view
+(senate_efd_ptr wins precedence; SSW rows lose).
+
+The `senate-stock-watcher-data` GitHub mirror remains accessible at `raw.githubusercontent.com/timothycarambat/senate-stock-watcher-data/master/aggregate/all_transactions.json`. It is the only free path to senate trade data for years 2012-2018.
 
 **Schema observed in the mirror (note divergence from doc's earlier claim):**
 ```json
@@ -658,7 +1309,7 @@ GET /api/congress/tickers/{ticker}/trades
 
 ## Part 3 — Schema (canonical)
 
-### `alt_political.legislator_trades`
+### `alt_political_us.legislator_trades`
 ```sql
 trade_id           uuid PRIMARY KEY DEFAULT gen_random_uuid()
 chamber            text NOT NULL              -- 'senate', 'house'
@@ -687,7 +1338,7 @@ as_of_time         timestamptz NOT NULL       -- POINT-IN-TIME — when WE knew
 UNIQUE (chamber, legislator_id, transaction_date, ticker, transaction_type, filing_date)
 ```
 
-### `alt_political.legislator_committees`
+### `alt_political_us.legislator_committees`
 ```sql
 legislator_id      text NOT NULL              -- bioguide id
 committee_code     text NOT NULL              -- Thomas ID (e.g., 'SSAS', 'SSFI')
@@ -700,7 +1351,7 @@ valid_to           date                       -- NULL = current
 PRIMARY KEY (legislator_id, committee_code, valid_from)
 ```
 
-### `alt_political.legislators`
+### `alt_political_us.legislators`
 ```sql
 legislator_id      text PRIMARY KEY           -- bioguide id
 first_name         text NOT NULL
@@ -717,7 +1368,7 @@ net_worth_high     bigint
 net_worth_year     int
 ```
 
-### `alt_political.committee_sector_map`
+### `alt_political_us.committee_sector_map`
 ```sql
 committee_code     text NOT NULL              -- Thomas ID
 gics_code          text NOT NULL              -- GICS industry code
@@ -726,7 +1377,7 @@ rationale          text
 PRIMARY KEY (committee_code, gics_code)
 ```
 
-### `alt_political.gov_contracts`
+### `alt_political_us.gov_contracts`
 ```sql
 contract_id        text PRIMARY KEY
 ticker             text                       -- mapped (may be NULL for unmapped companies)
@@ -741,7 +1392,7 @@ source             text DEFAULT 'usaspending'
 fetched_at         timestamptz NOT NULL DEFAULT now()
 ```
 
-### `alt_political.lobbying`
+### `alt_political_us.lobbying`
 ```sql
 lobbying_id        uuid PRIMARY KEY DEFAULT gen_random_uuid()
 ticker             text
@@ -783,7 +1434,7 @@ def parse_amount(amount_str: str) -> tuple[int | None, int | None, int | None]:
     return lo, hi, mid
 ```
 
-**Signal note:** Amount relative to net worth matters. A $15K-$50K buy from a senator worth $500K = conviction. Same range from one worth $50M = noise. Join against `alt_political.legislators.net_worth_*`.
+**Signal note:** Amount relative to net worth matters. A $15K-$50K buy from a senator worth $500K = conviction. Same range from one worth $50M = noise. Join against `alt_political_us.legislators.net_worth_*`.
 
 ---
 
@@ -837,23 +1488,23 @@ Signal strength: how likely committee membership creates information asymmetry o
 │   → parse {Y}FD.xml for (DocID, Year, FilingType='P', filer)     │
 │   → for each DocID, GET /public_disc/ptr-pdfs/{Y}/{DocID}.pdf    │
 │   → pdfplumber → row regex → AMOUNT_BUCKETS lookup               │
-│   → INSERT alt_political.legislator_trades                       │
+│   → INSERT alt_political_us.legislator_trades                       │
 │                                                                  │
 │ Senate 2014-2019 (frozen):                                       │
 │   Pull GitHub mirror's all_transactions.json (8,350 rows)        │
 │   → field-rename + synthesize filing_date = txn + 30d            │
-│   → INSERT alt_political.legislator_trades                       │
+│   → INSERT alt_political_us.legislator_trades                       │
 │                                                                  │
 │ Senate 2020-today:                                               │
 │   Direct eFD scraper: agreement-form POST → cookie session       │
 │   → /search/report PTR list by date window                       │
 │   → for each PTR, fetch + parse PDF                              │
-│   → INSERT alt_political.legislator_trades                       │
+│   → INSERT alt_political_us.legislator_trades                       │
 │                                                                  │
 │ Members + committees:                                            │
 │   GET raw legislators-current.yaml + committees-current.yaml     │
 │       + committee-membership-current.yaml                        │
-│   → INSERT alt_political.legislators / .legislator_committees    │
+│   → INSERT alt_political_us.legislators / .legislator_committees    │
 └──────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────┐
@@ -880,7 +1531,7 @@ Signal strength: how likely committee membership creates information asymmetry o
 │ Govt contracts cross-ref:                                        │
 │   For each unique ticker, GET Finnhub /stock/usa-spending        │
 │   (cached per-ticker JSON, free key, 60/min)                     │
-│   → INSERT alt_political.gov_contracts                           │
+│   → INSERT alt_political_us.gov_contracts                           │
 │                                                                  │
 │ Forward returns:                                                 │
 │   JOIN trades → market.prices at filing_date + N days            │
@@ -922,20 +1573,20 @@ SELECT DISTINCT t.ticker, t.legislator_name, t.filing_date, t.amount_mid,
        c.committee_name, c.role,
        g.amount as contract_amount, g.agency,
        l.amount as lobby_spend
-FROM alt_political.legislator_trades t
-JOIN alt_political.legislator_committees c
+FROM alt_political_us.legislator_trades t
+JOIN alt_political_us.legislator_committees c
   ON t.legislator_id = c.legislator_id
   AND t.transaction_date BETWEEN c.valid_from AND COALESCE(c.valid_to, '9999-12-31')
-JOIN alt_political.committee_sector_map csm
+JOIN alt_political_us.committee_sector_map csm
   ON c.committee_code = csm.committee_code
 JOIN ref.securities s
   ON t.security_id = s.security_id
   AND s.gics_code LIKE csm.gics_code || '%'
-LEFT JOIN alt_political.gov_contracts g
+LEFT JOIN alt_political_us.gov_contracts g
   ON t.ticker = g.ticker
   AND g.award_date BETWEEN t.transaction_date - INTERVAL '180 days'
                        AND t.transaction_date + INTERVAL '90 days'
-LEFT JOIN alt_political.lobbying l
+LEFT JOIN alt_political_us.lobbying l
   ON t.ticker = l.ticker
   AND l.filing_date BETWEEN t.transaction_date - INTERVAL '180 days'
                         AND t.transaction_date + INTERVAL '90 days'
@@ -987,7 +1638,7 @@ ORDER BY t.filing_date DESC;
 
 - [x] **Direct parsing vs. paid aggregator for v1?** → Hybrid: Senate Stock Watcher JSON (free) + House Clerk XML (free) for trades. `unitedstates/congress-legislators` for committee data. Add Quiver ($10/mo) when ready for contracts/lobbying cross-reference.
 - [x] **OCR pipeline budget?** → Avoid. Use Senate Stock Watcher JSON to skip PDF parsing entirely for v1. OCR only needed for gap-filling edge cases.
-- [x] **Extend to lobbying and government contracts?** → Yes, in `alt_political` schema. Critical for the small-cap thesis. Phase 2 via Quiver or Finnhub free tier.
+- [x] **Extend to lobbying and government contracts?** → Yes, in `alt_political_us` schema. Critical for the small-cap thesis. Phase 2 via Quiver or Finnhub free tier.
 
 ## Open Questions
 

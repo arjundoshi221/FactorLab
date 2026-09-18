@@ -1,0 +1,78 @@
+# European equity universe — multi-exchange (.PA .AS .SW .L .DE .MI .MC .BR ...)
+# Built 2026-05-02 for legislator PTR holdings; population via EODHD per-exchange pulls.
+#
+# Exchange suffix → vendor → calendar mapping per IRS / EODHD docs.
+# Currency varies per exchange — track at the row level via ref.instruments.currency_code.
+region: eu
+source: eodhd
+default_currency: EUR
+default_universe: demo
+
+exchanges:
+  paris:
+    calendar: XPAR
+    trading_hours: "09:00-17:30"
+    timezone: "Europe/Paris"
+    currency: EUR
+    suffix: ".PA"
+  amsterdam:
+    calendar: XAMS
+    trading_hours: "09:00-17:30"
+    timezone: "Europe/Amsterdam"
+    currency: EUR
+    suffix: ".AS"
+  swiss:
+    calendar: XSWX
+    trading_hours: "09:00-17:30"
+    timezone: "Europe/Zurich"
+    currency: CHF
+    suffix: ".SW"
+  london:
+    calendar: XLON
+    trading_hours: "08:00-16:30"
+    timezone: "Europe/London"
+    currency: GBP
+    suffix: ".L"
+  frankfurt:
+    calendar: XETR
+    trading_hours: "09:00-17:30"
+    timezone: "Europe/Berlin"
+    currency: EUR
+    suffix: ".DE"
+  milan:
+    calendar: XMIL
+    trading_hours: "09:00-17:30"
+    timezone: "Europe/Rome"
+    currency: EUR
+    suffix: ".MI"
+  madrid:
+    calendar: XMAD
+    trading_hours: "09:00-17:30"
+    timezone: "Europe/Madrid"
+    currency: EUR
+    suffix: ".MC"
+  brussels:
+    calendar: XBRU
+    trading_hours: "09:00-17:30"
+    timezone: "Europe/Brussels"
+    currency: EUR
+    suffix: ".BR"
+
+# ── Universes ────────────────────────────────────────────────────────────────
+universes:
+  demo:
+    symbols:
+      - SAN.PA          # Sanofi (Paris)
+      - ASML.AS         # ASML Holding (Amsterdam) — also US-listed ASML
+      - NESN.SW         # Nestlé (Swiss) — also ADR NSRGY
+      - SHEL.L          # Shell (London) — also US-listed SHEL
+      - SAP.DE          # SAP (Frankfurt) — also US-listed SAP
+      - ENI.MI          # Eni (Milan)
+      - SAN.MC          # Banco Santander (Madrid) — also ADR SAN
+  # Per-exchange file-based universes (future):
+  # paris_cac40:
+  #   source_file: data/eu/universes/cac40_latest.csv
+  # london_ftse100:
+  #   source_file: data/eu/universes/ftse100_latest.csv
+  # frankfurt_dax:
+  #   source_file: data/eu/universes/dax_latest.csv

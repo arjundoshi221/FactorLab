@@ -1,6 +1,6 @@
 """Fetch EODHD daily bars and convert to DataFrame / DB-ready format.
 
-Maps EODHD response → market.candles_daily schema.
+Maps EODHD response → market_us.candles_daily schema.
 """
 
 import logging
@@ -9,7 +9,7 @@ from uuid import UUID
 
 import pandas as pd
 
-from factorlab.sources.eodhd.client import EODHDClient
+from factorlab.countries.us.equities.eodhd.client import EODHDClient
 
 log = logging.getLogger(__name__)
 

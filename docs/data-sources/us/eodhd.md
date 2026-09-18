@@ -1,9 +1,20 @@
 # US Equities — EODHD
 
 > Status: `[active]` — client, instruments, daily candles implemented (April 2026)
+>
+> **Role update (2026-05-01)**: After probing Schwab's `instruments?projection=FUNDAMENTAL` (56 fields, 1 call) and quote-inline fundamentals (16 fields), Schwab now covers all basic ratios + margins + ROE/ROA + solvency + beta + short interest **for free**. EODHD's role narrows to: **(a)** US universe master list (1 call/day, free tier), **(b)** raw unadjusted prices for corp-action analysis, **(c)** items Schwab does NOT provide — full financial statements, earnings history (130 quarters), splits/dividends history, analyst ratings, holders, insider transactions. The Fundamentals plan ($60/mo) upgrade is **deferred** until factor work needs those EODHD-exclusive fields.
 
 ## Purpose
-Daily price bars, adjusted history, fundamentals, corporate actions, and reference data for US-listed equities and ETFs. Phase 1 anchor source for fundamentals and corporate actions. Also covers global equities (60+ exchanges) at no extra cost.
+Daily price bars (raw + adjusted history), full financial statements (10-Q/10-K), earnings time series, corporate-actions history, analyst ratings, institutional holders, and insider transactions for US-listed equities and ETFs. Also covers global equities (60+ exchanges) at no extra cost.
+
+EODHD-unique data (vs Schwab):
+- Full financial statements (income, balance sheet, cash flow)
+- Earnings history (130 quarterly EPS rows + annual + trend)
+- Splits & dividends history (24-year dividend series, last split factor + date)
+- Analyst ratings (rating, target price, buy/hold/sell counts)
+- Top 20 institutional holders + top 20 funds (with % owned)
+- Insider transactions (last 20 trades)
+- ESG scores (deprecated, not for production)
 
 ## Pricing (as of April 2026)
 
@@ -21,7 +32,13 @@ Daily price bars, adjusted history, fundamentals, corporate actions, and referen
 - Most endpoints: 1 call. Fundamentals: **10 calls**. Screener: **5 calls**. Bulk exchange: **1 call**.
 - 100K daily budget → 500-stock fundamentals refresh = 5,000 calls (5% of budget)
 
-**Recommended plan:** Fundamentals ($60/mo) for Phase 1. Upgrade to All-In-One ($100/mo) when intraday/tick/options needed.
+**Recommended plan (2026-05-01 update):** Stay on **Free tier** for Phase 1. Schwab covers daily OHLCV + basic fundamentals + options chain + Greeks for free. Upgrade EODHD to **Fundamentals ($60/mo)** only when factor work needs:
+- Earnings revision factors (need quarterly EPS time series)
+- Insider/holder concentration factors
+- Full balance sheet ratios (working capital turnover, asset turnover — not in Schwab's projection=FUNDAMENTAL)
+- DCF models requiring full income/balance/cash-flow statements
+
+Upgrade to **All-In-One ($100/mo)** is unlikely to be needed for US — Schwab's free options chain matches EODHD All-In-One's options offering. All-In-One only makes sense if non-US options or tick data become required.
 
 ## Source
 **EOD Historical Data (eodhd.com)** — REST API, JSON responses, all major US exchanges (NYSE, NASDAQ, AMEX, OTC).
@@ -106,7 +123,7 @@ Maps to `market.candles_daily`:
 | Instruments | `src/factorlab/sources/eodhd/instruments.py` | Fetch `/exchange-symbol-list/US` → `ref.instruments` upsert |
 | Candles | `src/factorlab/sources/eodhd/candles.py` | Fetch `/eod/{symbol}` → clean DataFrame |
 | Ingest | `src/factorlab/storage/ingest.py:write_candles_daily()` | DataFrame → `market.candles_daily` upsert |
-| Demo script | `scripts/factlab_us_daily.py` | CLI: fetch bars, print summary, save Parquet, optionally write DB |
+| Demo script | `scripts/us/equities/eodhd/us_equities_eodhd_daily.py` | CLI: fetch bars, print summary, save Parquet, optionally write DB |
 
 ### Free-tier constraints
 - 20 API calls/day (resets midnight GMT)
@@ -116,7 +133,7 @@ Maps to `market.candles_daily`:
 ## Pipeline
 
 ```
-scripts/factlab_us_daily.py [--demo | --symbols SYM1 SYM2] [--db]
+scripts/us/equities/eodhd/us_equities_eodhd_daily.py [--demo | --symbols SYM1 SYM2] [--db]
         │
         ▼
 load universe (configs/universes/us.yaml or --symbols)
@@ -152,5 +169,5 @@ for each symbol:
 ## Open questions
 - [x] Universe file: hard-coded list, or queried from `/api/exchange-symbol-list/US`? → Both. Demo/mega_cap in `configs/universes/us.yaml`; full exchange list via `fetch_us_instruments()`.
 - [ ] How often to re-pull full history vs. incremental? (default: incremental daily; full on schema change or vendor restatement notification)
-- [ ] Fundamentals storage cost — at 10 calls each, full quarterly refresh of 500 names is 5,000 calls. Requires Fundamentals plan ($60/mo).
-- [ ] Upgrade path: free → EOD All World ($20/mo) → Fundamentals ($60/mo) as usage grows.
+- [x] ~~Fundamentals storage cost — full quarterly refresh of 500 names is 5,000 calls.~~ → Schwab covers basic ratios for free; defer EODHD Fundamentals plan until earnings history / insider data / full statements become required.
+- [ ] Upgrade path (revised): free → Fundamentals ($60/mo) when factor research needs EODHD-exclusive fields. EOD All World ($20/mo) tier rarely makes sense as a stop-gap since Schwab already covers daily prices.

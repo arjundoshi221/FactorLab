@@ -256,11 +256,11 @@ Mid-quarter, the shareholding components (`promoter_change`, `pledge_risk`, `dii
 
 ### Orchestration
 ```
-factlab_india_ownership_quarterly   → shareholding pattern (run ~25th of Jan/Apr/Jul/Oct)
+india_equities_ownership_quarterly   → shareholding pattern (run ~25th of Jan/Apr/Jul/Oct)
 ```
 Daily ownership signals (PIT, bulk/block, FPI/DII) are handled by:
-- `factlab_india_ownership_daily` — see [doc 09](09-insider-supply-chain.md)
-- `factlab_india_fii_dii_daily` — see [doc 10](10-india-fii-fpi-flows.md)
+- `india_equities_ownership_daily` — see [doc 09](09-insider-supply-chain.md)
+- `india_equities_fii_dii_daily` — see [doc 10](10-india-fii-fpi-flows.md)
 
 ---
 

@@ -1,0 +1,126 @@
+# Common ETF / fund brand → ticker map.
+# Substring-matched (case-insensitive) against asset_name_raw.
+# More-specific patterns must appear BEFORE less-specific ones.
+#
+# Usage: factorlab.sources.political._asset_classifier.classify()
+
+# --- SPDRs --------------------------------------------------------------
+"spdr s&p 500": SPY
+"spdr trust series 1": SPY
+"spdr trust series": SPY
+"spdr gold tr gold shs": GLD
+"spdr gold trust": GLD
+"spdr gold": GLD
+"spdr euro stoxx 50": FEZ
+"spdr s&p oil & gas": XOP
+"spdr financial select": XLF
+"spdr energy select": XLE
+"spdr technology select": XLK
+"spdr health care select": XLV
+"spdr utilities select": XLU
+"spdr real estate select": XLRE
+"spdr consumer discret": XLY
+"spdr consumer staples": XLP
+"spdr industrial select": XLI
+"spdr materials select": XLB
+"spdr communication": XLC
+"spdr dow jones": DIA
+
+# --- iShares ------------------------------------------------------------
+"ishares china large cap": FXI
+"ishares msci eafe": EFA
+"ishares msci emerging mkts": EEM
+"ishares msci emerging markets": EEM
+"ishares russell 2000": IWM
+"ishares core s&p 500": IVV
+"ishares core u.s. aggregate": AGG
+"ishares 20+ year treasury": TLT
+"ishares iboxx investment grade": LQD
+"ishares iboxx high yield": HYG
+"ishares core msci": IXUS
+"ishares ibonds dec 20 trm corp": IBDL
+"ishares silver trust": SLV
+
+# --- Vanguard -----------------------------------------------------------
+"vanguard total stock market": VTI
+"vanguard s&p 500": VOO
+"vanguard total bond": BND
+"vanguard ftse developed": VEA
+"vanguard ftse emerging": VWO
+"vanguard real estate": VNQ
+"vanguard high dividend yield": VYM
+"vanguard dividend appreciation": VIG
+
+# --- Invesco / PowerShares ---------------------------------------------
+"invesco qqq": QQQ
+"powershares qqq": QQQ
+
+# --- Other notable -----------------------------------------------------
+"central fund of canada": CEF
+"proshares ultrapro qqq": TQQQ
+"proshares ultra": SSO
+
+# --- Bond/Treasury aggregator names ------------------------------------
+# (No ticker — these are real funds but classified as MF/EF without ticker)
+
+# --- Additions from Boozman paper-PTR vision extractions (2026-05-03) --
+# Names taken verbatim from the Senator Boozman Stock Act Transaction
+# attachment pages (Format B). Patterns are case-insensitive substrings.
+# Resolution priority: more-specific names listed before less-specific.
+
+# --- iShares (additions) -----------------------------------------------
+"ishares tr index barclays 7-10 year": IEF
+"ishares 7-10 year treasury":          IEF
+"ishared barclays mbs bond":           MBB
+"ishares barclays mbs":                MBB
+"ishares cmbs bond":                   CMBS
+"ishares msci india":                  INDA
+"ishares tr s&p 500 indx":             IVV
+"ishares tr s&p 500 grw":              IVW
+"ishares tr s&p 500 growth":           IVW
+"ishares tr msci eafe":                EFA
+"ishares tr rssll 2000":               IWM
+"ishares tr russell 2000":             IWM
+
+# --- Vanguard (additions) ----------------------------------------------
+"vanguard index fds reit":             VNQ
+"vanguard tax mgd fd europe pac":      VEA
+"vanguard tax-managed europe pacific": VEA
+
+# --- SPDR (additions) --------------------------------------------------
+"spdr s&p midcap 400":                 MDY
+"spdr s 7 p midcap 400":               MDY    # OCR variant
+
+# --- Schwab (additions) ------------------------------------------------
+"schwab strategic tr us tips":         SCHP
+"schwab us tips":                      SCHP
+
+# --- Goldman Sachs ETFs ------------------------------------------------
+"goldman sachs treas acct":            GBIL
+"goldman sach etf tr activebeta eme":  GEM
+"goldman sachs activebeta emerging":   GEM
+
+# --- FlexShares --------------------------------------------------------
+"flexshares r stoxx globr inf":        NFRA
+"flexshares stoxx global broad":       NFRA
+
+# --- First Trust -------------------------------------------------------
+"first tr exchange traded fd iv no amer energy": EMLP
+"first tr exch trd alpha fd ii europe":          FEUZ
+"first trust alphadex europe":                   FEUZ
+
+# --- Invesco -----------------------------------------------------------
+"invesco qqq tr unit ser 1":           QQQ
+
+# --- Mutual funds (no ETF ticker — leave NULL or use mutual-fund symbol)
+# These are not ETFs but registered open-end funds. The us_mutual_funds
+# universe should hold the actual ticker; here we just supply common
+# patterns so the classifier can mark them as type=MF without a ticker.
+"mngd port ser tortoise nram pi":      TOLLX     # Tortoise MLP & Pipeline
+"managed portfolio ser tortoise":      TOLLX
+"managed portfolio ser nuance mid":    NMVAX     # Nuance Mid Cap Value
+"westwood small cap instl":            WHGSX     # Westwood SmallCap Institutional
+"doubleline emg mkts inc":             DBLEX     # DoubleLine Emerging Markets Local Currency Bond I
+"van eck fds emrg mkts":               EMNCX     # VanEck Emerging Markets Bond Fund
+"first tr exchange traded fd ii alpha": FEUZ     # backup pattern
+

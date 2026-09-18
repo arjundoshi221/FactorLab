@@ -408,9 +408,9 @@ Following the existing convention (`factlab_{market}_{purpose}`):
 
 | Script | Frequency | Schedule | Purpose |
 |--------|-----------|----------|---------|
-| `factlab_india_filings.py` | Daily | 16:30 IST (post-close) | BSE insider trades + NSE bulk/block deals |
-| `factlab_india_shareholding.py` | Quarterly | 22nd of Jan/Apr/Jul/Oct | BSE shareholding patterns (21-day filing deadline) |
-| `factlab_india_sast.py` | Weekly | Sunday | SEBI SAST takeover disclosures |
+| `india_equities_filings.py` | Daily | 16:30 IST (post-close) | BSE insider trades + NSE bulk/block deals |
+| `india_equities_shareholding.py` | Quarterly | 22nd of Jan/Apr/Jul/Oct | BSE shareholding patterns (21-day filing deadline) |
+| `india_equities_sast.py` | Weekly | Sunday | SEBI SAST takeover disclosures |
 
 ### Data flow
 

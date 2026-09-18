@@ -1,7 +1,7 @@
 """EODHD API client with rate limiting and API-key auth.
 
 Usage:
-    from factorlab.sources.eodhd.client import EODHDClient
+    from factorlab.countries.us.equities.eodhd.client import EODHDClient
     client = EODHDClient()              # uses EODHD_API_KEY from .env
     bars = client.get_eod("AAPL.US")    # daily OHLCV
 """

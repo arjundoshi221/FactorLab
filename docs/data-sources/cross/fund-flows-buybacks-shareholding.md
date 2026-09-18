@@ -230,7 +230,7 @@ PRIMARY KEY (quarter_end, institution_cik, ticker)
 ### India
 5. NSE bulk/block deal fetcher (daily) — Bhav copy ZIP or Trendlyne API
    - Write to `alt_research.bulk_block_deals`
-   - Scheduler: `factlab_india_ownership_daily` (shared with PIT from [doc 09](09-insider-supply-chain.md))
+   - Scheduler: `india_equities_ownership_daily` (shared with PIT from [doc 09](09-insider-supply-chain.md))
 6. AMFI monthly mutual fund flows (India, free)
 7. India buyback offers — NSE corporate filings (event-driven)
    - Write to `market.india_buyback_offers`

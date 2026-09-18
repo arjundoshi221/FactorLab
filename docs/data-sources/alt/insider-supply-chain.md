@@ -309,7 +309,7 @@ UNIQUE (source_ticker, target_ticker, relationship_type, source, valid_from)
 - Add `india_insider_trades` table to alt_research schema
 - Daily fetch: PIT continual disclosures (Reg 7(2))
 - Event-driven: SAST disclosures (open offers, threshold crossings)
-- Scheduler: `factlab_india_ownership_daily` — fetch PIT + SAST + bulk/block deals
+- Scheduler: `india_equities_ownership_daily` — fetch PIT + SAST + bulk/block deals
 
 ### Phase 3 — Finnhub Supply Chain (evaluate, free tier)
 - Sign up for Finnhub free API key

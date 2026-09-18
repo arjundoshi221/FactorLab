@@ -1,0 +1,52 @@
+# pre-commit hooks: install once with
+#   pip install pre-commit && pre-commit install
+# Hooks then run automatically on every `git commit`.
+#
+# To run manually across the whole repo:
+#   pre-commit run --all-files
+
+repos:
+  # ── Standard hygiene ──────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: detect-private-key       # blocks accidental key file commits
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  # ── gitleaks: scan staged content for known secret patterns ──────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+
+  # ── Project-specific local hooks ─────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: no-data-or-logs
+        name: Block data/ and logs/ paths from being committed
+        entry: python scripts/_shared/_check_no_data_paths.py
+        language: system
+        pass_filenames: true
+        stages: [pre-commit]
+
+      - id: no-plaintext-secrets
+        name: Block plaintext api_key / token query strings
+        entry: python scripts/_shared/_check_no_plaintext_secrets.py
+        language: system
+        pass_filenames: true
+        stages: [pre-commit]
+        types: [text]
+
+      - id: no-hardcoded-raw-paths
+        name: Block hardcoded data/<source>/raw literals in src/ scripts/
+        entry: python scripts/_shared/_check_paths_in_code.py
+        language: system
+        pass_filenames: true
+        stages: [pre-commit]
+        types: [python]

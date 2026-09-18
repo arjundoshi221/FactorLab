@@ -1,10 +1,10 @@
 """Database engine, metadata, and schema definitions.
 
-Schemas follow docs/architecture/02-database-postgres.md:
+Schemas follow docs/architecture/database.md:
   ref            — securities, calendars, exchanges
   market         — prices, corporate actions, fundamentals, IBKR mirrors
   alt_social     — reddit, twitter posts and derived signals
-  alt_political  — senator/house trades, committees
+  alt_political_us  — senator/house trades, committees
   alt_research   — arxiv papers, embeddings, summaries
   derived        — factors, signals, portfolios
   experiments    — research runs, backtest results, proposed orders
@@ -31,13 +31,15 @@ NAMING_CONVENTION = {
 
 metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
-# Postgres schema names — one per domain
+# Postgres schema names — per-country split for market + alt_political_us domains
 SCHEMAS = [
     "ref",
-    "market",
+    "audit",
+    "market_in",
+    "market_us",
     "universe",
     "alt_social",
-    "alt_political",
+    "alt_political_us",
     "alt_research",
     "derived",
     "experiments",
