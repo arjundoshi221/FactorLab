@@ -1351,9 +1351,9 @@ CREATE TABLE broker.positions_snapshot (
     market_value       Nullable(Decimal(20,6)),
     unrealized_pnl     Nullable(Decimal(20,6)),
     realized_pnl_ytd   Nullable(Decimal(20,6)),
-    market_value_usd   Nullable(Decimal(20,6)),         -- FX-normalized at snapshot_time
-    -- resolution audit
-    resolution_confidence LowCardinality(String),       -- 'canonical','probable','vendor_only','unresolved'
+    market_value_usd   Nullable(Decimal(20,6)),         -- FX-normalized at snapshot_time (broker-reported)
+    -- resolution audit (aligned to alt.* enum, §6)
+    resolution_confidence Enum8('exact'=1,'high'=2,'medium'=3,'low'=4,'unresolved'=5,'manual_override'=6),
     -- provenance + PIT
     source             LowCardinality(String),          -- always the broker: 'ibkr'
     source_channel     LowCardinality(String),          -- 'paper_gateway','live_gateway'
@@ -1444,10 +1444,13 @@ CREATE TABLE broker.executions (
     commission_ccy     LowCardinality(String),
     realized_pnl       Nullable(Decimal(20,6)),
     -- resolution audit
-    resolution_confidence LowCardinality(String),
+    resolution_confidence Enum8('exact'=1,'high'=2,'medium'=3,'low'=4,'unresolved'=5,'manual_override'=6),
     -- provenance + PIT
     source, source_channel, raw_id, ingest_run_id,
-    as_of_time, ingested_at, version
+    as_of_time, ingested_at, version,
+    -- skip index: perm_id joins from the trade engine
+    INDEX idx_perm_id       perm_id       TYPE bloom_filter(0.01) GRANULARITY 4,
+    INDEX idx_listing_id    listing_id    TYPE bloom_filter(0.01) GRANULARITY 4
 )
 ENGINE = ReplacingMergeTree(version)
 PARTITION BY (broker_code, account_mode, toYYYYMM(exec_time))
@@ -1496,9 +1499,12 @@ CREATE TABLE broker.open_orders_snapshot (
     limit_price        Nullable(Decimal(20,6)),
     aux_price          Nullable(Decimal(20,6)),
     status             LowCardinality(String),          -- 'PreSubmitted','Submitted','Cancelled','Filled','Inactive',...
+    -- resolution audit
+    resolution_confidence Enum8('exact'=1,'high'=2,'medium'=3,'low'=4,'unresolved'=5,'manual_override'=6),
     -- provenance + PIT
     source, source_channel, raw_id, ingest_run_id,
-    as_of_time, ingested_at, version
+    as_of_time, ingested_at, version,
+    INDEX idx_perm_id       perm_id       TYPE bloom_filter(0.01) GRANULARITY 4
 )
 ENGINE = ReplacingMergeTree(version)
 PARTITION BY (broker_code, account_mode, toYYYYMM(snapshot_time))
@@ -1578,7 +1584,7 @@ FROM (
     WHERE broker_code='ibkr' AND account_mode='paper' AND account_id='DUE375963'
 ) p
 JOIN derived.backtest_returns b USING (trade_date)
-WHERE b.strategy_id = ...;
+WHERE b.strategy_id = {strategy_uuid:UUID};
 ```
 
 ### 9.7 Ingest, resolution, reconciliation
@@ -1610,11 +1616,15 @@ engine consumes this table and refuses to start if unresolved drift exists.
 
 ### 9.8 Extending to another broker
 
-Adding a second broker (e.g. Schwab for a US portfolio) is a row addition:
-`broker_code='schwab_broker'`, `account_mode='live'`, dispatch to a Schwab-
-specific ingester that writes the same four tables. No new tables. No schema
-migration. Cross-broker rollups (`SELECT sum(nav) ... GROUP BY account_mode`)
-work uniformly.
+Adding a second broker (e.g. Schwab as a portfolio source) is a row addition:
+`broker_code='schwab'`, `account_mode='live'`, dispatch to a Schwab-specific
+ingester that writes the same four tables. No new tables. No schema migration.
+Cross-broker rollups (`SELECT sum(nav) FROM broker.nav_daily GROUP BY broker_code`)
+work uniformly. Note: `broker_code` and `source` share a value namespace but
+sit in different tables — `source='schwab'` in `market.bars` is the Schwab
+market-data adapter; `broker_code='schwab'` in `broker.*` is the Schwab broker
+integration. Same firm, different role — the schema (`market.*` vs `broker.*`)
+disambiguates.
 
 ---
 
