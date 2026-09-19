@@ -188,11 +188,14 @@ tmp/
 temp/
 
 # ---- Claude / AI tooling state ----------------------------------------------
-# Ignore all of .claude/ EXCEPT the team-shared agents (committed for collaborators)
+# Ignore all of .claude/ EXCEPT the team-shared agents + skills (committed for collaborators)
 .claude/*
 !.claude/agents/
 .claude/agents/*
 !.claude/agents/team/
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/team/
 .claude-flow/
 
 # ---- Playground (local scratch/test, never commit) --------------------------
