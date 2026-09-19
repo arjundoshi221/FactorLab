@@ -1,23 +1,31 @@
 # Schema Rehau — FactorLab v2
 
-> Status: `[design]` — revision 2 (post-review)
+> Status: `[design]` — revision 3 (audit + tests + FK conventions)
 > Last verified: 2026-09-19
 
 Full redesign of the FactorLab ClickHouse footprint. Replaces the flat 19-table
 `factorlab` database. Targets: (1) every research question ≤ 1–2 joins away,
 (2) point-in-time correctness enforced by grants and CI, not convention,
 (3) horizontal scale to G10 + APAC without new tables, (4) hedge-fund-grade
-provenance and lineage.
+provenance and lineage, (5) canonical FactorLab UUIDs across every fact.
 
 This doc is the authoritative spec for what to build. `docs/architecture/02-database-clickhouse.md`
 becomes the *why*; this doc is the *what*.
 
+**Revision 3 changes** (2026-09-19): fully absorbed political-data audit —
+`ref.legislator_terms` added, `alt.*` section rewritten with canonical FK
+resolution, SCD-2 committee memberships, resolution-confidence enums. New
+section 11 (testing + code review discipline) with 11 test categories, coverage
+targets, and bug-class-to-test traceability. New section 10.13 (canonical FK
+conventions) formalizing the four FactorLab UUIDs + person canonical. Wave 4
+expanded to 4 tiers with explicit exit criteria. See section 15 for full history.
+
 **Revision 2 changes** (2026-09-19): incorporated review findings F1, F4, F5,
-F6, F7, F8, F9, F10, F12, F14. See section 14 for what was changed and why.
-Deferred: F2 (data-quality-aware conflict resolution — will address in post-
-ingest processing), F3 (FX complexity — using IBKR EOD snaps for exposure
-currencies), F11 (futures roll methodology — deferred with `derived.*`), F13
-(alt-data SLA), F15 (latency SLOs — separate ops/health module).
+F6, F7, F8, F9, F10, F12, F14. Deferred: F2 (data-quality-aware conflict
+resolution — will address in post-ingest processing), F3 (FX complexity —
+using IBKR EOD snaps for exposure currencies), F11 (futures roll methodology
+— deferred with `derived.*`), F13 (alt-data SLA), F15 (latency SLOs —
+separate ops/health module).
 
 ---
 
@@ -414,6 +422,38 @@ ORDER BY (dataset, version_tag, materialized_from);
 
 Backtest reports must log the `(dataset, version_tag)` tuple for every input.
 Two backtests with different dataset versions cannot be compared apples-to-apples.
+
+### `ref.legislator_terms` (SCD-2)
+
+Legislators are **entities** (`ref.entities` rows with `entity_type='person_legislator'`).
+Their term-scoped attributes (chamber, state, district, party, seat class) change
+across terms and live here, SCD-2. Former legislators keep their `entity_id`
+forever, so historical trade attribution never breaks when a member retires or
+changes chamber.
+
+```sql
+CREATE TABLE ref.legislator_terms (
+    legislator_entity_id  UUID,                       -- FK ref.entities
+    bioguide_id           String,                     -- persistent legislator ID (Bioguide)
+    congress_number       UInt16,                     -- term Congress
+    chamber               LowCardinality(String),     -- 'house','senate'
+    state                 FixedString(2),
+    district              Nullable(UInt16),           -- house only
+    party                 LowCardinality(String),
+    seat_class            Nullable(UInt8),            -- senate class 1/2/3
+    term_start            Date,
+    term_end              Date,                       -- known at term start (fixed length)
+    in_office             Bool,                       -- current-term flag
+    source                LowCardinality(String),
+    raw_id                Nullable(UUID),
+    as_of_time            DateTime64(3, 'UTC'),
+    version, ingested_at
+) ENGINE = ReplacingMergeTree(version)
+ORDER BY (bioguide_id, term_start);
+```
+
+Point-in-time attribution: "which party was Sen. X in on 2019-03-15" =
+`WHERE bioguide_id = ... AND term_start <= '2019-03-15' AND term_end > '2019-03-15'`.
 
 ### `ref.sessions` and `ref.holidays`
 
@@ -872,46 +912,217 @@ Same pattern: filing header + line items + optional PIT snapshot MV.
 ## 6. `alt` — Generalized alt-data pattern
 
 Every alt table follows the same shape: identity + event_time + as_of_time +
-source + raw_id + entity/security resolution + payload.
+source + raw_id + resolved canonical FKs (`entity_id`/`security_id`/`listing_id`/`contract_id`)
++ payload. **No repeated slowly-changing attributes on facts.** Party, sector,
+currency, exchange, chamber-per-term are FK-lookups to `ref.*`.
+
+Design driven by the 2026-09-19 political-data audit (see
+`docs/data-sources/political/quality-audit.md` when published):
+- Legislator identity: was 74% resolved. Target 95%+ via deterministic normalizer.
+- Amount parsing: was 99.6% defaulted (Sev-1). Fix: never default; NULL if unreadable.
+- Asset type: was inferred from ticker regex (~10% mistags). Fix: trust filing metadata.
+- Ticker → canonical listing: was ~1% resolved (empty ref). Target 85-95% post-Wave-1.
+- Options: were tagged as underlying only, losing strike/expiry. Fix: OCC parse → `contract_id`.
+- Committee memberships: were daily snapshots (105K rows in 6 weeks). Fix: SCD-2.
+- Senate data: missing from ClickHouse (lives in Postgres). Fix: unify.
 
 ### `alt.political_trades`
 
 ```sql
 CREATE TABLE alt.political_trades (
-    trade_id             UUID,                        -- factorlab canonical
-    country_code         FixedString(2),
-    chamber              LowCardinality(String),      -- 'house','senate'
-    filing_id            String,                      -- vendor's filing id
-    filing_date          Date,
-    transaction_date     Date,
-    notification_date    Nullable(Date),
-    bioguide_id          Nullable(String),
-    legislator_entity_id UUID,                        -- resolved to ref.entities (individual entity)
-    -- resolved instrument --
-    ticker_raw           Nullable(String),            -- what the filing said
-    listing_id           Nullable(UUID),              -- resolved via ref.identifier_aliases
-    security_id          Nullable(UUID),
-    entity_id            Nullable(UUID),              -- target-company entity
-    resolution_confidence Enum8(...) DEFAULT 'unresolved',
-    -- transaction --
-    owner_code           LowCardinality(String),      -- 'self','spouse','child','joint'
-    transaction_type     LowCardinality(String),      -- 'purchase','sale','exchange','partial_sale'
-    asset_type_code      LowCardinality(String),      -- 'ST','OP','MF','GS','CS','BD'
-    amount_min           Nullable(UInt64),
-    amount_max           Nullable(UInt64),
-    amount_str           String,
-    -- provenance --
+    -- identity --
+    trade_id                    UUID,                              -- factorlab canonical
+    country_code                FixedString(2),                    -- 'US' (extends when EU/UK filings ingested)
+    chamber                     LowCardinality(String),            -- 'house','senate'
+
+    -- filing linkage --
+    filing_id                   String,                            -- source-native
+    filing_url                  String,
+    filing_date                 Date,
+    transaction_date            Date,
+    notification_date           Nullable(Date),
+
+    -- LEGISLATOR (raw + resolved) --
+    legislator_name_raw         String,                            -- provenance only
+    bioguide_id                 Nullable(String),                  -- persistent Bioguide id
+    legislator_entity_id        Nullable(UUID),                    -- FK ref.entities (person_legislator)
+    bioguide_confidence         Enum8('exact'=1,'high'=2,'medium'=3,'low'=4,'unresolved'=5,'manual_override'=6),
+
+    -- ASSET (raw from filing) --
+    ticker_raw                  Nullable(String),                  -- what filing said
+    asset_name_raw              String,                            -- what filing said
+    filing_asset_type_code      LowCardinality(String),            -- what filing said: 'ST','OP','MF','BD','CT','GS','HN','OT'
+
+    -- ASSET (resolved to canonical) --
+    security_type               LowCardinality(String),            -- factorlab-canonical: 'common','preferred','adr',
+                                                                    -- 'etf','option','bond','muni','mutual_fund',
+                                                                    -- 'crypto','partnership','warrant','treasury','other'
+    listing_id                  Nullable(UUID),                    -- FK ref.listings (venue-scoped tradable)
+    contract_id                 Nullable(UUID),                    -- FK ref.contracts (options only; OCC-parsed)
+    security_id                 Nullable(UUID),                    -- FK ref.securities (security-level)
+    entity_id                   Nullable(UUID),                    -- FK ref.entities (issuer)
+    resolution_confidence       Enum8('exact'=1,'high'=2,'medium'=3,'low'=4,'unresolved'=5,'manual_override'=6),
+
+    -- TRANSACTION --
+    transaction_type            LowCardinality(String),            -- 'purchase','sale_full','sale_partial','exchange'
+    owner_code                  LowCardinality(String),            -- 'self','spouse','child','joint','dependent_child'
+    filer_type                  LowCardinality(String),
+    amount_bucket_id            LowCardinality(String),            -- '$1K-$15K','$15K-$50K',...,$50M+'
+    amount_min                  Nullable(UInt64),                  -- NEVER default; NULL if unextractable
+    amount_max                  Nullable(UInt64),
+    amount_str_raw              String,                            -- provenance
+
+    -- provenance / audit --
+    source                      LowCardinality(String),
+    source_channel              LowCardinality(String),            -- 'house_clerk_ptr','senate_efd','ssw_backfill'
+    parser_version              LowCardinality(String),
+    raw_id                      Nullable(UUID),                    -- FK raw.archive
+    ingest_run_id               UUID,                              -- FK ops.ingestion_runs
+    as_of_time                  DateTime64(3, 'UTC'),
+    ingested_at                 DateTime64(3, 'UTC'),
+    version                     UInt64,
+
+    INDEX idx_listing     listing_id     TYPE bloom_filter(0.01) GRANULARITY 4,
+    INDEX idx_entity      entity_id      TYPE bloom_filter(0.01) GRANULARITY 4,
+    INDEX idx_bioguide    bioguide_id    TYPE bloom_filter(0.01) GRANULARITY 4
+)
+ENGINE = ReplacingMergeTree(version)
+PARTITION BY toYYYYMM(transaction_date)
+ORDER BY (country_code, chamber, transaction_date, entity_id, trade_id);
+```
+
+**5NF adherence:**
+- Fact carries only FKs to canonical dims — no `party`, `state`, `district`,
+  `sector`, `exchange`, `currency`, etc.
+- Deliberate 5NF violations, all called out: `country_code` (partition prune),
+  `chamber` (fact-scoped, not derivable from entity — it's who filed, not who traded).
+- Raw provenance columns (`_raw` suffix) are provenance, not denormalization.
+
+### `alt.political_filings`
+
+Filing HEADERS. One row per filing. Amendments handled the same way as
+`fundamentals.filings` — chain via `amends_filing_id` + `original_filing_id`.
+
+```sql
+CREATE TABLE alt.political_filings (
+    filing_id                   String,                            -- source-native
+    country_code                FixedString(2),
+    chamber                     LowCardinality(String),
+    filing_type                 LowCardinality(String),            -- 'P' (PTR), 'FD' (annual), 'A' (amendment)
+    filing_year                 UInt16,
+    filing_date                 Date,
+    filer_name_raw              String,
+    bioguide_id                 Nullable(String),
+    legislator_entity_id        Nullable(UUID),                    -- FK ref.entities
+    bioguide_confidence         Enum8(...),
+    filing_url                  String,
+    amends_filing_id            Nullable(String),                  -- immediate predecessor
+    original_filing_id          Nullable(String),                  -- chain root (materialized at ingest)
+    amendment_seq               UInt8 DEFAULT 0,
+    is_amended                  Bool,
+    is_amendment                Bool,
+    trade_count                 UInt32,                            -- denorm from alt.political_trades count
+    source, source_channel, raw_id, ingest_run_id,
+    as_of_time, ingested_at, version
+)
+ENGINE = ReplacingMergeTree(version)
+PARTITION BY (chamber, filing_year)
+ORDER BY (country_code, chamber, filing_id);
+```
+
+### `alt.political_committee_memberships` (SCD-2)
+
+Fixed from the daily-snapshot bloat (105K rows in 6 weeks → target ~30K
+period rows).
+
+```sql
+CREATE TABLE alt.political_committee_memberships (
+    country_code                FixedString(2),
+    congress_number             UInt16,
+    committee_id                String,
+    committee_entity_id         UUID,                              -- FK ref.entities (committee as entity)
+    bioguide_id                 String,
+    legislator_entity_id        UUID,                              -- FK ref.entities (person)
+    role                        LowCardinality(String),            -- 'chair','ranking','vice_chair','member','ex_officio'
+    majority_status             LowCardinality(String),            -- 'majority','minority'
+    rank                        UInt16,                            -- seniority rank within committee
+    effective_from              Date,                              -- SCD-2
+    effective_to                Nullable(Date),                    -- NULL = current
     source, raw_id, ingest_run_id,
     as_of_time, ingested_at, version
 )
 ENGINE = ReplacingMergeTree(version)
-PARTITION BY toYYYYMM(transaction_date)
-ORDER BY (country_code, transaction_date, entity_id, bioguide_id, trade_id);
+ORDER BY (country_code, congress_number, committee_id, bioguide_id, effective_from);
 ```
 
-### `alt.political_filings`, `alt.political_committee_memberships`, `alt.political_lobbying`, `alt.political_contracts`, `alt.political_fec_contributions`
+Point-in-time query pattern (was Sen. X on committee Y on trade date Z):
+```sql
+WHERE bioguide_id = 'X000123' AND committee_id = 'HSAP'
+  AND effective_from <= '2024-06-15'
+  AND (effective_to IS NULL OR effective_to > '2024-06-15')
+```
 
-Each follows the pattern above with source-specific columns.
+### `alt.political_committees`
+
+```sql
+CREATE TABLE alt.political_committees (
+    committee_id                String,                            -- source-native
+    committee_entity_id         UUID,                              -- FK ref.entities
+    country_code                FixedString(2),
+    congress_number             UInt16,
+    parent_committee_id         Nullable(String),
+    chamber                     LowCardinality(String),
+    name                        String,
+    jurisdiction                String,
+    url                         String,
+    is_subcommittee             Bool,
+    effective_from              Date,                              -- SCD-2 for renaming/merging
+    effective_to                Nullable(Date),
+    source, raw_id, ingest_run_id,
+    as_of_time, ingested_at, version
+)
+ENGINE = ReplacingMergeTree(version)
+ORDER BY (committee_id, effective_from);
+```
+
+### `alt.political_lobbying`, `alt.political_contracts`, `alt.political_fec_contributions`
+
+Same shape template. All resolve to (`entity_id`, `security_id` when applicable,
+`legislator_entity_id` for legislators). All FK canonical dims. All SCD-2 where
+attributes change over time. Detailed schemas defined in Wave 4 build-out.
+
+### `alt.social_reddit_posts`, `alt.social_x_posts`
+
+```sql
+CREATE TABLE alt.social_reddit_posts (
+    post_id              String,                       -- vendor-native
+    country_code         FixedString(2),
+    subreddit            LowCardinality(String),
+    posted_at            DateTime64(3, 'UTC'),
+    author               String,
+    title                String,
+    body                 String,
+    score                Int32,
+    comment_count        UInt32,
+    -- mentioned tickers (multi-value, resolved) --
+    mentioned_listings   Array(UUID),                  -- FK ref.listings, resolved from body
+    mentioned_entities   Array(UUID),                  -- FK ref.entities
+    ticker_confidence    Array(Enum8('exact'=1,'high'=2,'medium'=3,'low'=4,'unresolved'=5)),
+    -- sentiment (if pre-computed) --
+    sentiment_score      Nullable(Float32),
+    sentiment_source     LowCardinality(String),
+    source, raw_id, ingest_run_id,
+    as_of_time, ingested_at, version
+)
+ENGINE = ReplacingMergeTree(version)
+PARTITION BY toYYYYMM(posted_at)
+ORDER BY (country_code, subreddit, posted_at, post_id);
+```
+
+### `alt.research_arxiv`, `alt.satellite_*`, `alt.card_panel_*`
+
+Reserve names; build when data flows. All follow the same
+canonical-FK-plus-provenance pattern.
 
 ### `alt.social_reddit_posts`, `alt.social_x_posts`
 
@@ -1364,9 +1575,228 @@ row with same (`entity_id`, `tag`, `period_end`) but new `filing_id`, new
 Research PIT snapshot MV uses `argMax(value, filed_at) FILTER (filed_at <=
 <backtest_date>)` → automatically gets the view that was current on that date.
 
+### 10.13 Canonical FK conventions
+
+ClickHouse doesn't enforce foreign-key integrity at the engine level.
+Structural enforcement stacks:
+
+**The four canonical FactorLab UUIDs.** Every fact row uses these — never
+vendor-native identifiers, never raw strings.
+
+| Canonical ID | Lives in | Points to | Denormalized on facts |
+|---|---|---|---|
+| `entity_id` | `ref.entities` | Issuer / company / individual entity (LEI-keyed where possible) | Yes — enables cross-source joins |
+| `security_id` | `ref.securities` | Security-level (ISIN-keyed; ADR + common are separate) | Yes |
+| `listing_id` | `ref.listings` | Venue-scoped tradable (exchange × symbol) — **primary key for market data** | Yes |
+| `contract_id` | `ref.contracts` | Derivative contract (futures + options) | Yes for derivatives only |
+
+Plus one **person canonical**:
+
+| Canonical ID | Lives in | Points to | Notes |
+|---|---|---|---|
+| `legislator_entity_id` | `ref.entities` | Individual legislator (`entity_type='person_legislator'`) | Same UUID space as issuer entities — different `entity_type` |
+
+**FK integrity enforcement (four defenses):**
+
+1. **Resolver-only writes.** Every ingester writes canonical IDs only after
+   `resolve_to_*()` call. No ingester composes UUIDs itself. Resolution failures
+   land as `NULL` FK with `resolution_confidence='unresolved'` — never fabricated.
+2. **Nightly integrity job** (`ops.integrity_checks`) — scans facts for
+   dangling FKs (row present in fact, target missing in dim). Alerts if
+   dangling-FK rate exceeds threshold per dataset.
+3. **CI schema conformance tests** — every migration asserts FK columns exist
+   with correct type; test suite includes `assert_no_dangling_fks(dataset)` for
+   representative samples.
+4. **Code review checklist** — every ingester PR must show which
+   `resolve_to_*()` function it calls, and how it handles unresolved returns.
+
+**Vendor native IDs live in aliases, not on facts.** A `schwab_conid`,
+`ibkr_conid`, `eodhd_symbol`, `upstox_instrument_key`, `bioguide_id`,
+`fec_candidate_id`, `cik`, `cusip`, `isin`, `figi` — all land in
+`ref.identifier_aliases` with `target_id` pointing to the canonical UUID.
+Facts hold canonical IDs; provenance strings (e.g., `ticker_raw`,
+`legislator_name_raw`) are marked with `_raw` suffix so it's obvious at a
+glance that they are not for joining.
+
+**5NF adherence check (informal):** for any fact table, ask "is any column
+here derivable from another column via a dim lookup?" If yes, it's a
+denormalization — must be justified (partition prune, join accelerant, or
+fact-scoped truth). All 5NF violations are documented in each table's schema
+comment. No silent duplication.
+
 ---
 
-## 11. Migration waves
+## 11. Testing and code review discipline
+
+Not a nice-to-have. This layer is what makes the schema *actually* deliver
+its 5NF and PIT guarantees. Every layer of the stack has a matching test
+category, coverage target, and CI gate.
+
+### 11.1 Test categories
+
+| Category | Purpose | Runs on | Coverage target |
+|---|---|---|---|
+| **Unit** | Pure-function correctness (parsers, resolvers, normalizers) | Every commit | ≥90% line coverage per module |
+| **Schema conformance** | Every table has expected columns, types, sort keys, indices | PR + nightly | 100% of production tables |
+| **Integrity — dangling FKs** | No fact row references a non-existent dim row | Nightly against prod | Dangling-FK rate <0.5% per dataset |
+| **PIT safety** | No research query returns rows with `as_of_time > asof_date` | PR (against staging fixtures) | 100% of `research.*` views |
+| **Resolver golden set** | Known (input, expected canonical id) pairs — regression on resolver drift | PR + nightly | ≥100 golden cases per resolver |
+| **Ingest end-to-end** | Vendor payload → fact row shape → integrity check passes | PR (with recorded fixtures) | 100% of ingest paths |
+| **Coverage / freshness** | Every active source has data landing within its SLA | Continuous (health module) | Alert on breach |
+| **Idempotency** | Re-running an ingester over same input produces same result (byte-identical facts) | Nightly | 100% of ingesters |
+| **Restatement / SCD-2 semantics** | Amendments produce new rows, don't overwrite; SCD-2 windows don't overlap | Nightly | 100% of SCD-2 tables |
+| **Amount / numeric parsing** | Known filing → known amount range | Every PR to political ingester | ≥50 golden cases across brackets |
+| **Backtest reproducibility** | Same `(dataset_version, asof_date, code_version)` → byte-identical returns | Weekly | 100% of published backtests |
+
+### 11.2 Coverage targets, not "have some tests"
+
+Each ingester has an explicit, tracked SLO:
+
+- **`src/factorlab/sources/upstox/`**: ≥90% line coverage, ≥95% branch for parsers
+- **`src/factorlab/sources/schwab/`**: same
+- **`src/factorlab/sources/political/`**: ≥95% (the audit found Sev-1 bugs; extra scrutiny justified)
+- **`src/factorlab/storage/`**: 100% coverage on write paths; ingesters call these constantly
+- **`src/factorlab/resolvers/`**: 100% coverage on resolution functions + golden-set regression
+
+**Fail the build if coverage regresses more than 1% on the changed module.**
+Coverage is a rope, not a jail — a big refactor that legitimately drops
+coverage 5% points but adds golden tests is fine, but requires reviewer signoff.
+
+### 11.3 Golden sets — the load-bearing test kind
+
+Regressions in resolvers or parsers silently poison downstream data.
+Golden sets catch this at PR time:
+
+- **`tests/golden/bioguide/`** — 100+ (raw_name, expected_bioguide_id) pairs including
+  the current pathological cases: `"Hon. Scott Scott Franklin"`,
+  `"Hon. Richard Dean Dr McCormick"`, `"Hon. April McClain Delaney"`.
+- **`tests/golden/amount_parser/`** — 50+ (filing_text, expected_min, expected_max)
+  pairs across all seven brackets. Fixes the Sev-1 default-to-smallest-bucket bug
+  and prevents regression.
+- **`tests/golden/ticker_resolution/`** — 200+ (ticker, country, asof_date, expected_listing_id) pairs
+  covering: exact match, class shares (BRK.A vs BRK.B), ticker reuse (FB→META),
+  ADR vs primary listing (`NOK` vs `NOKIA.HE`), delisted names.
+- **`tests/golden/occ_option_parser/`** — 30+ (occ_symbol, expected_underlying_listing_id,
+  expected_expiry, expected_strike, expected_right) pairs.
+- **`tests/golden/security_type/`** — 100+ (raw_ticker, raw_name, filing_asset_type_code,
+  expected_security_type) pairs covering the mistags found in the audit:
+  `('BILL', 'U.S. Treasury', 'GS') → 'treasury'`,
+  `('S', 'Oaktree Strategic Credit Fund', 'OT') → 'mutual_fund'`,
+  `('GE', 'GE Aerospace Common Stock', 'OP') → 'common'`.
+
+**Golden files live in the repo, versioned.** When a real edge case is
+discovered in prod, the fix PR MUST add a golden test row that would have
+caught it. This is enforced by review, not by CI (too language-specific to
+regex).
+
+### 11.4 PIT-safety test suite
+
+Every `research.*` view has a paired test:
+
+```python
+def test_bars_adjusted_pit_no_leak():
+    """research.bars_adjusted must never return rows with as_of_time > asof_date."""
+    for asof in [date(2024, 1, 15), date(2024, 6, 30), date(2025, 3, 1)]:
+        rows = client.query(
+            "SELECT max(as_of_time) FROM research.bars_adjusted(asof_date = %(asof)s)",
+            {"asof": asof},
+        ).result_rows
+        assert rows[0][0] <= datetime.combine(asof, time.max, UTC), \
+            f"PIT leak in bars_adjusted at asof={asof}"
+```
+
+Runs against staging fixtures on every PR that touches `research.*` schema or
+their upstream fact tables.
+
+### 11.5 Integrity + SCD-2 nightly checks
+
+```python
+# tests/nightly/test_scd2_no_overlap.py
+def test_universe_membership_no_overlap():
+    """No two rows for the same (universe, listing) with overlapping [from, to)."""
+    conflict_rows = client.query("""
+        SELECT universe_id, listing_id, count()
+        FROM ref.universe_membership FINAL
+        WHERE effective_from <= addDays(effective_to, -1)  -- valid window
+        GROUP BY universe_id, listing_id
+        HAVING count() > 1
+    """).result_rows
+    assert not conflict_rows, f"Overlapping SCD-2 windows: {conflict_rows[:5]}"
+```
+
+Same pattern for `ref.legislator_terms`, `alt.political_committee_memberships`,
+`ref.identifier_aliases`, `ref.listing_migrations`.
+
+### 11.6 Idempotency tests
+
+```python
+def test_upstox_ingester_idempotent(recorded_response):
+    """Same vendor payload processed twice = same rows (byte-identical)."""
+    run1 = ingest_upstox_response(recorded_response, run_id=uuid1())
+    run2 = ingest_upstox_response(recorded_response, run_id=uuid2())
+    assert run1.rows == run2.rows  # excluding run_id + ingested_at
+```
+
+Prevents "we re-ran the backfill and now have duplicate rows" (ReplacingMergeTree
+should absorb this, but idempotency tests catch cases where the business key
+composition is wrong).
+
+### 11.7 Code review — mandatory checklist per PR type
+
+Beyond the PIT checklist in 10.4.4, every ingester/resolver/schema PR requires:
+
+**Ingester PR:**
+- [ ] Payload archive: does the ingester call `raw.archive` write before parsing?
+- [ ] Resolver call: which `resolve_to_*()` function does this use?
+- [ ] Unresolved handling: what happens when resolution returns `None`?
+- [ ] Idempotency: re-running the ingester over the same payload produces same rows?
+- [ ] Version bump: does `parser_version` bump if parse logic changed?
+- [ ] Golden set: added at least 3 golden cases covering happy path + 2 edge cases?
+
+**Resolver PR:**
+- [ ] Confidence output: returns explicit `(target_id, confidence)` tuple?
+- [ ] Golden regression: existing golden set still passes?
+- [ ] New golden cases for any edge case the PR was written to solve?
+- [ ] SCD-2 aware: for time-scoped resolution, `asof_date` is a parameter?
+
+**Schema/migration PR:**
+- [ ] Sort key rationale: why these columns in this order?
+- [ ] Skip indices: filter-frequent columns not in sort key have skip indices?
+- [ ] Partition strategy: retention story documented?
+- [ ] `dataset_version` bump if this is a rewrite of existing data?
+- [ ] Downstream MVs / research views updated?
+- [ ] Test: schema conformance test asserts new columns/types?
+
+**Research/backtest PR:**
+- [ ] Uses `research.*` views only (PIT enforcement)
+- [ ] `asof_date` threaded from config, not hardcoded
+- [ ] `(dataset_version, code_version, input_hash)` logged in backtest run
+- [ ] Universe membership uses SCD-2 filter (no survivorship bias)
+- [ ] Corporate actions applied only if `ex_date <= asof_date`
+
+### 11.8 What tests protect against (traceable benefits)
+
+Each test category has a concrete failure mode it prevents:
+
+| Test category | Bug class prevented | Real historical example |
+|---|---|---|
+| Amount parser golden set | Default-to-smallest-bucket (Sev-1) | Present in current `alt_political_trades` (99.6% defaulted) |
+| Bioguide golden set | Name-normalizer regressions | Present now (26% orphan rate) |
+| Ticker resolution golden set | Wrong ticker attribution | `BILL` for Treasury (present now) |
+| Asset-type golden set | Type-inference mistags | `GE` tagged as option (present now) |
+| SCD-2 no-overlap | Duplicate historical constituency | Would silently double-count returns |
+| Idempotency | Duplicate rows from re-run | Would inflate volume/OI |
+| PIT safety | Look-ahead bias | Backtest that reads restated fundamentals → overfitting |
+| Restatement chain | Old view of fundamentals lost | Q3 2023 amended twice; research reads latest instead of asof |
+| Coverage / freshness | Silent ingest failure | India ingester was down; dashboard didn't alert |
+| Backtest reproducibility | Silent factor drift | Someone changes momentum formula, historical Sharpe silently shifts |
+
+Every fault surfaced in the design review corresponds to a test category that
+prevents its recurrence. **This is how the schema earns its rehau.**
+
+---
+
+## 12. Migration waves
 
 Zero big-bang. Every wave runs old and new in parallel; cutover per wave.
 
@@ -1389,10 +1819,78 @@ Zero big-bang. Every wave runs old and new in parallel; cutover per wave.
 2. Cutover dashboards / API
 3. Drop old tables
 
-**Wave 4 — Alt data generalization (2 weeks)**
-1. Rename `alt_political_*` → `alt.political_*` under new schema
-2. Backfill `listing_id`/`entity_id` via resolver
-3. Create `legislator_trades_dedup` view (currently missing in prod — see fault F1)
+**Wave 4 — Alt data generalization + political data quality (3-4 weeks)**
+
+Driven by the 2026-09-19 political-data audit. Wave 4 is longer than v1 estimated
+because the audit surfaced Sev-1 (amount defaulting) + Sev-2 (bioguide 74%,
+asset-type mistags) + Sev-3 (SCD-2 bloat) issues that must all land before the
+migration is meaningful.
+
+Tier 1 — ingester bug fixes (do BEFORE any table rebuild):
+1. **Fix amount parser** — read explicit bucket string; NULL if unreadable; NEVER default.
+   Golden set `tests/golden/amount_parser/` seeded with 50+ cases across all seven brackets.
+2. **Trust `filing_asset_type_code`** from PTR filing metadata; do not re-derive from
+   ticker/name regex. Fixes `BILL`-for-Treasury, `GE`-tagged-as-option, `S`-for-mutual-fund class of bugs.
+   Golden set `tests/golden/security_type/` seeded with 100+ audit-found mistags.
+3. **Fix legislator name normalizer** — strip `Hon.` prefix, strip titles (`Dr`, `Jr`, `Sr`),
+   collapse repeated first names, deduplicate whitespace; match against BOTH
+   `legislators-current.yaml` and `legislators-historical.yaml`.
+   Golden set `tests/golden/bioguide/` seeded with the current 26% orphan cases:
+   `"Hon. Scott Scott Franklin"`, `"Hon. Richard Dean Dr McCormick"`, `"Hon. April McClain Delaney"`, etc.
+   Target: 95%+ resolution rate.
+
+Tier 2 — schema rebuild + resolver-driven backfill:
+4. Rename `alt_political_*` → `alt.political_*` under new schema. Includes the
+   expanded columns: `legislator_entity_id`, `security_type`, `contract_id`,
+   `security_id`, `entity_id`, `resolution_confidence`, `bioguide_confidence`.
+5. **Backfill canonical FKs via resolver:**
+   - Ticker → `listing_id`, `security_id`, `entity_id` via `ref.identifier_aliases`
+     (populated in Wave 1 from EODHD full US universe + LEI-GLEIF + OpenFIGI).
+   - Options: parse OCC symbol → `contract_id` in `ref.contracts`.
+   - Legislator name → `bioguide_id` → `legislator_entity_id` in `ref.entities`.
+   - Unresolved rows land with `NULL` FKs + `resolution_confidence='unresolved'` →
+     queued to `ops.unresolved_entities`. Never silently dropped.
+   - Expected post-migration rates: ~90% ticker resolution, ~95% bioguide resolution,
+     100% options resolution (OCC-parseable).
+6. **Rebuild committee memberships as SCD-2.** Collapse 105K daily snapshots to
+   ~30K period rows (`effective_from`, `effective_to`). Deduplicate the redundant
+   daily state.
+7. **Migrate legislators to `ref.entities` + `ref.legislator_terms`.**
+   Existing `alt_political_legislators` (539 current) becomes ~1,500 entities
+   (adding historical) with N term rows per entity in `ref.legislator_terms`.
+   Retired members retain their `entity_id` — historical trade attribution works.
+
+Tier 3 — coverage completion:
+8. **Backfill Senate eFD from Postgres.** Memory says 6,514 rows exist in the
+   Postgres `alt_political_us` schema. Migrate to ClickHouse `alt.political_trades`
+   with `source_channel='senate_efd'`. Run the same resolver pipeline for canonical FKs.
+9. **Backfill filing headers** for pre-2026 filings referenced by existing trades
+   (currently trades reference filings back to Nov 2024 but filing headers only
+   exist from 2026-01-01).
+10. **Ingest historical committee memberships** for Congresses 117 and 118 (2021-2025).
+    Needed for pre-2025 trade × committee-membership correlation queries.
+11. **Create `legislator_trades_dedup` view** — cross-source dedup of House PTR ↔
+    Senate eFD ↔ Senate Stock Watcher for the 2019-2020 overlap window. View was
+    described in memory but doesn't exist in prod ClickHouse.
+12. **Ingest annual FDs** (filing_type='FD'), not just PTRs. Captures income,
+    honoraria, gifts, non-transaction holdings — enables broader wealth/exposure
+    analytics.
+
+Tier 4 — nice-to-have completeness (defer to Wave 4.5 if timeline pressures):
+13. Add CUSIP extraction for bonds/munis (hard due to PDF variance).
+14. Add House amendment tracking (`filing_type='A'`).
+15. Add FEC contribution ingestion (already scoped in memory: FEC=A+B).
+16. Add Congress.gov bills / lobbying (already scoped: Congresses 117-119, market-related policy areas).
+
+**Wave 4 exit criteria:**
+- Amount fidelity: 0% defaulted (all NULLs are true unreadable cases)
+- Bioguide resolution: ≥95%
+- Ticker → listing resolution: ≥85%
+- Options → contract resolution: 100% for OCC-parseable
+- All SCD-2 tables pass `test_scd2_no_overlap`
+- All FK integrity checks green (<0.5% dangling per table)
+- All 4 golden sets seeded and passing
+- Senate coverage: parity with House
 
 **Wave 5 — Fundamentals (3-4 weeks)**
 1. `fundamentals.filings`, `fundamentals.line_items`
@@ -1408,7 +1906,7 @@ Zero big-bang. Every wave runs old and new in parallel; cutover per wave.
 
 ---
 
-## 12. What this doc explicitly does NOT cover
+## 13. What this doc explicitly does NOT cover
 
 - Compute layer (Python/Polars/DuckDB research environment)
 - API layer redesign (FastAPI endpoint restructuring)
@@ -1423,7 +1921,7 @@ Zero big-bang. Every wave runs old and new in parallel; cutover per wave.
 
 ---
 
-## 13. Deferred concerns with rationale
+## 14. Deferred concerns with rationale
 
 Items considered during review and deliberately deferred. Not gaps in
 correctness — deferrals to earn scope.
@@ -1438,7 +1936,30 @@ correctness — deferrals to earn scope.
 
 ---
 
-## 14. Revision changelog
+## 15. Revision changelog
+
+### Revision 3 — 2026-09-19
+
+Political-data audit findings + test discipline + FK conventions folded in.
+
+- **`ref.legislator_terms` added** (SCD-2). Legislators become entities with
+  term-scoped attributes lifted out; retired members retain `entity_id`,
+  historical trade attribution never breaks.
+- **`alt.*` section rewritten** with fully-defined political tables reflecting
+  audit findings: canonical FK columns (`legislator_entity_id`, `security_id`,
+  `listing_id`, `contract_id`, `entity_id`), resolution confidence enums,
+  raw-vs-resolved separation, SCD-2 committee memberships (was daily snapshots).
+- **Section 10.13 — Canonical FK conventions.** Explicit statement of the four
+  canonical FactorLab UUIDs + person canonical; four defenses for FK integrity
+  (resolver-only writes, nightly integrity job, CI conformance, PR checklist).
+- **Section 11 — Testing and code review discipline** (NEW). Eleven test
+  categories with coverage targets; golden-set-driven regression on all
+  resolvers/parsers; PIT-safety tests; SCD-2 no-overlap; idempotency;
+  bug-class-to-test-category traceability table.
+- **Wave 4 fully expanded** to 4 tiers with concrete ingester fixes (amount
+  parser, asset-type trust, name normalizer), resolver-driven schema rebuild,
+  coverage completion (Senate backfill from Postgres, historical committees,
+  annual FDs, dedup view), and explicit exit criteria.
 
 ### Revision 2 — 2026-09-19
 
