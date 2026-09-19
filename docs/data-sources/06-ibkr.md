@@ -1,560 +1,613 @@
-# Interactive Brokers (IBKR) — Portfolio, Paper Trading, Data, Execution
+# Interactive Brokers (IBKR) — Read-Only Data & Portfolio Mirror
 
-> Status: `[design]`
-> **Special role:** IBKR is the **portfolio system of record** for FactorLab. Positions, fills, NAV, and PnL live in IBKR (paper today, live later). Postgres mirrors what IBKR says — IBKR is canonical.
-
-## Why IBKR is special
-
-Most data sources in FactorLab are read-only feeds. IBKR is different — it is simultaneously:
-
-1. **Portfolio store** — the source of truth for what we own, at what cost, across what accounts. The Postgres tables under `market.ibkr_positions_snapshot` and `market.ibkr_executions` are *mirrors* of broker state, not the master.
-2. **Execution venue** — the only place orders actually get placed.
-3. **Paper-trading sandbox** — full account simulating real fills, used as a deployment dry-run for live signals.
-4. **Multi-asset, multi-region market data** (US equities/options/futures, European, much of APAC) — once you pay for the right subscriptions.
-
-This dual role (data + portfolio + execution) means IBKR sits at the integration-test boundary of the platform. Every signal that would go live must round-trip through IBKR paper first. The day backtest predictions and IBKR paper fills systematically agree, the platform is ready for live capital.
+> Status: `[active — playground validated 2026-09-19]`
+> **Role in FactorLab: READ-ONLY, DUAL ACCOUNT.**
+> Mirrors **both paper and live IBKR accounts** in parallel to Postgres:
+> - **Paper** — forward-testing sandbox for the trade engine (real orders on paper, we score PnL vs backtest)
+> - **Live** — real portfolio system of record
+>
+> **Order placement is out of scope.** Execution — on either account — happens in a separate trade engine (future repo). This module never calls `placeOrder`, `cancelOrder`, or `modifyOrder`.
 
 ---
 
-## 1. Auth & Connection
+## 1. Role & Architecture
 
-IBKR's API model is unusual: you do **not** call a REST endpoint over the open internet. Instead, you run **TWS** (Trader Workstation) or **IB Gateway** locally, log in interactively, and connect to it via a TCP socket on `localhost`.
+### What IBKR does for FactorLab
 
-### TWS vs IB Gateway
+Every mirror table below has an `account_mode` column and is written **twice per snapshot cycle** — once for the paper Gateway, once for the live Gateway. Queries filter by `account_mode` (or group by it for compare).
 
-| | TWS | IB Gateway |
-|--|------|------------|
-| GUI | Full trading platform | Minimal connection-status only |
+| Concern | IBKR | Postgres mirror | Tagged by `account_mode` |
+|---|---|---|---|
+| Positions (broker truth) | ✅ Source | `market.ibkr_positions_snapshot` | ✅ |
+| Account NAV / margin / buying power | ✅ Source | `market.ibkr_account_values_snapshot` | ✅ |
+| Executions / fills | ✅ Source | `market.ibkr_executions` (PK: exec_id) | ✅ |
+| Open orders placed by any client | ✅ Source | `market.ibkr_open_orders_snapshot` | ✅ |
+| Historical daily bars for validation | ✅ Deep (40+ yrs some names) | `market.candles_daily` with `source='ibkr'` | n/a (data is account-independent) |
+| Contract metadata enrichment | ✅ Rich (44 fields) | `ref.securities`, `ref.security_aliases` | n/a |
+| **Order placement / cancellation** | ❌ **Never from this codebase** | — | — |
+
+### Forward testing flow
+
+```
+Trade engine  ─── proposes signal ───►  places order on PAPER Gateway (port 4002)
+                                              │
+                                              ▼
+                                        IBKR paper fills
+                                              │
+                                              ▼
+FactorLab ingests fills ────────────►  market.ibkr_executions (account_mode='paper')
+FactorLab snapshots positions ─────►  market.ibkr_positions_snapshot (account_mode='paper')
+                                              │
+                                              ▼
+                              Score forward-test PnL vs backtest predictions
+                              → derived.forward_test_attribution (future)
+```
+
+Live flow is identical with `account_mode='live'` and port 4001.
+
+### Why read-only
+
+Two hard rules make this the correct posture:
+1. **Data / research code stays away from money.** Same principle as [`feedback_no_schwab_trading.md`](../../memory/feedback_no_schwab_trading.md).
+2. **Trade engine is a separate concern.** A different codebase/service will own execution, guards, kill-switches, and audit trails.
+
+### System diagram
+
+```
+                              ┌────────────────────┐
+                              │  IB Gateway (TWS)  │  <- daily 2FA login
+                              │  localhost:4001/2  │
+                              └─────────┬──────────┘
+                                        │  ib_async socket
+                                        │  (readonly=True)
+                        ┌───────────────┼────────────────┐
+                        │               │                │
+                        ▼               ▼                ▼
+             FactorLab ingesters   Trade engine    (Ad-hoc research
+             (this codebase)       (future repo)    notebooks)
+                        │               │                │
+                        ▼               ▼                │
+              ┌─────────────────────────────────┐        │
+              │       Postgres (canonical)      │◀───────┘
+              │                                 │
+              │  market.ibkr_positions_snapshot │
+              │  market.ibkr_account_values_snapshot
+              │  market.ibkr_executions         │
+              │  market.ibkr_open_orders_snapshot
+              │  market.candles_daily (src=ibkr)│
+              │  ref.securities / _aliases      │
+              └─────────────────────────────────┘
+                        ▲
+                        │
+              Trade engine writes (executes elsewhere,
+              persists its own view — e.g. proposed_orders
+              in experiments schema, decision logs, etc.)
+```
+
+**Contract with the trade engine**: it reads positions/executions from these tables to close its own decision loop; it never expects FactorLab to place its orders.
+
+---
+
+## 2. Connection: IB Gateway (headless) + `ib_async`
+
+### Why Gateway not TWS
+
+| | TWS | **IB Gateway** |
+|--|------|----------------|
+| GUI | Full trading platform | Minimal connection panel |
 | Memory | ~1 GB | ~200 MB |
-| Use case | Manual trading + API | API-only, headless servers |
-| Auth | Same login | Same login |
+| Purpose | Manual trading | API-only |
 
-**For FactorLab: use IB Gateway.** TWS is overkill for headless data/execution.
+Use Gateway. TWS's trading UI is dead weight for a read-only data pipeline.
 
-### Paper vs Live ports (default)
+### Ports (defaults)
 
 | Mode | TWS port | Gateway port |
 |------|----------|--------------|
-| Paper | 7497 | 4002 |
-| Live | 7496 | 4001 |
+| Paper | 7497 | **4002** |
+| Live | 7496 | **4001** |
 
-Each account (paper, live) gets its own login. **Paper account credentials are different from live** — IBKR will issue them once you enable paper trading in Account Management. They share market-data subscriptions only if the live account is funded.
+Paper account username is prefixed `DU…` (e.g. `DUE375963`). Live has no prefix.
 
-### Daily login & 2FA
+### Daily lifecycle
 
-- IB Gateway / TWS auto-logs-out daily (security policy). You log in each morning.
-- 2FA via IBKR Mobile is the default; can be replaced with read-only API tokens for some workflows but **not** for the full TWS API.
-- Auto-restart can be configured (`config/jts.ini`) but you'll still hit a weekly forced-relogin. Plan for it.
+- Gateway auto-logs-out daily; you re-authenticate each morning via IBKR Mobile 2FA push.
+- Weekly forced re-login regardless of auto-restart config.
+- **Consequence for deployment**: production ingest cannot be fully unattended without [IBC](https://github.com/IbcAlpha/IBC) automation. For now: run Gateway on the local Windows machine, treat morning login as a manual ritual.
 
-### Library choice
+### Library
 
-| Library | Pros | Cons |
-|---------|------|------|
-| **`ib_async`** (maintained fork of `ib_insync`) | Async, pythonic, sane | Original maintainer stepped back; community fork actively maintained |
-| **`ibapi`** (official) | Authoritative | Callback-based, painful, low-level |
-| **`ib-gateway-docker`** + `ib_async` | Headless deployment | Docker image is community-maintained |
+**`ib_async` 2.1.0** (community-maintained fork of `ib_insync`). Async, pythonic, sane. Installed:
 
-**Recommendation: `ib_async`.** API surface is identical to the established `ib_insync` you'll find in tutorials.
+```bash
+"C:/Users/arjd2/.conda/envs/factorlab/python.exe" -m pip install ib_async
+```
+
+### Minimal connect
 
 ```python
-from ib_async import IB, Stock
+from ib_async import IB
 ib = IB()
-ib.connect('127.0.0.1', 4002, clientId=1)   # 4002 = Gateway paper
-contract = Stock('AAPL', 'SMART', 'USD')
-ib.qualifyContracts(contract)
-bars = ib.reqHistoricalData(
-    contract,
-    endDateTime='',
-    durationStr='1 Y',
-    barSizeSetting='1 day',
-    whatToShow='TRADES',
-    useRTH=True,
-)
+ib.connect('127.0.0.1', 4002, clientId=1, readonly=True, timeout=15)
 ```
 
-### `clientId` discipline
+The `readonly=True` flag causes the API server to **reject any order-mutation call at the socket boundary**. Belt vs suspenders alongside code-level enforcement.
 
-Every connection needs a unique `clientId`. The connection that has `clientId=0` is the "master" — it sees orders placed by all other clients. Reserve `0` for a monitoring/admin connection; assign deterministic IDs to your services:
+### `clientId` allocation
+
+IBKR forbids two connections sharing a `clientId` **per Gateway**. Live and paper are separate Gateways, so the same ID can be reused across modes.
+
+| ID | Service | Purpose |
+|----|---------|---------|
+| 0 | (reserved) | Never use — master client sees orders from all others |
+| 1 | Playground / ad-hoc research | Interactive sessions, notebooks |
+| 2 | `us_portfolio_ibkr_snapshot` | Daily portfolio mirror job |
+| 3 | `us_ibkr_historical` | Historical bar sampler |
+| 4 | `us_ibkr_openorders_watcher` | Intraday open-orders / execution poll |
+| 10+ | Trade engine services | Reserved for the external trade engine |
+
+Since IDs are per-Gateway, `us_portfolio_ibkr_snapshot` uses `clientId=2` when it connects to paper *and* `clientId=2` when it connects to live — sequentially or in parallel, no collision.
+
+Running a notebook (id=1) while the same-Gateway daemon is up (id=2) is fine; two notebooks both on id=1 against the same Gateway is not.
+
+### Gateway API config (one-time)
+
+`Configure → Settings → API → Settings`:
+- ✅ Enable ActiveX and Socket Clients
+- ✅ **Read-Only API** ← extra safety, matches our contract
+- ✅ Download open orders on connection
+- Socket port: `4001` (live) or `4002` (paper)
+- Master API client ID: blank
+
+`Configure → Settings → API → Trusted IPs`: add `127.0.0.1`. Also check ☑ *Allow connections from localhost only*.
+
+---
+
+## 3. Environment (`.env`)
 
 ```
-0   = master / monitoring
-1   = research notebooks
-2   = market-data ingester
-3   = signal generator (production)
-4   = order manager
-5   = portfolio reconciler
-```
-
-Two connections with the same `clientId` cannot coexist. This will bite you when running a notebook while a daemon is up.
-
-### `.env`
-
-```
+# IBKR — read-only client, dual-account (playground + ingest scripts)
 IBKR_HOST=127.0.0.1
-IBKR_PORT_PAPER=4002
-IBKR_PORT_LIVE=4001
-IBKR_CLIENT_ID_RESEARCH=1
-IBKR_CLIENT_ID_INGESTER=2
-IBKR_CLIENT_ID_SIGNAL=3
-IBKR_CLIENT_ID_ORDER=4
-IBKR_CLIENT_ID_RECONCILER=5
-IBKR_USERNAME=...           # only if using IBC for auto-login
-IBKR_PASSWORD=...           # only if using IBC for auto-login
-IBKR_TRADING_MODE=paper     # 'paper' or 'live'
-IBKR_LIVE_TRADING_ENABLED=0 # hard guard for any real-money order; flip to 1 manually
+IBKR_PORT_PAPER=4002                 # paper Gateway
+IBKR_PORT_LIVE=4001                  # live Gateway (run alongside)
+IBKR_CLIENT_ID=1                     # per-service; unique *per Gateway*
+IBKR_DEFAULT_MODE=paper              # 'paper' | 'live' — default for ad-hoc scripts
 ```
 
-For headless auto-relogin, the community tool **IBC** (Interactive Brokers Controller, https://github.com/IbcAlpha/IBC) wraps Gateway with auto-login. Required for production deployment on Railway-equivalent infra.
+Notes:
+- Client IDs are per-Gateway; `clientId=2` on paper does NOT collide with `clientId=2` on live (separate sockets, separate servers).
+- No `IBKR_TRADING_MODE`, no `IBKR_LIVE_TRADING_ENABLED` — this codebase is read-only regardless of which Gateway it talks to.
+- The trade engine will define its own env prefix (e.g. `TRADE_ENGINE_IBKR_*`) so there's no accidental ambient sharing.
+- Username / password never in `.env` — each Gateway handles auth via its own login window + IBKR Mobile 2FA.
+
+### Two Gateway installations
+
+Both Gateways run simultaneously. Standard setup:
+- **Paper Gateway** — logged in with Trading Mode = *Paper Trading*, listens on 4002
+- **Live Gateway** — logged in with Trading Mode = *Live Trading*, listens on 4001
+- Same install directory works for both (Gateway remembers last profile per login), or use two shortcuts pointing at the same executable with different profile prefs.
+
+Morning ritual: log both Gateways in (2× 2FA push on IBKR Mobile). Ingest scripts iterate over both.
 
 ---
 
-## 2. Portfolio System of Record
+## 4. Read-Only Enforcement — belt and braces
 
-Treat IBKR (whichever account is active) as the master. Postgres tables exist only to:
+Three layers, so a single mistake can't place an order:
 
-- **Mirror** broker state for fast querying and joining with research data
-- **Audit-log** every snapshot we ever took (positions drift; we want history)
-- **Reconcile** proposed signals vs. realized fills
+1. **Socket-level** — `ib.connect(readonly=True)`. Gateway server refuses `placeOrder` messages from this client.
+2. **Adapter-level** — the `IBKRReadOnlyClient` class under `src/factorlab/sources/ibkr/` does not expose `place_order`, `cancel_order`, `modify_order`, or any `MarketOrder` / `LimitOrder` constructor. Nothing to call.
+3. **Repo-level** — CI grep guard: any commit that adds `placeOrder(`, `cancelOrder(`, `modifyOrder(`, or `from ib_async import.*Order` to `src/factorlab/` fails the build.
 
-### Daily portfolio sync (mandatory)
-
-```python
-# pseudocode — runs at end of US session
-ib.connect(..., clientId=IBKR_CLIENT_ID_RECONCILER)
-
-# 1) Snapshot positions
-positions = ib.positions()                  # {account: [Position, ...]}
-# 2) Pull executions (today's fills)
-executions = ib.reqExecutions()             # ExecutionFilter() default = today
-# 3) Account values (NAV, cash, margin)
-account_values = ib.accountValues()
-# 4) Open orders not yet filled
-open_orders = ib.openOrders()
-
-# Persist all four to Postgres with snapshot_at = now()
-```
-
-### Reconciliation rule
-Every morning before signal generation:
-```
-positions_in_postgres == positions_in_ibkr   # MUST hold
-```
-If they diverge, **halt signal generation** and alert. A diverging portfolio means the previous day's run had an unrecorded effect (cancelled order that filled, partial fill, dividend received, etc.). Investigate before continuing.
-
-### What lives where
-
-| Concept | Master | Postgres mirror |
-|---------|--------|-----------------|
-| Open positions | IBKR account | `market.ibkr_positions_snapshot` (daily) |
-| Executions / fills | IBKR | `market.ibkr_executions` (append-only) |
-| Open orders | IBKR | `market.ibkr_open_orders_snapshot` (intra-day) |
-| NAV / cash / margin | IBKR | `market.ibkr_account_values_snapshot` |
-| Proposed signals | FactorLab signal generator | `experiments.proposed_orders` |
-| Slippage = proposed − filled | computed | `derived.slippage_attribution` |
-
-The Postgres tables are append-only history. To know "current" position, query the latest snapshot or, when stakes are high, hit IBKR live.
+Layer 3 is not yet implemented — TODO when we build the src/ module.
 
 ---
 
-## 3. Market Data Coverage & Subscriptions
+## 5. Data Endpoints — what IBKR gives us
 
-This is the part that surprises most people: **IBKR data is not free**, and the matrix is complicated.
+Playground validation on 2026-09-19 (see `playground/data/ibkr/*.json` for raw payloads).
 
-### Account type: IBKR Lite vs Pro
+### 5.1 Historical bars — `reqHistoricalData`
 
-| Feature | IBKR Lite | IBKR Pro |
-|---------|-----------|----------|
-| US stock commissions | $0 | $0.005/share ($1 min) |
-| **API access** | **NO** | **YES** |
-| Real-time streaming | Free (included) | Requires subscription |
-| Order routing | PFOF | SmartRouting (best execution) |
-| Minimum deposit | $0 | $0 |
-| Inactivity fee | None | None |
-
-**API requires IBKR Pro.** Upgrade from Lite: Client Portal → Settings → Account Type → Switch to Pro (instant, effective next business day).
-
-### Path from current free account to API access
-
-1. **Switch Lite → Pro** in Client Portal (free, instant)
-2. **Fund account** via ACH ($200-500 recommended to cover data fees)
-3. **Complete non-professional questionnaire** (personal research = non-pro, 5-10x cheaper)
-4. **Subscribe to market data** in Client Portal → Settings → Market Data Subscriptions
-5. **Download IB Gateway** from interactivebrokers.com/en/trading/ibgateway-stable.php
-6. **Enable API** in Gateway: Settings → API → Enable Socket Clients
-7. **Install `ib_async`** and test on paper (port 4002)
-
-### Subscription model
-- Most non-US data requires a **monthly market-data subscription** (e.g. NYSE depth ~$1.50/mo, Nasdaq TotalView ~$70/mo, Eurex level-2 separate, etc.)
-- Each subscription tier unlocks both *streaming* and *historical* data for that segment
-- Subscriptions are per-account; paper account inherits if the live account is funded
-- The Account Management → Settings → User Settings → Market Data Subscriptions page lists what you currently have
-
-**Action item before depending on any market: confirm the subscription is active.** API will silently return "No data available" or hit you with `Error 354: requested market data is not subscribed`.
-
-### Free / included with most accounts
-- Delayed (15-min) data on most US exchanges via `marketDataType=3`
-- US OPRA snapshot (delayed)
-- IBKR's own consolidated tape (limited)
-- Free real-time non-consolidated streaming quotes on US-listed stocks/ETFs
-- 100 free snapshot quotes/month
-- Historical daily bars (available on paper without real-time subscription)
-
-### Paid (relevant for FactorLab US Phase 1, non-professional prices)
-| Subscription | Cost/mo | Waiver | What you get |
-|--------------|---------|--------|--------------|
-| **US Securities Snapshot and Futures Value Bundle** | **$10.00** | Waived if commissions ≥ $30/mo | Real-time NBBO US equities + futures |
-| US Equity & Options Add-On Streaming Bundle | $4.50 | Waived if commissions ≥ $5/mo | Real-time level-1 streaming |
-| NYSE (Network A/CTA) | $1.50 | — | NYSE-listed top-of-book |
-| NASDAQ (Network C/UTP) | $1.50 | — | NASDAQ-listed top-of-book |
-| NYSE American, BATS, ARCA, IEX | $1.50 | — | Regional exchanges |
-| OPRA US Options | $1.50 | — | US options data |
-| Nasdaq TotalView (Level 2) | ~$24 (non-pro) | — | Level-2 depth |
-| NYSE OpenBook (Level 2) | ~$24-45 (non-pro) | — | NYSE depth |
-
-**Recommended for FactorLab:** US Securities Snapshot Bundle ($10/mo) — sufficient for daily bar research. Waived if you trade modestly.
-
-**Professional vs non-professional:** Non-pro = personal research, not managing others' money, not registered advisor. Price difference is 5-30x ($10 vs $75 for Snapshot Bundle).
-
-### Non-US (relevant later)
-- India: IBKR India is a separate entity; **not all symbols cleanly accessible** from a US account. NSE data subscription possible but limited to specific contract universes.
-- Europe: per-exchange subscriptions (Deutsche Börse, LSE, Euronext, etc.)
-- APAC: per-exchange (HKEX, ASX, JPX, etc.)
-
-For India in particular, **Upstox is a better data source than IBKR** because of cleaner instrument coverage and no subscription gating. Use IBKR for non-US developed markets in Phase 6+.
-
-### Snapshot vs streaming via API
-
-```python
-# Streaming (top of book) — requires subscription
-ticker = ib.reqMktData(contract, '', False, False)
-# ticker.bid, ticker.ask update asynchronously
-
-# Snapshot (one-shot) — cheaper in pacing terms
-ib.reqMktData(contract, '', True, False)
-
-# Delayed (free)
-ib.reqMarketDataType(3)   # 1=live, 2=frozen, 3=delayed, 4=delayed-frozen
-```
-
-Use snapshots for batch operations (e.g., refreshing 500 quotes once); subscribe to streams only for the names you actively trade.
-
----
-
-## 4. Historical Data — `reqHistoricalData`
-
-The most useful endpoint for FactorLab, and the one with the **most aggressive pacing rules** in the API world.
-
-### Signature
-
+**Signature**
 ```python
 bars = ib.reqHistoricalData(
     contract,
-    endDateTime='',                    # '' = now; or 'YYYYMMDD HH:MM:SS'
-    durationStr='1 Y',                 # '1 D', '2 W', '3 M', '5 Y', etc.
-    barSizeSetting='1 day',            # see size grid below
-    whatToShow='TRADES',               # see whatToShow grid
-    useRTH=True,                       # regular trading hours only
-    formatDate=1,                      # 1 = string, 2 = epoch
+    endDateTime='',                # '' = now; else 'YYYYMMDD HH:MM:SS'
+    durationStr='1 Y',             # '1 D', '2 W', '3 M', '5 Y', ...
+    barSizeSetting='1 day',        # secs, mins, hours, day, week, month
+    whatToShow='TRADES',           # see grid below
+    useRTH=True,                   # regular trading hours only
+    formatDate=1,                  # 1=string, 2=epoch
 )
 ```
 
-### Bar sizes
+**`whatToShow` grid**
 
-`1 secs`, `5 secs`, `10 secs`, `15 secs`, `30 secs`, `1 min`, `2 mins`, `3 mins`, `5 mins`, `10 mins`, `15 mins`, `20 mins`, `30 mins`, `1 hour`, `2 hours`, `3 hours`, `4 hours`, `8 hours`, `1 day`, `1 week`, `1 month`.
+| Value | Content | FactorLab use |
+|-------|---------|---------------|
+| `TRADES` | OHLC of executed trades + volume + wap + bar_count | Baseline for factor research |
+| `ADJUSTED_LAST` | Split/dividend-adjusted (US equities only) | Long-history factor research |
+| `MIDPOINT` | Bid-ask midpoint | FX, illiquid options |
+| `BID` / `ASK` | One-sided | Spread analysis |
+| `BID_ASK` | Both + hi/lo per bar | Microstructure (2× pacing cost) |
+| `HISTORICAL_VOLATILITY` | IV proxy | Options work |
+| `OPTION_IMPLIED_VOLATILITY` | Same | Options work |
 
-### `whatToShow` (data type)
-
-| Value | What |
-|-------|------|
-| `TRADES` | OHLC of executed trades |
-| `MIDPOINT` | Bid-ask midpoint (no trades — useful for FX, illiquid options) |
-| `BID` / `ASK` | One-sided |
-| `BID_ASK` | Both, plus min/max in bar |
-| `HISTORICAL_VOLATILITY` | IV proxies (options-related contracts) |
-| `OPTION_IMPLIED_VOLATILITY` | Same |
-| `ADJUSTED_LAST` | Split/dividend-adjusted (US equities only) |
-
-For factor research on equities, use `TRADES` + `useRTH=True` for daily bars and a separate `ADJUSTED_LAST` pull when you need clean adjusted history.
-
-### Pacing limits — the IBKR speed bump
-
-These are notoriously strict. The official rules (from IBKR docs, verified April 2026):
-
-| Rule | Limit | Penalty |
-|------|-------|---------|
-| **Global cap** | **60 requests per any 10-minute window** | Error 162 |
-| **Identical requests** | **15-second cooldown** between identical requests (same contract/exchange/tickType) | Error 162 |
-| **Same contract burst** | Max **6 requests** for same contract/exchange/tickType within **2 seconds** | Error 162 |
-| **Concurrent open requests** | Max **50 simultaneous** historical data requests | Error 162 |
-| **BID_ASK double-count** | Each BID_ASK request counts as **2 requests** toward all limits | — |
-| **Sub-30s bars > 6 months** | Stricter pacing for old fine-grained data | Undocumented soft limits |
-
-If you violate, the response is `Error 162: Historical Market Data Service error message: Pacing violation`. The connection isn't dropped, but the request fails. Persistent abuse can flag your account.
-
-**These limits apply to all clients. IBKR explicitly states they cannot be overcome.**
-
-If a request takes several minutes, cancel it with `ib.cancelHistoricalData()` to avoid throttling and potential API disconnection.
-
-**Practical implication:** building a 5-year daily-bar warehouse for 500 US stocks = 500 requests = 50 minutes minimum, just on pacing. Adapter design must respect this:
-
-```python
-# pseudocode
-class IBKRHistoricalRateLimiter:
-    # rolling window, max 50 requests per 600s (leave headroom under the 60 limit)
-    # async semaphore on per-contract concurrency = 1
-    # exponential backoff on Error 162
+**Bar record shape** (per bar returned):
 ```
+{ date, open, high, low, close, volume, wap, bar_count }
+```
+where `wap` is per-bar VWAP-like average and `bar_count` is the number of underlying trades aggregated into the bar.
 
-For long-history backfills, **prefer EODHD for US daily** and use IBKR only for intraday or non-US where EODHD doesn't reach.
+**Head timestamps** (earliest available, US equities sample from probe 06):
 
-### Date-range edge cases
-- `endDateTime=''` resolves to "now" in the **server's timezone** (US/Eastern for US contracts). Always pass explicit timestamps for reproducibility.
-- Maximum lookback varies by `barSizeSetting`. 1-second bars are limited to ~1800 bars per request; daily bars allow `15 Y`.
-- Earliest available data for a contract: `ib.reqHeadTimeStamp(contract, 'TRADES', useRTH=True, formatDate=1)`. Use this to plan backfill chunks.
+| Ticker | TRADES | BID/ASK/MID |
+|--------|--------|-------------|
+| AAPL | 1980-12-12 | 2004-01-23 |
+| IBM | 1980-03-17 | 2004-01-23 |
+| SPY | 1993-01-29 | 2004-01-23 |
+| NVDA | 1999-01-22 | 2004-01-23 |
+| TSLA | 2010-06-29 | 2010-06-29 |
+| META | 2012-05-18 | 2012-05-18 |
 
-### Storage path
-IBKR daily bars → same `market.price_bars_daily` table as EODHD, with `source='ibkr'`. Multi-source rows for the same `(security_id, trade_date)` are allowed; the `as_of_time` distinguishes them, and downstream queries pick a preferred source per region.
+**Implication**: IBKR beats EODHD for pre-2000 US equity daily history. Use IBKR to backfill deep history for older names; EODHD for bulk / breadth.
 
-IBKR minute/tick bars → separate partitioned tables (`market.price_bars_minute`, `market.tick_data`).
+**Intraday**: timestamps come with tz offset (e.g. `2026-09-14 09:30:00-04:00` for AAPL — America/New_York). Normalize to UTC at parser boundary.
+
+### 5.2 Contract resolution — `qualifyContracts` + `reqContractDetails`
+
+`qualifyContracts` mutates a `Stock('AAPL', 'SMART', 'USD')` stub in place, filling in `conId` and `primaryExchange`.
+
+`reqContractDetails` returns 44 fields. Notable ones for `ref.securities` population:
+
+| Field | Example | Use |
+|-------|---------|-----|
+| `contract.conId` | 265598 | Canonical IBKR ID (integer, stable) |
+| `contract.symbol` | AAPL | Trading symbol |
+| `contract.primaryExchange` | NASDAQ | Listing venue |
+| `contract.localSymbol` | AAPL | Broker-side symbol |
+| `contract.tradingClass` | NMS | Grouping |
+| `longName` | APPLE INC | Legal name |
+| `industry` / `category` / `subcategory` | Technology / Computers / Computers | GICS-ish |
+| `stockType` | COMMON | ETF / ADR / COMMON |
+| `secIdList` | `[TagValue(tag='ISIN', value='US0378331005')]` | **ISIN** for cross-source join |
+| `minTick` | 0.01 | Tick size |
+| `sizeIncrement` | 0.0001 | Fractional-share support |
+| `tradingHours` / `liquidHours` | `20260919:CLOSED;20260920:...` | Session detection |
+| `timeZoneId` | US/Eastern | Session normalization |
+| `validExchanges` | SMART,NYSE,ARCA,... | Routing options |
+| `marketRuleIds` | 4563,4563,... | Tick-rule table refs |
+
+**Caching**: `qualifyContracts` counts against pacing. Cache `symbol → conid` in `ref.security_aliases` and only re-qualify on cache miss.
+
+**Ambiguity**: `BRK B` and other multi-class tickers need `contract.primaryExchange` set before `qualifyContracts` (SMART alone is ambiguous). Similarly for dual-listed names.
+
+### 5.3 Portfolio state — `positions()`, `portfolio()`
+
+- `positions()` — light per-account list: `{account, contract, position, avgCost}`.
+- `portfolio()` — richer per-account list: adds `marketPrice`, `marketValue`, `unrealizedPNL`, `realizedPNL`. Requires an active market-data subscription for the underlying to get non-null mkt prices.
+
+Both are streamable — subscribe to `ib.positionsEvent` / `ib.updatePortfolioEvent` for live updates during a session.
+
+### 5.4 Account values — `accountValues()`, `accountSummary()`
+
+- `accountValues()` — **~144 unique tags** per account. Every tag comes in multiple flavors:
+  - Bare (`NetLiquidation`) — aggregated in base currency
+  - With suffix `-S` (Securities), `-C` (Commodities), `-P` (Paxos/crypto) — per-segment
+  - With currency dimension: `USD`, `BASE`, `''`
+- `accountSummary()` — clean 24-row subset per account (NetLiquidation, TotalCashValue, BuyingPower, GrossPositionValue, AvailableFunds, ExcessLiquidity, MaintMarginReq, InitMarginReq, DayTradesRemaining, Leverage, etc.). **Prefer this for daily snapshots.**
+
+Full tag list captured in `playground/data/ibkr/account_values_full.json` — reference when designing the snapshot schema.
+
+### 5.5 Executions & fills — `reqExecutions()`
+
+- Default: **today only** (per IBKR).
+- `reqExecutions(ExecutionFilter(time="YYYYMMDD HH:MM:SS"))` — window filter.
+- Returns `Fill` objects with `contract`, `execution` (exec_id, order_id, perm_id, side, shares, price, exchange, time), and `commissionReport`.
+- **`perm_id` is the durable key** — `order_id` resets per Gateway session.
+
+### 5.6 Open orders — `openTrades()`, `reqOpenOrders()`
+
+- With `Download open orders on connection` enabled + master API enabled, `openTrades()` shows orders placed by any client (including the trade engine).
+- Read-only from our side — we just observe them for reconciliation.
+
+### 5.7 What we do NOT use
+
+- Market-data streaming (`reqMktData`) — Schwab is cheaper for real-time US quotes; skip unless we need IBKR's direct feed.
+- News (`reqNewsProviders` etc.) — Briefing.com articles; not structured; separate econ-calendar sourcing decision (see below).
+- Economic calendar — **IBKR API does not expose it as structured data.** Use EODHD's `/economic-events` endpoint or FRED for macro instead.
 
 ---
 
-## 5. Orders, Paper Trading, and Execution
+## 6. Pacing & Rate Limits — the IBKR speed bump
 
-### Why paper trading matters in a research platform
+Official limits (verified with IBKR docs, 2026):
 
-Paper trading is **not** a stand-in for execution research — IBKR's paper fills are simulated and optimistic. But it is the right tool for:
+| Rule | Limit | Error |
+|------|-------|-------|
+| Global cap | **60 requests per any 10-minute window** | 162 |
+| Identical-request cooldown | **15 sec** between identical requests | 162 |
+| Same contract burst | Max **6 requests** for same contract/exchange/tickType in 2 sec | 162 |
+| Concurrent open historical requests | Max **50 simultaneous** | 162 |
+| BID_ASK double-count | Each request counts as **2** toward all limits | — |
 
-1. **Pipeline integration testing** — does your daily signal job actually translate signals into orders, against a realistic API surface?
-2. **Order-type validation** — your VWAP order behaves correctly, your TWAP slices, etc.
-3. **Cost-model calibration** — you can compare your backtester's predicted fills with paper fills, find systematic biases.
-4. **Pre-deployment dry-run** — same code, same connection logic, just port 4002 instead of 4001.
+**No way to raise these** — they apply globally, per account, per client.
 
-Treat paper as the **system-test environment** for the live signal pipeline. Every daily signal that would be sent live in production is also sent to paper, and paper fills are recorded next to backtest predictions.
+### Design implications
 
-### Placing an order
+- Client-side rolling-window rate limiter with cap = **50 req / 600 s** (headroom under 60).
+- Async semaphore on per-contract concurrency = 1.
+- Exponential backoff on Error 162.
+- For long backfills: **prefer EODHD** for bulk daily data. IBKR only for:
+  - Deep-history names EODHD lacks
+  - Validation samples (N random tickers/day cross-check)
+  - Intraday backfill (where EODHD is weaker)
 
-```python
-from ib_async import MarketOrder, LimitOrder, StopOrder
-
-contract = Stock('AAPL', 'SMART', 'USD')
-ib.qualifyContracts(contract)
-
-# Market order
-order = MarketOrder('BUY', 100)
-trade = ib.placeOrder(contract, order)
-
-# Limit order
-order = LimitOrder('BUY', 100, 175.50)
-trade = ib.placeOrder(contract, order)
-
-# Wait for fill (or cancel)
-ib.sleep(5)
-print(trade.orderStatus.status, trade.fills)
-```
-
-`trade` is an `ib_async.Trade` object — it stays subscribed and updates as state changes.
-
-### Useful order types
-| Type | Use |
-|------|-----|
-| `MarketOrder` | Get done now (paper fills at midpoint approx) |
-| `LimitOrder` | Default for research-driven entries |
-| `StopOrder` / `StopLimitOrder` | Risk control |
-| `MidPriceOrder` | Algo aiming for midpoint (US equities/options) |
-| `MOC` / `MOO` | Market on close / open |
-| `LOC` / `LOO` | Limit on close / open |
-| Algos: `Adaptive`, `TWAP`, `VWAP`, `IS` | Native IBKR algos via `algoStrategy` field |
-
-For factor strategies trading at close: **use `MOC` (market on close)**. Native exchange order, gets the official close print.
-
-### Position & portfolio queries
-
-```python
-positions = ib.positions()           # list of Position objects
-portfolio = ib.portfolio()           # PnL, average cost, etc.
-account = ib.accountValues()         # cash, NAV, margin
-```
-
-Positions update live; subscribe to `ib.positionsEvent` for callbacks.
-
-### Paper account quirks
-- **Fills are heuristic**, not real-market: IBKR uses real bid/ask but doesn't simulate queue position, partial fills, or slippage realistically. Treat paper PnL as optimistic.
-- **Resets quarterly**: IBKR resets paper account balance to $1M every ~3 months. Don't build long-running PnL dashboards on it.
-- **Some order types don't work in paper** (specific exchange algos, complex spreads). Test before depending.
-- **Market hours matter** — paper still requires a real session for fills. After-hours orders queue.
-
-### Production code path
-```python
-mode = os.getenv('IBKR_TRADING_MODE')      # 'paper' or 'live'
-port = int(os.getenv(f'IBKR_PORT_{mode.upper()}'))
-ib.connect('127.0.0.1', port, clientId=int(os.getenv('IBKR_CLIENT_ID_ORDER')))
-
-# Hard guard before any live-money order
-if mode == 'live' and os.getenv('IBKR_LIVE_TRADING_ENABLED') != '1':
-    raise RuntimeError("Live trading requires IBKR_LIVE_TRADING_ENABLED=1")
-```
-
-The same `place_orders(signals)` function runs in both. The only difference is the port and the explicit affirmative consent before any real-money trade.
+If a request stalls for minutes, cancel with `ib.cancelHistoricalData()` — abandoning it wastes both concurrency and throttle budget.
 
 ---
 
-## Schema mapping — IBKR-specific tables
+## 7. Postgres Schema (proposed — pending migration)
 
 ### `market.ibkr_positions_snapshot`
 ```sql
-snapshot_at       timestamptz NOT NULL
-account           text NOT NULL                -- IBKR account id (e.g. 'DU1234567')
-account_mode      text NOT NULL                -- 'paper' or 'live'
-contract_conid    int NOT NULL                 -- IBKR's contract id
-security_id       uuid REFERENCES ref.securities
-position          numeric(18,4) NOT NULL
-avg_cost          numeric(18,6)
-market_value      numeric(18,4)
-unrealized_pnl    numeric(18,4)
-realized_pnl_today numeric(18,4)
+snapshot_at        timestamptz NOT NULL,   -- UTC snapshot time
+account            text        NOT NULL,   -- 'DUE375963' (paper) or live acct id
+account_mode       text        NOT NULL,   -- 'paper' | 'live'
+contract_conid     bigint      NOT NULL,   -- IBKR conId (canonical)
+security_id        uuid        REFERENCES ref.securities(security_id),
+symbol             text        NOT NULL,
+sec_type           text        NOT NULL,   -- 'STK', 'FUT', 'OPT', ...
+currency           char(3)     NOT NULL,
+position           numeric(18,4) NOT NULL, -- can be negative (short)
+avg_cost           numeric(18,6),
+market_price       numeric(18,6),          -- from portfolio() (if mkt-data sub'd)
+market_value       numeric(18,4),
+unrealized_pnl     numeric(18,4),
+realized_pnl       numeric(18,4),
 PRIMARY KEY (snapshot_at, account, contract_conid)
+);
+```
+Append-only. Timescale hypertable on `snapshot_at` at 1-week chunks.
+
+### `market.ibkr_account_values_snapshot`
+```sql
+snapshot_at        timestamptz NOT NULL,
+account            text        NOT NULL,
+account_mode       text        NOT NULL,
+tag                text        NOT NULL,   -- 'NetLiquidation', 'BuyingPower', ...
+segment            text        NOT NULL,   -- '' (agg) | 'S' | 'C' | 'P'
+currency           char(4)     NOT NULL,   -- 'USD', 'BASE', 'NONE'
+value              text        NOT NULL,   -- IBKR returns strings; cast in queries
+PRIMARY KEY (snapshot_at, account, tag, segment, currency)
+);
 ```
 
 ### `market.ibkr_executions`
 ```sql
-exec_id           text PRIMARY KEY             -- IBKR's exec id (immutable)
-account           text NOT NULL
-account_mode      text NOT NULL
-order_id          int NOT NULL
-perm_id           int NOT NULL                 -- IBKR's permanent id (survives restarts)
-proposed_order_id uuid                         -- FK to experiments.proposed_orders, if any
-contract_conid    int NOT NULL
-security_id       uuid REFERENCES ref.securities
-side              text NOT NULL                -- 'BUY' / 'SELL'
-quantity          numeric(18,4) NOT NULL
-price             numeric(18,6) NOT NULL
-exchange          text NOT NULL
-exec_time         timestamptz NOT NULL
-commission        numeric(12,4)
-realized_pnl      numeric(18,4)
-raw_payload_id    uuid                         -- FK to raw archive
+exec_id            text        PRIMARY KEY,       -- IBKR exec id (immutable)
+account            text        NOT NULL,
+account_mode       text        NOT NULL,
+order_id           int         NOT NULL,          -- per-session
+perm_id            bigint      NOT NULL,          -- durable across sessions
+contract_conid     bigint      NOT NULL,
+security_id        uuid        REFERENCES ref.securities(security_id),
+symbol             text        NOT NULL,
+sec_type           text        NOT NULL,
+currency           char(3)     NOT NULL,
+side               text        NOT NULL,          -- 'BUY' | 'SELL'
+quantity           numeric(18,4) NOT NULL,
+price              numeric(18,6) NOT NULL,
+exchange           text        NOT NULL,
+exec_time          timestamptz NOT NULL,          -- UTC
+commission         numeric(12,4),
+commission_ccy     char(3),
+realized_pnl       numeric(18,4),
+raw_payload_id     uuid,
+ingested_at        timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX ON market.ibkr_executions (exec_time DESC);
+CREATE INDEX ON market.ibkr_executions (account, exec_time DESC);
+CREATE INDEX ON market.ibkr_executions (contract_conid, exec_time DESC);
 ```
+Append-only. `exec_id` is the immutable PK; re-fetching the same execution is idempotent.
 
-### `market.ibkr_account_values_snapshot`
+### `market.ibkr_open_orders_snapshot`
 ```sql
-snapshot_at       timestamptz NOT NULL
-account           text NOT NULL
-account_mode      text NOT NULL
-key               text NOT NULL                -- 'NetLiquidation', 'CashBalance', etc.
-value             text NOT NULL                -- IBKR returns string-typed; cast in queries
-currency          char(3) NOT NULL
-PRIMARY KEY (snapshot_at, account, key, currency)
+snapshot_at        timestamptz NOT NULL,
+account            text        NOT NULL,
+account_mode       text        NOT NULL,
+order_id           int         NOT NULL,
+perm_id            bigint      NOT NULL,
+contract_conid     bigint      NOT NULL,
+symbol             text        NOT NULL,
+sec_type           text        NOT NULL,
+side               text        NOT NULL,
+order_type         text        NOT NULL,          -- 'LMT', 'MKT', 'MOC', ...
+quantity           numeric(18,4) NOT NULL,
+filled_quantity    numeric(18,4),
+remaining_quantity numeric(18,4),
+limit_price        numeric(18,6),
+aux_price          numeric(18,6),
+status             text        NOT NULL,          -- 'Submitted', 'PreSubmitted', ...
+placed_by_client   int,                           -- API clientId that placed it
+PRIMARY KEY (snapshot_at, account, perm_id)
+);
 ```
 
-### `experiments.proposed_orders` (the FactorLab side of the bridge)
+### `ref.security_aliases` (existing — add IBKR vendor rows)
 ```sql
-proposed_order_id uuid PRIMARY KEY DEFAULT gen_random_uuid()
-run_id            uuid REFERENCES experiments.runs
-proposed_at       timestamptz NOT NULL
-security_id       uuid REFERENCES ref.securities
-side              text NOT NULL
-quantity          numeric(18,4) NOT NULL
-order_type        text NOT NULL                -- 'MOC', 'LMT', etc.
-limit_price       numeric(18,6)
-status            text NOT NULL                -- 'pending', 'sent', 'filled', 'cancelled', 'rejected'
-ibkr_order_id     int                          -- once placed
-ibkr_perm_id      int                          -- once placed
-notes             text
-```
-
-### Reference: contract resolution
-IBKR uses an internal `conid` (contract ID, integer) as the canonical identifier. Map to `ref.security_aliases` with `vendor='ibkr'`, `vendor_id=str(conid)`. Resolve once via `ib.qualifyContracts()` and cache aggressively — `qualifyContracts` is itself rate-limited.
-
----
-
-## Pipeline (IBKR-specific)
-
-```
-boot:
-    IB Gateway running, logged in, port open
-    health-check: ib.reqCurrentTime()
-
-morning (pre-market):
-    1. snapshot positions  → market.ibkr_positions_snapshot
-    2. snapshot account values → market.ibkr_account_values_snapshot
-    3. reconcile positions vs end-of-yesterday snapshot
-    4. if mismatch → halt, alert, investigate
-
-on signal generation (post-close or pre-market depending on strategy):
-    1. compute signals
-    2. translate signals → orders (sized, with limit prices, etc.)
-    3. log proposed orders to experiments.proposed_orders (status='pending')
-    4. (paper or live) ib.placeOrder for each → status='sent', record ibkr_order_id
-    5. wait for fills with timeout
-    6. record actual fills → market.ibkr_executions (exec_id PK), update proposed status
-    7. compare proposed vs filled → derived.slippage_attribution
-
-end of day:
-    1. final snapshot positions + account values
-    2. compute daily PnL attribution
-    3. nightly digest: signals proposed, signals filled, slippage, account drift
+-- already exists; we add rows with vendor='ibkr', vendor_id = str(conid)
 ```
 
 ---
 
-## Edge cases & gotchas
+## 8. Ingest Pipeline
 
-- **Connection stability** — Gateway hangs occasionally. Wrap operations with timeout + reconnect logic. `ib.disconnectedEvent` is your friend.
-- **`SMART` routing vs direct exchange** — `SMART` lets IBKR pick the venue. Fine for research; for backtests-of-execution-quality you may want to pin specific exchanges.
-- **Currency conversions** — orders in non-USD denominations require either an FX trade first or auto-conversion on settlement. Affects PnL accounting.
-- **Short borrow** — IBKR's `reqContractDetails` includes shortable status, but locate vs already-borrowed is opaque. For shorting strategies, expect surprises.
-- **Corporate actions handling** — IBKR adjusts positions automatically (splits, mergers). Your bookkeeping must too. Don't naïvely store positions as immutable rows.
-- **PaperTradingAccountReset** — listen for the `accountResetEvent` (or check NAV resetting to $1M) so you don't spuriously alarm.
-- **Order ID collisions** — `ib.client.getReqId()` for any user-facing request id; never reuse.
-- **Time zone trap** — IBKR returns timestamps in **server time** (US/Eastern) by default for US contracts, exchange-local for others. Always normalize to UTC at parser boundary.
-- **Subscription gaps** — `Error 354` (no subscription) and `Error 162` (pacing) are the two errors you will see most. Build observable counters for both.
-- **`perm_id` vs `order_id`** — `order_id` resets per session, `perm_id` is durable. Always join executions on `perm_id`.
+### Cadence
 
----
+| Job | Frequency | Client ID | What |
+|-----|-----------|-----------|------|
+| `us_portfolio_ibkr_snapshot` (morning) | Daily 06:00 ET | 2 | Snapshot positions + account values pre-open |
+| `us_portfolio_ibkr_snapshot` (EOD) | Daily 16:30 ET | 2 | Snapshot positions + account values post-close |
+| `us_ibkr_executions_pull` | Every 15 min during session | 4 | Pull new fills into `market.ibkr_executions` (idempotent by exec_id) |
+| `us_ibkr_openorders_watcher` | Every 5 min during session | 4 | Snapshot open orders (for observing trade engine activity) |
+| `us_ibkr_historical` | Manual / on demand | 3 | Deep history backfill for named tickers |
+| `us_ibkr_validation_sample` | Daily 17:00 ET | 3 | N random tickers cross-checked vs Schwab/EODHD |
 
-## Operational rituals
+Task Scheduler registration is out of scope per [`feedback_no_task_scheduler.md`](../../memory/feedback_no_task_scheduler.md) — scripts describe cadence; user owns install.
 
-1. **Morning checklist** (manual at first, automate later):
-   - Gateway logged in, port open
-   - 2FA accepted
-   - `clientId` not stuck in zombie state
-   - Connection latency < 100 ms (`ib.reqCurrentTime()` round-trip)
-   - Position reconciliation passed
-2. **Pre-trade go/no-go** for live runs:
-   - Connection healthy
-   - Account NAV present and ≥ floor
-   - No unexpected open orders
-   - Latest position snapshot reconciles with broker
-   - `IBKR_LIVE_TRADING_ENABLED=1` set deliberately for this session
-3. **Post-trade audit**:
-   - Every proposed order has an execution row OR a documented reason for non-fill
-   - Slippage vs limit recorded
-   - Daily PnL reconciles to broker statement (manually weekly to start)
+### Idempotence
+
+- Positions / account values: PK includes `snapshot_at` — natural append.
+- Executions: PK is `exec_id` — safe to re-pull the window without dupes.
+- Open orders: PK includes `snapshot_at` + `perm_id` — natural append.
+- Historical bars: `(security_id, trade_date, source)` — upsert by (conid, date, 'ibkr').
+
+### Reconciliation
+
+Every morning before the trade engine starts:
+1. Pull `positions()` from IBKR
+2. Compare to latest `market.ibkr_positions_snapshot` for same `account`
+3. If mismatch → write drift record + emit alert; **trade engine should refuse to start on drift**
+4. If match → snapshot both and proceed
+
+The drift check is FactorLab's job. The **response** to drift (halt trading, escalate, etc.) is the trade engine's job.
 
 ---
 
-## Open questions
+## 9. Downstream Consumer Contract (trade engine)
 
-- [ ] Headless deployment: run IB Gateway on Railway directly, on a small VPS, or on a home machine you trust to stay up?
-   *(Railway can run the Gateway in a container, but daily 2FA and weekly forced-relogin are hostile to fully unattended ops; many people run a NUC at home.)*
-- [ ] Subscription tier: which paid bundles for Phase 1 US, given the live account is funded?
-- [ ] India coverage: stay on Upstox for India and use IBKR only for US/EU/APAC, or attempt unification under IBKR?
-- [ ] Live-trading kill-switch policy: env-var guard plus what else? (Daily NAV-loss limits, position-size caps?)
-- [ ] Order sizing: position-target-based (% of NAV) or absolute share count? (Cleaner: % of NAV, with min/max share guards.)
-- [ ] Reconciliation cadence: daily vs intraday vs per-order? (Start daily; tighten if discrepancies appear.)
-- [ ] Multi-account: separate IBKR sub-accounts for distinct strategies? (Useful for isolated PnL attribution; complicates aggregation.)
+The trade engine is a separate repo/service. Its contract with FactorLab:
+
+**Reads (from our Postgres):**
+- `market.ibkr_positions_snapshot` — current & historical positions
+- `market.ibkr_account_values_snapshot` — NAV, buying power, margin available
+- `market.ibkr_executions` — fills for its own attribution
+- `market.candles_daily` (any source) — signal inputs
+- `derived.*` — signals, factor scores
+- `ref.securities` / `ref.security_aliases` — for contract mapping
+
+**Writes (to our Postgres):**
+- `experiments.proposed_orders` (or trade-engine schema — TBD when built) — its own intent log
+- Own decision logs
+
+**Does NOT expect FactorLab to:**
+- Place any order
+- Cancel any order
+- Watch its intraday risk in real time (its own concern)
+
+**FactorLab guarantees to the trade engine:**
+- Positions/executions in the mirror are ≤ 15 minutes stale during session
+- Reconciliation drift is detected and surfaced via a queryable table (`derived.ibkr_reconciliation_drift` — TBD)
+- Contract `conId`s in `ref.security_aliases` are stable across sessions
 
 ---
 
-## Reference links
+## 10. Src/ module layout (proposed)
+
+```
+src/factorlab/sources/ibkr/
+├── __init__.py
+├── client.py              # IBKRReadOnlyClient (connect + lifecycle)
+├── contracts.py           # qualify + cache to ref.security_aliases
+├── portfolio.py           # snapshot positions + account values -> market.ibkr_*
+├── executions.py          # pull fills + upsert market.ibkr_executions
+├── open_orders.py         # snapshot market.ibkr_open_orders_snapshot
+├── historical.py          # rate-limited daily-bar puller (validation only)
+├── pacing.py              # rolling-window rate limiter, error-162 backoff
+└── errors.py              # IBKRError, IBKRPacingError, IBKRReadOnlyViolation
+```
+
+```
+scripts/us/ibkr/
+├── us_portfolio_ibkr_snapshot.py    # daily morning + EOD snapshotter
+├── us_ibkr_executions_pull.py       # 15-min executions poll
+├── us_ibkr_openorders_watcher.py    # 5-min open-orders snapshot
+├── us_ibkr_historical.py            # CLI: backfill history for a ticker list
+└── us_ibkr_validation_sample.py     # cross-check N tickers vs Schwab/EODHD
+```
+
+Naming per [`docs/developments/008-script-naming-india-historical.md`](../developments/008-script-naming-india-historical.md).
+
+---
+
+## 11. Edge cases & gotchas
+
+- **Connection stability** — Gateway hangs occasionally. Wrap operations with timeout + reconnect. Listen to `ib.disconnectedEvent`.
+- **SMART vs pinned exchange** — SMART is fine for research; for corporate-action or venue-specific studies pin the exchange.
+- **Time zone trap** — IBKR returns server-local timestamps (`US/Eastern` for US contracts, exchange-local for others). Normalize to UTC in the parser.
+- **Paper vs live account values** — paper resets balance to $1M every ~3 months. Don't build long-running PnL dashboards off paper.
+- **`perm_id` vs `order_id`** — always join executions on `perm_id`. `order_id` resets per session.
+- **`exec_id` collisions** — none observed; IBKR guarantees uniqueness.
+- **Delisted / rebranded symbols** — `qualifyContracts` may still resolve stale symbols to old `conid`s. On corporate actions, re-qualify.
+- **Extended-hours bars** — `useRTH=False` includes pre (04:00-09:30) and post (16:00-20:00) US sessions. Volume distribution is heavily skewed to RTH.
+- **`ADJUSTED_LAST` semantics** — adjusts for splits + regular dividends. Does NOT adjust for special dividends or spinoffs in all cases — validate against known corporate actions.
+- **Bar count in daily bars** — `bar_count` is the number of underlying trades. Useful liquidity proxy.
+- **Segment suffixes in account values** — `-S` (Securities), `-C` (Commodities/Futures), `-P` (Paxos/crypto). Query base tag (no suffix) for aggregated.
+
+---
+
+## 12. Operational rituals
+
+**Morning:**
+- Gateway logged in on paper (or live), port open
+- `ib.reqCurrentTime()` round-trip < 100 ms
+- Snapshot pre-open positions + account values
+- Reconciliation: previous EOD vs current AM positions match
+
+**During session (every 5-15 min):**
+- Pull new executions
+- Snapshot open orders
+
+**End of day:**
+- Final snapshot positions + account values
+- Run validation-sample bar cross-check vs Schwab/EODHD
+- Nightly digest (positions delta, new fills, validation results)
+
+**Weekly:**
+- Verify Gateway auto-restart config still holds
+- Manual PnL reconcile: our tables ↔ IBKR PortfolioAnalyst report
+
+---
+
+## 13. Playground (reference implementations)
+
+Working probes under `playground/explore/ibkr/`:
+
+| Script | Purpose | Sample data written |
+|--------|---------|---------------------|
+| `_client.py` | Shared connect/disconnect helper | — |
+| `01_connect.py` | Smoke test: server time, accounts, positions | — |
+| `02_historical_bars.py` | Bar shape, adjustment, intraday | `hist_aapl_*.json` |
+| `03_contract_resolve.py` | Ticker→conid + ContractDetails | `contracts_qualified.json`, `contract_details_aapl.json` |
+| `04_executions.py` | reqExecutions + open trades | `executions_today.json`, `fills_window_30d.json`, `open_trades.json` |
+| `05_account_values.py` | Full accountValues + summary + portfolio | `account_values_full.json`, `account_summary_full.json`, `portfolio_full.json` |
+| `06_head_timestamp.py` | Earliest data per contract/whatToShow | `head_timestamps.json` |
+
+Sample payloads are the authoritative reference when designing schema / adapter shapes. Do not migrate a table until the sample JSON has been re-run against the account you'll actually use.
+
+---
+
+## 14. Open decisions
+
+- [ ] **Which account for portfolio SoR** — paper (`DUE375963`) fine for dev; live account required for real portfolio tracking. Switch when trade engine goes live.
+- [ ] **Historical backfill scope** — which universe do we deep-backfill via IBKR (pre-2000 US names EODHD doesn't cover)? Start with S&P 500 members ever, or narrower?
+- [ ] **Validation sampling policy** — N per day? Random or stratified by liquidity?
+- [ ] **Repo-level CI grep guard** — commit-time check that `src/factorlab/` never imports `Order` / uses `placeOrder`.
+- [ ] **Trade engine repo boot** — separate GitHub repo, or a service module inside FactorLab with a hard boundary? (Recommendation: separate repo — enforces the read-only rule structurally.)
+- [ ] **Deployment target for Gateway** — local Windows machine (current) vs dedicated NUC vs container on VPS. Fully unattended deployment blocked by daily 2FA.
+
+---
+
+## 15. Reference links
 
 | Resource | URL |
 |----------|-----|
 | Official TWS API docs | https://interactivebrokers.github.io/tws-api/ |
-| `ib_async` (maintained fork) | https://github.com/ib-api-reloaded/ib_async |
-| `ib_insync` (original, less maintained) | https://github.com/erdewit/ib_insync |
+| `ib_async` fork | https://github.com/ib-api-reloaded/ib_async |
 | IBC (auto-login wrapper) | https://github.com/IbcAlpha/IBC |
 | Gateway download | https://www.interactivebrokers.com/en/trading/ibgateway-stable.php |
-| Market data subscriptions guide | https://www.interactivebrokers.com/en/index.php?f=14193 |
+| Market data subs (non-pro pricing) | https://www.interactivebrokers.com/en/index.php?f=14193 |
 | Pacing limits (official) | https://interactivebrokers.github.io/tws-api/historical_limitations.html |

@@ -1,6 +1,6 @@
 # Schema Rehau — FactorLab v2
 
-> Status: `[design]` — revision 3 (audit + tests + FK conventions)
+> Status: `[design]` — revision 4 (broker/portfolio monitoring)
 > Last verified: 2026-09-19
 
 Full redesign of the FactorLab ClickHouse footprint. Replaces the flat 19-table
@@ -12,13 +12,19 @@ provenance and lineage, (5) canonical FactorLab UUIDs across every fact.
 This doc is the authoritative spec for what to build. `docs/architecture/02-database-clickhouse.md`
 becomes the *why*; this doc is the *what*.
 
+**Revision 4 changes** (2026-09-19): added `broker.*` namespace (new section 9)
+for portfolio and execution monitoring — mirrors broker-side truth (positions,
+account state, executions, open orders) across paper and live accounts,
+time-series by design. New Wave 7 in migration plan. Sections 10–16 renumbered
+from prior 9–15.
+
 **Revision 3 changes** (2026-09-19): fully absorbed political-data audit —
 `ref.legislator_terms` added, `alt.*` section rewritten with canonical FK
 resolution, SCD-2 committee memberships, resolution-confidence enums. New
-section 11 (testing + code review discipline) with 11 test categories, coverage
-targets, and bug-class-to-test traceability. New section 10.13 (canonical FK
+section 12 (testing + code review discipline) with 11 test categories, coverage
+targets, and bug-class-to-test traceability. New section 11.13 (canonical FK
 conventions) formalizing the four FactorLab UUIDs + person canonical. Wave 4
-expanded to 4 tiers with explicit exit criteria. See section 15 for full history.
+expanded to 4 tiers with explicit exit criteria. See section 16 for full history.
 
 **Revision 2 changes** (2026-09-19): incorporated review findings F1, F4, F5,
 F6, F7, F8, F9, F10, F12, F14. Deferred: F2 (data-quality-aware conflict
@@ -81,6 +87,7 @@ retention rules, and access grants.
 | `alt` | Political, social, research, satellite, card panel | Batch to real-time | Per source |
 | `derived` | Factors, signals, portfolios, backtests | Recomputable | Recompute on demand |
 | `ops` | Ingestion runs, coverage, source status, expected series, lineage | Continuous | 2y hot, 5y cold |
+| `broker` | Portfolio & execution monitoring: positions, account state, executions, open orders (paper + live) | Snapshotted 2× daily + intraday for execs | Forever |
 | `raw` | Raw HTTP + stream payload archive | Append-only, immutable | Per-source retention |
 
 ---
@@ -1289,7 +1296,329 @@ Per-row lineage becomes opt-in only for datasets where it earns its keep
 
 ---
 
-## 9. `raw` — Immutable archive
+## 9. `broker` — Portfolio and execution monitoring
+
+Read-only mirror of broker-side truth. Positions, account state, executions,
+and open orders across every broker account (paper and live) as time series.
+Every table lets you answer *"what did the broker say we owned / owed / had done,
+as of time T"* without reconstruction.
+
+**FactorLab code writing here is strictly read-only against the broker's API** —
+no `placeOrder` / `cancelOrder` calls in this codebase. Execution runs in a
+separate trade-engine service; the engine places orders (on paper for forward
+testing, on live for production) and reads back from `broker.executions` to
+close its own attribution loop. FactorLab only *watches*.
+
+### Dimensions carried on every row
+
+| Column | Type | Notes |
+|---|---|---|
+| `broker_code` | `LowCardinality(String)` | `ibkr`; later `schwab_broker`, etc. |
+| `account_id` | `String` | Broker-native (paper `DUE375963`, live `U1234567`) |
+| `account_mode` | `LowCardinality(String)` | `paper` \| `live` |
+| `country_code` | `FixedString(2)` | Account booking country |
+
+Multi-account (both paper and live simultaneously) is a first-class case, not
+an afterthought — forward testing lives on paper, real portfolio on live,
+same tables, disambiguated by `account_mode`.
+
+### 9.1 `broker.positions_snapshot`
+
+Time series of positions. Cadence: pre-open snapshot, EOD snapshot, on-demand.
+
+```sql
+CREATE TABLE broker.positions_snapshot (
+    -- identity
+    snapshot_time      DateTime64(3, 'UTC'),
+    broker_code        LowCardinality(String),
+    account_id         String,
+    account_mode       LowCardinality(String),
+    country_code       FixedString(2),
+    -- canonical FactorLab IDs (resolved from vendor id via ref.identifier_aliases)
+    listing_id         Nullable(UUID),
+    security_id        Nullable(UUID),
+    contract_id        Nullable(UUID),                 -- FUT/OPT
+    entity_id          Nullable(UUID),
+    product_type       LowCardinality(String),
+    -- vendor-native fallback (denormalized)
+    vendor_id          String,                          -- IBKR conid as string
+    trading_symbol     String,
+    currency           LowCardinality(String),
+    -- position
+    position           Decimal(20,6),                   -- signed; negative = short
+    avg_cost           Nullable(Decimal(20,6)),
+    market_price       Nullable(Decimal(20,6)),
+    market_value       Nullable(Decimal(20,6)),
+    unrealized_pnl     Nullable(Decimal(20,6)),
+    realized_pnl_ytd   Nullable(Decimal(20,6)),
+    market_value_usd   Nullable(Decimal(20,6)),         -- FX-normalized at snapshot_time
+    -- resolution audit
+    resolution_confidence LowCardinality(String),       -- 'canonical','probable','vendor_only','unresolved'
+    -- provenance + PIT
+    source             LowCardinality(String),          -- always the broker: 'ibkr'
+    source_channel     LowCardinality(String),          -- 'paper_gateway','live_gateway'
+    raw_id             Nullable(UUID),
+    ingest_run_id      UUID,
+    as_of_time         DateTime64(3, 'UTC'),
+    ingested_at        DateTime64(3, 'UTC'),
+    version            UInt64
+)
+ENGINE = ReplacingMergeTree(version)
+PARTITION BY (broker_code, account_mode, toYYYYMM(snapshot_time))
+ORDER BY (broker_code, account_id, snapshot_time,
+          coalesce(listing_id, toUUID('00000000-0000-0000-0000-000000000000')),
+          vendor_id);
+```
+
+**Why time series, not "current":** reconciliation, PnL attribution, and drawdown
+reconstruction all need position-as-of-T queries. A replace-in-place table would
+lose intra-session history.
+
+**Why nullable canonical IDs:** positions can arrive faster than the resolver
+maps `conid → listing_id`. Rows land with `resolution_confidence='vendor_only'`
+and queue to `ops.unresolved_entities`; the resolver backfills canonical IDs on
+its next pass, writing a new row with a later `as_of_time`.
+
+### 9.2 `broker.account_state_snapshot`
+
+Tall/long time series of account-level metrics. IBKR alone emits ~144 tags per
+account across segment × currency dimensions (see
+[`docs/data-sources/06-ibkr.md`](../data-sources/06-ibkr.md) §5.4). Tall keeps
+schema stable when new tags appear.
+
+```sql
+CREATE TABLE broker.account_state_snapshot (
+    snapshot_time      DateTime64(3, 'UTC'),
+    broker_code        LowCardinality(String),
+    account_id         String,
+    account_mode       LowCardinality(String),
+    country_code       FixedString(2),
+    -- metric identity
+    metric             LowCardinality(String),          -- 'NetLiquidation','BuyingPower','MaintMarginReq',...
+    segment            LowCardinality(String),          -- ''|'S'|'C'|'P' (agg/Securities/Commodities/Paxos)
+    currency           LowCardinality(String),          -- 'USD','BASE','NONE'
+    value_num          Nullable(Decimal(24,6)),         -- numeric cast (majority path)
+    value_str          Nullable(String),                -- when broker returns non-numeric
+    -- provenance + PIT
+    source, source_channel, raw_id, ingest_run_id,
+    as_of_time, ingested_at, version
+)
+ENGINE = ReplacingMergeTree(version)
+PARTITION BY (broker_code, account_mode, toYYYYMM(snapshot_time))
+ORDER BY (broker_code, account_id, metric, segment, currency, snapshot_time);
+```
+
+### 9.3 `broker.executions`
+
+Immutable event log — fills for orders placed by ANY client (trade engine,
+manual GUI order, etc.). Each fill is one row keyed by the broker's exec ID.
+
+```sql
+CREATE TABLE broker.executions (
+    exec_id            String,                          -- broker exec id (unique, immutable)
+    broker_code        LowCardinality(String),
+    account_id         String,
+    account_mode       LowCardinality(String),
+    country_code       FixedString(2),
+    -- order identity
+    order_id           Int64,                           -- broker session-scoped
+    perm_id            Int64,                           -- broker-durable (join key)
+    placed_by_client   Nullable(Int32),                 -- IBKR API clientId; e.g. trade-engine ID
+    -- security link
+    listing_id         Nullable(UUID),
+    security_id        Nullable(UUID),
+    contract_id        Nullable(UUID),
+    product_type       LowCardinality(String),
+    vendor_id          String,
+    trading_symbol     String,
+    currency           LowCardinality(String),
+    -- fill
+    exec_time          DateTime64(3, 'UTC'),
+    side               LowCardinality(String),          -- 'BUY'|'SELL'|'SSHORT'
+    quantity           Decimal(20,6),
+    price              Decimal(20,6),
+    exchange           LowCardinality(String),
+    liquidity_flag     LowCardinality(String),          -- 'ADDED'|'REMOVED'|'ROUTED'|''
+    -- commission + PnL
+    commission         Nullable(Decimal(18,6)),
+    commission_ccy     LowCardinality(String),
+    realized_pnl       Nullable(Decimal(20,6)),
+    -- resolution audit
+    resolution_confidence LowCardinality(String),
+    -- provenance + PIT
+    source, source_channel, raw_id, ingest_run_id,
+    as_of_time, ingested_at, version
+)
+ENGINE = ReplacingMergeTree(version)
+PARTITION BY (broker_code, account_mode, toYYYYMM(exec_time))
+ORDER BY (broker_code, account_id, exec_time, exec_id);
+```
+
+**Idempotency:** `exec_id` is broker-immutable — re-pulling the same window is a
+no-op post-merge. Ingest scripts always pull with overlap; ReplacingMergeTree
+deduplicates.
+
+**Join to trade engine intent:** the trade engine's own `proposed_orders` table
+(in its own schema) references `broker.executions` via `perm_id`. FactorLab is
+not responsible for that join; the engine does its own attribution using this
+table as the fill oracle.
+
+### 9.4 `broker.open_orders_snapshot`
+
+Time series of unfilled orders. Observed, not owned — the trade engine places;
+we mirror so PnL reconstruction can see intent alongside fills.
+
+```sql
+CREATE TABLE broker.open_orders_snapshot (
+    snapshot_time      DateTime64(3, 'UTC'),
+    broker_code        LowCardinality(String),
+    account_id         String,
+    account_mode       LowCardinality(String),
+    country_code       FixedString(2),
+    perm_id            Int64,                           -- durable join key
+    order_id           Int64,
+    placed_by_client   Nullable(Int32),
+    -- security link
+    listing_id         Nullable(UUID),
+    security_id        Nullable(UUID),
+    contract_id        Nullable(UUID),
+    product_type       LowCardinality(String),
+    vendor_id          String,
+    trading_symbol     String,
+    currency           LowCardinality(String),
+    -- order
+    side               LowCardinality(String),
+    order_type         LowCardinality(String),          -- 'LMT','MKT','MOC','MOO','LOC','LOO','STP','STPLMT',...
+    time_in_force      LowCardinality(String),          -- 'DAY','GTC','IOC','FOK',...
+    quantity           Decimal(20,6),
+    filled_quantity    Decimal(20,6),
+    remaining_quantity Decimal(20,6),
+    limit_price        Nullable(Decimal(20,6)),
+    aux_price          Nullable(Decimal(20,6)),
+    status             LowCardinality(String),          -- 'PreSubmitted','Submitted','Cancelled','Filled','Inactive',...
+    -- provenance + PIT
+    source, source_channel, raw_id, ingest_run_id,
+    as_of_time, ingested_at, version
+)
+ENGINE = ReplacingMergeTree(version)
+PARTITION BY (broker_code, account_mode, toYYYYMM(snapshot_time))
+ORDER BY (broker_code, account_id, snapshot_time, perm_id);
+```
+
+### 9.5 Materialized helpers
+
+```sql
+-- Latest position per (broker, account, security) — for "current portfolio" dashboards
+CREATE MATERIALIZED VIEW broker.positions_latest TO broker.positions_latest_storage AS
+SELECT
+    broker_code, account_id, account_mode,
+    coalesce(listing_id, toUUID('00000000-0000-0000-0000-000000000000')) AS listing_id_key,
+    vendor_id,
+    argMax(position,       snapshot_time) AS position,
+    argMax(avg_cost,       snapshot_time) AS avg_cost,
+    argMax(market_price,   snapshot_time) AS market_price,
+    argMax(market_value,   snapshot_time) AS market_value,
+    argMax(unrealized_pnl, snapshot_time) AS unrealized_pnl,
+    argMax(trading_symbol, snapshot_time) AS trading_symbol,
+    argMax(product_type,   snapshot_time) AS product_type,
+    max(snapshot_time)                     AS as_of
+FROM broker.positions_snapshot
+GROUP BY broker_code, account_id, account_mode, listing_id_key, vendor_id;
+```
+
+```sql
+-- Daily NAV per (broker, account) in BASE currency — the equity-curve source
+CREATE MATERIALIZED VIEW broker.nav_daily TO broker.nav_daily_storage AS
+SELECT
+    broker_code, account_id, account_mode,
+    toDate(snapshot_time) AS trade_date,
+    argMax(value_num, snapshot_time) AS nav
+FROM broker.account_state_snapshot
+WHERE metric = 'NetLiquidation' AND segment = '' AND currency = 'BASE'
+GROUP BY broker_code, account_id, account_mode, trade_date;
+```
+
+`derived.forward_test_attribution` (built in Wave 6+) joins `broker.nav_daily`
+(paper, per strategy) against `derived.backtest_returns` to score forward-test
+PnL vs backtest predictions.
+
+### 9.6 Multi-account, multi-broker semantics
+
+Every query filters on `(broker_code, account_id, account_mode)` — never mix
+silently. A few canonical patterns:
+
+```sql
+-- Paper portfolio as of yesterday's close
+SELECT trading_symbol, position, market_value
+FROM broker.positions_snapshot
+WHERE broker_code='ibkr' AND account_mode='paper'
+  AND snapshot_time = (
+      SELECT max(snapshot_time)
+      FROM broker.positions_snapshot
+      WHERE broker_code='ibkr' AND account_mode='paper'
+        AND snapshot_time < today()
+  );
+
+-- Live NAV equity curve, trailing 12 months
+SELECT trade_date, nav
+FROM broker.nav_daily
+WHERE broker_code='ibkr' AND account_mode='live'
+  AND trade_date >= today() - 365
+ORDER BY trade_date;
+
+-- Forward-test divergence (paper - backtest)
+SELECT p.trade_date,
+       p.paper_return,
+       b.backtest_return,
+       p.paper_return - b.backtest_return AS divergence
+FROM (
+    SELECT trade_date,
+           (nav / lagInFrame(nav) OVER (ORDER BY trade_date)) - 1 AS paper_return
+    FROM broker.nav_daily
+    WHERE broker_code='ibkr' AND account_mode='paper' AND account_id='DUE375963'
+) p
+JOIN derived.backtest_returns b USING (trade_date)
+WHERE b.strategy_id = ...;
+```
+
+### 9.7 Ingest, resolution, reconciliation
+
+| Job | Cadence | Writes |
+|---|---|---|
+| Position snapshot (both accounts) | 06:00 ET + 16:30 ET | `broker.positions_snapshot` |
+| Account state snapshot (both accounts) | 06:00 ET + 16:30 ET | `broker.account_state_snapshot` |
+| Executions pull (both accounts) | Every 15 min during session | `broker.executions` |
+| Open orders snapshot (both accounts) | Every 5 min during session | `broker.open_orders_snapshot` |
+
+Each job iterates `(broker_code='ibkr', account_mode) ∈ {paper, live}` and
+connects to the appropriate Gateway. Two Gateway instances run concurrently on
+different ports (see [`docs/data-sources/06-ibkr.md`](../data-sources/06-ibkr.md)).
+
+**Resolution flow:** on ingest, look up `vendor_id` (IBKR conid) in
+`ref.identifier_aliases`. On hit: populate `listing_id`/`security_id`/`entity_id`
+and set `resolution_confidence='canonical'`. On miss: leave FK nullable, set
+`resolution_confidence='vendor_only'`, and enqueue to `ops.unresolved_entities`.
+The resolver's next pass writes a new row (later `as_of_time`) with canonical
+IDs filled in — the old row stays for point-in-time consistency, the new row
+becomes latest for `positions_latest`.
+
+**Reconciliation contract:** morning position snapshot is compared to prior EOD
+snapshot per `(broker_code, account_id)`. Any drift writes a row to
+`ops.reconciliation_drift` (extension of `ops.*`, defined in Wave 7). The trade
+engine consumes this table and refuses to start if unresolved drift exists.
+**FactorLab detects; trade engine acts.**
+
+### 9.8 Extending to another broker
+
+Adding a second broker (e.g. Schwab for a US portfolio) is a row addition:
+`broker_code='schwab_broker'`, `account_mode='live'`, dispatch to a Schwab-
+specific ingester that writes the same four tables. No new tables. No schema
+migration. Cross-broker rollups (`SELECT sum(nav) ... GROUP BY account_mode`)
+work uniformly.
+
+---
+
+## 10. `raw` — Immutable archive
 
 ### `raw.archive` (renamed from `raw_http_archive`)
 
@@ -1337,9 +1666,9 @@ DROP PARTITION` from a cron job driven by policy config, not by ClickHouse TTL
 
 ---
 
-## 10. Cross-cutting concerns
+## 11. Cross-cutting concerns
 
-### 10.1 Multi-vendor conflict resolution
+### 11.1 Multi-vendor conflict resolution
 
 Same (`listing_id`, `resolution`, `bar_time`) can arrive from Schwab, EODHD,
 IBKR. Sort key includes `source` → no PK collision. To get "the best" bar:
@@ -1365,14 +1694,14 @@ GROUP BY country_code, listing_id, resolution, session, bar_time;
 Priority list is a table (`ref.source_priorities`) so it's editable without
 code deploys.
 
-### 10.2 Time zones
+### 11.2 Time zones
 
 - **Storage:** everything in `market.*`, `fundamentals.*`, `alt.*`, `ops.*` is UTC.
 - **Bar time:** UTC always. Daily bars use `00:00:00 UTC of trade_date`.
 - **Trade date:** session-local calendar date (e.g., 2026-09-18 for a NYSE session even if UTC crosses).
 - **Session windows:** stored in `ref.sessions` as local-time strings; resolved to UTC at query time using `ref.holidays` for adjustments.
 
-### 10.3 Corporate actions
+### 11.3 Corporate actions
 
 - Raw prices in `market.bars` are **never** adjusted post-hoc.
 - Split/dividend arrives → new row in `ref.corporate_actions` → nightly job
@@ -1381,7 +1710,7 @@ code deploys.
 - Every research query defaults to reading `bars_adjusted`. Execution reads
   `bars` (raw) because live trading uses live prices.
 
-### 10.4 PIT correctness — bitemporal, enforced
+### 11.4 PIT correctness — bitemporal, enforced
 
 Two time axes on every fact row:
 - **valid_time** = `event_time`, `bar_time`, `transaction_date`, `period_end`
@@ -1513,7 +1842,7 @@ or modifies a research query.
 - Ops dashboards and admin scripts have their own path exemption because
   they legitimately query raw ingestion state for health monitoring.
 
-### 10.5 Symbol reassignment (FB → META)
+### 11.5 Symbol reassignment (FB → META)
 
 `ref.identifier_aliases` is SCD-2. A ticker change:
 1. `ref.identifier_aliases`: existing (`ticker`,`META`,US)→(entity_facebook) gets `valid_to = 2022-06-08`
@@ -1521,14 +1850,14 @@ or modifies a research query.
 3. Old ticker gets a `ref.corporate_actions` row `action_type='ticker_change'`
 4. Existing `listing_id` is unchanged; `ref.listings.trading_symbol` becomes `META` (SCD-2 on that column would be better; open question)
 
-### 10.6 Delisting and survivorship bias
+### 11.6 Delisting and survivorship bias
 
 - Delisted listings get `ref.listings.active = false`, `last_traded = <date>`.
 - `ref.universe_membership` records the delisting via `effective_to` and
   `reason='delisting'`.
 - Backtests reading historical universe include delisted names — no survivorship bias.
 
-### 10.7 Universe reconstruction
+### 11.7 Universe reconstruction
 
 To reconstruct R3K as of 2024-03-15:
 ```sql
@@ -1540,7 +1869,7 @@ WHERE universe_id = 'r3k'
 ```
 1 query, 1 table. No joins.
 
-### 10.8 FX conversion at scale
+### 11.8 FX conversion at scale
 
 Cross-country research (INR-listed vs USD-listed) needs USD-normalized
 returns. Options:
@@ -1551,7 +1880,7 @@ MV convention: FX at `bar_time` close, `fix_convention='close'`. For research
 that needs a different fix (WM/Reuters 4pm London), parameterize by rebuilding
 MV with different fix_convention.
 
-### 10.9 Entity resolution failure policy
+### 11.9 Entity resolution failure policy
 
 Alt-data ingesters try to resolve `ticker` → `listing_id` via
 `ref.identifier_aliases`. Two failure modes:
@@ -1563,7 +1892,7 @@ Alt-data ingesters try to resolve `ticker` → `listing_id` via
 
 Never silently drop rows. Never guess without recording confidence.
 
-### 10.10 Restatement handling
+### 11.10 Restatement handling
 
 Fundamentals get restated. Q1 2024 revenue announced 2024-04-15 as $X; amended
 2025-02-10 as $Y.
@@ -1575,7 +1904,7 @@ row with same (`entity_id`, `tag`, `period_end`) but new `filing_id`, new
 Research PIT snapshot MV uses `argMax(value, filed_at) FILTER (filed_at <=
 <backtest_date>)` → automatically gets the view that was current on that date.
 
-### 10.13 Canonical FK conventions
+### 11.13 Canonical FK conventions
 
 ClickHouse doesn't enforce foreign-key integrity at the engine level.
 Structural enforcement stacks:
@@ -1626,13 +1955,13 @@ comment. No silent duplication.
 
 ---
 
-## 11. Testing and code review discipline
+## 12. Testing and code review discipline
 
 Not a nice-to-have. This layer is what makes the schema *actually* deliver
 its 5NF and PIT guarantees. Every layer of the stack has a matching test
 category, coverage target, and CI gate.
 
-### 11.1 Test categories
+### 12.1 Test categories
 
 | Category | Purpose | Runs on | Coverage target |
 |---|---|---|---|
@@ -1648,7 +1977,7 @@ category, coverage target, and CI gate.
 | **Amount / numeric parsing** | Known filing → known amount range | Every PR to political ingester | ≥50 golden cases across brackets |
 | **Backtest reproducibility** | Same `(dataset_version, asof_date, code_version)` → byte-identical returns | Weekly | 100% of published backtests |
 
-### 11.2 Coverage targets, not "have some tests"
+### 12.2 Coverage targets, not "have some tests"
 
 Each ingester has an explicit, tracked SLO:
 
@@ -1662,7 +1991,7 @@ Each ingester has an explicit, tracked SLO:
 Coverage is a rope, not a jail — a big refactor that legitimately drops
 coverage 5% points but adds golden tests is fine, but requires reviewer signoff.
 
-### 11.3 Golden sets — the load-bearing test kind
+### 12.3 Golden sets — the load-bearing test kind
 
 Regressions in resolvers or parsers silently poison downstream data.
 Golden sets catch this at PR time:
@@ -1689,7 +2018,7 @@ discovered in prod, the fix PR MUST add a golden test row that would have
 caught it. This is enforced by review, not by CI (too language-specific to
 regex).
 
-### 11.4 PIT-safety test suite
+### 12.4 PIT-safety test suite
 
 Every `research.*` view has a paired test:
 
@@ -1708,7 +2037,7 @@ def test_bars_adjusted_pit_no_leak():
 Runs against staging fixtures on every PR that touches `research.*` schema or
 their upstream fact tables.
 
-### 11.5 Integrity + SCD-2 nightly checks
+### 12.5 Integrity + SCD-2 nightly checks
 
 ```python
 # tests/nightly/test_scd2_no_overlap.py
@@ -1727,7 +2056,7 @@ def test_universe_membership_no_overlap():
 Same pattern for `ref.legislator_terms`, `alt.political_committee_memberships`,
 `ref.identifier_aliases`, `ref.listing_migrations`.
 
-### 11.6 Idempotency tests
+### 12.6 Idempotency tests
 
 ```python
 def test_upstox_ingester_idempotent(recorded_response):
@@ -1741,7 +2070,7 @@ Prevents "we re-ran the backfill and now have duplicate rows" (ReplacingMergeTre
 should absorb this, but idempotency tests catch cases where the business key
 composition is wrong).
 
-### 11.7 Code review — mandatory checklist per PR type
+### 12.7 Code review — mandatory checklist per PR type
 
 Beyond the PIT checklist in 10.4.4, every ingester/resolver/schema PR requires:
 
@@ -1774,7 +2103,7 @@ Beyond the PIT checklist in 10.4.4, every ingester/resolver/schema PR requires:
 - [ ] Universe membership uses SCD-2 filter (no survivorship bias)
 - [ ] Corporate actions applied only if `ex_date <= asof_date`
 
-### 11.8 What tests protect against (traceable benefits)
+### 12.8 What tests protect against (traceable benefits)
 
 Each test category has a concrete failure mode it prevents:
 
@@ -1796,7 +2125,7 @@ prevents its recurrence. **This is how the schema earns its rehau.**
 
 ---
 
-## 12. Migration waves
+## 13. Migration waves
 
 Zero big-bang. Every wave runs old and new in parallel; cutover per wave.
 
@@ -1902,11 +2231,34 @@ Tier 4 — nice-to-have completeness (defer to Wave 4.5 if timeline pressures):
 2. Migrate existing factor calc code
 3. Bitemporal enforcement in research views
 
-**Total: ~12-14 weeks focused work.**
+**Wave 7 — Broker mirror (2 weeks)**
+1. Create `broker.*` tables + materialized views (`positions_latest`, `nav_daily`)
+2. Populate `ref.identifier_aliases` with IBKR `conid` for the launch universe
+   (S&P 500 members + held positions across paper and live accounts)
+3. Wire IBKR ingesters — dual Gateway (paper 4002, live 4001), per-`account_mode`
+   dispatch — writing to `broker.positions_snapshot`,
+   `broker.account_state_snapshot`, `broker.executions`,
+   `broker.open_orders_snapshot`
+4. Backfill `broker.executions` from IBKR (30d rolling window at first;
+   deep-backfill for the paper account if forward-test attribution needs
+   further history)
+5. Add `ops.reconciliation_drift` (small companion table under existing `ops.*`)
+   and wire morning reconciliation
+6. Cutover portfolio dashboards to `broker.positions_latest` + `broker.nav_daily`
+
+Exit criteria:
+- Both paper and live IBKR accounts land 2× daily snapshots for ≥5 consecutive sessions
+- Executions ingest is idempotent (re-run of any window produces 0 duplicate rows post-merge)
+- `resolution_confidence='canonical'` for ≥95% of positions in the launch universe
+- Reconciliation drift detection verified with a deliberate injected mismatch
+- No `placeOrder`/`cancelOrder`/`modifyOrder` calls anywhere in FactorLab
+  source tree (CI grep guard green)
+
+**Total: ~14-16 weeks focused work.**
 
 ---
 
-## 13. What this doc explicitly does NOT cover
+## 14. What this doc explicitly does NOT cover
 
 - Compute layer (Python/Polars/DuckDB research environment)
 - API layer redesign (FastAPI endpoint restructuring)
@@ -1921,7 +2273,7 @@ Tier 4 — nice-to-have completeness (defer to Wave 4.5 if timeline pressures):
 
 ---
 
-## 14. Deferred concerns with rationale
+## 15. Deferred concerns with rationale
 
 Items considered during review and deliberately deferred. Not gaps in
 correctness — deferrals to earn scope.
@@ -1936,7 +2288,30 @@ correctness — deferrals to earn scope.
 
 ---
 
-## 15. Revision changelog
+## 16. Revision changelog
+
+### Revision 4 — 2026-09-19
+
+Broker/portfolio monitoring added as first-class namespace.
+
+- **New `broker` database** (section 9) — mirrors broker-side truth as time
+  series: positions, account state (NetLiquidation/BuyingPower/margin/etc.),
+  executions (immutable event log by `exec_id`), open orders. Every row tagged
+  with `broker_code`, `account_id`, `account_mode` — paper and live coexist,
+  never mixed silently.
+- **Read-only contract** documented explicitly: FactorLab code never calls
+  `placeOrder`/`cancelOrder`. Execution runs in a separate trade-engine service
+  that reads `broker.executions` for attribution.
+- **Materialized helpers** — `broker.positions_latest` (current portfolio per
+  broker+account), `broker.nav_daily` (equity-curve source for forward-test
+  attribution).
+- **Wave 7 added** to migration plan — 2 weeks, exit criteria include 95%
+  canonical resolution on launch universe and idempotent execution ingest.
+- **`ops.reconciliation_drift`** introduced as a small companion table for the
+  morning position drift check (Wave 7 delivers it).
+- **Namespace table** updated with the new `broker` row.
+- **Renumber**: previous sections 9–15 shifted to 10–16 to fit the new
+  section 9. Cross-refs in rev 3 changelog updated to current numbering.
 
 ### Revision 3 — 2026-09-19
 
@@ -1949,10 +2324,10 @@ Political-data audit findings + test discipline + FK conventions folded in.
   audit findings: canonical FK columns (`legislator_entity_id`, `security_id`,
   `listing_id`, `contract_id`, `entity_id`), resolution confidence enums,
   raw-vs-resolved separation, SCD-2 committee memberships (was daily snapshots).
-- **Section 10.13 — Canonical FK conventions.** Explicit statement of the four
+- **Section 11.13 — Canonical FK conventions.** Explicit statement of the four
   canonical FactorLab UUIDs + person canonical; four defenses for FK integrity
   (resolver-only writes, nightly integrity job, CI conformance, PR checklist).
-- **Section 11 — Testing and code review discipline** (NEW). Eleven test
+- **Section 12 — Testing and code review discipline** (NEW). Eleven test
   categories with coverage targets; golden-set-driven regression on all
   resolvers/parsers; PIT-safety tests; SCD-2 no-overlap; idempotency;
   bug-class-to-test-category traceability table.
@@ -1965,7 +2340,7 @@ Political-data audit findings + test discipline + FK conventions folded in.
 
 Post-review changes based on prop-shop-lens vetting.
 
-**F1 — Enforced PIT** (section 10.4)
+**F1 — Enforced PIT** (section 11.4)
 Was: "should include `WHERE as_of_time <=` clause."
 Now: four-defense enforcement — role-based grants, parametric `research.*`
 view schema, CI grep rule failing PRs that bypass, PR review template
