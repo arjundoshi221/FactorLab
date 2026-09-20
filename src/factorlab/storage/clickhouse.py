@@ -10,6 +10,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 import clickhouse_connect
@@ -57,19 +58,54 @@ def contract_id_for(contract_key: str) -> uuid.UUID:
 class ClickHouseStorage:
     """Thin explicit-DDL storage client for the initial ClickHouse migration."""
 
-    def __init__(self, client: Any) -> None:
+    def __init__(self, client: Any, tunnel: Any = None) -> None:
         self.client = client
+        self._tunnel = tunnel
 
     @classmethod
     def from_environment(cls) -> "ClickHouseStorage":
-        client = clickhouse_connect.get_client(
-            host=os.getenv("CLICKHOUSE_HOST", "localhost"),
-            port=int(os.getenv("CLICKHOUSE_PORT", "8123")),
-            username=os.getenv("CLICKHOUSE_USERNAME", "factorlab"),
-            password=get_secret("CLICKHOUSE_PASSWORD", "factorlab_dev"),
-            database=os.getenv("CLICKHOUSE_DATABASE", "factorlab"),
-        )
-        return cls(client)
+        ssh_host = os.getenv("CLICKHOUSE_SSH_HOST")
+        remote_host = os.getenv("CLICKHOUSE_HOST", "localhost")
+        remote_port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
+        tunnel = None
+        client_host = remote_host
+        client_port = remote_port
+        if ssh_host:
+            tunnel = _open_ssh_tunnel(ssh_host, remote_host, remote_port)
+            client_host = "127.0.0.1"
+            client_port = tunnel.local_bind_port
+        try:
+            client = clickhouse_connect.get_client(
+                host=client_host,
+                port=client_port,
+                username=os.getenv("CLICKHOUSE_USERNAME", "factorlab"),
+                password=get_secret("CLICKHOUSE_PASSWORD", "factorlab_dev"),
+                database=os.getenv("CLICKHOUSE_DATABASE", "factorlab"),
+            )
+        except Exception:
+            if tunnel is not None:
+                tunnel.stop()
+            raise
+        return cls(client, tunnel=tunnel)
+
+    def close(self) -> None:
+        """Close the ClickHouse client and any SSH tunnel opened for it."""
+        try:
+            self.client.close()
+        except Exception:
+            pass
+        if self._tunnel is not None:
+            try:
+                self._tunnel.stop()
+            except Exception:
+                pass
+            self._tunnel = None
+
+    def __enter__(self) -> "ClickHouseStorage":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        self.close()
 
     def archive_http_response(
         self,
@@ -567,3 +603,43 @@ def _as_utc_datetime(value: Any) -> datetime:
     if timestamp.tzinfo is None:
         timestamp = timestamp.tz_localize("UTC")
     return timestamp.tz_convert("UTC").to_pydatetime()
+
+
+def _open_ssh_tunnel(ssh_host: str, remote_host: str, remote_port: int) -> Any:
+    """Open an SSH tunnel to reach a loopback-bound ClickHouse over the VPS.
+
+    Reads CLICKHOUSE_SSH_{USER,PORT,KEY_PATH,PASSWORD} from the environment;
+    CLICKHOUSE_SSH_KEY_PATH takes precedence over CLICKHOUSE_SSH_PASSWORD, and
+    both fall back to whatever keys the local ssh-agent / default identity
+    files provide.
+    """
+    try:
+        import paramiko
+        if not hasattr(paramiko, "DSSKey"):
+            paramiko.DSSKey = paramiko.RSAKey
+        from sshtunnel import SSHTunnelForwarder
+    except ImportError as exc:
+        raise RuntimeError(
+            "sshtunnel is required when CLICKHOUSE_SSH_HOST is set; install "
+            "with `pip install -e \".[ops]\"`"
+        ) from exc
+
+    ssh_user = os.getenv("CLICKHOUSE_SSH_USER", "ubuntu")
+    ssh_port = int(os.getenv("CLICKHOUSE_SSH_PORT", "22"))
+    key_path_raw = os.getenv("CLICKHOUSE_SSH_KEY_PATH")
+    key_path = str(Path(key_path_raw).expanduser()) if key_path_raw else None
+    kwargs: dict[str, Any] = {
+        "ssh_username": ssh_user,
+        "remote_bind_address": (remote_host, remote_port),
+        "local_bind_address": ("127.0.0.1",),
+        "set_keepalive": 30.0,
+    }
+    if key_path:
+        kwargs["ssh_pkey"] = key_path
+    ssh_password = get_secret("CLICKHOUSE_SSH_PASSWORD", "")
+    if ssh_password:
+        kwargs["ssh_password"] = ssh_password
+
+    tunnel = SSHTunnelForwarder((ssh_host, ssh_port), **kwargs)
+    tunnel.start()
+    return tunnel

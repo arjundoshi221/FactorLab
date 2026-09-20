@@ -158,6 +158,36 @@ Then browse to `http://127.0.0.1:8000/`, open the India explorer at
 `http://127.0.0.1:8000/india`, or call the API on the same local base URL. The
 browser never receives the API bearer secret.
 
+## ClickHouse workstation access
+
+ClickHouse binds to `127.0.0.1` on the VPS and must not be exposed publicly.
+Python code opens the SSH tunnel automatically when `CLICKHOUSE_SSH_HOST` is
+set in `.env`; `ClickHouseStorage.from_environment()` starts a forwarder on a
+random local port, points the client at it, and tears the tunnel down on
+`close()`.
+
+Required `.env` keys for tunneled access from a workstation:
+
+```text
+CLICKHOUSE_SSH_HOST=145.239.75.163
+CLICKHOUSE_SSH_USER=ubuntu
+CLICKHOUSE_SSH_PASSWORD=<ubuntu-login-password>
+CLICKHOUSE_HOST=127.0.0.1               # remote bind seen from the VPS
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_USERNAME=<user>
+CLICKHOUSE_PASSWORD=<from Cloudflare Secrets Store>
+CLICKHOUSE_DATABASE=<database>
+```
+
+`CLICKHOUSE_SSH_KEY_PATH` is also honored if a key file is preferred, but
+password authentication is the workstation default. If both keys are set,
+`CLICKHOUSE_SSH_KEY_PATH` wins.
+
+Container-side code (VPS-native services in the Compose stack) leaves
+`CLICKHOUSE_SSH_HOST` unset and reaches ClickHouse over the private Docker
+network without a tunnel. The SSH tunnel is a workstation convenience only;
+do not enable it inside deployed services.
+
 ## Deploy or update
 
 Build and upload an `amd64` image from project root:

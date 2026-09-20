@@ -46,6 +46,10 @@ server = [
     "flask-limiter>=3.0",
     "gunicorn>=22.0",
 ]
+ops = [
+    "paramiko>=3.4",
+    "sshtunnel>=0.4",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/factorlab"]
