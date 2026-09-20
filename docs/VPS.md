@@ -125,6 +125,8 @@ by the Access application protecting
 Hub:     GET /
 Roadmap: GET /roadmap
 Hub data: GET /hub/api/v1/overview
+Schema map: GET /schema and GET /hub/api/v1/schema-map
+Schema layout: PUT /hub/api/v1/schema-map/layout
 Health:  GET /health
 Trades:  GET /api/v1/political/trades
 India:   GET /api/v1/india/candles/1min
@@ -320,6 +322,19 @@ Docker's `unless-stopped` restart policy.
 
 ### 2026-09-18
 
+- Deployed the live ClickHouse Schema Map as immutable image
+  `factorlab:schema-map-v1-20260918` to the API service only. The India and US
+  ingestion containers retained their existing identities and start times.
+- Applied additive migration `005_hub_schema_map.sql`, creating
+  `hub_schema_layouts` for the revision-checked shared canvas arrangement.
+- Live verification reported 19 tables, 29 reviewed logical relationships,
+  zero schema warnings, and layout revision 0. `/schema`, schema metadata,
+  overview, India, US, and political Hub endpoints all returned HTTP 200.
+- Archived the deployed image at
+  `/mnt/factorlab-data/deployment-archives/factorlab-schema-map-v1-20260918.tar`.
+  SHA-256: `2c99d4fae31ce3fb423aba8f65aae73840b282dc9a208ef6ee13ede2ad109943`.
+  Rollback configuration is in
+  `/opt/factorlab/deploy/rollback-schema-map-20260918T182000Z`.
 - Fixed intermittent HTTP 500 responses on the US dashboard, instruments, and
   ingestion-run endpoints. The US FastAPI routes now create request-local
   ClickHouse clients instead of sharing one non-thread-safe client session

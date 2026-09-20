@@ -2,12 +2,13 @@
 
 ## Overview
 
-FactorLab exposes a private, read-only HTTP API backed by ClickHouse.
+FactorLab exposes private read APIs and narrowly scoped Hub UI-state writes backed by ClickHouse.
 
 ```text
 SSH-tunnel base URL: http://127.0.0.1:8000
 Web dashboard:       http://127.0.0.1:8000/
 India Markets:       http://127.0.0.1:8000/india
+Schema map:          http://127.0.0.1:8000/schema
 Interactive docs:    http://127.0.0.1:8000/docs
 OpenAPI schema:      http://127.0.0.1:8000/openapi.json
 ```
@@ -49,8 +50,11 @@ Then use `http://127.0.0.1:8000` as the base URL.
 |---|---|---|---|
 | `GET` | `/` | SSH/edge boundary | FactorLab Data Hub dashboard |
 | `GET` | `/india` | SSH/edge boundary | India instrument and trading-session explorer |
+| `GET` | `/schema` | SSH/edge boundary | Live ClickHouse schema map and shared scratchboard |
 | `GET` | `/roadmap` | SSH/edge boundary | V1-V5 product roadmap |
 | `GET` | `/hub/api/v1/overview` | SSH/edge boundary | Cached table inventory and schedule-aware health |
+| `GET` | `/hub/api/v1/schema-map` | SSH/edge boundary | Tables, columns, engine keys, logical links, and shared layout |
+| `PUT` | `/hub/api/v1/schema-map/layout` | SSH/edge boundary | Save the version-checked canonical schema layout |
 | `GET` | `/hub/api/v1/india/dashboard` | SSH/edge boundary | Selected-day India collection health |
 | `GET` | `/hub/api/v1/india/instruments` | SSH/edge boundary | Unique instruments with coverage and value checks |
 | `GET` | `/hub/api/v1/india/instruments/{id}/days` | SSH/edge boundary | Exchange-session checks for one instrument |
@@ -96,6 +100,16 @@ including empty tables. Counts come from active ClickHouse parts and are
 reported as fast stored-row counts rather than deduplicated `FINAL` counts.
 Known tables also include their domain date range, latest ingestion, rows for
 today, and a schedule-aware status. The response is cached for 55 seconds.
+
+### Schema map web endpoints
+
+`GET /hub/api/v1/schema-map` reads live `system.tables` and `system.columns`
+metadata, then adds reviewed logical relationships because ClickHouse does not
+enforce foreign keys. `PUT /hub/api/v1/schema-map/layout` stores only table
+positions, collapsed state, and viewport in `hub_schema_layouts`; it requires
+the current layout revision and schema fingerprint, returning `409` for a stale
+layout and `422` when the live schema has changed. No table rows or query tools
+are exposed by these endpoints.
 
 ### India Markets web endpoints
 

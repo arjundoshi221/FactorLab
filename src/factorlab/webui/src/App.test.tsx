@@ -6,6 +6,7 @@ vi.mock("./components/us/USDashboardPanel", () => ({
   USDashboardPanel: () => <a href="/us">US universe and collection</a>,
 }));
 vi.mock("./pages/USMarkets", () => ({ USMarkets: () => null }));
+vi.mock("./pages/SchemaMap", () => ({ SchemaMap: () => <h1>Schema map canvas</h1> }));
 
 const overview = {
   generated_at: "2026-08-20T05:30:00Z",
@@ -73,6 +74,13 @@ describe("FactorLab Hub", () => {
     render(<App />);
     expect(screen.getByText("From data confidence to research execution.")).toBeInTheDocument();
     expect(screen.getByText("Backtesting")).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("renders the schema map route without loading the dashboard", async () => {
+    window.history.replaceState({}, "", "/schema");
+    render(<App />);
+    expect(await screen.findByText("Schema map canvas")).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
   });
 });

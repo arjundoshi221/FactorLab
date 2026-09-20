@@ -60,6 +60,15 @@ from factorlab.api.political_observability import (
     PoliticalTickersPage,
     PoliticalTickerSummary,
 )
+from factorlab.api.schema_map import (
+    InvalidLayoutError,
+    LayoutConflictError,
+    SchemaLayoutUpdate,
+    SchemaMapResponse,
+    SchemaMapRepository,
+    SchemaMapService,
+    SharedSchemaLayout,
+)
 
 app = FastAPI(
     title="FactorLab API",
@@ -108,6 +117,13 @@ def get_hub_overview_service() -> HubOverviewService:
     return HubOverviewService(HubRepository.from_environment())
 
 
+@lru_cache
+def get_schema_map_service() -> SchemaMapService:
+    """Create the live schema reader and canonical layout store."""
+
+    return SchemaMapService(SchemaMapRepository.from_environment())
+
+
 @app.get("/health", tags=["operations"])
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -127,6 +143,43 @@ def get_hub_overview(
         return service.get_overview()
     except Exception as exc:
         raise HTTPException(status_code=503, detail="FactorLab data store is unavailable") from exc
+
+
+@app.get(
+    "/hub/api/v1/schema-map",
+    response_model=SchemaMapResponse,
+    tags=["hub"],
+)
+def get_hub_schema_map(
+    service: Annotated[SchemaMapService, Depends(get_schema_map_service)],
+) -> SchemaMapResponse:
+    """Return live ClickHouse metadata, logical links, and the shared layout."""
+
+    try:
+        return service.get_schema_map()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Schema metadata is unavailable") from exc
+
+
+@app.put(
+    "/hub/api/v1/schema-map/layout",
+    response_model=SharedSchemaLayout,
+    tags=["hub"],
+)
+def save_hub_schema_layout(
+    update: SchemaLayoutUpdate,
+    service: Annotated[SchemaMapService, Depends(get_schema_map_service)],
+) -> SharedSchemaLayout:
+    """Replace the shared layout when the caller still has the current revision."""
+
+    try:
+        return service.save_layout(update)
+    except LayoutConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except InvalidLayoutError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="The shared layout could not be saved") from exc
 
 
 @app.get(
@@ -1114,4 +1167,9 @@ def hub_us_markets() -> FileResponse:
 
 @app.get("/political", include_in_schema=False)
 def hub_political_data() -> FileResponse:
+    return _hub_index()
+
+
+@app.get("/schema", include_in_schema=False)
+def hub_schema_map() -> FileResponse:
     return _hub_index()

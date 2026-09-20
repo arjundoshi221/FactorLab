@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { USDashboardPanel } from "./components/us/USDashboardPanel";
 import { IndiaMarkets } from "./pages/IndiaMarkets";
 import { IndiaInstrumentDetail } from "./pages/IndiaInstrumentDetail";
 import { PoliticalData } from "./pages/PoliticalData";
 import { USMarkets } from "./pages/USMarkets";
+
+const SchemaMap = lazy(async () => {
+  const module = await import("./pages/SchemaMap");
+  return { default: module.SchemaMap };
+});
 
 type HubStatus =
   | "healthy"
@@ -142,6 +147,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <a className={path.startsWith("/india") ? "active" : ""} href="/india">India markets</a>
           <a className={path === "/us" ? "active" : ""} href="/us">US markets</a>
           <a className={path === "/political" ? "active" : ""} href="/political">Political</a>
+          <a className={path === "/schema" ? "active" : ""} href="/schema">Schema map</a>
           <a className={path === "/roadmap" ? "active" : ""} href="/roadmap">Roadmap</a>
         </nav>
         <span className="private-badge">Private system</span>
@@ -447,7 +453,7 @@ export function App() {
   const indiaInstrumentMatch = path.match(/^\/india\/instruments\/([0-9a-f-]+)$/i);
   return (
     <Shell>
-      {path === "/roadmap" ? <Roadmap /> : indiaInstrumentMatch ? <IndiaInstrumentDetail instrumentId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
+      {path === "/roadmap" ? <Roadmap /> : path === "/schema" ? <Suspense fallback={<main className="loading-state">Loading schema canvas…</main>}><SchemaMap /></Suspense> : indiaInstrumentMatch ? <IndiaInstrumentDetail instrumentId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
     </Shell>
   );
 }
