@@ -26,23 +26,26 @@ Tracking where institutional capital is flowing — and where companies are depl
 
 | Field | Detail |
 |-------|--------|
-| URL | EDGAR 13F filings |
-| Auth | None |
+| URL | EDGAR — via `sources/edgar/` client in this repo |
+| Auth | None (SEC Fair Access UA — see [`20-edgar-sec-filings.md`](20-edgar-sec-filings.md)) |
 | Frequency | **Quarterly** — filed within 45 days of quarter end |
 | Coverage | All institutions managing >$100M in US equities |
-| Tool | `edgartools` or SEC 13F XML parser |
+| Tool | Own EDGAR client + `parse_13f_info_table()` recipe in [`20-edgar-sec-filings.md § Parsing recipes`](20-edgar-sec-filings.md#parsing-recipes) |
+| Sample | Berkshire 2026 Q2 at [`data/edgar/samples/13f_hr/`](../../data/edgar/samples/13f_hr/) |
 
 **Key use:** Track what Berkshire, Bridgewater, Renaissance, etc. are buying/selling. 45-day lag limits alpha but reveals structural positions.
+
+**Watch-outs**: 13F `value` field is in **thousands** of USD (multiply by 1,000). CUSIP → ticker resolution requires SEC's quarterly [13F Securities List](https://www.sec.gov/divisions/investment/13flists.htm) + a CUSIP↔ticker overlay. Berkshire files confidential-treatment requests for some positions.
 
 ### 1C. Share Buyback Announcements (US)
 
 | Source | Cost | Notes |
 |--------|------|-------|
 | EODHD Corporate Actions | $0 (on plan) | Buyback announcements in corporate actions feed |
-| SEC filings (10-Q Item 2) | Free | Actual shares repurchased per quarter |
+| SEC 10-Q Item 2 | Free | Actual shares repurchased per quarter — reach via EDGAR client + HTML narrative parse. Sample 10-Q at [`data/edgar/samples/10_q/`](../../data/edgar/samples/10_q/). |
 | Finnhub | Free | `GET /api/v1/stock/share-buyback?symbol=AAPL` |
 
-**Signal:** Announced buyback = intent. Actual repurchases (from 10-Q) = execution. Companies that announce AND execute outperform those that announce but don't follow through.
+**Signal:** Announced buyback = intent. Actual repurchases (from 10-Q Item 2) = execution. Companies that announce AND execute outperform those that announce but don't follow through.
 
 ### 1D. AMFI — India Mutual Fund Flows
 

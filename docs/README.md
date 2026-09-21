@@ -11,20 +11,37 @@ docs/
 |-- README.md
 |-- API.md
 |-- VPS.md
-|-- architecture/
-|   |-- 01-overview.md
-|   |-- 02-database-clickhouse.md
-|   |-- 03-roadmap.md
-|   |-- 04-multi-country-schema.md
-|   `-- 05-secrets-and-upstox-auth.md
-|-- data-sources/
+|-- architecture/            (design docs, ADRs)
+|-- countries/               (per-country market notes)
+|-- data-sources/            (one doc per vendor / feed)
 |   |-- 01-us-equities-eodhd.md
 |   |-- 02-india-markets-upstox.md
 |   |-- 03-social-reddit-twitter.md
 |   |-- 04-political-senator-trades.md
 |   |-- 05-research-arxiv.md
-|   `-- 06-ibkr.md
-`-- ops/
+|   |-- 06-ibkr.md
+|   |-- 07-us-equities-schwab.md
+|   |-- 08-india-fundamentals-filings.md
+|   |-- 09-insider-supply-chain.md
+|   |-- 10-india-fii-fpi-flows.md
+|   |-- 11-macro-regime.md
+|   |-- 11-us-schwab-ingestion.md
+|   |-- 12-earnings-revisions-estimates.md
+|   |-- 13-earnings-call-transcripts.md
+|   |-- 14-short-interest-positioning.md
+|   |-- 15-commodities-input-costs.md
+|   |-- 16-index-reconstitution.md
+|   |-- 17-regulatory-policy-events.md
+|   |-- 18-fund-flows-buybacks-shareholding.md
+|   |-- 19-alpha-research-stack.md
+|   `-- 20-edgar-sec-filings.md           ← EDGAR (funds, insiders, 13F, XBRL, filings)
+|-- developments/            (per-feature dev notes)
+|-- operations/              (runbooks, scheduler entries)
+|-- reform/                  (architecture cleanup docs)
+|-- research/                (research-facing playbooks — signals, sources, workflows)
+|   `-- etf-intelligence.md
+|-- security/                (auth, secrets, PII, threat model)
+`-- ops/                     (legacy — being migrated to operations/)
 ```
 
 ## Conventions

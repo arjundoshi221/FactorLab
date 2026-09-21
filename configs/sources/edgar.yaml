@@ -1,0 +1,76 @@
+# SEC EDGAR source configuration
+name: edgar
+vendor_key: edgar  # matches ref.security_aliases.vendor once schema lands
+
+api:
+  base_url_www: https://www.sec.gov
+  base_url_data: https://data.sec.gov
+  base_url_search: https://efts.sec.gov
+  auth_type: user_agent_only
+  user_agent_env: EDGAR_USER_AGENT
+  # SEC Fair Access requires an identifying UA on every request.
+  # Format: "Sample Company Name AdminContact@samplecompany.com"
+
+rate_limits:
+  requests_per_second: 10          # hard SEC limit, per-IP, all hosts combined
+  min_request_interval_ms: 100     # 100 ms floor between requests
+  retry_attempts: 5
+  # 429s / 5xx: exponential backoff, honor Retry-After
+
+endpoints:
+  # www.sec.gov — Archives + full-index
+  full_index_quarterly:       "/Archives/edgar/full-index/{year}/QTR{quarter}/form.idx"
+  full_index_master:          "/Archives/edgar/full-index/{year}/QTR{quarter}/master.idx"
+  daily_index_by_form:        "/Archives/edgar/daily-index/{year}/QTR{quarter}/form.{yyyymmdd}.idx"
+  daily_index_master:         "/Archives/edgar/daily-index/{year}/QTR{quarter}/master.{yyyymmdd}.idx"
+  filing_base:                "/Archives/edgar/data/{cik}/{accession_nodash}/"
+  filing_index_json:          "/Archives/edgar/data/{cik}/{accession_nodash}/index.json"
+  rss_atom_by_form:           "/cgi-bin/browse-edgar?action=getcompany&type={form}&count=40&output=atom"
+  rss_atom_by_cik:            "/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type={form}&count=40&output=atom"
+
+  # data.sec.gov — structured JSON
+  submissions:                "/submissions/CIK{cik_padded}.json"
+  submissions_page:           "/submissions/{filename}"     # for paginated older filings
+  company_facts:              "/api/xbrl/companyfacts/CIK{cik_padded}.json"
+  company_concept:            "/api/xbrl/companyconcept/CIK{cik_padded}/{taxonomy}/{tag}.json"
+  frame:                      "/api/xbrl/frames/{taxonomy}/{tag}/{unit}/CY{year}Q{quarter}I.json"
+
+  # Reference
+  ticker_cik_map:             "https://www.sec.gov/files/company_tickers.json"
+  ticker_cik_exchange_map:    "https://www.sec.gov/files/company_tickers_exchange.json"
+
+  # efts.sec.gov — full-text search
+  search:                     "/LATEST/search-index"
+
+forms_in_scope:
+  priority_1:
+    - N-PORT-P        # fund holdings, monthly
+    - "13F-HR"        # institutional holdings, quarterly
+    - "4"             # insider transactions, T+1
+    - N-1A            # fund registration
+    - N-1A/A          # fund registration amendments
+    - 497K            # summary prospectus (fund goes live)
+    - "497"
+  priority_2:
+    - SC 13D
+    - SC 13G
+    - "8-K"
+    - N-CEN
+  priority_3:
+    - "10-K"
+    - "10-Q"
+    - DEF 14A
+    - S-1
+    - "424B4"
+    - N-CSR
+    - N-CSRS
+
+identifiers:
+  primary: cik                     # 10-digit zero-padded in URLs, unpadded int in JSON
+  accession_format: "NNNNNNNNNN-YY-NNNNNN"      # dashed
+  accession_url_format: "NNNNNNNNNNYYNNNNNN"    # no dashes, used in Archives paths
+
+response:
+  format: mixed                    # JSON on data.sec.gov, XML/HTML on Archives, .idx (pipe-delimited) on full-index
+  encoding: utf-8
+  gzip: true                       # server honors Accept-Encoding: gzip

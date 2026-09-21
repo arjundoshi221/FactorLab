@@ -35,10 +35,10 @@ GET https://eodhd.com/api/insider-transactions?code=AAPL.US&limit=100&from=2024-
 
 | Source | Cost | Quality | Notes |
 |--------|------|---------|-------|
-| [SEC EDGAR direct](https://www.sec.gov/search-filings/edgar-application-programming-interfaces) | Free | Raw XML, needs parsing | Free EDGAR APIs, no auth needed |
-| [edgartools](https://github.com/dgunning/edgartools) (Python) | Free | Parses Form 3/4/5 into Python objects | Best OSS library for raw EDGAR |
+| **SEC EDGAR (this repo)** | Free | Raw XML, canonical | Primary fallback for the T+1 raw feed. Client + Form 4/3/5 parsing recipes in [`20-edgar-sec-filings.md`](20-edgar-sec-filings.md). Real Form 4 sample at [`data/edgar/samples/4/`](../../data/edgar/samples/4/). |
+| [edgartools](https://github.com/dgunning/edgartools) (Python) | Free | Parses Form 3/4/5 into Python objects | OSS reference; we own the primary integration. |
 | [OpenInsider](http://openinsider.com/) | Free | Web screener, no API | Manual research / validation only |
-| [sec-api.io](https://sec-api.io/docs/insider-ownership-trading-api) | ~$50/mo | Bulk JSONL downloads, real-time | Overkill since we have EODHD |
+| [sec-api.io](https://sec-api.io/docs/insider-ownership-trading-api) | ~$50/mo | Bulk JSONL downloads, real-time | Overkill since we have EODHD + EDGAR |
 | [Finnhub](https://finnhub.io/docs/api/insider-transactions) | Free (60 req/min) | Per-ticker queries | Good free backup |
 
 ### 1C. Signal Construction
