@@ -34,7 +34,6 @@ try {
     }
 
     Invoke-Git -Arguments @("fetch", "--prune", "origin", "main:refs/remotes/origin/main")
-
     $head = (& git rev-parse "HEAD").Trim()
     $remoteHead = (& git rev-parse "refs/remotes/origin/main").Trim()
     if ($LASTEXITCODE -ne 0) {
