@@ -49,12 +49,13 @@ class USRepository:
         return item
 
     def sources_status(self):
-        return [self.source_status("eodhd"), self.source_status("schwab")]
+        return [self.source_status("universe"), self.source_status("eodhd"),
+                self.source_status("schwab")]
 
     def overall_status(self):
         sources = self.sources_status()
-        priority = {"error": 5, "auth_required": 4, "stale": 3, "incomplete": 2,
-                    "recovering": 1, "ready": 0}
+        priority = {"error": 6, "auth_required": 5, "stale": 4, "incomplete": 3,
+                    "waiting": 2, "recovering": 1, "ready": 0}
         return max(sources, key=lambda item: priority.get(item["status"], 2))
 
     def instruments(self, *, trading_date, search="", scope="all", limit=100, offset=0):
@@ -127,10 +128,18 @@ class USRepository:
         count_rows = self.query("""
             SELECT
               (SELECT count() FROM ref_instruments FINAL WHERE market_code = 'USA' AND status = 'active') AS active,
-              (SELECT count() FROM us_expected_series FINAL WHERE active AND resolution = 'daily') AS daily_configured,
-              (SELECT count() FROM us_expected_series FINAL WHERE active AND resolution = '1min') AS minute_configured,
-              (SELECT uniqExact(instrument_id) FROM market_candles_daily FINAL WHERE market_code = 'USA' AND source = 'eodhd') AS daily_with_data,
-              (SELECT uniqExact(instrument_id) FROM market_candles_1min FINAL WHERE market_code = 'USA' AND source = 'schwab') AS minute_with_data,
+              (SELECT count() FROM us_expected_series FINAL
+                  WHERE active AND source = 'eodhd' AND resolution = 'daily') AS daily_configured,
+              (SELECT count() FROM us_expected_series FINAL
+                  WHERE active AND source = 'schwab' AND resolution = '1min') AS minute_configured,
+              (SELECT uniqExact(instrument_id) FROM market_candles_daily FINAL
+                  WHERE market_code = 'USA' AND source = 'eodhd'
+                    AND instrument_id IN (SELECT instrument_id FROM us_expected_series FINAL
+                        WHERE active AND source = 'eodhd' AND resolution = 'daily')) AS daily_with_data,
+              (SELECT uniqExact(instrument_id) FROM market_candles_1min FINAL
+                  WHERE market_code = 'USA' AND source = 'schwab'
+                    AND instrument_id IN (SELECT instrument_id FROM us_expected_series FINAL
+                        WHERE active AND source = 'schwab' AND resolution = '1min')) AS minute_with_data,
               (SELECT max(ingested_at) FROM ref_instruments FINAL WHERE market_code = 'USA' AND status = 'active') AS master_as_of,
               (SELECT max(ingested_at) FROM us_expected_series FINAL WHERE active AND resolution = '1min') AS ranking_as_of
             """)
@@ -147,13 +156,19 @@ class USRepository:
             source = "schwab" if resolution == "1min" else "eodhd"
             actual_rows = self.query("""SELECT sum(actual) AS actual FROM us_session_coverage FINAL
                 WHERE source = {source:String} AND resolution = {resolution:String}
-                  AND trade_date = {day:Date}""", source=source, resolution=resolution, day=day)
+                  AND trade_date = {day:Date}
+                  AND instrument_id IN (SELECT instrument_id FROM us_expected_series FINAL
+                      WHERE active AND source = {source:String}
+                        AND resolution = {resolution:String})""",
+                source=source, resolution=resolution, day=day)
             actual = int(actual_rows[0]["actual"] or 0) if actual_rows else 0
             totals[resolution] = {"expected": expected, "actual": actual,
                                   "missing": max(0, expected - actual),
                                   "coverage_percent": round(min(100, actual * 100 / expected), 2) if expected else None}
         active = int(counts.get("active", 0))
-        universe = {**counts, "no_daily_data": max(0, active - int(counts.get("daily_with_data", 0)))}
+        daily_configured = int(counts.get("daily_configured", 0))
+        universe = {**counts, "no_daily_data": max(
+            0, daily_configured - int(counts.get("daily_with_data", 0)))}
         sources = self.sources_status()
         return {"generated_at": now, "trading_date": day, "market_status": market_status,
                 "instruments": active, "universe": universe, "resolutions": totals,

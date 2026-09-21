@@ -1,0 +1,195 @@
+name: Production release
+
+on:
+  push:
+    tags:
+      - "release/*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: factorlab-production
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/arjundoshi221/factorlab
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate release tag and main ancestry
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^release/[0-9]{8}T[0-9]{6}Z-([0-9a-f]{7,12})$ ]]; then
+            echo "Invalid release tag: $tag" >&2
+            exit 1
+          fi
+          tagged_short="${BASH_REMATCH[1]}"
+          commit=$(git rev-list -n 1 "$GITHUB_REF")
+          if [[ "${commit:0:${#tagged_short}}" != "$tagged_short" ]]; then
+            echo "Tag SHA does not match the tagged commit." >&2
+            exit 1
+          fi
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$commit" origin/main
+          echo "release_id=${tag#release/}" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+  backend-tests:
+    needs: authorize
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Python package
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - name: Run Python tests
+        run: python -m pytest
+
+  frontend-tests:
+    needs: authorize
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/factorlab/webui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/factorlab/webui/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  publish:
+    needs: [authorize, backend-tests, frontend-tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Refuse an existing immutable image tag
+        env:
+          RELEASE_ID: ${{ needs.authorize.outputs.release_id }}
+        run: |
+          if docker buildx imagetools inspect "$IMAGE_NAME:$RELEASE_ID" >/dev/null 2>&1; then
+            echo "Image tag already exists and will not be overwritten: $IMAGE_NAME:$RELEASE_ID" >&2
+            exit 1
+          fi
+      - name: Build and publish Linux AMD64 image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ needs.authorize.outputs.release_id }}
+          provenance: true
+          sbom: true
+
+  deploy:
+    needs: [authorize, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned SSH identity
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          SSH_HOST_KEY: ${{ secrets.VPS_SSH_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/factorlab_deploy
+          chmod 0600 ~/.ssh/factorlab_deploy
+          printf '%s\n' "$SSH_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 0644 ~/.ssh/known_hosts
+      - name: Package and upload deployment bundle
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          RUN_DIR: /tmp/factorlab-release-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          tar -czf deploy-bundle.tar.gz deploy
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" "install -d -m 0700 '$RUN_DIR'"
+          scp -i ~/.ssh/factorlab_deploy -o BatchMode=yes deploy-bundle.tar.gz "$VPS_USER@$VPS_HOST:$RUN_DIR/deploy-bundle.tar.gz"
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "tar -xzf '$RUN_DIR/deploy-bundle.tar.gz' -C '$RUN_DIR'"
+      - name: Deploy exact image digest
+        id: deployment
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          RUN_DIR: /tmp/factorlab-release-${{ github.run_id }}-${{ github.run_attempt }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_ID: ${{ needs.authorize.outputs.release_id }}
+          RELEASE_COMMIT: ${{ needs.authorize.outputs.commit }}
+          IMAGE_DIGEST: ${{ needs.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+          remote_image="$IMAGE_NAME@$IMAGE_DIGEST"
+          set +e
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "sudo bash '$RUN_DIR/deploy/scripts/deploy-release.sh' '$RELEASE_ID' '$RELEASE_COMMIT' '$remote_image' '$RUN_DIR/deploy-bundle.tar.gz'" \
+            | tee deployment.log
+          deploy_status=${PIPESTATUS[0]}
+          set -e
+          previous_digest=$(sed -n 's/^FACTORLAB_RESULT_PREVIOUS_IMAGE=//p' deployment.log | tail -1)
+          verification=$(sed -n 's/^FACTORLAB_RESULT_VERIFICATION=//p' deployment.log | tail -1)
+          rollback=$(sed -n 's/^FACTORLAB_RESULT_ROLLBACK=//p' deployment.log | tail -1)
+          {
+            echo "previous_digest=${previous_digest:-unknown}"
+            echo "verification=${verification:-failed}"
+            echo "rollback=${rollback:-not-reported}"
+          } >> "$GITHUB_OUTPUT"
+          if (( deploy_status != 0 )); then exit "$deploy_status"; fi
+      - name: Record release result
+        if: always()
+        env:
+          PREVIOUS_DIGEST: ${{ steps.deployment.outputs.previous_digest }}
+          VERIFICATION: ${{ steps.deployment.outputs.verification }}
+          ROLLBACK: ${{ steps.deployment.outputs.rollback }}
+          IMAGE_DIGEST: ${{ needs.publish.outputs.digest }}
+          RELEASE_COMMIT: ${{ needs.authorize.outputs.commit }}
+        run: |
+          {
+            echo "## FactorLab production release"
+            echo "- Release tag: \`${GITHUB_REF_NAME}\`"
+            echo "- Commit: \`${RELEASE_COMMIT}\`"
+            echo "- Image digest: \`${IMAGE_DIGEST}\`"
+            echo "- Previous image: \`${PREVIOUS_DIGEST:-unknown}\`"
+            echo "- Verification: \`${VERIFICATION:-not-run}\`"
+            echo "- Rollback: \`${ROLLBACK:-not-required}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove remote transfer directory
+        if: always()
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          RUN_DIR: /tmp/factorlab-release-${{ github.run_id }}-${{ github.run_attempt }}
+        run: ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" "rm -rf -- '$RUN_DIR'"

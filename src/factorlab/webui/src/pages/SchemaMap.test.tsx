@@ -154,4 +154,23 @@ describe("SchemaMap", () => {
     await waitFor(() => expect(requestFullscreen).toHaveBeenCalledTimes(1));
     Reflect.deleteProperty(HTMLElement.prototype, "requestFullscreen");
   });
+
+  it("loads the multi-database v2 map from its independent endpoint", async () => {
+    const v2Schema = {
+      ...schema,
+      database: "factorlab_v2",
+      tables: schema.tables.map((table) => ({ ...table, name: `ref.${table.name}` })),
+    };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => v2Schema });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SchemaMap version="v2" />);
+
+    expect(await screen.findByText("V2 schema preview")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "V2 preview" })).toHaveClass("active");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/hub/api/v1/schema-map/v2",
+      expect.objectContaining({ headers: { Accept: "application/json" } }),
+    );
+  });
 });

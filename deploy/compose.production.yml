@@ -126,6 +126,26 @@ services:
       - us_runtime:/run/secrets/app:ro
       - /var/lib/factorlab/app-data:/app/data
 
+  universe-us:
+    <<: *factorlab-service
+    image: ${FACTORLAB_US_IMAGE:-factorlab:latest}
+    command:
+      - python
+      - scripts/factlab_us_universe.py
+      - --config
+      - /app/config/us-universe.yaml
+      - --daemon
+    mem_limit: 512m
+    environment:
+      <<: *clickhouse-client-env
+      FACTORLAB_SECRETS_DIR: /run/secrets/app
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - us_runtime:/run/secrets/app:ro
+      - ${FACTORLAB_US_UNIVERSE_CONFIG:-/etc/factorlab/us-universe.yaml}:/app/config/us-universe.yaml:ro
+
   ingest-political:
     <<: *factorlab-service
     restart: "no"

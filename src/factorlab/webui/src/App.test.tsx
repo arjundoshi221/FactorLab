@@ -83,4 +83,11 @@ describe("FactorLab Hub", () => {
     expect(await screen.findByText("Schema map canvas")).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it("renders the v2 schema map route without loading the dashboard", async () => {
+    window.history.replaceState({}, "", "/schema/v2");
+    render(<App />);
+    expect(await screen.findByText("Schema map canvas")).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

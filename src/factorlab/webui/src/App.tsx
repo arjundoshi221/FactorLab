@@ -147,7 +147,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <a className={path.startsWith("/india") ? "active" : ""} href="/india">India markets</a>
           <a className={path === "/us" ? "active" : ""} href="/us">US markets</a>
           <a className={path === "/political" ? "active" : ""} href="/political">Political</a>
-          <a className={path === "/schema" ? "active" : ""} href="/schema">Schema map</a>
+          <a className={path.startsWith("/schema") ? "active" : ""} href="/schema">Schema map</a>
           <a className={path === "/roadmap" ? "active" : ""} href="/roadmap">Roadmap</a>
         </nav>
         <span className="private-badge">Private system</span>
@@ -451,6 +451,15 @@ function Roadmap() {
 export function App() {
   const path = window.location.pathname;
   const indiaInstrumentMatch = path.match(/^\/india\/instruments\/([0-9a-f-]+)$/i);
+  if (path === "/schema/v2") {
+    return (
+      <Shell>
+        <Suspense fallback={<main className="loading-state">Loading v2 schema canvas...</main>}>
+          <SchemaMap version="v2" />
+        </Suspense>
+      </Shell>
+    );
+  }
   return (
     <Shell>
       {path === "/roadmap" ? <Roadmap /> : path === "/schema" ? <Suspense fallback={<main className="loading-state">Loading schema canvas…</main>}><SchemaMap /></Suspense> : indiaInstrumentMatch ? <IndiaInstrumentDetail instrumentId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}

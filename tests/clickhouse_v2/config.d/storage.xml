@@ -1,0 +1,18 @@
+<clickhouse>
+  <storage_configuration>
+    <disks>
+      <default>
+        <keep_free_space_bytes>0</keep_free_space_bytes>
+      </default>
+    </disks>
+    <policies>
+      <raw_archive>
+        <volumes>
+          <main>
+            <disk>default</disk>
+          </main>
+        </volumes>
+      </raw_archive>
+    </policies>
+  </storage_configuration>
+</clickhouse>

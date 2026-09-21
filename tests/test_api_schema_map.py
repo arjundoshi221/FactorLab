@@ -3,8 +3,9 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from factorlab.api.app import app, get_schema_map_service
+from factorlab.api.app import app, get_schema_map_service, get_v2_schema_map_service
 from factorlab.api.schema_map import (
+    V2_DATABASES,
     LayoutConflictError,
     LayoutNode,
     LayoutViewport,
@@ -42,7 +43,15 @@ class SchemaQueryClient:
                     "partition_key",
                 ],
                 ("ref_countries", "ReplacingMergeTree", 2, 100, "country_code", "country_code", ""),
-                ("ref_exchanges", "ReplacingMergeTree", 3, 200, "exchange_code", "exchange_code", ""),
+                (
+                    "ref_exchanges",
+                    "ReplacingMergeTree",
+                    3,
+                    200,
+                    "exchange_code",
+                    "exchange_code",
+                    "",
+                ),
             )
         if "FROM system.columns" in query:
             return result(
@@ -64,9 +73,7 @@ class SchemaQueryClient:
             )
         if "FROM hub_schema_layouts FINAL" in query:
             if self.saved is None:
-                return result(
-                    ["revision", "schema_fingerprint", "layout_json", "updated_at"]
-                )
+                return result(["revision", "schema_fingerprint", "layout_json", "updated_at"])
             return result(
                 ["revision", "schema_fingerprint", "layout_json", "updated_at"],
                 self.saved,
@@ -152,3 +159,116 @@ def test_schema_map_endpoints_use_private_service():
 
     assert response.status_code == 200
     assert response.json()["tables"][0]["name"] == "ref_countries"
+
+
+class V2SchemaQueryClient(SchemaQueryClient):
+    def query(self, query, parameters=None):
+        if "FROM system.tables AS tables" in query:
+            assert parameters == {"databases": list(V2_DATABASES)}
+            return result(
+                [
+                    "database",
+                    "name",
+                    "engine",
+                    "stored_rows",
+                    "bytes_on_disk",
+                    "primary_key",
+                    "sorting_key",
+                    "partition_key",
+                ],
+                ("ref", "listings", "ReplacingMergeTree", 10, 500, "listing_id", "listing_id", ""),
+                ("market", "bars", "ReplacingMergeTree", 100, 5000, "", "listing_id", "resolution"),
+            )
+        if "FROM system.columns" in query:
+            assert parameters == {"databases": list(V2_DATABASES)}
+            return result(
+                [
+                    "database",
+                    "table",
+                    "name",
+                    "type",
+                    "position",
+                    "default_kind",
+                    "default_expression",
+                    "is_in_primary_key",
+                    "is_in_sorting_key",
+                    "is_in_partition_key",
+                ],
+                ("ref", "listings", "listing_id", "UUID", 1, "", "", 1, 1, 0),
+                ("market", "bars", "listing_id", "UUID", 1, "", "", 0, 1, 0),
+            )
+        return super().query(query, parameters)
+
+
+def test_v2_schema_map_qualifies_tables_across_databases_and_uses_separate_layout():
+    client = V2SchemaQueryClient()
+    schema = SchemaMapRepository(
+        client,
+        database="factorlab_v2",
+        databases=V2_DATABASES,
+        qualify_names=True,
+        layout_id="v2",
+    ).get_schema_map(now=datetime(2026, 9, 20, tzinfo=UTC))
+
+    assert schema.database == "factorlab_v2"
+    assert [table.name for table in schema.tables] == ["ref.listings", "market.bars"]
+    assert schema.tables[0].domain == "Reference"
+    assert schema.tables[1].domain == "Market data"
+    relationship = schema.relationships[0]
+    assert relationship.source.table == "market.bars"
+    assert relationship.target.table == "ref.listings"
+
+
+def test_v2_schema_map_endpoint_uses_v2_service():
+    service = SchemaMapService(
+        SchemaMapRepository(
+            V2SchemaQueryClient(),
+            database="factorlab_v2",
+            databases=V2_DATABASES,
+            qualify_names=True,
+            layout_id="v2",
+        )
+    )
+    app.dependency_overrides[get_v2_schema_map_service] = lambda: service
+    try:
+        response = TestClient(app).get("/hub/api/v1/schema-map/v2")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["tables"][1]["name"] == "market.bars"
+
+
+class EmptyV2SchemaQueryClient(SchemaQueryClient):
+    def query(self, query, parameters=None):
+        if "FROM system.tables AS tables" in query:
+            return result(
+                [
+                    "database",
+                    "name",
+                    "engine",
+                    "stored_rows",
+                    "bytes_on_disk",
+                    "primary_key",
+                    "sorting_key",
+                    "partition_key",
+                ]
+            )
+        return super().query(query, parameters)
+
+
+def test_v2_schema_map_falls_back_to_migration_ddl_preview_when_databases_are_absent():
+    schema = SchemaMapRepository(
+        EmptyV2SchemaQueryClient(),
+        database="factorlab_v2",
+        databases=V2_DATABASES,
+        qualify_names=True,
+        layout_id="v2",
+    ).get_schema_map(now=datetime(2026, 9, 21, tzinfo=UTC))
+
+    namespaces = {table.name.split(".", 1)[0] for table in schema.tables}
+    assert namespaces == set(V2_DATABASES)
+    assert len(schema.tables) >= 60
+    assert next(table for table in schema.tables if table.name == "market.bars").columns
+    assert next(table for table in schema.tables if table.name == "research.bars").engine == "View"
+    assert schema.warnings[0].startswith("Preview mode:")

@@ -53,7 +53,12 @@ describe("PoliticalData", () => {
     expect(screen.getByText("Disclosure coverage")).toBeInTheDocument();
     expect(screen.getByText("Nancy Pelosi")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "AAPL" })).toHaveAttribute("href", "/us?symbol=AAPL");
-    expect(screen.getByText("45")).toBeInTheDocument();
+    expect(screen.getByText("Underlying data")).toBeInTheDocument();
+    expect(screen.getByText("Period total")).toBeInTheDocument();
+    expect(screen.getAllByText("45")).toHaveLength(2);
+    fireEvent.click(screen.getByText("All fields"));
+    expect(screen.getByText("Filing ID")).toBeInTheDocument();
+    expect(screen.getByText("15,000")).toBeInTheDocument();
   });
 
   it("applies ticker and chamber filters to the trade request", async () => {

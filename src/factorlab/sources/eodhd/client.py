@@ -122,6 +122,7 @@ class EODHDClient:
         """
         params = {"type": instrument_type} if instrument_type else None
         data = self._get(f"/exchange-symbol-list/{exchange}", params).json()
+        self.last_exchange_raw_id = self.last_raw_id
         log.info("EODHD exchange-symbol-list/%s: %d symbols", exchange, len(data))
         return data
 
@@ -151,3 +152,10 @@ class EODHDClient:
     def get_fundamentals(self, symbol: str) -> dict:
         """Fetch full fundamentals dump (costs 10 API calls)."""
         return self._get(f"/fundamentals/{symbol}").json()
+
+    def get_index_components(self, symbol: str) -> dict | list:
+        """Fetch the current constituents for an EODHD index symbol."""
+        data = self._get(f"/fundamentals/{symbol}", {"filter": "Components"}).json()
+        size = len(data) if isinstance(data, (dict, list)) else 0
+        log.info("EODHD index components %s: %d records", symbol, size)
+        return data

@@ -6,9 +6,13 @@ cd /opt/factorlab/deploy
 backup="/opt/factorlab/deploy/rollback-us-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$backup"
 cp compose.production.yml production.env "$backup/"
+if [ -f /etc/factorlab/us-universe.yaml ]; then
+    cp /etc/factorlab/us-universe.yaml "$backup/"
+fi
 sudo docker inspect --format '{{.Id}} {{.State.StartedAt}}' factorlab-ingest-india-1 > "$backup/india-before.txt"
 sudo docker load -i "$release/factorlab-us-schwab-v1-20260909.tar"
 sudo cp "$release/compose.production.yml" compose.production.yml
+sudo install -D -m 0644 "$release/us-universe.yaml" /etc/factorlab/us-universe.yaml
 sudo python3 - <<'PY'
 from pathlib import Path
 path = Path('production.env')
@@ -29,12 +33,14 @@ for statement in Path("sql/clickhouse/004_us_collection.sql").read_text().split(
         store.client.command(statement)
 print("US schema ready")
 '
+"${compose[@]}" run --rm --no-deps universe-us python scripts/factlab_us_universe.py \
+    --config /app/config/us-universe.yaml --once
 if "${compose[@]}" run --rm --no-deps ingest-us python scripts/factlab_us_clickhouse.py --backfill; then
     echo 'Initial US collection completed'
 else
     echo 'Initial US collection has unresolved work; daemon will retry and report coverage'
 fi
-"${compose[@]}" up -d --no-deps ingest-us api
+"${compose[@]}" up -d --no-deps universe-us ingest-us api
 sudo docker inspect --format '{{.Id}} {{.State.StartedAt}}' factorlab-ingest-india-1 > "$backup/india-after.txt"
 cmp "$backup/india-before.txt" "$backup/india-after.txt"
 printf 'Rollback configuration: %s\n' "$backup"

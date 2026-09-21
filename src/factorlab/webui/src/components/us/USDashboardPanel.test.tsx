@@ -7,6 +7,7 @@ const dashboard = {
   trading_date: "2026-09-15", market_status: "open", instruments: 6100,
   source: { source: "eodhd", status: "ready", detail: "Daily collection ready" },
   sources: [
+    { source: "universe", status: "ready", detail: "500 configured stocks resolved" },
     { source: "eodhd", status: "ready", detail: "Daily collection ready" },
     { source: "schwab", status: "auth_required", detail: "Authenticate Schwab" },
   ],
@@ -37,6 +38,7 @@ it("integrates universe, coverage, sources, instruments, and runs", async () => 
   expect(await screen.findByText("AAPL")).toBeInTheDocument();
   expect(screen.getByText("6,100 stocks")).toBeInTheDocument();
   expect(screen.getByText("us bulk daily")).toBeInTheDocument();
+  expect(screen.getByText("500 configured stocks resolved")).toBeInTheDocument();
   expect(screen.getByText("Authenticate Schwab")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Explore all US data" })).toHaveAttribute("href", "/us");
 });

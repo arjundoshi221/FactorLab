@@ -29,8 +29,8 @@ export function USSummaryCard() {
   return <article className="health-card">
     <span className="eyebrow">US · EODHD + Schwab</span><h2><a href="/us">US market coverage</a></h2>
     {data ? <><strong className="health-card__metric">{data.universe.active.toLocaleString()}</strong>
-      <p>listed stocks · {data.universe.minute_configured} in minute tier</p>
-      <USStatusPill status={data.source.status} /><small>Full daily universe · liquid-250 minute data</small></>
+      <p>reference stocks · {data.universe.daily_configured} configured</p>
+      <USStatusPill status={data.source.status} /><small>Configured daily universe · liquid minute tier</small></>
       : <p>{error ? "Collection status unavailable" : "Loading US coverage…"}</p>}
   </article>;
 }
@@ -94,14 +94,14 @@ export function USMarkets() {
   const total = page.total ?? page.items.length;
   return <main className="us-markets">
     <section className="hero"><div><span className="eyebrow">US equities · EODHD + Schwab</span>
-      <h1>US markets</h1><p>All listed common stocks and ADRs daily; liquid-250 one-minute coverage.</p></div>
+      <h1>US markets</h1><p>Configured US stocks daily; up to 250 liquid names with one-minute coverage.</p></div>
       <button onClick={() => setTick(value => value + 1)} disabled={loading}>Refresh data</button></section>
     {error && <div className="notice notice--error" role="alert">{error}</div>}
     {loading && <p role="status">Loading US markets…</p>}
     {dashboard && <><USSummaryCards dashboard={dashboard} />
       {dashboard.sources.some(source => source.status === "auth_required") && <div className="notice" role="status">
         Schwab authentication is required for minute data. <a href="https://factorlab-upstox-auth.kairo-jai.workers.dev/" target="_blank" rel="noreferrer">Open broker authentication</a></div>}</>}
-    <section className="inventory"><div className="section-heading"><div><span className="eyebrow">Full listed universe</span>
+    <section className="inventory"><div className="section-heading"><div><span className="eyebrow">Full reference master</span>
       <h2>Instruments and coverage</h2></div><small>{total.toLocaleString()} matching stocks</small></div>
       <USUniverseTabs value={scope} onChange={value => { setScope(value); setOffset(0); setSelected(null); }} />
       <div className="table-tools"><label>Search stocks <input value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} placeholder="Symbol or company" /></label>

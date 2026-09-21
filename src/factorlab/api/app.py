@@ -124,6 +124,13 @@ def get_schema_map_service() -> SchemaMapService:
     return SchemaMapService(SchemaMapRepository.from_environment())
 
 
+@lru_cache
+def get_v2_schema_map_service() -> SchemaMapService:
+    """Create the multi-database v2 schema reader and its separate layout store."""
+
+    return SchemaMapService(SchemaMapRepository.v2_from_environment())
+
+
 @app.get("/health", tags=["operations"])
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -180,6 +187,43 @@ def save_hub_schema_layout(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="The shared layout could not be saved") from exc
+
+
+@app.get(
+    "/hub/api/v1/schema-map/v2",
+    response_model=SchemaMapResponse,
+    tags=["hub"],
+)
+def get_hub_v2_schema_map(
+    service: Annotated[SchemaMapService, Depends(get_v2_schema_map_service)],
+) -> SchemaMapResponse:
+    """Return live metadata for every FactorLab v2 ClickHouse namespace."""
+
+    try:
+        return service.get_schema_map()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="V2 schema metadata is unavailable") from exc
+
+
+@app.put(
+    "/hub/api/v1/schema-map/v2/layout",
+    response_model=SharedSchemaLayout,
+    tags=["hub"],
+)
+def save_hub_v2_schema_layout(
+    update: SchemaLayoutUpdate,
+    service: Annotated[SchemaMapService, Depends(get_v2_schema_map_service)],
+) -> SharedSchemaLayout:
+    """Save the independent shared layout for the multi-database v2 map."""
+
+    try:
+        return service.save_layout(update)
+    except LayoutConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except InvalidLayoutError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="The v2 layout could not be saved") from exc
 
 
 @app.get(
@@ -1172,4 +1216,9 @@ def hub_political_data() -> FileResponse:
 
 @app.get("/schema", include_in_schema=False)
 def hub_schema_map() -> FileResponse:
+    return _hub_index()
+
+
+@app.get("/schema/v2", include_in_schema=False)
+def hub_v2_schema_map() -> FileResponse:
     return _hub_index()

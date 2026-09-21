@@ -4,7 +4,7 @@ import { USStatusPill } from "./USStatusPill";
 export function USSummaryCards({ dashboard }: { dashboard: USDashboard }) {
   return <>
     <section className="metric-grid" aria-label="US collection summary">
-      <article className="metric-card"><span>Listed universe</span>
+      <article className="metric-card"><span>Reference master</span>
         <strong>{dashboard.universe.active.toLocaleString()} stocks</strong>
         <small>{dashboard.universe.daily_configured.toLocaleString()} daily configured</small></article>
       <article className="metric-card"><span>Liquid minute tier</span>

@@ -1,7 +1,6 @@
 import importlib.util
 from datetime import date
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -89,22 +88,6 @@ def test_pending_daily_includes_incomplete_stale_and_error_states():
     assert [item["instrument_id"] for item in runner.pending_daily(items, states, target_day)] == identifiers[:3]
 
 
-def test_sync_full_universe_activates_every_daily_series(monkeypatch):
-    monkeypatch.setattr(runner, "MINIMUM_MASTER_SIZE", 1)
-    storage = Mock()
-    storage.active_reference_count.return_value = 0
-    storage.sync_reference_master.return_value = {"AAPL": uuid4(), "BABA": uuid4()}
-    eodhd = SimpleNamespace(
-        get_exchange_symbols=Mock(return_value=[master_item("AAPL"), master_item("BABA", exchange="NYSE")]),
-        last_raw_id="raw",
-    )
-    result = runner.sync_full_universe(storage, eodhd)
-    assert len(result) == 2
-    assert storage.sync_expected_series.call_args.kwargs == {
-        "source": "eodhd", "universe": "us_listed_equities", "resolution": "daily"}
-    storage.finish_ingestion_run.assert_called_once()
-
-
 def test_liquid_tier_skips_unresolved_schwab_symbols(monkeypatch):
     monkeypatch.setattr(runner, "MINUTE_TIER_SIZE", 2)
     identifiers = [uuid4() for _ in range(3)]
@@ -120,3 +103,17 @@ def test_liquid_tier_skips_unresolved_schwab_symbols(monkeypatch):
     assert [item[0] for item in result] == ["AAPL", "MSFT"]
     assert storage.sync_expected_series.call_args.kwargs == {
         "source": "schwab", "universe": "us_liquid_250", "resolution": "1min"}
+
+
+def test_liquid_tier_targets_configured_count_when_below_cap(monkeypatch):
+    monkeypatch.setattr(runner, "MINUTE_TIER_SIZE", 250)
+    identifiers = [uuid4() for _ in range(2)]
+    items = [{"instrument_id": identifier, "symbol": symbol,
+              "provider_symbol": f"{symbol}.US"}
+             for identifier, symbol in zip(identifiers, ["AAPL", "MSFT"], strict=True)]
+    storage = Mock()
+    storage.liquid_candidates.return_value = items
+    client = Mock()
+    result = runner.select_minute_tier(storage, client, items)
+    assert len(result) == 2
+    storage.liquid_candidates.assert_called_once_with(limit=152)

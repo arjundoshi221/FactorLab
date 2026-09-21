@@ -43,8 +43,20 @@ const domainColors: Record<string, string> = {
   "US operations": "#ff8179",
   Operations: "#82d8e8",
   "Hub internals": "#9ba5ae",
+  Fundamentals: "#ffb86b",
+  "Alternative data": "#f2c66d",
+  "Investment book": "#ff8179",
+  Risk: "#ff5f73",
+  "Derived research": "#74a8ff",
+  "Broker mirror": "#5dd69b",
+  "Data operations": "#82d8e8",
+  "Research views": "#b8f35a",
   Unclassified: "#9ba5ae",
 };
+
+export interface SchemaMapProps {
+  version?: "legacy" | "v2";
+}
 
 type SchemaNodeData = {
   table: SchemaTable;
@@ -291,7 +303,9 @@ function SchemaInspector({
   );
 }
 
-function SchemaMapCanvas() {
+function SchemaMapCanvas({ version = "legacy" }: SchemaMapProps) {
+  const isV2 = version === "v2";
+  const apiBase = isV2 ? "/hub/api/v1/schema-map/v2" : "/hub/api/v1/schema-map";
   const [schema, setSchema] = useState<SchemaMapResponse | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<SchemaFlowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -363,13 +377,13 @@ function SchemaMapCanvas() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const response = await fetch("/hub/api/v1/schema-map", { headers: { Accept: "application/json" } });
+      const response = await fetch(apiBase, { headers: { Accept: "application/json" } });
       if (!response.ok) throw new Error(`Schema request failed (${response.status})`);
       await hydrate(await response.json() as SchemaMapResponse);
     } catch {
       setError("The live ClickHouse schema could not be loaded.");
     }
-  }, [hydrate]);
+  }, [apiBase, hydrate]);
 
   useEffect(() => {
     if (initialized.current) return;
@@ -439,7 +453,7 @@ function SchemaMapCanvas() {
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch("/hub/api/v1/schema-map/layout", {
+      const response = await fetch(`${apiBase}/layout`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
@@ -468,7 +482,7 @@ function SchemaMapCanvas() {
     } finally {
       setSaving(false);
     }
-  }, [instance, nodes, schema]);
+  }, [apiBase, instance, nodes, schema]);
 
   const domains = useMemo(
     () => ["All domains", ...Array.from(new Set(schema?.tables.map((table) => table.domain) ?? [])).sort()],
@@ -498,16 +512,30 @@ function SchemaMapCanvas() {
   const selected = schema?.tables.find((table) => table.name === selectedTable) ?? null;
   const hasExpandedCards = nodes.some((node) => !node.data.collapsed);
   const warningCount = schema?.warnings.length ?? 0;
+  const previewWarning = schema?.warnings.find((warning) => warning.startsWith("Preview mode:"));
+  const isPreview = Boolean(previewWarning);
+  const databaseCount = isV2
+    ? new Set(schema?.tables.map((table) => table.name.split(".", 1)[0]) ?? []).size
+    : 1;
 
   return (
     <main className="schema-page">
       <section className="schema-heading">
         <div>
-          <span className="eyebrow">Live ClickHouse architecture</span>
-          <h1>Schema map</h1>
-          <p>Drag tables into place, trace reviewed key relationships, and inspect every column without exposing row data.</p>
+          <span className="eyebrow">{isV2 ? (isPreview ? "Temporary migration preview" : "FactorLab v2 architecture") : "Live ClickHouse architecture"}</span>
+          <h1>{isV2 ? "V2 schema preview" : "Schema map"}</h1>
+          <p>{isV2
+            ? (isPreview
+              ? "Explore the planned v2 databases and tables directly from the bundled migration definitions. No production schema changes are applied."
+              : "Explore every v2 database, trace canonical identifiers across namespaces, and inspect the live migration target.")
+            : "Drag tables into place, trace reviewed key relationships, and inspect every column without exposing row data."}</p>
+          <nav className="schema-version-nav" aria-label="Schema versions">
+            <a className={!isV2 ? "active" : ""} href="/schema">Legacy database</a>
+            <a className={isV2 ? "active" : ""} href="/schema/v2">V2 preview</a>
+          </nav>
         </div>
         <div className="schema-heading__stats">
+          {isV2 && <><strong>{schema ? databaseCount : "—"}</strong><span>databases</span></>}
           <strong>{schema?.tables.length ?? "—"}</strong><span>tables</span>
           <strong>{schema?.relationships.length ?? "—"}</strong><span>logical links</span>
         </div>
@@ -535,7 +563,7 @@ function SchemaMapCanvas() {
         </section>
         {Boolean(error || notice || warningCount > 0) && (
           <div className={error ? "notice notice--error schema-notice" : "notice schema-notice"} role="status">
-            {error ?? notice ?? `${warningCount} configured relationship(s) do not match the live schema.`}
+            {error ?? notice ?? previewWarning ?? `${warningCount} configured relationship(s) do not match the live schema.`}
             {error?.includes("newer layout") && <button type="button" onClick={() => void load()}>Reload</button>}
           </div>
         )}
@@ -578,6 +606,6 @@ function SchemaMapCanvas() {
   );
 }
 
-export function SchemaMap() {
-  return <ReactFlowProvider><SchemaMapCanvas /></ReactFlowProvider>;
+export function SchemaMap({ version = "legacy" }: SchemaMapProps) {
+  return <ReactFlowProvider><SchemaMapCanvas version={version} /></ReactFlowProvider>;
 }

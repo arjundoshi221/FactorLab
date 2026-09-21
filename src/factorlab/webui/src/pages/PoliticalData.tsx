@@ -100,6 +100,32 @@ function ActivityChart({ series }: { series: PoliticalMetricsSeries }) {
   );
 }
 
+function ActivityDataTable({ series }: { series: PoliticalMetricsSeries }) {
+  const exactUsdFormatter = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+  const total = series.points.reduce((sum, point) => sum + point.value, 0);
+
+  return <div className="political-series-data">
+    <div className="political-series-data__heading">
+      <div><span className="eyebrow">Query result</span><h3>Underlying data</h3></div>
+      <span>{series.points.length} rows</span>
+    </div>
+    {series.points.length ? <div className="table-wrap"><table>
+      <thead><tr><th>Bucket</th><th>Metric</th><th className="number-cell">Exact value</th><th className="number-cell">Period share</th></tr></thead>
+      <tbody>{series.points.map((point) => <tr key={point.bucket}>
+        <td><time dateTime={point.bucket}>{formatDate(point.bucket)}</time><small>{point.bucket}</small></td>
+        <td>{METRIC_LABELS[series.metric]}</td>
+        <td className="number-cell political-series-data__value">{series.metric === "amount_min" ? exactUsdFormatter.format(point.value) : integerFormatter.format(point.value)}</td>
+        <td className="number-cell">{total ? `${((point.value / total) * 100).toFixed(1)}%` : "0.0%"}</td>
+      </tr>)}</tbody>
+      <tfoot><tr><th colSpan={2}>Period total</th><th className="number-cell">{series.metric === "amount_min" ? exactUsdFormatter.format(total) : integerFormatter.format(total)}</th><th className="number-cell">100.0%</th></tr></tfoot>
+    </table></div> : <p className="political-empty">No query rows were returned for this period.</p>}
+  </div>;
+}
+
 function RateBar({ label, value }: { label: string; value: number }) {
   return <div className="political-rate">
     <div><span>{label}</span><strong>{value.toFixed(1)}%</strong></div>
@@ -133,7 +159,18 @@ function TradeTable({ trades }: { trades: PoliticalTrade[] }) {
       <td data-label="Type"><span className={`transaction-type transaction-type--${trade.transaction_type.startsWith("sale") ? "sale" : trade.transaction_type}`}>{trade.transaction_type.replaceAll("_", " ")}</span></td>
       <td data-label="Amount">{trade.amount_str || (trade.amount_min === null ? "—" : usdFormatter.format(trade.amount_min))}</td>
       <td data-label="Filed">{formatDate(trade.filing_date)}<small>{Math.max(0, Math.round((Date.parse(trade.filing_date) - Date.parse(trade.transaction_date)) / 86_400_000))} days later</small></td>
-      <td data-label="Source"><a href={trade.filing_url} target="_blank" rel="noreferrer">View filing ↗</a><small>{trade.source.replaceAll("_", " ")}</small></td>
+      <td data-label="Source"><a href={trade.filing_url} target="_blank" rel="noreferrer">View filing ↗</a><small>{trade.source.replaceAll("_", " ")}</small><details className="political-row-data"><summary>All fields</summary><dl>
+        <div><dt>Trade key</dt><dd>{trade.trade_key}</dd></div>
+        <div><dt>Filing ID</dt><dd>{trade.filing_id}</dd></div>
+        <div><dt>Owner code</dt><dd>{trade.owner_code || "—"}</dd></div>
+        <div><dt>Filer type</dt><dd>{trade.filer_type || "—"}</dd></div>
+        <div><dt>Asset type</dt><dd>{trade.asset_type_code || "—"}</dd></div>
+        <div><dt>Amount min</dt><dd>{trade.amount_min === null ? "—" : integerFormatter.format(trade.amount_min)}</dd></div>
+        <div><dt>Amount max</dt><dd>{trade.amount_max === null ? "—" : integerFormatter.format(trade.amount_max)}</dd></div>
+        <div><dt>Notification date</dt><dd>{trade.notification_date ?? "—"}</dd></div>
+        <div><dt>As of</dt><dd>{trade.as_of_time}</dd></div>
+        <div><dt>Ingested</dt><dd>{trade.ingested_at}</dd></div>
+      </dl></details></td>
     </tr>)}</tbody>
   </table></div>;
 }
@@ -203,7 +240,7 @@ export function PoliticalData() {
     </section>
     <section className="political-activity">
       <div className="political-metric-control"><label htmlFor="political-metric">Chart metric</label><select id="political-metric" value={metric} onChange={(event) => setMetric(event.target.value as PoliticalMetric)}>{Object.entries(METRIC_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
-      {series && <ActivityChart series={series} />}
+      {series && <div className="political-activity__panels"><ActivityChart series={series} /><ActivityDataTable series={series} /></div>}
     </section>
     <CoveragePanel coverage={coverage} />
     <section className="inventory" aria-labelledby="trades-title">

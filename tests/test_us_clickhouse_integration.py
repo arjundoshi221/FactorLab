@@ -63,6 +63,7 @@ def test_real_clickhouse_retries_reference_state_coverage_and_api():
     assert storage.state(ident, "1min")["history_complete"]
     storage.source_status("ready", "Integration test", source="schwab")
     storage.source_status("ready", "Integration test", source="eodhd")
+    storage.source_status("ready", "Integration test", source="universe")
     repo = USRepository(client)
     for resolution in ("1min", "daily"):
         page = repo.candles(resolution, symbol=symbol, date_from=date(2026, 9, 4), date_to=date(2026, 9, 4), cursor=None, limit=10)

@@ -4,7 +4,8 @@ import { USMarkets } from "./USMarkets";
 
 const dashboard = { trading_date: "2026-09-04", market_status: "closed", instruments: 1,
   source: { source: "eodhd", status: "ready", detail: "Ready" },
-  sources: [{ source: "eodhd", status: "ready", detail: "Daily ready" },
+  sources: [{ source: "universe", status: "ready", detail: "1 configured stock resolved" },
+    { source: "eodhd", status: "ready", detail: "Daily ready" },
     { source: "schwab", status: "ready", detail: "Minute ready" }],
   universe: { active: 1, daily_configured: 1, minute_configured: 1,
     daily_with_data: 1, minute_with_data: 1, no_daily_data: 0 }, resolutions: {

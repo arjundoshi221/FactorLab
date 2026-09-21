@@ -111,6 +111,13 @@ class USStorage(ClickHouseStorage):
         self.insert_dicts("us_expected_series", inserts)
         return len(current)
 
+    def active_expected_series(self, *, source="eodhd", resolution="daily"):
+        """Return the currently published collection universe in stable order."""
+        return rows(self.client.query("""SELECT instrument_id, symbol, provider_symbol, universe,
+            version, ingested_at FROM us_expected_series FINAL
+            WHERE source = {source:String} AND resolution = {resolution:String} AND active
+            ORDER BY symbol""", parameters={"source": source, "resolution": resolution}))
+
     def reference(self, symbol, provider_symbol, record, raw_id, universe):
         now = datetime.now(UTC)
         instrument_key = f"schwab:USA:{symbol}"
@@ -225,15 +232,15 @@ class USStorage(ClickHouseStorage):
         return present
 
     def liquid_candidates(self, limit=400):
-        """Rank active common stocks by recent median dollar volume."""
+        """Rank configured daily stocks by recent median dollar volume."""
         result = rows(self.client.query("""
             WITH recent AS (
                 SELECT instrument_id, symbol, trade_date, close, volume
                 FROM market_candles_daily FINAL
                 WHERE market_code = 'USA' AND source = 'eodhd'
                   AND instrument_id IN (
-                      SELECT instrument_id FROM ref_instruments FINAL
-                      WHERE market_code = 'USA' AND status = 'active')
+                      SELECT instrument_id FROM us_expected_series FINAL
+                      WHERE source = 'eodhd' AND resolution = 'daily' AND active)
                 ORDER BY instrument_id, trade_date DESC
                 LIMIT 20 BY instrument_id
             )

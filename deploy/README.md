@@ -4,6 +4,91 @@ ClickHouse, the private FactorLab Data Hub/API, India ingestion, optional
 US/political jobs, and the Cloudflare runtime-secret agent run on one VPS.
 Secret values are rendered only into Docker tmpfs volumes.
 
+## Automated production releases
+
+Production releases are initiated only from a clean, synchronized `main`:
+
+```powershell
+.\deploy\release.ps1
+```
+
+The helper fetches `origin/main`, refuses dirty, non-`main`, unpushed, behind,
+or diverged states, and pushes an immutable
+`release/<UTC timestamp>-<short SHA>` tag. The tag starts
+`.github/workflows/release.yml`, which runs the Python and frontend test suites,
+builds one Linux/AMD64 image, publishes it privately to GHCR, and deploys the
+exact image digest. Do not move or reuse release tags.
+
+The ClickHouse v2 migration runner is intentionally not part of this workflow.
+Production migrations must remain additive and backward-compatible; run that
+forward-only migration as its own reviewed operation.
+
+### One-time GitHub and VPS setup
+
+In the GitHub repository, allow Actions to read and write packages. Add these
+Actions secrets:
+
+- `VPS_HOST`: production hostname or IP address.
+- `VPS_USER`: the dedicated deployment account.
+- `VPS_SSH_PRIVATE_KEY`: its private deployment key.
+- `VPS_SSH_HOST_KEY`: the complete, pinned `known_hosts` line for `VPS_HOST`.
+
+Verify the server's SSH fingerprint through the VPS console or another trusted
+channel before storing the host-key line. The workflow never disables SSH
+host-key checking. Install the matching public deployment key in the account's
+`authorized_keys`, and grant that account non-interactive `sudo` access for the
+reviewed deployment command.
+
+Private GHCR pulls need a separate, read-only credential on the VPS. Create a
+classic GitHub PAT with only `read:packages`, then authenticate the root Docker
+client once (the token is read from stdin and must not be saved in shell
+history):
+
+```bash
+read -rsp 'GHCR read token: ' GHCR_TOKEN; echo
+printf '%s' "$GHCR_TOKEN" | sudo docker login ghcr.io -u arjundoshi221 --password-stdin
+unset GHCR_TOKEN
+sudo install -d -m 0755 /opt/factorlab/releases
+sudo bash /opt/factorlab/deploy/scripts/prepare-host.sh
+```
+
+Keep the GHCR package private, retain release-tagged images for rollback, and
+delete only untagged local layers when disk cleanup is needed. The workflow
+publishes with its short-lived `GITHUB_TOKEN`; the VPS credential cannot publish.
+
+### Inspect a release
+
+The Actions job summary records the tag, commit, new digest, previous image,
+verification result, and rollback result. On the VPS:
+
+```bash
+sudo cat /opt/factorlab/current-release /opt/factorlab/current-image
+sudo cat /opt/factorlab/releases/RELEASE_ID/release.env
+cd /opt/factorlab/deploy
+sudo docker compose --env-file production.env -f compose.production.yml ps -a
+sudo docker compose --env-file production.env -f compose.production.yml logs --tail 100 api ingest-india ingest-us
+```
+
+The deployer serializes releases with `flock`, validates both staged and
+installed Compose configurations, starts the secret agent first, and verifies
+the agent, image pins, API health, ClickHouse-backed hub overview, and ingestion
+stability. A failed check restores the preceding bundle and image pins and
+still fails the Actions run.
+
+### Manual rollback
+
+Use the release ID that is being undone. The saved record contains the exact
+bundle and per-service images that were active before it:
+
+```bash
+sudo bash /opt/factorlab/deploy/scripts/rollback-release.sh 20260920T120000Z-0123456789ab
+```
+
+The rollback command takes the same release lock, removes services introduced
+by that release, restores the prior bundle, recreates only the prior FactorLab
+services, and verifies both API endpoints. It does not recreate ClickHouse,
+Uptime Kuma, Portainer, or persistent volumes.
+
 ## Server layout
 
 ```text
@@ -11,6 +96,7 @@ Secret values are rendered only into Docker tmpfs volumes.
 /var/lib/factorlab/clickhouse          curated ClickHouse data (75 GB root disk)
 /mnt/factorlab-data/clickhouse-raw     raw HTTP archive (50 GB added disk)
 /etc/factorlab/identity                Cloudflare Access service-token files
+/etc/factorlab/us-universe.yaml        non-secret US collection universe
 ```
 
 ## Cloudflare no-domain contract
@@ -28,7 +114,7 @@ They are limited to the Worker Access application. Upstox, EODHD, and
 ClickHouse credentials remain in Cloudflare Secrets Store and reach containers
 only through tmpfs.
 
-## Build and upload
+## Legacy manual build and upload
 
 The production image uses a Node build stage for the React hub and a Python
 runtime stage for FastAPI and ingestion. Tag releases immutably and set
@@ -105,3 +191,16 @@ ssh -L 8000:127.0.0.1:8000 ubuntu@SERVER_IP
 ```
 
 Then browse to `http://127.0.0.1:8000/`.
+
+## US universe configuration
+
+`universe-us` resolves `/etc/factorlab/us-universe.yaml` into the active EODHD
+daily universe. It keeps the complete US common-stock master available for
+search while `ingest-us` polls the published membership. After editing the
+configuration, only the resolver needs a restart:
+
+```bash
+docker compose --env-file production.env -f compose.production.yml restart universe-us
+```
+
+The collector detects the new membership without a restart.
