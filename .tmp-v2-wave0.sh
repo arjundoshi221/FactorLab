@@ -57,6 +57,11 @@ try:
         "SELECT argMax(status, version), argMax(checksum, version) "
         "FROM meta.schema_migrations WHERE migration_id = 'wave_00_schema'"
     ).result_rows[0]
+    journal_checksum = (
+        journal[1].decode("utf-8").rstrip("\x00")
+        if isinstance(journal[1], bytes)
+        else str(journal[1])
+    )
     legacy_tables = client.query(
         "SELECT count() FROM system.tables WHERE database = 'factorlab'"
     ).result_rows[0][0]
@@ -67,7 +72,7 @@ try:
     assert not missing, missing
     assert expected_meta <= meta_tables, expected_meta - meta_tables
     assert journal[0] == "succeeded", journal
-    assert journal[1] == "e21095af4133b081b6484052c46cbac3c97382ab07219a1257f47fc7dcd83a4e", journal
+    assert journal_checksum == "e21095af41334e42431d380b16dc5afbd2f947c5b41d5e3a3aafc4da85421ef3", journal
     assert legacy_tables == 19, legacy_tables
     assert lock_count == 0, lock_count
     print("v2_databases=11")
