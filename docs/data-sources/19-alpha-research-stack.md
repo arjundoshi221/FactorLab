@@ -113,14 +113,15 @@ Structural: OCC total put/call, contract mix. FINRA short volume per ticker (not
 | URL | https://efts.sec.gov/LATEST/search-index?q= |
 | REST | https://data.sec.gov/submissions/CIK{cik}.json |
 | RSS | https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&output=atom |
-| Auth | None (User-Agent header required with contact) |
+| Auth | None beyond a self-identifying User-Agent (SEC Fair Access) |
 | Cadence | Real-time |
 | Format | JSON + HTML/XBRL filings |
 | LLM-ready | Yes — this is your primary text firehose |
+| Status | **API surface live** — see [`20-edgar-sec-filings.md`](20-edgar-sec-filings.md), client at [`src/factorlab/sources/edgar/`](../../src/factorlab/sources/edgar/), sample of every form at [`data/edgar/samples/CATALOG.md`](../../data/edgar/samples/CATALOG.md) |
 
 **Alpha thesis**: 8-Ks are event catalysts (guidance, M&A, exec changes). 13D/G is activist positioning. Form 4 insider clusters (multiple insiders buying within 30 days) is one of the highest-Sharpe signals in academic literature (Cohen-Malloy-Pomorski). 10-Q/K MD&A text changes YoY, run through LLM diff, surfaces subtle guidance shifts.
 
-**Note**: User-Agent header MUST include real contact per SEC ToS. Per user preference (memory: no email leakage), use `factorlab research (admin contact via github.com/arjundoshi)` — NOT personal email.
+**Auth**: `EDGAR_USER_AGENT` in `.env`, format `"Company/Project Name contact@email"`. SEC Fair Access is an API-contract requirement, so the personal-email prohibition (memory: `feedback_no_email_leakage.md`) has an explicit carve-out here. Personal email or a project-specific alias both work — SEC just wants an inbox they could reach if traffic became a problem.
 
 #### B2. Congress.gov API
 | URL | https://api.congress.gov/v3/ |
@@ -331,7 +332,7 @@ New schemas (`alt_positioning_us`, `alt_positioning_in`, `alt_flow_us`, `alt_new
 
 ## Compliance & ToS Notes
 
-- **SEC EDGAR**: User-Agent header must include real contact — use github handle, never personal email (per user preference).
+- **SEC EDGAR**: User-Agent header must include real contact per [SEC Fair Access policy](https://www.sec.gov/os/accessing-edgar-data). This is an API-contract requirement, so it carves out from the "no personal email in code/logs" rule (see `EDGAR_USER_AGENT` in `.env`; details in [`20-edgar-sec-filings.md § Auth`](20-edgar-sec-filings.md#auth)).
 - **NSE India**: No official API; scrape is tolerated but throttled. Respect rate limits (>2s between calls), realistic User-Agent, cookie handling.
 - **CFTC Socrata**: Free, but register app token to raise rate limit from 1k/day → unlimited.
 - **Reddit**: Free OAuth, 100 QPM per authenticated user.

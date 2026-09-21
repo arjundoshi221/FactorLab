@@ -34,12 +34,13 @@ Returns: `transcript[]` with `speaker`, `speech` (text), `section` (Prepared Rem
 
 | Field | Detail |
 |-------|--------|
-| URL | EDGAR full-text search |
-| Tool | `edgartools` Python library |
+| URL | EDGAR — via `sources/edgar/` client in this repo |
+| Tool | Own EDGAR client + item-extract recipe in [`20-edgar-sec-filings.md § Parsing recipes`](20-edgar-sec-filings.md#parsing-recipes) |
 | Coverage | All US public companies |
 | Lag | Filed within 4 business days of the call |
+| Sample | Apple Q3 2026 earnings 8-K at [`data/edgar/samples/8_k/`](../../data/edgar/samples/8_k/) |
 
-Some companies file full transcripts as 8-K exhibits (Item 2.02). Not universal — use Finnhub as primary, EDGAR as supplement.
+Item 2.02 (Results of Operations) is where earnings press releases are attached as `ex99*.htm` exhibits. Not every company files transcripts here — use Finnhub as the transcript-primary, EDGAR as the exhibit-supplement (press release text).
 
 ### 1C. Paid Sources (future)
 
