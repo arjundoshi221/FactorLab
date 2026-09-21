@@ -168,11 +168,30 @@ def create_client() -> Any:
             "clickhouse-connect is required; install the project dependencies"
         ) from exc
     secure = os.getenv("CLICKHOUSE_SECURE", "false").lower() in {"1", "true", "yes"}
+    username = os.getenv("CLICKHOUSE_USER") or os.getenv("CLICKHOUSE_USERNAME", "default")
+    password = os.getenv("CLICKHOUSE_PASSWORD", "")
+    if not password:
+        password_file = os.getenv("CLICKHOUSE_PASSWORD_FILE", "")
+        secret_directory = os.getenv("FACTORLAB_SECRETS_DIR", "")
+        candidates = [Path(password_file)] if password_file else []
+        if secret_directory:
+            candidates.append(Path(secret_directory) / "CLICKHOUSE_PASSWORD")
+        for candidate in candidates:
+            try:
+                password = candidate.read_text(encoding="utf-8").strip()
+            except FileNotFoundError:
+                continue
+            except OSError as exc:
+                raise MigrationError(
+                    f"unable to read ClickHouse password from {candidate}: {exc}"
+                ) from exc
+            if password:
+                break
     return clickhouse_connect.get_client(
         host=os.getenv("CLICKHOUSE_HOST", "localhost"),
         port=int(os.getenv("CLICKHOUSE_PORT", "8443" if secure else "8123")),
-        username=os.getenv("CLICKHOUSE_USER", "default"),
-        password=os.getenv("CLICKHOUSE_PASSWORD", ""),
+        username=username,
+        password=password,
         secure=secure,
         connect_timeout=int(os.getenv("CLICKHOUSE_CONNECT_TIMEOUT", "10")),
     )

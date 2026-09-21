@@ -81,6 +81,25 @@ def test_apply_requires_yes_before_mutating():
         migration.command_apply(object(), args, [item])
 
 
+def test_create_client_reads_production_username_and_password_file(monkeypatch, tmp_path):
+    captured = {}
+    password_file = tmp_path / "CLICKHOUSE_PASSWORD"
+    password_file.write_text("production-secret\n", encoding="utf-8")
+    monkeypatch.delenv("CLICKHOUSE_USER", raising=False)
+    monkeypatch.delenv("CLICKHOUSE_PASSWORD", raising=False)
+    monkeypatch.setenv("CLICKHOUSE_USERNAME", "factorlab")
+    monkeypatch.setenv("CLICKHOUSE_PASSWORD_FILE", str(password_file))
+    monkeypatch.setattr(
+        "clickhouse_connect.get_client",
+        lambda **kwargs: captured.update(kwargs) or object(),
+    )
+
+    migration.create_client()
+
+    assert captured["username"] == "factorlab"
+    assert captured["password"] == "production-secret"
+
+
 def test_failed_migration_is_resumed(monkeypatch):
     args = SimpleNamespace(
         phase="backfill",

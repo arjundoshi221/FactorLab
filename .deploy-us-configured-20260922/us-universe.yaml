@@ -1,0 +1,10 @@
+version: 1
+name: us_configured
+provider: eodhd
+refresh_interval_minutes: 1440
+
+indexes:
+  - symbol: GSPC.INDX
+    minimum_constituents: 450
+
+extra_symbols: []
