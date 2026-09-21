@@ -1,0 +1,51 @@
+# Upstox API Credentials
+# Do NOT commit this file to version control
+
+# C:\Users\arjd2.claude\plans\deep-plan-mode-and-soft-peacock.md 
+FACTORLAB_USER_AGENT=arjd221@gmail.com
+
+# Digish
+UPSTOX_API_KEY=36b19f95-edf3-4a0f-940a-de3a6d700c27
+UPSTOX_API_SECRET=jli6j84xn9
+UPSTOX_REDIRECT_URL=http://localhost:8888/
+
+# Auth (update after re-authentication)
+# Run uplinkAuthorization.py to get a fresh token
+UPSTOX_ACCESS_TOKEN='eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI1S0NSSE4iLCJqdGkiOiI2YTM0YmE2N2I5NjIwYjc0YmFmYTQ2MzAiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlhdCI6MTc4MTg0MDQ4NywiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxNzgxOTA2NDAwfQ.mDflcu60ZVhl42N0uOfXsM9kgEk5T2eYiOPvTKmdrTs'
+UPSTOX_AUTH_CODE='-kPdrS'
+
+AUTH_SERVER_URL=https://factorlab-production.up.railway.app
+AUTH_SERVER_PIN=7291
+
+DATABASE_URL=postgresql+psycopg://postgres@localhost:5432/factorlab
+
+EODHD_API_KEY=69a1ecda980b65.91580923
+
+FINNHUB_API_KEY=d7oual9r01qmthudjkhgd7oual9r01qmthudjki0
+FINNHUB_API_SECRET_KEY=d7oual9r01qmthudjkj0
+FINNHUB_DASHBOARD_URL=https://finnhub.io/dashboard
+
+LDA_API_TOKEN=ef468bec2d645f378bb1260ebe3235c050a4a791
+LDA_API_USERNAME=arjd221
+LDA_API_PASSWORD=ArjunFL@2025
+
+# CONGRESS.GOV API 
+Account_Email=arjundoshi221@gmail.com
+Account_ID=a4641958-4768-4c4a-bc2e-81d761a98ff9
+
+FEC_API_KEY=KXxL3u9SYWZX4kK1mO1faDAc7CUkyazyyNPDIosC
+CONGRESS_API_KEY=GlaQ74wU9HuMsMEUAaVyfeUk0P1D59f9sK2N43aj
+BACKUP_CONGRESS_FEC_API_KEY=piK7HxyJfrLP7v6mSfcac7CaL2yttlAugwiffvkt
+
+#SCHWAB API
+
+SCHWAB_APP_KEY=UluvoX2FXD0VvdVPl6ALUa92uZxYLpqrpTPRRzFNysT9pWrq
+SCHWAB_APP_SECRET=AJLdpsApQFIYUD7Gbu8Z7mwqlvmBJqBGsQ07KOQttGGyKTAkGkEz0XWSXDfurj4Z
+SCHWAB_CALLBACK_URL=https://127.0.0.1:8182
+SCHWAB_TOKEN_PATH=data/schwab/.token
+
+
+FACTORLAB_NOTIFY_TO=arjundoshi221@gmail.com
+
+POLITICAL_ACTIVE_CONGRESSES=119
+POLITICAL_CACHE_TTL_ACTIVE_SEC=3600

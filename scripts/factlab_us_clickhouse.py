@@ -15,8 +15,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import yaml
 
-from factorlab.sources.eodhd.client import EODHDClient
-from factorlab.sources.eodhd.us_universe import (
+from factorlab.countries.us.equities.eodhd.client import EODHDClient
+from factorlab.countries.us.equities.eodhd.us_universe import (
     normalize_bulk,
     normalize_daily,
     schwab_symbol,

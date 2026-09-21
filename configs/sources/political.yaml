@@ -1,0 +1,91 @@
+# Political-data ingestion sources.
+# Endpoints + rate limits + key-env names. Read by src/factorlab/sources/political/.
+
+sources:
+
+  legislators:
+    description: unitedstates/congress-legislators YAML files (community mirror of .gov data)
+    base_url: https://raw.githubusercontent.com/unitedstates/congress-legislators/main
+    auth: none
+    files:
+      - legislators-current.yaml
+      - legislators-historical.yaml
+      - committees-current.yaml
+      - committees-historical.yaml
+      - committee-membership-current.yaml
+      - executive.yaml
+
+  house_clerk:
+    description: House Clerk PTR PDFs
+    auth: none
+    index_url: https://disclosures-clerk.house.gov/public_disc/financial-pdfs/{YEAR}FD.ZIP
+    pdf_url:   https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/{YEAR}/{DocID}.pdf
+    polite_delay_sec: 0.2
+    year_range: [2014, 2026]
+
+  senate_stock_watcher:
+    description: Frozen GitHub mirror, 2014-2019
+    auth: none
+    url: https://raw.githubusercontent.com/timothycarambat/senate-stock-watcher-data/master/aggregate/all_transactions.json
+
+  senate_efd:
+    description: Senate eFD via Playwright (residential IP only — Akamai)
+    auth: cookie_session
+    base_url: https://efdsearch.senate.gov
+    home_path: /search/home/
+    search_path: /search/
+    headless: true
+    polite_delay_sec: 0.4
+    note: Must run on local machine, never datacenter
+
+  lda:
+    description: Senate LDA REST API (lobbying disclosures)
+    base_url: https://lda.senate.gov/api/v1
+    auth: token              # Authorization: Token <LDA_API_TOKEN>; register at https://lda.senate.gov/api/auth/register/
+    api_key_env: LDA_API_TOKEN
+    rate_limit_rpm_anon: 15  # IP-throttled when unauthenticated
+    rate_limit_rpm_auth: 120 # per-token, free tier
+    page_size: 100
+
+  usaspending:
+    description: USASpending.gov direct (sovereign primary for gov contracts)
+    base_url: https://api.usaspending.gov/api/v2
+    auth: none
+    rate_limit_rpm: null
+    page_size: 100
+    contract_type_codes: [A, B, C, D]
+
+  finnhub_contracts:
+    description: Finnhub /stock/usa-spending (third-party, ticker-keyed)
+    base_url: https://finnhub.io/api/v1
+    auth: api_key_query
+    api_key_env: FINNHUB_API_KEY
+    rate_limit_rpm: 60
+    paid_endpoints_to_skip:
+      - /stock/congressional-trading
+      - /stock/lobby
+
+  fec:                # STUB in this PR — full impl when key arrives
+    description: FEC OpenAPI (campaign donations + committees)
+    base_url: https://api.open.fec.gov/v1
+    auth: api_key_query
+    api_key_env: FEC_API_KEY
+    rate_limit_rpm_demo: 30
+    rate_limit_rpm_real: 7200
+    page_size: 100
+    enabled: false
+
+  congress_gov:       # STUB in this PR — full impl when key arrives
+    description: Congress.gov (bills, hearings, members)
+    base_url: https://api.congress.gov/v3
+    auth: api_key_query
+    api_key_env: CONGRESS_API_KEY
+    rate_limit_rpm_demo: 17     # ~1000/hr documented but ~10/hr sustained empirically
+    rate_limit_rpm_real: 83     # 5000/hr
+    page_size: 250
+    enabled: false
+
+# Output paths (under repo root; data/ is gitignored)
+storage:
+  raw_root: data/political/raw
+  state_root: data/political/_state

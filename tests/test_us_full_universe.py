@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from factorlab.sources.eodhd.us_universe import (
+from factorlab.countries.us.equities.eodhd.us_universe import (
     canonical_symbol,
     normalize_bulk,
     normalize_daily,

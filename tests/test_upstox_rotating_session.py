@@ -1,6 +1,6 @@
 import requests
 
-from factorlab.sources.upstox.client import UpstoxSession
+from factorlab.countries.in_.equities.upstox.client import UpstoxSession
 
 
 def _response(status_code: int) -> requests.Response:
@@ -13,7 +13,10 @@ def _response(status_code: int) -> requests.Response:
 
 def test_session_adopts_token_from_runtime_secret(monkeypatch):
     session = UpstoxSession("old-token")
-    monkeypatch.setattr("factorlab.sources.upstox.client.get_secret", lambda *args: "new-token")
+    monkeypatch.setattr(
+        "factorlab.countries.in_.equities.upstox.client.get_secret",
+        lambda *args: "new-token",
+    )
     observed = []
 
     def fake_request(instance, method, url, *args, **kwargs):
@@ -30,7 +33,7 @@ def test_session_retries_401_once_when_token_rotates(monkeypatch):
     session = UpstoxSession("old-token")
     available_tokens = iter(["old-token", "new-token"])
     monkeypatch.setattr(
-        "factorlab.sources.upstox.client.get_secret",
+        "factorlab.countries.in_.equities.upstox.client.get_secret",
         lambda *args: next(available_tokens),
     )
     observed = []
@@ -50,7 +53,7 @@ def test_session_does_not_automatically_retry_post(monkeypatch):
     session = UpstoxSession("old-token")
     available_tokens = iter(["old-token", "new-token"])
     monkeypatch.setattr(
-        "factorlab.sources.upstox.client.get_secret",
+        "factorlab.countries.in_.equities.upstox.client.get_secret",
         lambda *args: next(available_tokens),
     )
     calls = []

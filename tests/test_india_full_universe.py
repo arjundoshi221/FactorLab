@@ -3,7 +3,7 @@ import uuid
 import pandas as pd
 import scripts.factlab_india_clickhouse_5min as ingest
 
-from factorlab.sources.upstox.candles import MarketQuoteOHLCBatch
+from factorlab.countries.in_.equities.upstox.candles import MarketQuoteOHLCBatch
 
 
 def test_full_equity_series_uses_every_nse_eq_record_only_once():

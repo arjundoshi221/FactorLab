@@ -257,13 +257,13 @@ Sectors with enough breadth for within-sector factor portfolios:
 
 | Script | Frequency | Schedule | Purpose |
 |--------|-----------|----------|---------|
-| `factlab_india_premarket.py` | Daily | 08:00–08:30 IST | Token sync from Railway, instruments download, universe build |
-| `factlab_india_5min.py` | Long-running | 09:10–15:35 IST | Live 1-min equity + futures candles (staggered polling) |
-| `factlab_india_hourly.py` | Hourly | 10:15, 11:15, ..., 15:28 IST | Historical candle backfill (safety net for 5min gaps) |
+| `india_equities_upstox_premarket.py` | Daily | 06:00 IST | Token sync from Railway, instruments download, universe build |
+| `india_equities_upstox_live.py` | Long-running | 09:10–15:35 IST | Live 1-min equity + futures candles (staggered polling) |
+| `india_equities_upstox_historical.py` | Manual one-shot | ad-hoc | Backfill daily/30m bars for any universe (Upstox V3 historical-candle API) |
 
 ### Auth flow
 
-1. **Daily login** on Railway auth server (`factlab_auth_server.py`) — browser OAuth2
+1. **Daily login** on Railway auth server (`india_equities_upstox_auth_server.py`) — browser OAuth2
 2. Token stored in `data/upstox/.token` on Railway
 3. **Premarket script** calls `ensure_token()` which tries: local file → env var → Railway server → interactive login
 4. Token expires daily ~3:30 AM IST. No refresh tokens.

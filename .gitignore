@@ -207,3 +207,34 @@ arjun_notes.txt
 # ---- Concept / reference PDFs (per memory: do not edit, but should they ship?)
 # Decision pending — uncomment to keep concept PDF out of git
 # concepts/*.pdf
+
+# ---- Political pipeline-specific (defense in depth on top of data/ + logs/) -
+# Even if someone runs `git add` from a subdir, these patterns block scrapes,
+# state files, sidecars, ZIP caches, and audit JSONLs from sneaking in.
+data/political/raw/**
+data/political/_state/**
+logs/house_clerk_historical_load_*/
+logs/political_*/
+logs/political_metrics.jsonl
+logs/political_alerts.jsonl
+logs/.political.lock
+*.tier?_*.csv
+tier?_review.csv
+
+# Sidecar JSONs from PTR scrapers (paper-PTR image manifests, link metadata)
+*.sidecar.json
+**/_state/*.json
+
+# Generated archive bundles
+*.zip.cache
+**/*.zip
+!**/test_fixtures/**/*.zip   # tiny test fixtures only
+
+# Memory dumps / state snapshots
+*.snapshot
+state.json
+checkpoint.json
+
+# Codex
+.codex/
+.agents/

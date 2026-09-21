@@ -13,8 +13,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from factorlab.sources.eodhd.client import EODHDClient
-from factorlab.sources.eodhd.configured_universe import load_config, resolve_universe
+from factorlab.countries.us.equities.eodhd.client import EODHDClient
+from factorlab.countries.us.equities.eodhd.configured_universe import load_config, resolve_universe
 from factorlab.storage.us_clickhouse import USStorage
 
 log = logging.getLogger("factorlab.us-universe")

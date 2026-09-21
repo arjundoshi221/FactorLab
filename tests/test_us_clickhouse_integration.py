@@ -9,7 +9,7 @@ import pytest
 
 from factorlab.api.hub import TABLE_PROFILES, HubRepository
 from factorlab.api.us import USRepository
-from factorlab.sources.eodhd.us_universe import normalize_daily
+from factorlab.countries.us.equities.eodhd.us_universe import normalize_daily
 from factorlab.sources.schwab.market import normalize
 from factorlab.storage.us_clickhouse import USStorage
 

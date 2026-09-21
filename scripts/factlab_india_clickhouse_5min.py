@@ -21,8 +21,8 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from factorlab.sources.upstox.auth import ensure_token
-from factorlab.sources.upstox.candles import (
+from factorlab.countries.in_.equities.upstox.auth import ensure_token
+from factorlab.countries.in_.equities.upstox.candles import (
     MARKET_QUOTE_BATCH_SIZE,
     UpstoxFetchError,
     UpstoxRateLimiter,
@@ -32,13 +32,13 @@ from factorlab.sources.upstox.candles import (
     historical_windows,
     instrument_key_batches,
 )
-from factorlab.sources.upstox.client import get_session
-from factorlab.sources.upstox.instruments import (
+from factorlab.countries.in_.equities.upstox.client import get_session
+from factorlab.countries.in_.equities.upstox.instruments import (
     find_equities,
     find_nearest_future,
     load_or_download,
 )
-from factorlab.sources.upstox.universes import load_universe
+from factorlab.countries.in_.equities.upstox.universes import load_universe
 from factorlab.storage.clickhouse import ClickHouseStorage
 
 UTC = ZoneInfo("UTC")

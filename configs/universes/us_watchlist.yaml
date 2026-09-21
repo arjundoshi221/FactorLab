@@ -1,0 +1,32 @@
+name: watchlist
+country: US
+description: 25 US mega-caps for 1-min live polling (fits 60s window with ~38s of headroom)
+as_of: 2026-05-01
+source: hand-curated by market cap + liquidity
+count: 25
+symbols:
+  - AAPL
+  - MSFT
+  - GOOGL
+  - AMZN
+  - NVDA
+  - META
+  - TSLA
+  - BRK.B
+  - JPM
+  - V
+  - WMT
+  - LLY
+  - JNJ
+  - UNH
+  - XOM
+  - MA
+  - HD
+  - PG
+  - AVGO
+  - COST
+  - CVX
+  - ABBV
+  - BAC
+  - KO
+  - ORCL

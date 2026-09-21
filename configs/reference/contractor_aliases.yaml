@@ -1,0 +1,227 @@
+# Manual overrides — USASpending recipient names → SEC ticker
+# Keyed by NORMALIZED name (lowercase, suffixes/punct stripped).
+# Keep entries here when:
+#   - subsidiary normalized name doesn't match parent's (e.g. "rockwell collins" → RTX)
+#   - ambiguity needs an explicit pick (e.g. "alphabet" → GOOGL not GOOG)
+#   - common-name shorthand the SEC master doesn't carry
+#
+# When the resolver learns a new mapping it should append here OR write to
+# _aliases_learned.yaml (which this file overrides).
+
+# Defense / aerospace
+"lockheed martin global": LMT
+"lockheed martin services": LMT
+"sikorsky aircraft": LMT
+"rockwell collins": RTX
+"raytheon": RTX
+"raytheon technologies": RTX
+"raytheon missiles & defense": RTX
+"raytheon intelligence & space": RTX
+"pratt & whitney": RTX
+"atk launch systems": NOC
+"orbital atk": NOC
+"northrop grumman systems": NOC
+"northrop grumman innovation systems": NOC
+"northrop grumman space systems": NOC
+"general dynamics electric boat": GD
+"general dynamics ordnance": GD
+"general dynamics mission systems": GD
+"general dynamics information technology": GD
+"bae systems": BAESY      # ADR
+"l3harris technologies": LHX
+"huntington ingalls industries": HII
+"leidos": LDOS
+"booz allen hamilton": BAH
+"booz allen hamilton holding": BAH
+"caci international": CACI
+"saic": SAIC
+"science applications international": SAIC
+
+# Tech / software (federal-heavy)
+"palantir usg": PLTR
+"palantir technologies": PLTR
+"microsoft": MSFT
+"oracle america": ORCL
+"oracle": ORCL
+"google": GOOGL                 # tie-break: voting class
+"alphabet": GOOGL
+"amazon web services": AMZN
+"amazon com": AMZN
+"meta platforms": META
+"international business machines": IBM
+"hewlett packard enterprise": HPE
+"hp inc": HPQ
+"dell technologies": DELL
+"cisco systems": CSCO
+"servicenow": NOW
+
+# Pharma / health
+"pfizer": PFE
+"merck sharp & dohme": MRK
+"merck": MRK
+"eli lilly": LLY
+"abbvie": ABBV
+"johnson & johnson": JNJ
+"bristol myers squibb": BMY
+"unitedhealth group": UNH
+"unitedhealthcare": UNH
+"optum": UNH
+"cvs health": CVS
+"cvs caremark": CVS
+
+# Energy
+"exxon mobil": XOM
+"chevron": CVX
+"conocophillips": COP
+"halliburton": HAL
+"baker hughes": BKR
+
+# Finance
+"jpmorgan chase": JPM
+"bank of america": BAC
+"wells fargo": WFC
+"citigroup": C
+"goldman sachs group": GS
+"morgan stanley": MS
+"blackrock": BLK
+"berkshire hathaway": BRK-B    # voting class B more accessible
+
+# Index/share-class tie-breaks (when normalized-name collision needs a pick)
+# These resolve to the COMMON / VOTING ticker, not preferred shares
+"jpmorgan chase & co": JPM
+"jp morgan chase": JPM
+"goldman sachs": GS
+"the goldman sachs group": GS
+"asml nv": ASML
+
+# Misc large federal vendors
+"general electric": GE
+"honeywell international": HON
+"3m": MMM
+"caterpillar": CAT
+"boeing": BA
+"deere & co": DE
+"deere": DE
+
+# FEC corp-PAC additions (audited 2026-05-01) — public-co PACs that the
+# generic SEC-master normalizer misses after PAC-noise stripping.
+# Tech / semis
+"apple": AAPL
+"broadcom": AVGO
+"nvidia": NVDA
+"intel": INTC
+"salesforce": CRM
+"texas instruments": TXN
+"qualcomm": QCOM
+"applied materials": AMAT
+"lam research": LRCX
+"adobe": ADBE
+"autodesk": ADSK
+# Telecom / media
+"at t": T                          # AT&T normalizes to "at t"
+"verizon communications": VZ
+"verizon": VZ
+"comcast": CMCSA
+"walt disney": DIS
+"disney": DIS
+"news corp": NWSA
+# Defense / aerospace not yet covered
+"l3 communications": LHX
+"textron": TXT
+# Pharma / biotech additions
+"amgen": AMGN
+"gilead sciences": GILD
+"biogen": BIIB
+"regeneron pharmaceuticals": REGN
+"vertex pharmaceuticals": VRTX
+"moderna": MRNA
+"abbott laboratories": ABT
+"medtronic": MDT
+"thermo fisher scientific": TMO
+"danaher": DHR
+"intuitive surgical": ISRG
+# Health insurance / managed care
+"cigna": CI
+"anthem": ELV                      # rebranded Elevance
+"elevance health": ELV
+"humana": HUM
+"centene": CNC
+# Energy not yet covered
+"valero energy": VLO
+"phillips 66": PSX
+"marathon petroleum": MPC
+"marathon oil": MRO
+"occidental petroleum": OXY
+"devon energy": DVN
+"eog resources": EOG
+# Utilities (heavy regulators, frequent PAC giving)
+"duke energy": DUK
+"southern": SO                     # Southern Co
+"nextera energy": NEE
+"dominion energy": D
+"exelon": EXC
+"american electric power": AEP
+"consolidated edison": ED
+"public service enterprise group": PEG
+"edison international": EIX
+# Industrials / autos / transports
+"ford motor": F
+"general motors": GM
+"tesla": TSLA
+"autonation": AN
+"carmax": KMX
+"fedex": FDX
+"united parcel service": UPS
+"union pacific": UNP
+"csx": CSX
+"norfolk southern": NSC
+"delta air lines": DAL
+"american airlines": AAL
+"southwest airlines": LUV
+"united airlines holdings": UAL
+# Finance — banks/brokers/insurers not yet covered
+"u s bancorp": USB
+"pnc financial services": PNC
+"truist financial": TFC
+"capital one financial": COF
+"american express": AXP
+"discover financial services": DFS
+"charles schwab": SCHW
+"the charles schwab corporation": SCHW
+"travelers companies": TRV
+"chubb": CB
+"aflac": AFL
+"prudential financial": PRU
+"metlife": MET
+"allstate": ALL
+"progressive": PGR
+"marsh & mclennan": MMC
+"hartford financial services": HIG
+# Foreign-domiciled but SEC-listed (ADRs)
+"diageo": DEO
+"toyota motor": TM                 # ADR — verify if PAC's parent attribution matches
+"sony": SONY
+"asml": ASML
+
+# C2 audit — explicit aliases for unmatched corp PACs found in 2026-05-01 sweep.
+# These have post-PAC-noise normalized forms that don't reduce to clean
+# SEC-name tokens (residual descriptors: 'citizens forum', 'innovation', etc).
+# Wrong-classification > miss policy keeps the prefix-alias path single-token-≥4-char,
+# so we explicitly enumerate.
+"lockheed": LMT                       # "LOCKHEED EMPLOYEES PAC" (separate from Martin)
+"northrop grumman": NOC               # "EMPLOYEES OF NORTHROP GRUMMAN CORPORATION PAC"
+"mastercard": MA
+"mastercard international": MA
+"coinbase": COIN
+"coinbase innovation": COIN
+"lowe": LOW                           # "LOWE'S COMPANIES" — apostrophe-strip yields 'lowe s'
+"lowe s": LOW
+"lowes": LOW
+"lowes companies": LOW
+"target": TGT
+"target citizens": TGT
+"target citizens forum": TGT
+"walmart": WMT
+"walmart responsible": WMT
+"procter": PG                         # "& gamble" punct-stripped → bare 'procter'
+"procter gamble": PG

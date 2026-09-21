@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from factorlab.sources.eodhd.configured_universe import (
+from factorlab.countries.us.equities.eodhd.configured_universe import (
     UniverseConfig,
     component_symbols,
     resolve_universe,

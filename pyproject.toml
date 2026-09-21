@@ -8,7 +8,8 @@ version = "0.1.0"
 description = "Global fundamental equity research platform"
 requires-python = ">=3.12"
 dependencies = [
-    "requests>=2.31",
+    "requests>=2.32.3",     # CVE-2024-35195 (cert-verify bypass) fixed in 2.32.0
+    "defusedxml>=0.7.1",    # billion-laughs / XXE protection for House Clerk year-XML
     "pyyaml>=6.0",
     "pydantic>=2.5",
     "pydantic-settings>=2.1",
@@ -25,6 +26,7 @@ dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
     "ib_async>=2.1",
+    "schwab-py>=1.4",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +52,14 @@ server = [
 ops = [
     "paramiko>=3.4",
     "sshtunnel>=0.4",
+]
+notify = [
+    "pywin32>=308; platform_system == 'Windows'",  # Outlook COM (Windows-only)
+    "flask>=3.0",                                  # notifier daemon HTTP service
+]
+political = [
+    "playwright>=1.40",     # Senate eFD scraping (residential IP only)
+    "pdfplumber>=0.11",     # House Clerk PTR PDF extraction
 ]
 
 [tool.hatch.build.targets.wheel]

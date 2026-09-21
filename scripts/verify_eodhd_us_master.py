@@ -1,7 +1,7 @@
 """Read-only validation of the configured EODHD US common-stock master."""
 
-from factorlab.sources.eodhd.client import EODHDClient
-from factorlab.sources.eodhd.us_universe import normalize_master
+from factorlab.countries.us.equities.eodhd.client import EODHDClient
+from factorlab.countries.us.equities.eodhd.us_universe import normalize_master
 
 payload = EODHDClient().get_exchange_symbols("US", instrument_type="common_stock")
 master = normalize_master(payload)

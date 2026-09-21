@@ -34,6 +34,35 @@ universes:
       - JPM.US
       - JNJ.US
       - V.US
+  # ETFs surfaced via legislator paper-PTR vision extractions (2026-05-03).
+  # Entries here are funds Senator Boozman (and likely others) hold in IRA
+  # accounts; tracking them lets us decompose senator-flow into broad
+  # asset-class signals (treasuries, REITs, commodities, intl equity).
+  # Source: senate_efd_paper_llm endpoint extractions.
+  senate_held_etfs:
+    description: ETFs held by US senators (surfaced via paper-PTR LLM extraction)
+    symbols:
+      - SPY.US      # S&P 500
+      - QQQ.US      # Nasdaq 100
+      - IVV.US      # iShares S&P 500
+      - IVW.US      # iShares S&P 500 Growth
+      - IWM.US      # iShares Russell 2000
+      - EFA.US      # iShares MSCI EAFE
+      - INDA.US     # iShares MSCI India
+      - GEM.US      # GS ActiveBeta Emerging Markets
+      - SCHP.US     # Schwab US TIPS
+      - IEF.US      # iShares 7-10 Year Treasury
+      - MBB.US      # iShares MBS
+      - CMBS.US     # iShares CMBS
+      - GBIL.US     # GS Treasury Access (T-bills)
+      - VNQ.US      # Vanguard REIT
+      - VEA.US      # Vanguard FTSE Developed
+      - SLV.US      # iShares Silver Trust
+      - GLD.US      # SPDR Gold (commonly seen, included for completeness)
+      - MDY.US      # SPDR S&P 400 Midcap
+      - EMLP.US     # First Trust North American Energy Infrastructure
+      - FEUZ.US     # First Trust Eurozone AlphaDEX
+      - NFRA.US     # FlexShares STOXX Global Infrastructure
   # File-based universes (built by scripts/build_universe.py):
   # russell3000:
   #   source_file: data/us/universes/russell3000_latest.csv

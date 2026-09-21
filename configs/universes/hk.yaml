@@ -1,0 +1,30 @@
+# Hong Kong (HKEX) equity universe — symbol format: {NNNN}.HK (4-digit zero-padded)
+# Built 2026-05-02; population via EODHD /exchange-symbol-list/HK.
+region: hk
+source: eodhd
+currency: HKD
+exchange_calendar: XHKG   # HKEX calendar
+default_universe: demo
+
+exchanges:
+  hkex:
+    calendar: XHKG
+    trading_hours: "09:30-16:00"   # local; with lunch break 12:00-13:00
+    timezone: "Asia/Hong_Kong"
+    suffix: ".HK"
+
+# ── Universes ────────────────────────────────────────────────────────────────
+universes:
+  demo:
+    symbols:
+      - 0700.HK         # Tencent — also ADR TCEHY
+      - 0941.HK         # China Mobile — also ADR CHL (delisted 2021; track for historical)
+      - 1299.HK         # AIA Group
+      - 0005.HK         # HSBC Holdings — also US-listed HSBC
+      - 0939.HK         # China Construction Bank
+      - 9988.HK         # Alibaba HK — also US-listed BABA
+  # File-based (future):
+  # hkex_hsi:
+  #   source_file: data/hk/universes/hsi_latest.csv
+  # hkex_hsce:
+  #   source_file: data/hk/universes/hsce_latest.csv
