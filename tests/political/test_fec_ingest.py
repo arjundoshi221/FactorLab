@@ -7,6 +7,7 @@ behavior). Integration tests are skipped if DATABASE_URL is unset.
 from __future__ import annotations
 
 import os
+from unittest.mock import patch
 
 import pytest
 
@@ -49,7 +50,41 @@ class TestNormalizePacName:
 
 @pytest.fixture(scope="module")
 def resolver():
-    return Resolver()
+    # Unit tests must not depend on SEC availability, rate limits, or network
+    # policy. Keep enough of the SEC master here to exercise both successful
+    # matches and the historical false-positive candidates below.
+    companies = [
+        ("MSFT", 789019, "MICROSOFT CORP"),
+        ("AAPL", 320193, "APPLE INC"),
+        ("AVGO", 1730168, "BROADCOM INC"),
+        ("NVDA", 1045810, "NVIDIA CORP"),
+        ("PFE", 78003, "PFIZER INC"),
+        ("BA", 12927, "BOEING CO"),
+        ("LMT", 936468, "LOCKHEED MARTIN CORP"),
+        ("CVX", 93410, "CHEVRON CORP"),
+        ("CAT", 18230, "CATERPILLAR INC"),
+        ("BLK", 1364742, "BLACKROCK INC"),
+        ("MET", 1099219, "METLIFE INC"),
+        ("DE", 315189, "DEERE & CO"),
+        ("UNP", 100885, "UNION PACIFIC CORP"),
+        ("CRM", 1108524, "SALESFORCE INC"),
+        ("FIBK", 860413, "FIRST INTERSTATE BANCSYSTEM INC"),
+        ("USNA", 896264, "USANA HEALTH SCIENCES INC"),
+        ("UAMY", 101538, "UNITED STATES ANTIMONY CORP"),
+        ("ANAT", 1801075, "AMERICAN NATIONAL GROUP INC"),
+        ("NSC", 702165, "NORFOLK SOUTHERN CORP"),
+        ("RKT", 1805284, "ROCKET COMPANIES INC"),
+        ("PGR", 80661, "PROGRESSIVE CORP"),
+    ]
+    sec_master = {
+        str(index): {"ticker": ticker, "cik_str": cik, "title": title}
+        for index, (ticker, cik, title) in enumerate(companies)
+    }
+    with patch(
+        "factorlab.countries.us.political._resolver.fetch_sec_master",
+        return_value=sec_master,
+    ):
+        return Resolver()
 
 
 class TestResolverPacNameMatches:

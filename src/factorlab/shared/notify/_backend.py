@@ -80,7 +80,6 @@ class Notification:
             bits.append(f"[{self.country.upper()}]")
         if self.vendor:
             bits.append(self.vendor)
-        bits.append("·")
         bits.append(self.subject)
         return " ".join(bits)
 
