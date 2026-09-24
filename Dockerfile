@@ -24,4 +24,14 @@ RUN pip install --no-cache-dir .
 
 ENV FACTORLAB_WEB_DIST=/app/web-dist
 
+# Release metadata last, so it never invalidates the dependency layers above.
+ARG FACTORLAB_RELEASE_ID=""
+ARG FACTORLAB_COMMIT=""
+ENV FACTORLAB_RELEASE_ID=$FACTORLAB_RELEASE_ID \
+    FACTORLAB_COMMIT=$FACTORLAB_COMMIT
+LABEL org.opencontainers.image.title="FactorLab" \
+      org.opencontainers.image.source="https://github.com/arjundoshi221/FactorLab" \
+      org.opencontainers.image.version=$FACTORLAB_RELEASE_ID \
+      org.opencontainers.image.revision=$FACTORLAB_COMMIT
+
 CMD ["python", "scripts/factlab_india_5min.py", "--universe", "demo", "--daemon"]

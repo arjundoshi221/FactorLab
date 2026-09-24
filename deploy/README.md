@@ -115,10 +115,21 @@ Uptime Kuma, Portainer, or persistent volumes.
 per minute. Its service reads local Docker image and container metadata and
 atomically replaces `/var/lib/factorlab/docker-images/snapshot.json`. The API
 mounts that directory read-only at `/run/docker-images`; it has no Docker socket
-mount. The snapshot contains IDs, tags, digests, sizes, creation times, container
-names/status/start times, and the current release activation time. It excludes
-container environment variables and mounts. The inventory covers images stored
-on this VPS, including unused and untagged images, but not unpulled registry images.
+mount. The snapshot contains IDs, tags, digests, sizes, platforms, creation times,
+container names/status/start times, each container's Compose service and image
+reference, and the `org.opencontainers.image.*` revision, version, source,
+created, and title labels. It also carries the current release record and the
+latest 12 release records (ID, commit, image, previous release and image, and
+activation time), read only from whitelisted, validated `release.env` keys. It
+excludes container environment variables, mounts, and all other labels. The
+inventory covers images stored on this VPS, including unused and untagged images,
+but not unpulled registry images. `deploy-release.sh` reinstalls the collector
+through `prepare-host.sh` on every release.
+
+Release images bake `FACTORLAB_RELEASE_ID` and `FACTORLAB_COMMIT` into their
+environment and OCI labels. The overview footer and the Docker images page show
+the API's own build, and the page flags a build that differs from the host's
+current release record.
 
 The release deployer writes `releases/RELEASE_ID/activated-at` after successful
 verification; rollback updates the restored release's activation time. Older

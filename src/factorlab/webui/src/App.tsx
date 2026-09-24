@@ -25,6 +25,7 @@ interface HubTable {
   domain: string;
   category: string;
   engine: string;
+  kind?: "table" | "view";
   stored_rows: number;
   bytes_on_disk: number;
   count_kind: "stored";
@@ -38,9 +39,11 @@ interface HubTable {
 
 interface HubOverview {
   generated_at: string;
+  build?: { release_id: string | null; commit: string | null } | null;
   summary: {
     database: string;
     table_count: number;
+    view_count?: number;
     populated_tables: number;
     stored_rows: number;
     bytes_on_disk: number;
@@ -73,6 +76,15 @@ interface HubOverview {
 }
 
 type SortKey = "name" | "domain" | "stored_rows" | "bytes_on_disk" | "today_status";
+type StatusFilter = "all" | "attention" | "healthy" | "not_configured" | "not_expected";
+
+const statusFilters: Record<StatusFilter, { label: string; matches: (status: HubStatus) => boolean }> = {
+  all: { label: "All statuses", matches: () => true },
+  attention: { label: "Needs attention", matches: (status) => ["attention", "missing", "unknown"].includes(status) },
+  healthy: { label: "Healthy", matches: (status) => status === "healthy" },
+  not_configured: { label: "No producer yet", matches: (status) => status === "not_configured" },
+  not_expected: { label: "No daily rule", matches: (status) => status === "not_expected" },
+};
 
 const statusCopy: Record<HubStatus, string> = {
   healthy: "Healthy",
@@ -255,6 +267,8 @@ function Dashboard() {
   const { data, error, loading, refreshing, refresh } = useOverview();
   const [filter, setFilter] = useState("");
   const [domain, setDomain] = useState("All domains");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [hideEmpty, setHideEmpty] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("stored_rows");
   const [descending, setDescending] = useState(true);
 
@@ -266,6 +280,8 @@ function Dashboard() {
     const query = filter.trim().toLowerCase();
     return [...(data?.tables ?? [])]
       .filter((table) => domain === "All domains" || table.domain === domain)
+      .filter((table) => statusFilters[status].matches(table.today_status))
+      .filter((table) => !hideEmpty || table.stored_rows > 0)
       .filter((table) => !query || `${table.name} ${table.domain} ${table.category}`.toLowerCase().includes(query))
       .sort((left, right) => {
         const a = left[sortKey];
@@ -273,7 +289,7 @@ function Dashboard() {
         const compared = typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b));
         return descending ? -compared : compared;
       });
-  }, [data, domain, filter, sortKey, descending]);
+  }, [data, domain, status, hideEmpty, filter, sortKey, descending]);
 
   function changeSort(nextKey: SortKey) {
     if (sortKey === nextKey) setDescending((value) => !value);
@@ -307,9 +323,9 @@ function Dashboard() {
     <main>
       <section className="hero">
         <div>
-          <span className="eyebrow">System overview</span>
+          <span className="eyebrow">System overview · ClickHouse v2</span>
           <h1>Your data, at a glance.</h1>
-          <p>Coverage, history, and freshness across every FactorLab table.</p>
+          <p>Coverage, history, and freshness across every FactorLab v2 namespace, from raw payloads to curated market, political, and operations tables.</p>
         </div>
         <div className="refresh-block">
           <span>Updated {formatTime(data.generated_at)}</span>
@@ -326,8 +342,8 @@ function Dashboard() {
 
       <section className="metric-grid" aria-label="Database totals">
         <SummaryCard label="Stored rows" value={compactFormatter.format(data.summary.stored_rows)} detail="Fast physical count" />
-        <SummaryCard label="On disk" value={formatBytes(data.summary.bytes_on_disk)} detail={`${data.summary.database} database`} />
-        <SummaryCard label="Tables populated" value={`${data.summary.populated_tables}/${data.summary.table_count}`} detail="Empty tables stay visible" />
+        <SummaryCard label="On disk" value={formatBytes(data.summary.bytes_on_disk)} detail={`${domains.length - 1} v2 namespaces`} />
+        <SummaryCard label="Tables populated" value={`${data.summary.populated_tables}/${data.summary.table_count}`} detail={data.summary.view_count ? `Plus ${data.summary.view_count} research views` : "Empty tables stay visible"} />
         <SummaryCard label="Needs attention" value={numberFormatter.format(data.summary.attention_tables)} detail={`${data.summary.healthy_tables} evaluated healthy`} />
       </section>
 
@@ -358,7 +374,7 @@ function Dashboard() {
             <span className="eyebrow">ClickHouse inventory</span>
             <h2 id="inventory-title">Every table, one view</h2>
           </div>
-          <span>{tables.length} of {data.summary.table_count} tables</span>
+          <span>{tables.length} of {data.tables.length} tables and views</span>
         </div>
         <div className="table-tools">
           <label>
@@ -370,6 +386,16 @@ function Dashboard() {
             <select value={domain} onChange={(event) => setDomain(event.target.value)}>
               {domains.map((item) => <option key={item}>{item}</option>)}
             </select>
+          </label>
+          <label>
+            <span className="sr-only">Filter by status</span>
+            <select value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)}>
+              {(Object.keys(statusFilters) as StatusFilter[]).map((key) => <option key={key} value={key}>{statusFilters[key].label}</option>)}
+            </select>
+          </label>
+          <label className="toggle">
+            <input type="checkbox" checked={hideEmpty} onChange={(event) => setHideEmpty(event.target.checked)} />
+            <span>Hide empty tables</span>
           </label>
         </div>
         <div className="table-wrap">
@@ -389,7 +415,7 @@ function Dashboard() {
             <tbody>
               {tables.map((table) => (
                 <tr key={table.name}>
-                  <td data-label="Table"><code>{table.name}</code><small>{table.category}</small></td>
+                  <td data-label="Table"><code>{table.name}</code><small>{table.kind === "view" ? `View · ${table.category}` : table.category}</small></td>
                   <td data-label="Domain">{table.domain}</td>
                   <td data-label="Stored rows" className="numeric">{numberFormatter.format(table.stored_rows)}</td>
                   <td data-label="On disk" className="numeric">{formatBytes(table.bytes_on_disk)}</td>
@@ -404,7 +430,12 @@ function Dashboard() {
           {tables.length === 0 && <p className="no-results">No tables match those filters.</p>}
         </div>
       </section>
-      <footer>FactorLab · Asia/Kolkata · Stored counts may include replacing-table versions</footer>
+      <footer>
+        FactorLab · {data.summary.database}
+        {data.build?.release_id && <> · Release <a href="/docker-images">{data.build.release_id}</a></>}
+        {data.build?.commit && <> · Commit {data.build.commit.slice(0, 12)}</>}
+        {" "}· Asia/Kolkata · Stored counts may include replacing-table versions
+      </footer>
     </main>
   );
 }

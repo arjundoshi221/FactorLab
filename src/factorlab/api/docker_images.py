@@ -5,7 +5,9 @@ import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from factorlab.api.hub import HubBuild, current_build
 
 
 class DockerContainer(BaseModel):
@@ -13,6 +15,17 @@ class DockerContainer(BaseModel):
     name: str
     status: str
     started_at: datetime | None
+    service: str | None = None
+    image_ref: str | None = None
+
+
+class DockerImageLabels(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: str | None = None
+    version: str | None = None
+    source: str | None = None
+    created: str | None = None
+    title: str | None = None
 
 
 class DockerImage(BaseModel):
@@ -25,6 +38,19 @@ class DockerImage(BaseModel):
     containers: list[DockerContainer]
     last_container_start_at: datetime | None
     release_activated_at: datetime | None
+    current_release: bool = False
+    platform: str | None = None
+    labels: DockerImageLabels = Field(default_factory=DockerImageLabels)
+
+
+class DockerRelease(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    commit: str | None = None
+    image: str | None = None
+    previous_release: str | None = None
+    previous_image: str | None = None
+    activated_at: datetime | None = None
 
 
 class DockerImagesSnapshot(BaseModel):
@@ -32,10 +58,13 @@ class DockerImagesSnapshot(BaseModel):
     snapshot_at: datetime
     release_id: str | None
     images: list[DockerImage]
+    release: DockerRelease | None = None
+    releases: list[DockerRelease] = Field(default_factory=list)
 
 
 class DockerImagesResponse(DockerImagesSnapshot):
     stale: bool
+    api_build: HubBuild
 
 
 def read_docker_images_snapshot(
@@ -47,5 +76,7 @@ def read_docker_images_snapshot(
     if snapshot.snapshot_at.tzinfo is None:
         raise ValueError("snapshot_at must include a timezone")
     return DockerImagesResponse(
-        **snapshot.model_dump(), stale=current - snapshot.snapshot_at > timedelta(minutes=3)
+        **snapshot.model_dump(),
+        stale=current - snapshot.snapshot_at > timedelta(minutes=3),
+        api_build=current_build(),
     )

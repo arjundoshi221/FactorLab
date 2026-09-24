@@ -109,6 +109,9 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ env.IMAGE_NAME }}:${{ needs.authorize.outputs.release_id }}
+          build-args: |
+            FACTORLAB_RELEASE_ID=${{ needs.authorize.outputs.release_id }}
+            FACTORLAB_COMMIT=${{ needs.authorize.outputs.commit }}
           provenance: true
           sbom: true
 

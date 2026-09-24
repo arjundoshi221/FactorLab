@@ -50,6 +50,30 @@ describe("FactorLab Hub", () => {
     expect(screen.getByText("market_candles_daily")).toBeInTheDocument();
   });
 
+  it("filters by status, hides empty tables, and shows the running build", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({
+      ...overview,
+      build: { release_id: "20260925T050000Z-abcdef123456", commit: "a".repeat(40) },
+      summary: { ...overview.summary, view_count: 1 },
+      tables: [...overview.tables, { ...overview.tables[1], name: "research.bars", kind: "view", engine: "View", category: "View", today_status: "not_expected" }],
+    }) } as Response);
+    render(<App />);
+    await screen.findByText("market_candles_1min");
+    expect(screen.getByText("Plus 1 research views")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "20260925T050000Z-abcdef123456" })).toHaveAttribute("href", "/docker-images");
+    expect(screen.getByText("View · View")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter by status"), { target: { value: "attention" } });
+    expect(screen.getByText("market_candles_1min")).toBeInTheDocument();
+    expect(screen.queryByText("market_candles_daily")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter by status"), { target: { value: "all" } });
+    fireEvent.click(screen.getByLabelText("Hide empty tables"));
+    expect(screen.queryByText("market_candles_daily")).not.toBeInTheDocument();
+    expect(screen.queryByText("research.bars")).not.toBeInTheDocument();
+    expect(screen.getByText("market_candles_1min")).toBeInTheDocument();
+  });
+
   it("keeps the last snapshot when refresh fails", async () => {
     const fetchMock = vi.mocked(fetch)
       .mockResolvedValueOnce({ ok: true, json: async () => overview } as Response)
