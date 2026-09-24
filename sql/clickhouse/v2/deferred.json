@@ -35,7 +35,6 @@
     {"name": "market.orderbook_l2", "kind": "table", "reason": "Roadmap table without concrete DDL."},
     {"name": "research.bars_adjusted", "kind": "view", "reason": "Depends on deferred market.bars_adjusted."},
     {"name": "research.listing_continuous_returns", "kind": "view", "reason": "Depends on deferred market objects."},
-    {"name": "application_cutover", "kind": "operational", "reason": "Application v2 code and release sequence are prepared; production history checks, final Wave 9 copy, table exchange, and live release remain gated."},
     {"name": "legacy_table_deletion", "kind": "operational", "reason": "Keep legacy history for recovery and audit after the v2 cutover; deletion requires a later decision."}
   ]
 }

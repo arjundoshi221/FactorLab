@@ -23,6 +23,10 @@ lock=/var/lock/factorlab-release.lock
 
 exec 9>"$lock"
 flock -n 9 || { echo "another FactorLab release operation is active" >&2; exit 1; }
+if [[ -e $root/v2-cutover-activated ]]; then
+    echo "v2 writers have been activated; rollback is disabled, release a v2 fix instead" >&2
+    exit 1
+fi
 
 compose() {
     docker compose --env-file "$live/production.env" -f "$live/compose.production.yml" "$@"

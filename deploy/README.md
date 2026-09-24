@@ -1,7 +1,7 @@
 # FactorLab production deployment
 
-ClickHouse, the private FactorLab Data Hub/API, India ingestion, optional
-US/political jobs, and the Cloudflare runtime-secret agent run on one VPS.
+ClickHouse, the private FactorLab Data Hub/API, India and US ingestion,
+political jobs, and the Cloudflare runtime-secret agent run on one VPS.
 Secret values are rendered only into Docker tmpfs volumes.
 
 ## Automated production releases
@@ -20,14 +20,13 @@ builds one Linux/AMD64 image, publishes it privately to GHCR, and deploys the
 exact image digest. Do not move or reuse release tags.
 
 The ClickHouse v2 migration runner is intentionally outside this workflow.
-For the September 25, 2026 application cutover, finish the production checks,
-final Wave 9 catch-up, and operational-table exchange in
-[`clickhouse-v2-data-completion.md`](../docs/operations/clickhouse-v2-data-completion.md)
-before running the release helper. The first v2 release refuses active legacy
-writers or political cron. It starts the API and checks v2 reads before starting
-universe, India, and US writers, then installs political cron. Once v2 writers
-activate, failures stop the writers for a v2 fix-forward release; the release
-does not restore legacy collection.
+The production application cutover completed on September 24 for the September
+25 collection day; its validation record is in
+[`clickhouse-v2-data-completion.md`](../docs/operations/clickhouse-v2-data-completion.md).
+The first v2 release required paused legacy writers and cron, checked the new
+API before starting universe, India, and US writers, then installed political
+cron. After v2 activation, failures stop affected writers for a v2 fix-forward
+release. Legacy collection must not be restored.
 
 ### One-time GitHub and VPS setup
 
@@ -82,10 +81,13 @@ hub reads. Before first v2 writer activation, a failed release restores the
 preceding bundle and image pins. After activation, inspect fresh v2 writes and
 raw-to-curated lineage with the runbook checks and fix forward on failure.
 
-### Manual rollback
+### Manual rollback before v2 activation
 
-Use the release ID that is being undone. The saved record contains the exact
-bundle and per-service images that were active before it:
+The production v2 activation marker is set, so the rollback script now refuses
+to run. Repair production with a v2 fix-forward release.
+
+Before activation, use the release ID being undone. The saved record contains
+the exact bundle and per-service images that were active before it:
 
 ```bash
 sudo bash /opt/factorlab/deploy/scripts/rollback-release.sh 20260920T120000Z-0123456789ab

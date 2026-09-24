@@ -1,6 +1,6 @@
 # ClickHouse v2 data completion and application cutover
 
-## September 25, 2026 cutover (Asia/Kolkata)
+## Production cutover procedure (completed for September 25, 2026 collection)
 
 The release is gated on complete Waves 1–4 history and the final Wave 9
 operational-table copy. Verify the September 24 production schema report below
@@ -67,8 +67,8 @@ collection. Keep Wave 8 RBAC pending. Exchange names only under the cutover
 gates above.
 
 The Wave 4 data-completion extension moves legacy rows that could not fit the
-original v2 tables. It is additive. Until the gated cutover, running US and
-India ingest containers write to `factorlab` and legacy remains authoritative.
+original v2 tables. It is additive. Before the gated cutover, US and India
+ingest containers wrote to `factorlab`; v2 is now authoritative.
 
 | Legacy source | V2 destination | Identity and preservation |
 | --- | --- | --- |
@@ -84,8 +84,9 @@ already-applied Wave 4 files. Apply `schema` through Wave 4 first, then run
 commands must be run with the matching SQL package and the production migration
 lock; mutations require `--yes`. No RBAC phase is needed. Compare source and
 destination counts with `FINAL`, check source hashes and canonical foreign keys,
-then rerun the backfill to verify logical idempotency. Later catch-up runs must
-repeat validation because legacy writers remain active.
+then rerun the backfill to verify logical idempotency. Preactivation catch-up
+runs repeated validation while legacy writers remained active. Do not rerun a
+backfill after the first v2 live write.
 
 Production `us_session_coverage` spans January 1985 through September 2026
 (501 monthly partitions). The default ClickHouse limit of 100 partitions per
@@ -120,12 +121,40 @@ Migration validation through Wave 9 passed again after the backfill. No v2
 application writer had been activated at this checkpoint. Free ClickHouse disk
 was about 74 GB at preflight.
 
-The Wave 8 RBAC phase remains pending by choice. Application deployment remains
-the next release step.
+The Wave 8 RBAC phase remains pending by choice. Application activation and
+post-cutover checks are recorded below.
 
 These later-wave tables are empty: the legacy `factorlab` database has no
 corresponding fundamentals, derived, broker, book, or risk source tables.
 Creating these schemas does not implement the spec's new provider ingesters,
 derived computations, broker reconciliation, attribution, risk tooling, or
-deferred materialized views. Legacy ingestion remains authoritative; use a
-separate reviewed plan before wiring writers or readers to the new namespaces.
+deferred materialized views. The v2 application write path is authoritative;
+use a separate reviewed plan before wiring new workloads to those namespaces.
+
+## Production application activation (2026-09-24)
+
+Release `20260924T170537Z-f5061f3eaea8` completed at
+`2026-09-24T17:11:12Z` with image digest
+`sha256:c439223edd910c399ce5b24b1afc4b18b29d683ab865a8f2be49da7793ffe605`.
+The API, secret agent, universe, India, and US containers were running on that
+digest, and political cron was installed for 02:15 UTC daily. The v2 activation
+marker is set; never run the legacy backfill or restore legacy writers now.
+
+Post-activation checks found 503 active US daily series, 198,996 fresh v2
+market bars with valid raw and run references at the audit time, and new US
+coverage and recovery rows. A manual run of the scheduled political job wrote
+113 trade rows with raw and run lineage; `alt.political_trades FINAL` increased
+from 496 to 498 logical trades. The overview, schema map, India, US, and
+political hub routes responded; US instrument and candle pagination returned
+canonical `listing_id` values. Legacy India minute, US minute, US daily, and
+political trade counts remained at their cutover watermark values. The Cboe
+BZX exchange and CBOE listing resolved to MIC `BATS` using the
+[Cboe `Z=BZX` feed code](https://www.cboe.com/document/tech-spec/content/technical-specifications/cboe-titanium-cboe-one-equities-feed-specification/cboe-one-update-messages-udp--tcp/openingclosing-price-message-fields)
+and the [published BZX MIC](https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX%3A02016R1646-20221017).
+The release workflow and its backend and frontend jobs passed.
+
+The India market had closed before activation. During the September 25 India
+session, confirm fresh equity and contract-futures bars with raw and run IDs,
+coverage and recovery continuity, API and UI results, and unchanged legacy
+counts. Continue checking the US and political cycles on v2; fix any failure
+forward without replaying migration backfills.
