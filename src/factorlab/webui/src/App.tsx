@@ -464,7 +464,7 @@ export function App() {
   }
   return (
     <Shell>
-      {path === "/roadmap" ? <Roadmap /> : path === "/docker-images" ? <DockerImages /> : path === "/schema" ? <Suspense fallback={<main className="loading-state">Loading schema canvas…</main>}><SchemaMap /></Suspense> : indiaInstrumentMatch ? <IndiaInstrumentDetail instrumentId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
+      {path === "/roadmap" ? <Roadmap /> : path === "/docker-images" ? <DockerImages /> : path === "/schema" ? <Suspense fallback={<main className="loading-state">Loading schema canvas…</main>}><SchemaMap /></Suspense> : indiaInstrumentMatch ? <IndiaInstrumentDetail listingId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
     </Shell>
   );
 }

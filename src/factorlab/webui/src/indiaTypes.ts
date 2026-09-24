@@ -20,11 +20,10 @@ export interface IndiaDashboardData {
 }
 
 export interface IndiaInstrumentRow {
-  instrument_id: string;
+  listing_id: string;
   symbol: string;
   name: string | null;
   exchange_code: string | null;
-  segment: string | null;
   instrument_type: string | null;
   status: string | null;
   source: string | null;
@@ -86,17 +85,17 @@ export interface IndiaInstrumentDay {
 }
 
 export interface IndiaInstrumentDays {
-  instrument_id: string;
+  listing_id: string;
   date_from: string;
   date_to: string;
   items: IndiaInstrumentDay[];
 }
 
 export interface IndiaCandle {
-  instrument_id: string;
-  contract_id: string;
+  listing_id: string;
+  contract_id: string | null;
   symbol: string;
-  market_code: string;
+  country_code: string;
   bar_time: string;
   open: number | string | null;
   high: number | string | null;

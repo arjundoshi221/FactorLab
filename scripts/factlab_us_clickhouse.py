@@ -24,7 +24,7 @@ from factorlab.sources.schwab.market import (
     latest_completed,
     token_ready,
 )
-from factorlab.storage.us_clickhouse import USStorage
+from factorlab.storage.v2_us import V2USStorage as USStorage
 
 log = logging.getLogger("factorlab.schwab")
 stop = threading.Event()
@@ -100,7 +100,7 @@ def safe_source_status(storage, source, status, detail):
     except TypeError:
         # Compatibility with older storage doubles and images.
         storage.source_status(status, detail)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - source health must survive status-write failures
         log.error("Source status write failed for %s: %s", source, type(exc).__name__)
 
 
@@ -232,7 +232,7 @@ def run_full(args, storage):
                     break
                 try:
                     collect(storage, schwab, item, "1min", now=datetime.now(UTC), live=True)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - continue other live symbols
                     log.error("Live %s failed: %s", item[0], type(exc).__name__)
             next_live = datetime.now(UTC) + timedelta(seconds=300)
         if token_ready(now) and minute_pending:
@@ -244,7 +244,7 @@ def run_full(args, storage):
                     if not complete:
                         minute_retry_at[retry_key] = now + timedelta(minutes=15)
                         minute_pending.append(item)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - retry one failed recovery later
                     log.error("Minute recovery %s failed: %s", item[0], type(exc).__name__)
                     minute_retry_at[retry_key] = now + timedelta(minutes=15)
                     minute_pending.append(item)
@@ -258,7 +258,7 @@ def run_full(args, storage):
                                   item["instrument_id"])
                     collect(storage, schwab, daily_item, "daily", now=now,
                             universe_name=item.get("universe", FULL_UNIVERSE))
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - retry one failed daily recovery later
                     log.error("Daily recovery %s failed: %s", item["symbol"], type(exc).__name__)
                     retry_at[item["instrument_id"]] = now + timedelta(minutes=15)
                     pending.append(item)
@@ -303,7 +303,7 @@ def run(args, storage, client):
                     record, raw_id = client.instrument(provider)
                     identifier = storage.reference(symbol, provider, record, raw_id, args.universe)
                     items.append((symbol, provider, identifier))
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - report unresolved provider rows
                     log.error("Reference %s failed: %s", symbol, type(exc).__name__)
                     health = ("error", f"Reference lookup failed for {symbol}")
                     had_failure = True
@@ -321,7 +321,7 @@ def run(args, storage, client):
                     break
                 try:
                     collect(storage, client, item, "1min", now=datetime.now(UTC), live=True)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - continue other live symbols
                     log.error("Live %s failed: %s", item[0], type(exc).__name__)
             next_live = datetime.now(UTC) + timedelta(seconds=300)
         target = bounds(latest_completed(now))[1]
@@ -329,10 +329,10 @@ def run(args, storage, client):
         for item in items:
             for resolution in ("1min", "daily"):
                 state = storage.state(item[2], resolution)
-                if (not state["history_complete"] or not state["checked_through"] or state["checked_through"] < target
-                        or state["error"] or not state["full_refreshed_at"] or now - state["full_refreshed_at"] >= timedelta(days=7)):
-                    if now >= retry_at.get((item[0], resolution), datetime.min.replace(tzinfo=UTC)):
-                        pending.append((item, resolution))
+                if ((not state["history_complete"] or not state["checked_through"] or state["checked_through"] < target
+                     or state["error"] or not state["full_refreshed_at"] or now - state["full_refreshed_at"] >= timedelta(days=7))
+                        and now >= retry_at.get((item[0], resolution), datetime.min.replace(tzinfo=UTC))):
+                    pending.append((item, resolution))
         # One historical request per tick lets live polling preempt long startup backfills.
         for item, resolution in pending[:1] if args.daemon else pending:
             if stop.is_set():
@@ -343,7 +343,7 @@ def run(args, storage, client):
                     retry_at[(item[0], resolution)] = now + timedelta(minutes=15)
                     had_failure = True
                 health = ("ready", "Schwab collection ready")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - preserve the daemon and report failure
                 had_failure = True
                 health = ("auth_required" if isinstance(exc, AuthRequired) else "error",
                           f"{item[0]} {resolution}: {type(exc).__name__}; retry scheduled")

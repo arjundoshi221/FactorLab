@@ -11,7 +11,7 @@ import pandas as pd
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
-from factorlab.api.india import QueryClient
+from factorlab.api.india import INDIA_BAR_VERSIONS_SQL, INDIA_BARS_SQL, QueryClient
 from factorlab.api.india_observability import _session_state
 from factorlab.storage.clickhouse import ClickHouseStorage
 
@@ -21,11 +21,10 @@ IndiaCollectionStatus = Literal["collecting", "historical", "not_configured"]
 
 
 class IndiaHubInstrument(BaseModel):
-    instrument_id: UUID
+    listing_id: UUID
     symbol: str
     name: str | None
     exchange_code: str | None
-    segment: str | None
     instrument_type: str | None
     status: str | None
     source: str | None
@@ -87,7 +86,7 @@ class IndiaHubInstrumentDay(BaseModel):
 
 
 class IndiaHubInstrumentDays(BaseModel):
-    instrument_id: UUID
+    listing_id: UUID
     date_from: date
     date_to: date
     items: list[IndiaHubInstrumentDay]
@@ -181,7 +180,7 @@ class IndiaHubRepository:
         self,
         *,
         trading_date: date,
-        instrument_id: UUID | None = None,
+        listing_id: UUID | None = None,
         scope: IndiaCollectionScope = "all",
         search: str | None = None,
         limit: int = 100,
@@ -209,37 +208,35 @@ class IndiaHubRepository:
             "limit": limit,
             "offset": offset,
         }
-        if instrument_id:
-            instrument_condition = "AND reference.instrument_id = {instrument_id:UUID}"
-            parameters["instrument_id"] = instrument_id
+        if listing_id:
+            instrument_condition = "AND reference.listing_id = {listing_id:UUID}"
+            parameters["listing_id"] = listing_id
         if search:
             search_condition = """
                 AND (
                     positionCaseInsensitiveUTF8(reference.symbol, {search:String}) > 0
                     OR positionCaseInsensitiveUTF8(ifNull(reference.name, ''), {search:String}) > 0
-                    OR positionCaseInsensitiveUTF8(ifNull(reference.instrument_key, ''), {search:String}) > 0
                 )
             """
             parameters["search"] = search
 
         summary_result = self.client.query(
-            """
+            f"""
             WITH reference AS (
-                SELECT instrument_id
-                FROM ref_instruments FINAL
-                WHERE market_code = 'IND' AND status = 'active'
-                GROUP BY instrument_id
+                SELECT listing_id FROM ref.listings FINAL
+                WHERE country_code = 'IN' AND active
+                GROUP BY listing_id
             ), history AS (
-                SELECT instrument_id, count() AS data_points,
+                SELECT listing_id, count() AS data_points,
                        max(ingested_at) AS last_ingested_at
-                FROM market_candles_1min FINAL
-                WHERE market_code = 'IND'
-                GROUP BY instrument_id
+                FROM ({INDIA_BARS_SQL}) AS bars
+                WHERE country_code = 'IN'
+                GROUP BY listing_id
             ), expected AS (
-                SELECT instrument_id, count() AS expected_series
-                FROM india_expected_series FINAL
-                WHERE active
-                GROUP BY instrument_id
+                SELECT listing_id, count() AS expected_series
+                FROM meta.expected_series FINAL
+                WHERE country_code = 'IN' AND active
+                GROUP BY listing_id
             )
             SELECT count() AS reference_total,
                    countIf(ifNull(expected.expected_series, 0) > 0) AS collecting_total,
@@ -249,8 +246,8 @@ class IndiaHubRepository:
                            AND ifNull(history.data_points, 0) = 0) AS not_configured_total,
                    max(history.last_ingested_at) AS data_as_of
             FROM reference
-            LEFT JOIN history USING (instrument_id)
-            LEFT JOIN expected USING (instrument_id)
+            LEFT JOIN history USING (listing_id)
+            LEFT JOIN expected USING (listing_id)
             SETTINGS join_use_nulls = 1
             """
         )
@@ -260,63 +257,69 @@ class IndiaHubRepository:
         result = self.client.query(
             f"""
             WITH history AS (
-                SELECT instrument_id,
+                SELECT listing_id,
                        argMax(symbol, bar_time) AS symbol,
                        count() AS data_points,
-                       uniqExact(toDate(bar_time, 'Asia/Kolkata')) AS trading_days,
+                       uniqExact(trade_date) AS trading_days,
                        uniqExact(tuple(contract_id, source)) AS unique_series,
                        min(bar_time) AS first_bar_time,
                        max(bar_time) AS last_bar_time,
                        max(ingested_at) AS last_ingested_at,
-                       countIf(toDate(bar_time, 'Asia/Kolkata') = {{trading_date:Date}})
+                       countIf(trade_date = {{trading_date:Date}})
                            AS selected_data_points,
                        uniqExactIf(tuple(contract_id, source),
-                           toDate(bar_time, 'Asia/Kolkata') = {{trading_date:Date}})
+                           trade_date = {{trading_date:Date}})
                            AS selected_unique_series,
-                       countIf(toDate(bar_time, 'Asia/Kolkata') = {{trading_date:Date}}
+                       countIf(trade_date = {{trading_date:Date}}
                            AND (low > high OR open < low OR open > high
                                 OR close < low OR close > high)) AS ohlc_violations,
-                       countIf(toDate(bar_time, 'Asia/Kolkata') = {{trading_date:Date}}
+                       countIf(trade_date = {{trading_date:Date}}
                            AND (isNull(open) OR isNull(high) OR isNull(low) OR isNull(close)))
                            AS null_ohlc_values,
-                       countIf(toDate(bar_time, 'Asia/Kolkata') = {{trading_date:Date}}
+                       countIf(trade_date = {{trading_date:Date}}
                            AND (toHour(toTimeZone(bar_time, 'Asia/Kolkata')) * 60
                                     + toMinute(toTimeZone(bar_time, 'Asia/Kolkata')) < 555
                                 OR toHour(toTimeZone(bar_time, 'Asia/Kolkata')) * 60
                                     + toMinute(toTimeZone(bar_time, 'Asia/Kolkata')) >= 930))
                            AS outside_session
-                FROM market_candles_1min FINAL
-                WHERE market_code = 'IND'
-                GROUP BY instrument_id
+                FROM ({INDIA_BARS_SQL}) AS bars
+                WHERE country_code = 'IN'
+                GROUP BY listing_id
             ), reference AS (
-                SELECT instrument_id,
-                       instrument_key,
-                       trading_symbol AS symbol,
-                       name,
-                       exchange_code,
-                       segment,
-                       instrument_type,
-                       status,
-                       source
-                FROM ref_instruments FINAL
-                WHERE market_code = 'IND' AND status = 'active'
+                SELECT l.listing_id,
+                       l.trading_symbol AS symbol,
+                       e.legal_name AS name,
+                       l.exchange_code,
+                       s.security_type AS instrument_type,
+                       if(l.active, 'active', 'inactive') AS status,
+                       ifNull(a.source, 'reference') AS source
+                FROM ref.listings AS l FINAL
+                INNER JOIN ref.securities AS s FINAL ON s.security_id = l.security_id
+                INNER JOIN ref.entities AS e FINAL ON e.entity_id = s.entity_id
+                LEFT JOIN (
+                    SELECT target_id, argMax(source, version) AS source
+                    FROM ref.identifier_aliases FINAL
+                    WHERE target_kind = 'listing' AND alias_kind = 'upstox_instrument_key'
+                    GROUP BY target_id
+                ) AS a ON a.target_id = l.listing_id
+                WHERE l.country_code = 'IN' AND l.active
             ), expected AS (
-                SELECT instrument_id, count() AS expected_series
-                FROM india_expected_series FINAL
-                WHERE active
-                GROUP BY instrument_id
+                SELECT listing_id, count() AS expected_series
+                FROM meta.expected_series FINAL
+                WHERE country_code = 'IN' AND active
+                GROUP BY listing_id
             ), versions AS (
-                SELECT instrument_id,
+                SELECT listing_id,
                        count() - uniqExact(tuple(contract_id, bar_time, source))
                            AS duplicate_versions
-                FROM market_candles_1min
-                WHERE market_code = 'IND'
-                  AND toDate(bar_time, 'Asia/Kolkata') = {{trading_date:Date}}
-                GROUP BY instrument_id
+                FROM ({INDIA_BAR_VERSIONS_SQL}) AS bars
+                WHERE country_code = 'IN'
+                  AND trade_date = {{trading_date:Date}}
+                GROUP BY listing_id
             )
-            SELECT reference.instrument_id AS instrument_id, reference.symbol AS symbol,
+            SELECT reference.listing_id AS listing_id, reference.symbol AS symbol,
                    reference.name AS name, reference.exchange_code AS exchange_code,
-                   reference.segment AS segment, reference.instrument_type AS instrument_type,
+                   reference.instrument_type AS instrument_type,
                    reference.status AS status, reference.source AS source,
                    ifNull(history.data_points, 0) AS data_points,
                    ifNull(history.trading_days, 0) AS trading_days,
@@ -334,11 +337,11 @@ class IndiaHubRepository:
                        AS duplicate_versions,
                    count() OVER () AS total
             FROM reference
-            LEFT JOIN history USING (instrument_id)
-            LEFT JOIN expected USING (instrument_id)
-            LEFT JOIN versions USING (instrument_id)
+            LEFT JOIN history USING (listing_id)
+            LEFT JOIN expected USING (listing_id)
+            LEFT JOIN versions USING (listing_id)
             WHERE 1 = 1 {scope_condition} {instrument_condition} {search_condition}
-            ORDER BY reference.symbol, reference.instrument_id
+            ORDER BY reference.symbol, reference.listing_id
             LIMIT {{limit:UInt16}} OFFSET {{offset:UInt32}}
             SETTINGS join_use_nulls = 1
             """,
@@ -397,7 +400,7 @@ class IndiaHubRepository:
 
     def get_instrument(
         self,
-        instrument_id: UUID,
+        listing_id: UUID,
         *,
         trading_date: date,
         now: datetime | None = None,
@@ -405,7 +408,7 @@ class IndiaHubRepository:
         """Return one instrument with stored-history and selected-session checks."""
 
         page = self.list_instruments(
-            instrument_id=instrument_id,
+            listing_id=listing_id,
             trading_date=trading_date,
             limit=1,
             now=now,
@@ -416,21 +419,21 @@ class IndiaHubRepository:
 
     def list_instrument_days(
         self,
-        instrument_id: UUID,
+        listing_id: UUID,
         *,
         date_from: date,
         date_to: date,
         now: datetime | None = None,
     ) -> IndiaHubInstrumentDays:
         parameters = {
-            "instrument_id": instrument_id,
+            "listing_id": listing_id,
             "date_from": date_from,
             "date_to": date_to,
         }
         result = self.client.query(
             """
             WITH latest AS (
-                SELECT toDate(bar_time, 'Asia/Kolkata') AS trading_date,
+                SELECT trade_date AS trading_date,
                        count() AS data_points,
                        uniqExact(tuple(contract_id, source)) AS unique_series,
                        min(bar_time) AS first_bar_time,
@@ -445,21 +448,21 @@ class IndiaHubRepository:
                                OR toHour(toTimeZone(bar_time, 'Asia/Kolkata')) * 60
                                    + toMinute(toTimeZone(bar_time, 'Asia/Kolkata')) >= 930)
                            AS outside_session
-                FROM market_candles_1min FINAL
-                WHERE market_code = 'IND'
-                  AND instrument_id = {instrument_id:UUID}
-                  AND toDate(bar_time, 'Asia/Kolkata') >= {date_from:Date}
-                  AND toDate(bar_time, 'Asia/Kolkata') <= {date_to:Date}
+                FROM (__BARS__) AS bars
+                WHERE country_code = 'IN'
+                  AND listing_id = {listing_id:UUID}
+                  AND trade_date >= {date_from:Date}
+                  AND trade_date <= {date_to:Date}
                 GROUP BY trading_date
             ), versions AS (
-                SELECT toDate(bar_time, 'Asia/Kolkata') AS trading_date,
+                SELECT trade_date AS trading_date,
                        count() - uniqExact(tuple(contract_id, bar_time, source))
                            AS duplicate_versions
-                FROM market_candles_1min
-                WHERE market_code = 'IND'
-                  AND instrument_id = {instrument_id:UUID}
-                  AND toDate(bar_time, 'Asia/Kolkata') >= {date_from:Date}
-                  AND toDate(bar_time, 'Asia/Kolkata') <= {date_to:Date}
+                FROM (__VERSIONS__) AS bars
+                WHERE country_code = 'IN'
+                  AND listing_id = {listing_id:UUID}
+                  AND trade_date >= {date_from:Date}
+                  AND trade_date <= {date_to:Date}
                 GROUP BY trading_date
             )
             SELECT latest.trading_date, latest.data_points, latest.unique_series,
@@ -467,12 +470,15 @@ class IndiaHubRepository:
                    latest.ohlc_violations, latest.null_ohlc_values,
                    latest.outside_session, ifNull(versions.duplicate_versions, 0)
                        AS duplicate_versions,
-                   (SELECT count() FROM india_expected_series FINAL
-                    WHERE instrument_id = {instrument_id:UUID} AND active) AS expected_series
+                   (SELECT count() FROM meta.expected_series FINAL
+                    WHERE country_code = 'IN' AND listing_id = {listing_id:UUID} AND active)
+                    AS expected_series
             FROM latest
             LEFT JOIN versions USING (trading_date)
             ORDER BY trading_date DESC
-            """,
+            """.replace("__BARS__", INDIA_BARS_SQL).replace(
+                "__VERSIONS__", INDIA_BAR_VERSIONS_SQL
+            ),
             parameters=parameters,
         )
         observed = {row["trading_date"]: row for row in _rows(result)}
@@ -487,10 +493,10 @@ class IndiaHubRepository:
         if not observed:
             expected_result = self.client.query(
                 """
-                SELECT count() AS expected_series FROM india_expected_series FINAL
-                WHERE instrument_id = {instrument_id:UUID} AND active
+                SELECT count() AS expected_series FROM meta.expected_series FINAL
+                WHERE country_code = 'IN' AND listing_id = {listing_id:UUID} AND active
                 """,
-                parameters={"instrument_id": instrument_id},
+                parameters={"listing_id": listing_id},
             )
             expected_rows = _rows(expected_result)
             expected_series = int(expected_rows[0]["expected_series"]) if expected_rows else 0
@@ -536,7 +542,7 @@ class IndiaHubRepository:
                 )
             )
         return IndiaHubInstrumentDays(
-            instrument_id=instrument_id,
+            listing_id=listing_id,
             date_from=date_from,
             date_to=date_to,
             items=items,

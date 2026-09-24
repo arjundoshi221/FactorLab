@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from factorlab.api.india import QueryClient
 from factorlab.api.india_observability import _session_state
+from factorlab.api.schema_map import V2_DATABASES
 from factorlab.storage.clickhouse import ClickHouseStorage
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -197,6 +198,22 @@ TABLE_PROFILES: dict[str, TableProfile] = {
                                ("us_session_coverage", "ingested_at"), ("us_source_status", "checked_at")]},
 }
 
+V2_TABLE_PROFILES: dict[str, TableProfile] = {
+    "raw.archive": TableProfile("Raw archive", "Raw", "fetched_at", "fetched_at", "fetched_at", "fetched_at"),
+    "ref.countries": TableProfile("Reference", "Reference", "ingested_at", "ingested_at", "ingested_at", "ingested_at"),
+    "ref.exchanges": TableProfile("Reference", "Reference", "ingested_at", "ingested_at", "ingested_at", "ingested_at"),
+    "ref.listings": TableProfile("Market reference", "Reference", "ingested_at", "ingested_at", "ingested_at", "ingested_at"),
+    "ref.contracts": TableProfile("Market reference", "Reference", "ingested_at", "ingested_at", "ingested_at", "ingested_at"),
+    "market.bars": TableProfile("Global market", "Market data", "bar_time", "bar_time", "ingested_at", "bar_time"),
+    "market.futures_contract_bars": TableProfile("Global market", "Market data", "bar_time", "bar_time", "ingested_at", "bar_time"),
+    "alt.political_committees": TableProfile("Political", "Reference", "ingested_at", "ingested_at", "ingested_at", "ingested_at"),
+    "alt.political_committee_memberships": TableProfile("Political", "Political data", "effective_from", "effective_from", "ingested_at", "effective_from", status_policy="political"),
+    "alt.political_filings": TableProfile("Political", "Political data", "filing_date", "filing_date", "ingested_at", "filing_date", status_policy="political"),
+    "alt.political_trades": TableProfile("Political", "Political data", "transaction_date", "transaction_date", "ingested_at", "transaction_date", status_policy="political"),
+    "meta.expected_series": TableProfile("India market", "Operations", "ingested_at", "ingested_at", "ingested_at", "ingested_at"),
+    "meta.ingestion_runs": TableProfile("Pipelines", "Operations", "started_at", "started_at", "ingested_at", "started_at", status_policy="ingestion"),
+}
+
 
 def _rows(result: Any) -> list[dict[str, Any]]:
     return [dict(zip(result.column_names, row, strict=True)) for row in result.result_rows]
@@ -228,7 +245,7 @@ def _freshness_seconds(value: datetime | None, now: datetime) -> int | None:
 class HubRepository:
     """Build a dashboard overview from FactorLab and ClickHouse metadata."""
 
-    def __init__(self, client: QueryClient, *, database: str = "factorlab") -> None:
+    def __init__(self, client: QueryClient, *, database: str = "factorlab_v2") -> None:
         self.client = client
         self.database = database
 
@@ -249,7 +266,7 @@ class HubRepository:
 
         for row in metadata:
             name = str(row["name"])
-            profile = TABLE_PROFILES.get(name)
+            profile = V2_TABLE_PROFILES.get(name)
             table = HubTable(
                 name=name,
                 domain=profile.domain if profile else "Unclassified",
@@ -310,20 +327,20 @@ class HubRepository:
         result = self.client.query(
             """
             WITH parts AS (
-                SELECT table, sum(rows) AS stored_rows, sum(bytes_on_disk) AS bytes_on_disk
+                SELECT database, table, sum(rows) AS stored_rows, sum(bytes_on_disk) AS bytes_on_disk
                 FROM system.parts
-                WHERE active AND database = {database:String}
-                GROUP BY table
+                WHERE active AND has({databases:Array(String)}, database)
+                GROUP BY database, table
             )
-            SELECT tables.name, tables.engine,
+            SELECT concat(tables.database, '.', tables.name) AS name, tables.engine,
                    ifNull(parts.stored_rows, 0) AS stored_rows,
                    ifNull(parts.bytes_on_disk, 0) AS bytes_on_disk
             FROM system.tables AS tables
-            LEFT JOIN parts ON parts.table = tables.name
-            WHERE tables.database = {database:String}
-            ORDER BY tables.name
+            LEFT JOIN parts ON parts.database = tables.database AND parts.table = tables.name
+            WHERE has({databases:Array(String)}, tables.database)
+            ORDER BY tables.database, tables.name
             """,
-            parameters={"database": self.database},
+            parameters={"databases": list(V2_DATABASES)},
         )
         return _rows(result)
 
@@ -342,8 +359,8 @@ class HubRepository:
                    maxOrNull({profile.last_expression}) AS last_data_at,
                    maxOrNull({profile.ingested_expression}) AS last_ingested_at,
                    countIf({today_expression} = {{today:Date}}) AS today_rows
-            FROM {table_name}{" FINAL" if table_name in ("market_candles_1min", "market_candles_daily") else ""}
-            {"WHERE market_code = {market_code:String}" if market_code else ""}
+            FROM {table_name}{'' if table_name == 'raw.archive' else ' FINAL'}
+            {"WHERE country_code = {market_code:String}" if market_code else ""}
             """,
             parameters={"today": today_ist, **({"market_code": market_code} if market_code else {})},
         )
@@ -352,11 +369,11 @@ class HubRepository:
     def _active_expected_series(self, warnings: list[str]) -> int:
         try:
             result = self.client.query(
-                "SELECT count() AS expected_series FROM india_expected_series FINAL WHERE active"
+                "SELECT count() AS expected_series FROM meta.expected_series FINAL WHERE country_code = 'IN' AND active"
             )
             return int(_rows(result)[0]["expected_series"])
         except Exception as exc:  # noqa: BLE001 - degraded overview is still useful
-            warnings.append(f"india_expected_series health: {type(exc).__name__}")
+            warnings.append(f"meta.expected_series health: {type(exc).__name__}")
             return 0
 
     def _latest_run_failures(self, warnings: list[str]) -> int:
@@ -365,9 +382,9 @@ class HubRepository:
                 """
                 SELECT countIf(latest_status IN ('failed', 'partial')) AS failed_pipelines
                 FROM (
-                    SELECT market_code, pipeline, source, argMax(status, started_at) AS latest_status
-                    FROM ingestion_runs FINAL
-                    GROUP BY market_code, pipeline, source
+                    SELECT country_code, pipeline, source, argMax(status, started_at) AS latest_status
+                    FROM meta.ingestion_runs FINAL
+                    GROUP BY country_code, pipeline, source
                 )
                 """
             )
@@ -429,18 +446,19 @@ class HubRepository:
         expected_series: int,
     ) -> HubIndiaSummary:
         market_status, points_per_series = _session_state(trading_date, now)
-        table = next((item for item in tables if item.name == "market_candles_1min"), None)
+        table = next((item for item in tables if item.name == "market.bars"), None)
         if table:
             table = table.model_copy(deep=True)
-            profile = replace(TABLE_PROFILES["market_candles_1min"],
+            profile = replace(V2_TABLE_PROFILES["market.bars"],
                               today_timezone="Asia/Kolkata", status_policy="market_intraday")
             try:
-                aggregate = self._profile_aggregate("market_candles_1min", profile, trading_date, market_code="IND")
-                table.today_rows = int(aggregate["today_rows"] or 0)
+                aggregate = self._profile_aggregate("market.bars", profile, trading_date, market_code="IN")
+                future = self._profile_aggregate("market.futures_contract_bars", profile, trading_date, market_code="IN")
+                table.today_rows = int(aggregate["today_rows"] or 0) + int(future["today_rows"] or 0)
                 table.last_ingested_at = _aware_utc(aggregate["last_ingested_at"])
                 table.today_status, table.status_reason = self._table_status(
                     table, profile, now, trading_date, expected_series, 0)
-            except Exception:
+            except Exception:  # noqa: BLE001 - keep the overview available when a table is unavailable
                 table.today_rows = None
                 table.last_ingested_at = None
                 table.today_status = "unknown"
@@ -470,8 +488,8 @@ class HubRepository:
         datasets = [
             item
             for item in tables
-            if TABLE_PROFILES.get(item.name)
-            and TABLE_PROFILES[item.name].status_policy == "political"
+            if V2_TABLE_PROFILES.get(item.name)
+            and V2_TABLE_PROFILES[item.name].status_policy == "political"
         ]
         latest = max(
             (item.last_ingested_at for item in datasets if item.last_ingested_at is not None),

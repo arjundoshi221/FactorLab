@@ -26,17 +26,17 @@ class HubQueryClient:
         if "FROM system.tables AS tables" in query:
             return result(
                 ["name", "engine", "stored_rows", "bytes_on_disk"],
-                ("market_candles_1min", "ReplacingMergeTree", 10_000, 500_000),
-                ("market_candles_daily", "ReplacingMergeTree", 0, 0),
-                ("alt_political_trades", "ReplacingMergeTree", 244, 80_000),
-                ("ingestion_runs", "ReplacingMergeTree", 300, 15_000),
+                ("market.bars", "ReplacingMergeTree", 10_000, 500_000),
+                ("market.futures_contract_bars", "ReplacingMergeTree", 0, 0),
+                ("alt.political_trades", "ReplacingMergeTree", 244, 80_000),
+                ("meta.ingestion_runs", "ReplacingMergeTree", 300, 15_000),
                 ("future_table", "MergeTree", 4, 100),
             )
-        if "FROM india_expected_series FINAL WHERE active" in query:
+        if "FROM meta.expected_series FINAL" in query:
             return result(["expected_series"], (1,))
         if "failed_pipelines" in query:
             return result(["failed_pipelines"], (0,))
-        if "FROM market_candles_1min" in query:
+        if "FROM market.bars" in query:
             return result(
                 ["first_data_at", "last_data_at", "last_ingested_at", "today_rows"],
                 (
@@ -46,17 +46,17 @@ class HubQueryClient:
                     101,
                 ),
             )
-        if "FROM market_candles_daily" in query:
+        if "FROM market.futures_contract_bars" in query:
             return result(
                 ["first_data_at", "last_data_at", "last_ingested_at", "today_rows"],
                 (None, None, None, 0),
             )
-        if "FROM alt_political_trades" in query:
+        if "FROM alt.political_trades" in query:
             return result(
                 ["first_data_at", "last_data_at", "last_ingested_at", "today_rows"],
                 (date(2025, 1, 1), date(2026, 8, 18), self.now - timedelta(hours=12), 0),
             )
-        if "FROM ingestion_runs" in query:
+        if "FROM meta.ingestion_runs" in query:
             return result(
                 ["first_data_at", "last_data_at", "last_ingested_at", "today_rows"],
                 (self.now - timedelta(days=30), self.now, self.now, 12),
@@ -72,11 +72,11 @@ def test_overview_includes_empty_unknown_and_schedule_aware_tables():
     assert overview.summary.table_count == 5
     assert overview.summary.populated_tables == 4
     assert overview.summary.stored_rows == 10_548
-    assert tables["market_candles_1min"].today_status == "not_expected"
+    assert tables["market.bars"].today_status == "not_expected"
     assert overview.india.status == "healthy"
-    assert tables["market_candles_1min"].today_rows == 101
-    assert tables["market_candles_daily"].today_status == "not_expected"
-    assert tables["alt_political_trades"].today_status == "healthy"
+    assert tables["market.bars"].today_rows == 101
+    assert tables["market.futures_contract_bars"].today_status == "not_expected"
+    assert tables["alt.political_trades"].today_status == "healthy"
     assert tables["future_table"].today_status == "not_configured"
     assert overview.india.expected_data_points == 106
     assert overview.india.coverage_percent == 95.28
@@ -90,7 +90,7 @@ def test_overview_marks_stale_political_and_failed_ingestion_attention():
     def query(query, parameters=None):
         if "failed_pipelines" in query:
             return result(["failed_pipelines"], (2,))
-        if "FROM alt_political_trades" in query:
+        if "FROM alt.political_trades" in query:
             return result(
                 ["first_data_at", "last_data_at", "last_ingested_at", "today_rows"],
                 (date(2025, 1, 1), date(2026, 8, 1), now - timedelta(days=3), 0),
@@ -101,8 +101,8 @@ def test_overview_marks_stale_political_and_failed_ingestion_attention():
     overview = HubRepository(client).get_overview(now=now)
     tables = {item.name: item for item in overview.tables}
 
-    assert tables["alt_political_trades"].today_status == "attention"
-    assert tables["ingestion_runs"].today_status == "attention"
+    assert tables["alt.political_trades"].today_status == "attention"
+    assert tables["meta.ingestion_runs"].today_status == "attention"
     assert overview.political.status == "attention"
     assert overview.summary.attention_tables == 2
 

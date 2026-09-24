@@ -56,6 +56,10 @@ export interface PoliticalMetricsSeries {
 
 export interface PoliticalTrade {
   trade_key: string;
+  political_trade_id: string;
+  listing_id: string | null;
+  contract_id: string | null;
+  legislator_entity_id: string | null;
   chamber: string;
   filing_id: string;
   filing_date: string;

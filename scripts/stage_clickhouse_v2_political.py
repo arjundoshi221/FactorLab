@@ -91,6 +91,7 @@ OFFICIAL_HOUSE_ALIASES = {
 REVIEWED_PDF_MISMATCHES = {
     "74052a4ca3a3985b796f4f07d0908caade7f6152ffb5ad98e60246cd43f3e140": {
         "raw_id": "591fcbf8-8b5e-47c6-925f-fda5ab92c78e",
+        "pdf_sha256": "4855dbf37259adfb23c47b4d8b2784e55e74ca543f570d75c6110193cdfa6369",
         "legacy_ticker": "FUND",
         "legacy_asset": "Lord Abbett Short Duration High Yield I (LSYIX) bond",
         "date": "08/26/2026", "type": "P", "amount": "$1,001 - $15,000",
@@ -182,14 +183,16 @@ def exact_pdf_match(
 
 
 def reviewed_pdf_match(
-    legacy: dict[str, Any], parsed_trades: list[dict[str, Any]]
+    legacy: dict[str, Any], parsed_trades: list[dict[str, Any]],
+    *, archive_sha256: str | None = None,
 ) -> dict[str, Any] | None:
     expected = REVIEWED_PDF_MISMATCHES.get(_text(legacy["trade_key"]))
     if expected is None:
         return None
     month, day, year = map(int, expected["date"].split("/"))
     if (
-        _text(legacy["raw_id"]) != expected["raw_id"]
+        (archive_sha256 != expected["pdf_sha256"] if "pdf_sha256" in expected
+         else _text(legacy["raw_id"]) != expected["raw_id"])
         or _text(legacy["ticker"]) != expected["legacy_ticker"]
         or _text(legacy["asset_name_raw"]) != expected["legacy_asset"]
         or _text(legacy["amount_str"]) != expected["amount"]
@@ -354,7 +357,10 @@ def build_candidates(
         supported = supported_pdf_match(trade, parsed_archives.get(raw_id, []))
         reviewed = False
         if supported is None:
-            reviewed_match = reviewed_pdf_match(trade, parsed_archives.get(raw_id, []))
+            reviewed_match = reviewed_pdf_match(
+                trade, parsed_archives.get(raw_id, []),
+                archive_sha256=archives.get(raw_id, (None, None))[1],
+            )
             if reviewed_match is not None:
                 supported = reviewed_match, 1
                 reviewed = True

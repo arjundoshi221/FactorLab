@@ -21,11 +21,10 @@ const dashboard = {
 };
 
 const tcs = {
-  instrument_id: "11111111-1111-1111-1111-111111111111",
+  listing_id: "11111111-1111-1111-1111-111111111111",
   symbol: "TCS",
   name: "Tata Consultancy Services",
   exchange_code: "NSE",
-  segment: "NSE_EQ",
   instrument_type: "EQ",
   status: "active",
   source: "upstox",
@@ -67,7 +66,7 @@ const instruments = {
 };
 
 const days = {
-  instrument_id: tcs.instrument_id,
+  listing_id: tcs.listing_id,
   date_from: "2026-07-23",
   date_to: "2026-08-27",
   items: [
@@ -140,7 +139,7 @@ describe("India Markets", () => {
     const selectedDate = (screen.getByLabelText("Trading date") as HTMLInputElement).value;
     expect(screen.getByRole("link", { name: /TCS/ })).toHaveAttribute(
       "href",
-      `/india/instruments/${tcs.instrument_id}?date=${selectedDate}`,
+      `/india/instruments/${tcs.listing_id}?date=${selectedDate}`,
     );
     expect(screen.queryByText("Session health")).not.toBeInTheDocument();
   });

@@ -161,7 +161,10 @@ def test_reviewed_parser_mismatch_requires_exact_legacy_and_unique_pdf(trade_key
         "amount_str": expected["amount"], "ticker": expected["pdf_ticker"],
         "asset_name_raw": expected["pdf_asset"],
     }
-    assert reviewed_pdf_match(legacy, [parsed]) == parsed
-    assert reviewed_pdf_match(legacy, [parsed, parsed]) is None
-    assert reviewed_pdf_match({**legacy, "amount_str": "changed"}, [parsed]) is None
-    assert reviewed_pdf_match(legacy, [{**parsed, "asset_name_raw": "changed"}]) is None
+    sha = expected.get("pdf_sha256")
+    assert reviewed_pdf_match(legacy, [parsed], archive_sha256=sha) == parsed
+    assert reviewed_pdf_match(legacy, [parsed, parsed], archive_sha256=sha) is None
+    assert reviewed_pdf_match({**legacy, "amount_str": "changed"}, [parsed], archive_sha256=sha) is None
+    assert reviewed_pdf_match(legacy, [{**parsed, "asset_name_raw": "changed"}], archive_sha256=sha) is None
+    if sha:
+        assert reviewed_pdf_match(legacy, [parsed], archive_sha256="wrong") is None

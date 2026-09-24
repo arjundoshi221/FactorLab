@@ -3,31 +3,33 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date
-from pathlib import Path
 import sys
+from datetime import UTC, datetime
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from factorlab.sources.political.house_clerk import (  # noqa: E402
+from factorlab.sources.political.house_clerk import (
     fetch_and_parse_ptr,
     fetch_house_filing_index,
 )
-from factorlab.sources.political.references import fetch_reference_snapshot  # noqa: E402
-from factorlab.storage.clickhouse import ClickHouseStorage  # noqa: E402
-from factorlab.storage.political_clickhouse import (  # noqa: E402
-    PoliticalClickHouseStorage,
+from factorlab.sources.political.references import fetch_reference_snapshot
+from factorlab.storage.political_clickhouse import (
     build_name_resolver,
     resolve_filing_bioguide,
 )
+from factorlab.storage.v2_political import (
+    V2PoliticalClickHouseStorage as PoliticalClickHouseStorage,
+)
+from factorlab.storage.v2_us import V2USStorage as ClickHouseStorage
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Ingest public congressional references and House PTRs"
     )
-    parser.add_argument("--year", type=int, default=date.today().year)
+    parser.add_argument("--year", type=int, default=datetime.now(UTC).year)
     parser.add_argument(
         "--ptr-limit",
         type=int,
@@ -74,13 +76,14 @@ def _run_ingestion(args, base_storage, storage) -> tuple[int, int]:
     committee_lookup = storage.sync_committees(
         snapshot.committees,
         raw_id=snapshot.raw_ids["committees"],
+        congress_number=args.congress,
     )
     membership_count = storage.sync_memberships(
         snapshot.memberships,
         legislator_lookup=legislator_lookup,
         committee_lookup=committee_lookup,
         raw_id=snapshot.raw_ids["memberships"],
-        snapshot_date=date.today(),
+        snapshot_date=datetime.now(UTC).date(),
         congress_number=args.congress,
     )
     print(

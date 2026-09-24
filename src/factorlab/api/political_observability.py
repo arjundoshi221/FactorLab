@@ -14,6 +14,40 @@ from factorlab.api.india_observability import IndiaIngestionRun, IndiaIngestionR
 from factorlab.api.political import QueryClient
 from factorlab.storage.clickhouse import ClickHouseStorage
 
+_TRADES = """(
+    SELECT political_trade_id, toString(political_trade_id) AS trade_key,
+           country_code, chamber, filing_id, filing_url, filing_date,
+           toYear(filing_date) AS filing_year, transaction_date, notification_date,
+           bioguide_id, legislator_entity_id,
+           legislator_name_raw AS legislator_name,
+           ticker_raw AS ticker, listing_id, contract_id, asset_name_raw,
+           transaction_type, amount_min, amount_max, source, ingested_at
+    FROM alt.political_trades {final}
+)"""
+_FILINGS = "(SELECT * FROM alt.political_filings {final} WHERE chamber = 'house')"
+_LEGISLATORS = """(
+    SELECT t.bioguide_id, t.legislator_entity_id, e.legal_name AS official_full,
+           t.chamber, t.state, t.district, t.party,
+           t.latest_term_start AS term_start, t.term_end,
+           t.in_office, t.source, t.ingested_at
+    FROM (
+        SELECT bioguide_id, argMax(legislator_entity_id, term_start) AS legislator_entity_id,
+               argMax(chamber, term_start) AS chamber,
+               argMax(state, term_start) AS state,
+               argMax(district, term_start) AS district,
+               argMax(party, term_start) AS party,
+               max(term_start) AS latest_term_start,
+               argMax(term_end, term_start) AS term_end,
+               argMax(in_office, term_start) AS in_office,
+               argMax(source, term_start) AS source,
+               max(ingested_at) AS ingested_at
+        FROM ref.legislator_terms FINAL GROUP BY bioguide_id
+    ) AS t
+    INNER JOIN ref.entities AS e FINAL ON e.entity_id = t.legislator_entity_id
+)"""
+_COMMITTEES = "(SELECT *, effective_to IS NULL AS is_current FROM alt.political_committees FINAL)"
+_MEMBERSHIPS = "alt.political_committee_memberships"
+
 
 class PoliticalDashboard(BaseModel):
     as_of_date: date
@@ -127,6 +161,7 @@ class PoliticalMetricsSeries(BaseModel):
 
 
 class PoliticalLegislator(BaseModel):
+    legislator_entity_id: UUID
     bioguide_id: str
     official_full: str
     chamber: str
@@ -213,12 +248,26 @@ class PoliticalObservabilityRepository:
     def __init__(self, client: QueryClient) -> None:
         self.client = client
 
+    def _query(self, sql: str, parameters: dict[str, Any] | None = None):
+        for old, projection in (
+            ("alt_political_house_filings", _FILINGS),
+            ("alt_political_trades", _TRADES),
+        ):
+            sql = sql.replace(f"{old} AS filings FINAL", projection.format(final="FINAL") + " AS filings")
+            sql = sql.replace(f"{old} FINAL", projection.format(final="FINAL"))
+            sql = sql.replace(old, projection.format(final=""))
+        sql = sql.replace("alt_political_legislators FINAL", _LEGISLATORS)
+        sql = sql.replace("alt_political_committees FINAL", _COMMITTEES)
+        sql = sql.replace("alt_political_committee_memberships FINAL", _MEMBERSHIPS + " FINAL")
+        sql = sql.replace("FROM ingestion_runs FINAL", "FROM meta.ingestion_runs FINAL")
+        return self.client.query(sql, parameters=parameters)
+
     @classmethod
     def from_environment(cls) -> PoliticalObservabilityRepository:
         return cls(ClickHouseStorage.from_environment().client)
 
     def get_dashboard(self, *, as_of_date: date) -> PoliticalDashboard:
-        result = self.client.query(
+        result = self._query(
             """
             WITH
                 (SELECT count() FROM alt_political_trades FINAL
@@ -292,7 +341,7 @@ class PoliticalObservabilityRepository:
     def list_coverage(self, *, year: int | None = None) -> PoliticalCoveragePage:
         filing_filter = "" if year is None else "WHERE filing_year = {year:UInt16}"
         trade_filter = "" if year is None else "WHERE filing_year = {year:UInt16}"
-        result = self.client.query(
+        result = self._query(
             f"""
             WITH filings AS (
                 SELECT 'house' AS chamber, count() AS filings,
@@ -348,7 +397,7 @@ class PoliticalObservabilityRepository:
 
     def get_collection_activity(self, *, ingestion_date: date) -> PoliticalCollectionActivity:
         parameters = {"ingestion_date": ingestion_date}
-        summary = self.client.query(
+        summary = self._query(
             """
             SELECT
                 (SELECT count() FROM alt_political_house_filings
@@ -374,7 +423,7 @@ class PoliticalObservabilityRepository:
             """,
             parameters=parameters,
         )
-        hourly = self.client.query(
+        hourly = self._query(
             """
             SELECT bucket, sum(filing_rows) AS filing_rows, sum(trade_rows) AS trade_rows
             FROM (
@@ -391,7 +440,7 @@ class PoliticalObservabilityRepository:
             """,
             parameters=parameters,
         )
-        sources = self.client.query(
+        sources = self._query(
             """
             SELECT bucket, sum(filing_rows) AS filing_rows, sum(trade_rows) AS trade_rows
             FROM (
@@ -416,7 +465,7 @@ class PoliticalObservabilityRepository:
 
     def list_freshness(self, *, stale_after_seconds: int) -> PoliticalFreshnessPage:
         checked_at = datetime.now(UTC)
-        result = self.client.query(
+        result = self._query(
             """
             SELECT dataset, source, rows, last_ingested_at FROM (
                 SELECT 'legislators' AS dataset, 'congress_legislators' AS source,
@@ -482,7 +531,7 @@ class PoliticalObservabilityRepository:
             conditions.append("anomaly_type = {anomaly_type:String}")
             parameters["anomaly_type"] = anomaly_type
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        result = self.client.query(
+        result = self._query(
             f"""
             WITH parsed AS (SELECT DISTINCT filing_id FROM alt_political_trades FINAL)
             SELECT * FROM (
@@ -568,7 +617,7 @@ class PoliticalObservabilityRepository:
             "late_disclosures": "countIf(dateDiff('day', transaction_date, filing_date) > 45)",
             "unmatched_legislators": "countIf(bioguide_id IS NULL)",
         }[metric]
-        result = self.client.query(
+        result = self._query(
             f"""
             SELECT {bucket} AS bucket, toFloat64({expression}) AS value
             FROM {table} FINAL
@@ -608,9 +657,9 @@ class PoliticalObservabilityRepository:
             conditions.append("in_office = {in_office:Bool}")
             parameters["in_office"] = in_office
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        result = self.client.query(
+        result = self._query(
             f"""
-            SELECT bioguide_id, official_full, chamber, state, district, party,
+            SELECT legislator_entity_id, bioguide_id, official_full, chamber, state, district, party,
                    term_start, term_end, in_office, source, ingested_at
             FROM alt_political_legislators FINAL {where}
             ORDER BY official_full, bioguide_id
@@ -636,7 +685,7 @@ class PoliticalObservabilityRepository:
         if search:
             conditions.append("positionCaseInsensitiveUTF8(ticker, {search:String}) > 0")
             parameters["search"] = search
-        result = self.client.query(
+        result = self._query(
             f"""
             SELECT ticker, count() AS trades, uniqExact(filing_id) AS filings,
                    uniqExactIf(bioguide_id, bioguide_id IS NOT NULL) AS legislators,
@@ -660,9 +709,9 @@ class PoliticalObservabilityRepository:
         )
 
     def get_legislator_summary(self, bioguide_id: str) -> PoliticalLegislatorSummary:
-        legislator_result = self.client.query(
+        legislator_result = self._query(
             """
-            SELECT bioguide_id, official_full, chamber, state, district, party,
+            SELECT legislator_entity_id, bioguide_id, official_full, chamber, state, district, party,
                    term_start, term_end, in_office, source, ingested_at
             FROM alt_political_legislators FINAL
             WHERE bioguide_id = {bioguide_id:String} LIMIT 1
@@ -674,7 +723,7 @@ class PoliticalObservabilityRepository:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Legislator not found"
             )
-        stats = self.client.query(
+        stats = self._query(
             """
             SELECT (SELECT count() FROM alt_political_house_filings FINAL
                     WHERE bioguide_id = {bioguide_id:Nullable(String)}) AS filings,
@@ -702,7 +751,7 @@ class PoliticalObservabilityRepository:
         if ticker_item is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticker not found")
         parameters = {"ticker": ticker}
-        legislators = self.client.query(
+        legislators = self._query(
             """
             SELECT legislator_name, bioguide_id, count() AS trades,
                    sum(ifNull(amount_min, 0)) AS amount_min_total
@@ -711,7 +760,7 @@ class PoliticalObservabilityRepository:
             """,
             parameters=parameters,
         )
-        transaction_types = self.client.query(
+        transaction_types = self._query(
             """
             SELECT transaction_type, count() AS trades
             FROM alt_political_trades FINAL WHERE ticker = {ticker:Nullable(String)}
@@ -726,7 +775,7 @@ class PoliticalObservabilityRepository:
         )
 
     def list_ingestion_runs(self, **kwargs: Any) -> IndiaIngestionRunsPage:
-        conditions = ["market_code = 'ALT_POLITICAL'"]
+        conditions = ["country_code = 'US' AND pipeline LIKE 'political%'"]
         parameters: dict[str, Any] = {
             "limit": kwargs.get("limit", 100),
             "offset": kwargs.get("offset", 0),
@@ -739,9 +788,10 @@ class PoliticalObservabilityRepository:
             if value:
                 conditions.append(f"{field} = {{{field}:String}}")
                 parameters[field] = value
-        result = self.client.query(
+        result = self._query(
             f"""
-            SELECT run_id, pipeline, source, universe, status, started_at, completed_at,
+            SELECT run_id, pipeline, source, universe_id AS universe,
+                   status, started_at, completed_at,
                    requested_series, successful_series, failed_series, rows_written,
                    error, metadata_json
             FROM ingestion_runs FINAL WHERE {" AND ".join(conditions)}
@@ -757,13 +807,14 @@ class PoliticalObservabilityRepository:
         )
 
     def get_ingestion_run(self, run_id: UUID) -> IndiaIngestionRun:
-        result = self.client.query(
+        result = self._query(
             """
-            SELECT run_id, pipeline, source, universe, status, started_at, completed_at,
+            SELECT run_id, pipeline, source, universe_id AS universe,
+                   status, started_at, completed_at,
                    requested_series, successful_series, failed_series, rows_written,
                    error, metadata_json
             FROM ingestion_runs FINAL
-            WHERE market_code = 'ALT_POLITICAL' AND run_id = {run_id:UUID} LIMIT 1
+            WHERE country_code = 'US' AND pipeline LIKE 'political%' AND run_id = {run_id:UUID} LIMIT 1
             """,
             parameters={"run_id": run_id},
         )
@@ -776,7 +827,7 @@ class PoliticalObservabilityRepository:
 
     def list_source_status(self, *, stale_after_seconds: int) -> PoliticalSourceStatusPage:
         checked_at = datetime.now(UTC)
-        result = self.client.query(
+        result = self._query(
             """
             WITH data AS (
                 SELECT 'political' AS source,
@@ -789,12 +840,12 @@ class PoliticalObservabilityRepository:
                        max(started_at) AS last_run_started_at,
                        argMax(completed_at, started_at) AS last_run_completed_at,
                        maxIf(completed_at, status = 'success') AS last_success_at
-                FROM ingestion_runs FINAL WHERE market_code = 'ALT_POLITICAL'
+                FROM ingestion_runs FINAL WHERE country_code = 'US' AND pipeline LIKE 'political%'
                 GROUP BY source, pipeline
             )
             SELECT runs.source, runs.pipeline, runs.run_status, runs.last_run_started_at,
                    runs.last_run_completed_at, runs.last_success_at, data.last_ingested_at
-            FROM runs LEFT JOIN data USING (source)
+            FROM runs CROSS JOIN data
             ORDER BY runs.source, runs.pipeline
             """
         )

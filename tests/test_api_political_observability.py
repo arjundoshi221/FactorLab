@@ -222,13 +222,14 @@ def test_metrics_use_allowlisted_table_date_and_expression():
     )
 
     query = client.calls[0][0]
-    assert "FROM alt_political_trades FINAL" in query
+    assert "FROM (" in query and "alt.political_trades FINAL" in query
     assert "transaction_date AS bucket" in query
     assert series.points[0].value == 450.0
 
 
 def test_legislator_and_ticker_discovery_queries():
     legislator_columns = [
+        "legislator_entity_id",
         "bioguide_id",
         "official_full",
         "chamber",
@@ -258,6 +259,7 @@ def test_legislator_and_ticker_discovery_queries():
         result(
             legislator_columns,
             (
+                UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
                 "D000001",
                 "Jane Doe",
                 "rep",
@@ -288,6 +290,7 @@ def test_legislator_and_ticker_discovery_queries():
 
 def test_legislator_and_ticker_summaries_combine_drill_down_data():
     legislator_columns = [
+        "legislator_entity_id",
         "bioguide_id",
         "official_full",
         "chamber",
@@ -317,6 +320,7 @@ def test_legislator_and_ticker_summaries_combine_drill_down_data():
         result(
             legislator_columns,
             (
+                UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
                 "D000001",
                 "Jane Doe",
                 "rep",
@@ -421,7 +425,7 @@ def test_political_run_queries_are_isolated_by_market_code():
     sources = repository.list_source_status(stale_after_seconds=172800)
 
     assert page.items[0].pipeline == "political_bootstrap"
-    assert "market_code = 'ALT_POLITICAL'" in client.calls[0][0]
+    assert "country_code = 'US'" in client.calls[0][0]
     assert sources.items[0].status == "stale"
 
 

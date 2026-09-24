@@ -429,7 +429,7 @@ class SchemaMapRepository:
 
     @classmethod
     def from_environment(cls) -> SchemaMapRepository:
-        return cls(ClickHouseStorage.from_environment().client)
+        return cls.v2_from_environment()
 
     @classmethod
     def v2_from_environment(cls) -> SchemaMapRepository:
@@ -640,7 +640,7 @@ class SchemaMapRepository:
         result = self.client.query(
             """
             SELECT revision, schema_fingerprint, layout_json, updated_at
-            FROM hub_schema_layouts FINAL
+            FROM meta.hub_schema_layouts FINAL
             WHERE layout_id = {layout_id:String}
             LIMIT 1
             """,
@@ -677,7 +677,7 @@ class SchemaMapRepository:
             sort_keys=True,
         )
         self.client.insert(
-            "hub_schema_layouts",
+            "meta.hub_schema_layouts",
             [[self.layout_id, revision, schema_fingerprint, payload, updated_at]],
             column_names=[
                 "layout_id",

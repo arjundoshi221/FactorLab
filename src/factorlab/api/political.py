@@ -6,6 +6,7 @@ import base64
 import json
 from datetime import date, datetime
 from typing import Any, Literal, Protocol
+from uuid import UUID
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict
@@ -19,6 +20,10 @@ class PoliticalTrade(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     trade_key: str
+    political_trade_id: UUID
+    listing_id: UUID | None
+    contract_id: UUID | None
+    legislator_entity_id: UUID | None
     chamber: str
     filing_id: str
     filing_date: date
@@ -86,25 +91,25 @@ class PoliticalTradesRepository:
         parameters: dict[str, Any] = {"fetch_limit": limit + 1}
 
         if ticker:
-            conditions.append("ticker = {ticker:Nullable(String)}")
+            conditions.append("t.ticker_raw = {ticker:Nullable(String)}")
             parameters["ticker"] = ticker.upper()
         if bioguide_id:
-            conditions.append("bioguide_id = {bioguide_id:Nullable(String)}")
+            conditions.append("t.bioguide_id = {bioguide_id:Nullable(String)}")
             parameters["bioguide_id"] = bioguide_id.upper()
         if chamber:
-            conditions.append("chamber = {chamber:String}")
+            conditions.append("t.chamber = {chamber:String}")
             parameters["chamber"] = chamber
         if date_from:
-            conditions.append("transaction_date >= {date_from:Date}")
+            conditions.append("t.transaction_date >= {date_from:Date}")
             parameters["date_from"] = date_from
         if date_to:
-            conditions.append("transaction_date <= {date_to:Date}")
+            conditions.append("t.transaction_date <= {date_to:Date}")
             parameters["date_to"] = date_to
         if cursor:
             cursor_date, cursor_key = decode_cursor(cursor)
             conditions.append(
-                "(transaction_date < {cursor_date:Date} OR "
-                "(transaction_date = {cursor_date:Date} AND trade_key < {cursor_key:String}))"
+                "(t.transaction_date < {cursor_date:Date} OR "
+                "(t.transaction_date = {cursor_date:Date} AND t.political_trade_id < {cursor_key:UUID}))"
             )
             parameters.update(cursor_date=cursor_date, cursor_key=cursor_key)
 
@@ -112,14 +117,24 @@ class PoliticalTradesRepository:
         result = self.client.query(
             f"""
             SELECT
-                trade_key, chamber, filing_id, filing_date, filing_url,
-                bioguide_id, legislator_name, state, district, owner_code,
-                filer_type, asset_name_raw, ticker, asset_type_code,
+                toString(political_trade_id) AS trade_key, political_trade_id,
+                listing_id, contract_id, legislator_entity_id,
+                chamber, filing_id, filing_date, filing_url,
+                bioguide_id, legislator_name_raw AS legislator_name,
+                ifNull(terms.state, '') AS state, terms.district, owner_code,
+                filer_type, asset_name_raw, ticker_raw AS ticker,
+                filing_asset_type_code AS asset_type_code,
                 transaction_type, transaction_date, notification_date,
-                amount_str, amount_min, amount_max, source, as_of_time, ingested_at
-            FROM alt_political_trades FINAL
+                amount_str_raw AS amount_str, amount_min, amount_max,
+                source, as_of_time, ingested_at
+            FROM alt.political_trades AS t FINAL
+            LEFT JOIN (
+                SELECT bioguide_id, argMax(state, term_start) AS state,
+                       argMax(district, term_start) AS district
+                FROM ref.legislator_terms FINAL GROUP BY bioguide_id
+            ) AS terms ON t.bioguide_id = terms.bioguide_id
             {where}
-            ORDER BY transaction_date DESC, trade_key DESC
+            ORDER BY transaction_date DESC, political_trade_id DESC
             LIMIT {{fetch_limit:UInt16}}
             """,
             parameters=parameters,
@@ -131,7 +146,7 @@ class PoliticalTradesRepository:
         next_cursor = None
         if has_more and items:
             last = items[-1]
-            next_cursor = encode_cursor(last.transaction_date, last.trade_key)
+            next_cursor = encode_cursor(last.transaction_date, str(last.political_trade_id))
         return PoliticalTradesPage(
             items=items,
             next_cursor=next_cursor,
@@ -140,23 +155,23 @@ class PoliticalTradesRepository:
         )
 
 
-def encode_cursor(transaction_date: date, trade_key: str) -> str:
+def encode_cursor(transaction_date: date, political_trade_id: str) -> str:
     payload = json.dumps(
-        {"date": transaction_date.isoformat(), "trade_key": trade_key},
+        {"v": 2, "date": transaction_date.isoformat(), "political_trade_id": political_trade_id},
         separators=(",", ":"),
     ).encode()
     return base64.urlsafe_b64encode(payload).decode().rstrip("=")
 
 
-def decode_cursor(cursor: str) -> tuple[date, str]:
+def decode_cursor(cursor: str) -> tuple[date, UUID]:
     try:
         padding = "=" * (-len(cursor) % 4)
         payload = json.loads(base64.urlsafe_b64decode(cursor + padding))
+        if not isinstance(payload, dict) or payload.get("v") != 2:
+            raise HTTPException(400, "Legacy cursor; restart pagination with canonical political trade IDs")
         cursor_date = date.fromisoformat(payload["date"])
-        trade_key = payload["trade_key"]
-        if not isinstance(trade_key, str) or len(trade_key) != 64:
-            raise ValueError("invalid trade key")
-        return cursor_date, trade_key
+        political_trade_id = UUID(payload["political_trade_id"])
+        return cursor_date, political_trade_id
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -2,6 +2,8 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from factorlab.api.app import app, get_india_candles_repository
@@ -12,7 +14,7 @@ from factorlab.api.india import (
 )
 
 COLUMNS = [
-    "instrument_id", "contract_id", "symbol", "market_code", "bar_time",
+    "listing_id", "contract_id", "symbol", "country_code", "bar_time",
     "open", "high", "low", "close", "volume", "oi", "source",
     "as_of_time", "ingested_at",
 ]
@@ -23,7 +25,7 @@ CONTRACT_ID = UUID(int=0)
 def candle_row(minute: int) -> tuple:
     timestamp = datetime(2026, 8, 12, 9, minute, tzinfo=UTC)
     return (
-        INSTRUMENT_ID, CONTRACT_ID, "RELIANCE", "IND", timestamp,
+        INSTRUMENT_ID, None, "RELIANCE", "IN", timestamp,
         Decimal("100.000000"), Decimal("101.000000"), Decimal("99.000000"),
         Decimal("100.500000"), 1000, None, "upstox", timestamp, timestamp,
     )
@@ -50,7 +52,7 @@ def test_repository_filters_and_paginates_candles():
     client = FakeQueryClient([candle_row(3), candle_row(2), candle_row(1)])
     repository = IndiaCandlesRepository(client)
     page = repository.list_candles(
-        instrument_id=INSTRUMENT_ID,
+        listing_id=INSTRUMENT_ID,
         symbol="reliance",
         trading_date=date(2026, 8, 12),
         source="upstox",
@@ -58,32 +60,33 @@ def test_repository_filters_and_paginates_candles():
     )
 
     query, parameters = client.calls[0]
-    assert "FROM market_candles_1min FINAL" in query
+    assert "FROM market.bars AS b FINAL" in query
+    assert "FROM market.futures_contract_bars AS f FINAL" in query
     assert parameters["symbol"] == "RELIANCE"
-    assert parameters["instrument_id"] == INSTRUMENT_ID
+    assert parameters["listing_id"] == INSTRUMENT_ID
     assert parameters["trading_date"] == date(2026, 8, 12)
-    assert "toDate(bar_time, 'Asia/Kolkata') = {trading_date:Date}" in query
+    assert "trade_date = {trading_date:Date}" in query
     assert parameters["source"] == "upstox"
     assert parameters["fetch_limit"] == 3
     assert len(page.items) == 2
     assert page.next_cursor is not None
     decoded = decode_cursor(page.next_cursor)
     assert decoded["cursor_time"] == datetime(2026, 8, 12, 9, 2, tzinfo=UTC)
-    assert decoded["cursor_instrument"] == INSTRUMENT_ID
+    assert decoded["cursor_listing"] == INSTRUMENT_ID
 
 
 def test_repository_lists_and_paginates_reference_instruments():
     columns = [
-        "instrument_id", "instrument_key", "trading_symbol", "name", "isin",
-        "exchange_code", "segment", "instrument_type", "asset_class", "currency_code",
+        "listing_id", "security_id", "trading_symbol", "name", "isin",
+        "exchange_code", "security_type", "currency_code",
         "lot_size", "tick_size", "status", "source", "first_seen", "last_seen",
         "ingested_at",
     ]
     timestamp = datetime(2026, 8, 12, tzinfo=UTC)
     rows = [
         (
-            UUID(int=index), f"NSE_EQ|{index}", symbol, name, f"INE{index:09d}",
-            "NSE", "NSE_EQ", "EQ", "equity", "INR", 1, Decimal("0.050000"),
+            UUID(int=index), UUID(int=index + 100), symbol, name, f"INE{index:09d}",
+            "NSE", "common", "INR", 1, Decimal("0.050000"),
             "active", "upstox", date(2026, 8, 1), date(2026, 8, 12), timestamp,
         )
         for index, symbol, name in [
@@ -98,13 +101,26 @@ def test_repository_lists_and_paginates_reference_instruments():
     )
 
     query, parameters = client.calls[0]
-    assert "FROM ref_instruments FINAL" in query
+    assert "FROM ref.listings AS l FINAL" in query
     assert "positionCaseInsensitiveUTF8" in query
     assert parameters == {
         "fetch_limit": 3, "search": "rel", "status": "active", "source": "upstox"
     }
     assert [item.trading_symbol for item in page.items] == ["INFY", "RELIANCE"]
     assert decode_instrument_cursor(page.next_cursor) == ("RELIANCE", UUID(int=2))
+
+
+def test_legacy_india_cursors_are_rejected():
+    import base64
+    import json
+
+    old = base64.urlsafe_b64encode(json.dumps({
+        "symbol": "RELIANCE", "instrument": str(INSTRUMENT_ID)
+    }).encode()).decode().rstrip("=")
+    with pytest.raises(HTTPException, match="Legacy cursor"):
+        decode_instrument_cursor(old)
+    with pytest.raises(HTTPException, match="Legacy cursor"):
+        decode_cursor(old)
 
 
 def test_repository_returns_overall_and_daily_stats():
@@ -122,9 +138,9 @@ def test_repository_returns_overall_and_daily_stats():
     )
 
     query, parameters = overall_client.calls[0]
-    assert "uniqExact(instrument_id)" in query
-    assert "uniqExact(tuple(instrument_id, contract_id))" in query
-    assert "toDate(bar_time, 'Asia/Kolkata')" in query
+    assert "uniqExact(listing_id)" in query
+    assert "uniqExact(tuple(listing_id, contract_id))" in query
+    assert "trade_date" in query
     assert parameters["date_from"] == date(2026, 8, 12)
     assert stats.reference_instruments == 2464
     assert stats.data_points == 3750
@@ -198,7 +214,7 @@ def test_endpoint_requires_auth_and_forwards_filters(monkeypatch):
     assert hub_response.status_code == 200
     assert api_kwargs["symbol"] == "RELIANCE"
     assert api_kwargs["limit"] == 25
-    assert repository.kwargs["instrument_id"] == INSTRUMENT_ID
+    assert repository.kwargs["listing_id"] == INSTRUMENT_ID
     assert repository.kwargs["trading_date"] == date(2026, 8, 12)
 
 

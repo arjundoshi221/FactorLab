@@ -4,6 +4,12 @@
 
 FactorLab exposes private read APIs and narrowly scoped Hub UI-state writes backed by ClickHouse.
 
+At the v2 cutover, the existing `/api/v1` and `/hub/api/v1` paths keep their
+URLs but use canonical `listing_id`, nullable `contract_id`, and (for political
+trades) `political_trade_id`. Clients must restart pagination: v1 cursors are
+rejected. Daily bars expose raw OHLCV; adjusted close is unavailable until an
+adjusted-bars dataset is built.
+
 ```text
 SSH-tunnel base URL: http://127.0.0.1:8000
 Web dashboard:       http://127.0.0.1:8000/
@@ -75,6 +81,11 @@ Then use `http://127.0.0.1:8000` as the base URL.
 | `GET` | `/api/v1/india/ingestion/runs` | Bearer | Ingestion run history |
 | `GET` | `/api/v1/india/ingestion/runs/{id}` | Bearer | One ingestion run |
 | `GET` | `/api/v1/india/sources/status` | Bearer | Latest health of every source pipeline |
+| `GET` | `/api/v1/us/dashboard` | Bearer | US daily and minute coverage summary |
+| `GET` | `/api/v1/us/instruments` | Bearer | Canonical US listings and recovery state |
+| `GET` | `/api/v1/us/candles/{resolution}` | Bearer | `daily` or `1min` raw bars |
+| `GET` | `/api/v1/us/instruments/{listing_id}/days` | Bearer | US session coverage for a listing |
+| `GET` | `/api/v1/us/ingestion/runs` | Bearer | US ingestion run history |
 | `GET` | `/api/v1/political/trades` | Bearer | US congressional transaction disclosures |
 | `GET` | `/api/v1/political/dashboard` | Bearer | Political collection and quality overview |
 | `GET` | `/api/v1/political/coverage` | Bearer | Filing parse and entity-resolution coverage |
@@ -96,7 +107,8 @@ Then use `http://127.0.0.1:8000` as the base URL.
 
 ### Web hub overview
 
-`GET /hub/api/v1/overview` discovers every table in the `factorlab` database,
+`GET /hub/api/v1/overview` discovers tables in the v2 `raw`, `ref`, `market`,
+`meta`, and `alt` databases (and the other installed v2 namespaces),
 including empty tables. Counts come from active ClickHouse parts and are
 reported as fast stored-row counts rather than deduplicated `FINAL` counts.
 Known tables also include their domain date range, latest ingestion, rows for
@@ -115,7 +127,7 @@ times are left null. The endpoint has no Docker socket access.
 `GET /hub/api/v1/schema-map` reads live `system.tables` and `system.columns`
 metadata, then adds reviewed logical relationships because ClickHouse does not
 enforce foreign keys. `PUT /hub/api/v1/schema-map/layout` stores only table
-positions, collapsed state, and viewport in `hub_schema_layouts`; it requires
+positions, collapsed state, and viewport in `meta.hub_schema_layouts`; it requires
 the current layout revision and schema fingerprint, returning `409` for a stale
 layout and `422` when the live schema has changed. No table rows or query tools
 are exposed by these endpoints.
@@ -153,10 +165,9 @@ curl -s http://127.0.0.1:8000/health
 
 ### `GET /api/v1/india/candles/1min`
 
-Returns latest-version Indian candles from `market_candles_1min`, ordered from
-newest to oldest. Both equities and futures can appear. A zero `contract_id`
-identifies the underlying equity; a non-zero `contract_id` identifies a
-derivative contract.
+Returns latest-version Indian candles from `market.bars` and
+`market.futures_contract_bars`, ordered from newest to oldest. Equities have a
+null `contract_id`; futures have a canonical contract UUID.
 
 ### Query parameters
 
@@ -196,10 +207,10 @@ Response shape:
 {
   "items": [
     {
-      "instrument_id": "a579e92a-07cf-520a-97e2-64ce18ca5747",
-      "contract_id": "00000000-0000-0000-0000-000000000000",
+      "listing_id": "a579e92a-07cf-520a-97e2-64ce18ca5747",
+      "contract_id": null,
       "symbol": "TCS",
-      "market_code": "IND",
+      "country_code": "IN",
       "bar_time": "2026-08-12T08:09:00",
       "open": "2322.400000",
       "high": "2322.700000",
@@ -226,7 +237,7 @@ Decimal price fields are serialized as JSON strings to preserve precision.
 ### `GET /api/v1/india/instruments`
 
 Returns the synchronized Indian reference universe, ordered by trading symbol.
-This is the endpoint for discovering instrument IDs and metadata; it is not
+This is the endpoint for discovering canonical listing IDs and metadata; it is not
 limited to instruments that currently have candles.
 
 | Parameter | Type | Default | Rules |
@@ -243,7 +254,7 @@ curl -s \
   "http://127.0.0.1:8000/api/v1/india/instruments?search=tata&status=active&limit=100"
 ```
 
-Each item includes the stable `instrument_id`, vendor instrument key, trading
+Each item includes the stable `listing_id`, vendor instrument key, trading
 symbol, name, ISIN, exchange and segment metadata, asset type, currency, lot
 and tick sizes, status, source, and reference-data timestamps.
 
@@ -360,26 +371,35 @@ Supported metrics:
 
 ### Instrument, run, and source drill-down
 
-- `/api/v1/india/instruments/{instrument_id}/summary` combines reference
+- `/api/v1/india/instruments/{listing_id}/summary` combines reference
   metadata, contracts, historical coverage, and today's health.
 - `/api/v1/india/ingestion/runs` supports `pipeline`, `source`, `status`,
   `limit`, and `offset`; `/{run_id}` returns one run.
 - `/api/v1/india/sources/status` combines the latest run outcome with candle
   freshness. `stale_after_seconds` defaults to 600.
 
-### Current India coverage
+### Historical India coverage snapshot
 
 Live snapshot verified on 2026-08-12:
 
 | Metric | Count |
 |---|---:|
-| NSE equity instruments in `ref_instruments` | 2,464 |
+| NSE equity instruments in the former `ref_instruments` | 2,464 |
 | Symbols currently producing candles | 5 |
 | Equity/futures instrument-contract series with candles | 10 |
 
-The reference count is the searchable/synchronized universe, not the number
-being polled. The ingestion service currently uses the configured `demo`
-universe of five symbols.
+This August 12 snapshot describes the former legacy collection state. Use the
+v2 dashboard and coverage endpoints for current counts after cutover.
+
+## US bars and recovery
+
+The `/api/v1/us` and `/hub/api/v1/us` routes read `ref.listings`,
+`market.bars`, `meta.expected_series`, `meta.session_coverage`, and
+`meta.recovery_state`. Instrument rows and routes use canonical `listing_id`.
+`/candles/daily` and `/candles/1min` return raw OHLCV rows with `listing_id`;
+daily rows have no `adj_close`. Cursor tokens contain a v2 marker, query
+scope, timestamp, symbol, and listing ID. Restart pagination at cutover;
+legacy cursors return `422`.
 
 ## Political trades
 
@@ -409,7 +429,10 @@ curl -s \
 Each item contains filing identity and dates, legislator identity, asset and
 ticker, transaction type/date, reported amount range, source, and ingestion
 timestamps. Nullable fields can include `bioguide_id`, `district`, `ticker`,
-`notification_date`, `amount_min`, and `amount_max`.
+`notification_date`, `amount_min`, and `amount_max`. The canonical identity is
+`political_trade_id`; resolved references use nullable `listing_id`,
+`contract_id`, and `legislator_entity_id`. The cursor contains the canonical
+political trade ID, and legacy cursors are rejected.
 
 ## Political collection observability
 

@@ -48,7 +48,7 @@ def test_dashboard_distinguishes_expected_actual_and_backfilled_data():
         ),
         result(
             [
-                "instrument_id",
+                "listing_id",
                 "contract_id",
                 "symbol",
                 "source",
@@ -80,7 +80,7 @@ def test_dashboard_distinguishes_expected_actual_and_backfilled_data():
 
 def test_coverage_reports_missing_partial_and_complete_series():
     columns = [
-        "instrument_id",
+        "listing_id",
         "contract_id",
         "symbol",
         "source",
@@ -142,7 +142,7 @@ def test_collection_activity_groups_physical_ingestion_rows():
 
 def test_freshness_includes_never_seen_and_stale_series():
     columns = [
-        "instrument_id",
+        "listing_id",
         "contract_id",
         "symbol",
         "source",
@@ -176,7 +176,7 @@ def test_freshness_includes_never_seen_and_stale_series():
 
 def test_gaps_return_contiguous_ranges_with_severity():
     columns = [
-        "instrument_id",
+        "listing_id",
         "contract_id",
         "symbol",
         "source",
@@ -203,7 +203,7 @@ def test_gaps_return_contiguous_ranges_with_severity():
 
 def test_anomalies_expand_series_checks_into_stable_findings():
     columns = [
-        "instrument_id",
+        "listing_id",
         "contract_id",
         "symbol",
         "source",
@@ -328,15 +328,13 @@ def test_ingestion_run_and_source_status_read_models():
 
 def test_instrument_summary_combines_reference_contract_and_data_health():
     instrument_columns = [
-        "instrument_id",
-        "instrument_key",
+        "listing_id",
+        "security_id",
         "trading_symbol",
         "name",
         "isin",
         "exchange_code",
-        "segment",
-        "instrument_type",
-        "asset_class",
+        "security_type",
         "currency_code",
         "lot_size",
         "tick_size",
@@ -351,14 +349,12 @@ def test_instrument_summary_combines_reference_contract_and_data_health():
             instrument_columns,
             (
                 INSTRUMENT_ID,
-                "NSE_EQ|TCS",
+                UUID(int=3),
                 "TCS",
                 "Tata Consultancy Services",
                 "INE467B01029",
                 "NSE",
-                "NSE_EQ",
-                "EQ",
-                "equity",
+                "common",
                 "INR",
                 1,
                 0.05,
@@ -370,8 +366,8 @@ def test_instrument_summary_combines_reference_contract_and_data_health():
             ),
         ),
         result(
-            ["contract_id", "trading_symbol", "contract_type", "segment", "expiry", "status"],
-            (UUID(int=2), "TCS FUT", "FUT", "NSE_FO", date(2026, 8, 27), "active"),
+            ["contract_id", "underlying_listing_id", "contract_type", "expiry", "active"],
+            (UUID(int=2), INSTRUMENT_ID, "future", date(2026, 8, 27), True),
         ),
         result(
             [
@@ -393,7 +389,7 @@ def test_instrument_summary_combines_reference_contract_and_data_health():
     )
 
     assert summary.instrument.trading_symbol == "TCS"
-    assert summary.contracts[0].contract_type == "FUT"
+    assert summary.contracts[0].contract_type == "future"
     assert summary.data.missing_points_today == 10
     assert summary.data.anomaly_count_today == 1
 

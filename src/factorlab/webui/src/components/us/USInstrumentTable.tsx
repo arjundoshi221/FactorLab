@@ -12,8 +12,8 @@ export function USInstrumentTable({ items, selected, onSelect }: {
 }) {
   return <div className="table-scroll"><table><thead><tr><th>Instrument</th><th>Minute collection</th>
     <th>Minute history</th><th>Daily collection</th><th>Daily history</th></tr></thead>
-    <tbody>{items.map(item => <tr key={item.instrument_id}
-      className={selected?.instrument_id === item.instrument_id ? "us-selected" : ""}>
+    <tbody>{items.map(item => <tr key={item.listing_id}
+      className={selected?.listing_id === item.listing_id ? "us-selected" : ""}>
       <td><button className="us-symbol" onClick={() => onSelect(item)}>{item.symbol}</button>
         <small className="us-subtitle">{item.name} · {item.exchange_code}</small></td>
       {item.series.map(series => <Fragment key={series.resolution}><td><USStatusPill status={series.status} />

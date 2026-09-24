@@ -23,6 +23,9 @@ const coverage = { items: [{
 
 const trades = { items: [{
   trade_key: "a".repeat(64), chamber: "house", filing_id: "filing-1",
+  political_trade_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  listing_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+  contract_id: null, legislator_entity_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
   filing_date: "2026-09-17", filing_url: "https://example.test/filing-1",
   bioguide_id: "P000197", legislator_name: "Nancy Pelosi", state: "CA", district: 11,
   owner_code: "SP", filer_type: "self", asset_name_raw: "Apple Inc.", ticker: "AAPL",

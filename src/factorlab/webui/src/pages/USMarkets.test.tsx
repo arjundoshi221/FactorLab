@@ -11,7 +11,7 @@ const dashboard = { trading_date: "2026-09-04", market_status: "closed", instrum
     "1min": { actual: 390, expected: 390, missing: 0, coverage_percent: 100 },
     daily: { actual: 1, expected: 1, missing: 0, coverage_percent: 100 },
   } };
-const instrument = { instrument_id: "id", symbol: "AAPL", name: "Apple", exchange_code: "NASDAQ",
+const instrument = { listing_id: "id", symbol: "AAPL", name: "Apple", exchange_code: "NASDAQ",
   series: ["1min", "daily"].map(resolution => ({ resolution,
     source: "schwab", status: "complete", expected: 1, actual: 1,
     missing: 0, available_from: "1985-01-02T05:00:00Z", last_bar: "2026-09-04T05:00:00Z", error: null })) };

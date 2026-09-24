@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, Protocol
 from uuid import UUID
@@ -18,10 +18,10 @@ from factorlab.storage.clickhouse import ClickHouseStorage
 class IndiaCandle1Min(BaseModel):
     """One latest-version Indian one-minute market candle."""
 
-    instrument_id: UUID
-    contract_id: UUID
+    listing_id: UUID
+    contract_id: UUID | None
     symbol: str
-    market_code: str
+    country_code: str
     bar_time: datetime
     open: Decimal | None
     high: Decimal | None
@@ -46,15 +46,13 @@ class IndiaCandlesPage(BaseModel):
 class IndiaInstrument(BaseModel):
     """One latest-version Indian reference instrument."""
 
-    instrument_id: UUID
-    instrument_key: str
+    listing_id: UUID
+    security_id: UUID
     trading_symbol: str
     name: str
     isin: str | None
     exchange_code: str
-    segment: str
-    instrument_type: str
-    asset_class: str
+    security_type: str
     currency_code: str
     lot_size: int
     tick_size: Decimal | None
@@ -115,8 +113,31 @@ class QueryClient(Protocol):
     def query(self, query: str, parameters: dict[str, Any] | None = None) -> QueryResult: ...
 
 
+INDIA_BARS_SQL = """
+    SELECT b.listing_id, CAST(NULL, 'Nullable(UUID)') AS contract_id,
+           l.trading_symbol AS symbol, b.country_code, b.trade_date,
+           b.bar_time, b.open, b.high, b.low, b.close, b.volume, b.oi,
+           b.source, b.as_of_time, b.ingested_at
+    FROM market.bars AS b FINAL
+    INNER JOIN ref.listings AS l FINAL ON l.listing_id = b.listing_id
+    WHERE b.country_code = 'IN' AND b.resolution = '1min'
+    UNION ALL
+    SELECT f.underlying_listing_id AS listing_id, toNullable(f.contract_id) AS contract_id,
+           f.source_symbol AS symbol, f.country_code, f.trade_date,
+           f.bar_time, f.open, f.high, f.low, f.close, f.volume, f.oi,
+           f.source, f.as_of_time, f.ingested_at
+    FROM market.futures_contract_bars AS f FINAL
+    WHERE f.country_code = 'IN' AND f.resolution = '1min'
+"""
+
+INDIA_BAR_VERSIONS_SQL = (
+    INDIA_BARS_SQL.replace("market.bars AS b FINAL", "market.bars AS b")
+    .replace("market.futures_contract_bars AS f FINAL", "market.futures_contract_bars AS f")
+)
+
+
 class IndiaCandlesRepository:
-    """Execute parameterized reads against ``market_candles_1min``."""
+    """Execute parameterized reads against canonical Indian market tables."""
 
     def __init__(self, client: QueryClient) -> None:
         self.client = client
@@ -128,7 +149,7 @@ class IndiaCandlesRepository:
     def list_candles(
         self,
         *,
-        instrument_id: UUID | None = None,
+        listing_id: UUID | None = None,
         symbol: str | None = None,
         trading_date: date | None = None,
         time_from: datetime | None = None,
@@ -137,17 +158,17 @@ class IndiaCandlesRepository:
         cursor: str | None = None,
         limit: int = 500,
     ) -> IndiaCandlesPage:
-        conditions = ["market_code = 'IND'"]
+        conditions = ["country_code = 'IN'"]
         parameters: dict[str, Any] = {"fetch_limit": limit + 1}
 
-        if instrument_id:
-            conditions.append("instrument_id = {instrument_id:UUID}")
-            parameters["instrument_id"] = instrument_id
+        if listing_id:
+            conditions.append("listing_id = {listing_id:UUID}")
+            parameters["listing_id"] = listing_id
         if symbol:
             conditions.append("symbol = {symbol:String}")
             parameters["symbol"] = symbol.upper()
         if trading_date:
-            conditions.append("toDate(bar_time, 'Asia/Kolkata') = {trading_date:Date}")
+            conditions.append("trade_date = {trading_date:Date}")
             parameters["trading_date"] = trading_date
         if time_from:
             conditions.append("bar_time >= {time_from:DateTime64(3, 'UTC')}")
@@ -161,20 +182,22 @@ class IndiaCandlesRepository:
         if cursor:
             cursor_values = decode_cursor(cursor)
             conditions.append(
-                "(bar_time, symbol, instrument_id, contract_id, source) < "
+                "(bar_time, symbol, listing_id, ifNull(contract_id, toUUID('00000000-0000-0000-0000-000000000000')), source) < "
                 "({cursor_time:DateTime64(3, 'UTC')}, {cursor_symbol:String}, "
-                "{cursor_instrument:UUID}, {cursor_contract:UUID}, {cursor_source:String})"
+                "{cursor_listing:UUID}, {cursor_contract:UUID}, {cursor_source:String})"
             )
             parameters.update(cursor_values)
 
         result = self.client.query(
             f"""
             SELECT
-                instrument_id, contract_id, symbol, market_code, bar_time,
+                listing_id, contract_id, symbol, country_code, bar_time,
                 open, high, low, close, volume, oi, source, as_of_time, ingested_at
-            FROM market_candles_1min FINAL
+            FROM ({INDIA_BARS_SQL}) AS bars
             WHERE {' AND '.join(conditions)}
-            ORDER BY bar_time DESC, symbol DESC, instrument_id DESC, contract_id DESC, source DESC
+            ORDER BY bar_time DESC, symbol DESC, listing_id DESC,
+                     ifNull(contract_id, toUUID('00000000-0000-0000-0000-000000000000')) DESC,
+                     source DESC
             LIMIT {{fetch_limit:UInt16}}
             """,
             parameters=parameters,
@@ -199,42 +222,53 @@ class IndiaCandlesRepository:
         cursor: str | None = None,
         limit: int = 100,
     ) -> IndiaInstrumentsPage:
-        conditions = ["market_code = 'IND'"]
+        conditions = ["l.country_code = 'IN'"]
         parameters: dict[str, Any] = {"fetch_limit": limit + 1}
 
         if search:
             conditions.append(
                 "(positionCaseInsensitiveUTF8(trading_symbol, {search:String}) > 0 OR "
-                "positionCaseInsensitiveUTF8(name, {search:String}) > 0 OR "
-                "positionCaseInsensitiveUTF8(ifNull(isin, ''), {search:String}) > 0)"
+                "positionCaseInsensitiveUTF8(e.legal_name, {search:String}) > 0 OR "
+                "positionCaseInsensitiveUTF8(ifNull(s.isin, ''), {search:String}) > 0)"
             )
             parameters["search"] = search
         if status:
-            conditions.append("status = {status:String}")
+            conditions.append("if(l.active, 'active', 'inactive') = {status:String}")
             parameters["status"] = status
         if source:
-            conditions.append("source = {source:String}")
+            conditions.append("a.source = {source:String}")
             parameters["source"] = source
         if cursor:
-            cursor_symbol, cursor_instrument = decode_instrument_cursor(cursor)
+            cursor_symbol, cursor_listing = decode_instrument_cursor(cursor)
             conditions.append(
-                "(trading_symbol, instrument_id) > "
-                "({cursor_symbol:String}, {cursor_instrument:UUID})"
+                "(l.trading_symbol, l.listing_id) > "
+                "({cursor_symbol:String}, {cursor_listing:UUID})"
             )
             parameters.update(
                 cursor_symbol=cursor_symbol,
-                cursor_instrument=cursor_instrument,
+                cursor_listing=cursor_listing,
             )
 
         result = self.client.query(
             f"""
             SELECT
-                instrument_id, instrument_key, trading_symbol, name, isin,
-                exchange_code, segment, instrument_type, asset_class, currency_code,
-                lot_size, tick_size, status, source, first_seen, last_seen, ingested_at
-            FROM ref_instruments FINAL
+                l.listing_id, s.security_id AS security_id, l.trading_symbol,
+                e.legal_name AS name, s.isin, l.exchange_code,
+                s.security_type, s.currency_code, l.lot_size, l.tick_size,
+                if(l.active, 'active', 'inactive') AS status,
+                ifNull(a.source, 'reference') AS source,
+                e.first_seen, e.last_seen, l.ingested_at AS ingested_at
+            FROM ref.listings AS l FINAL
+            INNER JOIN ref.securities AS s FINAL ON s.security_id = l.security_id
+            INNER JOIN ref.entities AS e FINAL ON e.entity_id = s.entity_id
+            LEFT JOIN (
+                SELECT target_id, argMax(source, version) AS source
+                FROM ref.identifier_aliases FINAL
+                WHERE target_kind = 'listing' AND alias_kind = 'upstox_instrument_key'
+                GROUP BY target_id
+            ) AS a ON a.target_id = l.listing_id
             WHERE {' AND '.join(conditions)}
-            ORDER BY trading_symbol ASC, instrument_id ASC
+            ORDER BY l.trading_symbol ASC, l.listing_id ASC
             LIMIT {{fetch_limit:UInt16}}
             """,
             parameters=parameters,
@@ -265,17 +299,17 @@ class IndiaCandlesRepository:
         result = self.client.query(
             f"""
             SELECT
-                (SELECT uniqExact(instrument_id)
-                 FROM ref_instruments FINAL
-                 WHERE market_code = 'IND') AS reference_instruments,
-                uniqExact(instrument_id) AS instruments_with_data,
-                uniqExact(tuple(instrument_id, contract_id)) AS unique_series,
+                (SELECT uniqExact(listing_id)
+                 FROM ref.listings FINAL
+                 WHERE country_code = 'IN') AS reference_instruments,
+                uniqExact(listing_id) AS instruments_with_data,
+                uniqExact(tuple(listing_id, contract_id)) AS unique_series,
                 count() AS data_points,
-                uniqExact(toDate(bar_time, 'Asia/Kolkata')) AS trading_days,
+                uniqExact(trade_date) AS trading_days,
                 minOrNull(bar_time) AS first_bar_time,
                 maxOrNull(bar_time) AS last_bar_time,
                 maxOrNull(as_of_time) AS data_as_of
-            FROM market_candles_1min FINAL
+            FROM ({INDIA_BARS_SQL}) AS bars
             WHERE {' AND '.join(conditions)}
             """,
             parameters=parameters,
@@ -300,14 +334,14 @@ class IndiaCandlesRepository:
         result = self.client.query(
             f"""
             SELECT
-                toDate(bar_time, 'Asia/Kolkata') AS trading_date,
+                trade_date AS trading_date,
                 count() AS data_points,
-                uniqExact(instrument_id) AS unique_instruments,
-                uniqExact(tuple(instrument_id, contract_id)) AS unique_series,
+                uniqExact(listing_id) AS unique_instruments,
+                uniqExact(tuple(listing_id, contract_id)) AS unique_series,
                 min(bar_time) AS first_bar_time,
                 max(bar_time) AS last_bar_time,
                 max(as_of_time) AS data_as_of
-            FROM market_candles_1min FINAL
+            FROM ({INDIA_BARS_SQL}) AS bars
             WHERE {' AND '.join(conditions)}
             GROUP BY trading_date
             ORDER BY trading_date DESC
@@ -328,13 +362,13 @@ def _candle_stats_filters(
     date_to: date | None,
     source: str | None,
 ) -> tuple[list[str], dict[str, Any]]:
-    conditions = ["market_code = 'IND'"]
+    conditions = ["country_code = 'IN'"]
     parameters: dict[str, Any] = {}
     if date_from:
-        conditions.append("toDate(bar_time, 'Asia/Kolkata') >= {date_from:Date}")
+        conditions.append("trade_date >= {date_from:Date}")
         parameters["date_from"] = date_from
     if date_to:
-        conditions.append("toDate(bar_time, 'Asia/Kolkata') <= {date_to:Date}")
+        conditions.append("trade_date <= {date_to:Date}")
         parameters["date_to"] = date_to
     if source:
         conditions.append("source = {source:String}")
@@ -347,8 +381,9 @@ def encode_cursor(candle: IndiaCandle1Min) -> str:
         {
             "time": candle.bar_time.isoformat(),
             "symbol": candle.symbol,
-            "instrument": str(candle.instrument_id),
-            "contract": str(candle.contract_id),
+            "v": 2,
+            "listing_id": str(candle.listing_id),
+            "contract_id": str(candle.contract_id) if candle.contract_id else None,
             "source": candle.source,
         },
         separators=(",", ":"),
@@ -360,11 +395,19 @@ def decode_cursor(cursor: str) -> dict[str, Any]:
     try:
         padding = "=" * (-len(cursor) % 4)
         payload = json.loads(base64.urlsafe_b64decode(cursor + padding))
+        if not isinstance(payload, dict) or payload.get("v") != 2:
+            raise HTTPException(400, "Legacy cursor; restart pagination with canonical listing IDs")
+        cursor_time = datetime.fromisoformat(payload["time"])
+        cursor_time = (
+            cursor_time.replace(tzinfo=UTC)
+            if cursor_time.tzinfo is None
+            else cursor_time.astimezone(UTC)
+        )
         return {
-            "cursor_time": datetime.fromisoformat(payload["time"]),
+            "cursor_time": cursor_time,
             "cursor_symbol": str(payload["symbol"]),
-            "cursor_instrument": UUID(payload["instrument"]),
-            "cursor_contract": UUID(payload["contract"]),
+            "cursor_listing": UUID(payload["listing_id"]),
+            "cursor_contract": UUID(payload["contract_id"]) if payload["contract_id"] else UUID(int=0),
             "cursor_source": str(payload["source"]),
         }
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -378,7 +421,8 @@ def encode_instrument_cursor(instrument: IndiaInstrument) -> str:
     payload = json.dumps(
         {
             "symbol": instrument.trading_symbol,
-            "instrument": str(instrument.instrument_id),
+            "v": 2,
+            "listing_id": str(instrument.listing_id),
         },
         separators=(",", ":"),
     ).encode()
@@ -389,10 +433,12 @@ def decode_instrument_cursor(cursor: str) -> tuple[str, UUID]:
     try:
         padding = "=" * (-len(cursor) % 4)
         payload = json.loads(base64.urlsafe_b64decode(cursor + padding))
+        if not isinstance(payload, dict) or payload.get("v") != 2:
+            raise HTTPException(400, "Legacy cursor; restart pagination with canonical listing IDs")
         symbol = payload["symbol"]
         if not isinstance(symbol, str) or not symbol:
             raise ValueError("invalid instrument symbol")
-        return symbol, UUID(payload["instrument"])
+        return symbol, UUID(payload["listing_id"])
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -14,7 +14,7 @@ from factorlab.api.us import USRepository, repository
 def test_candle_reads_are_market_scoped_and_cursor_bound_to_filters():
     client = Mock()
     ident = uuid4()
-    client.query.return_value = SimpleNamespace(column_names=["instrument_id", "symbol", "trade_date", "as_of_time"],
+    client.query.return_value = SimpleNamespace(column_names=["listing_id", "symbol", "trade_date", "as_of_time"],
         result_rows=[(ident, "AAPL", date(2026, 9, 4), datetime(2026, 9, 5, tzinfo=UTC)),
                      (ident, "AAPL", date(2026, 9, 3), datetime(2026, 9, 5, tzinfo=UTC))])
     repo = USRepository(client)
@@ -22,7 +22,8 @@ def test_candle_reads_are_market_scoped_and_cursor_bound_to_filters():
     page = repo.candles("daily", cursor=None, **kwargs)
     assert page.next_cursor
     assert client.query.call_args.kwargs["parameters"]["source"] == "schwab"
-    assert "market_code = 'USA'" in client.query.call_args.args[0]
+    assert "b.country_code = 'US'" in client.query.call_args.args[0]
+    assert "FROM market.bars AS b FINAL" in client.query.call_args.args[0]
     assert "FINAL" in client.query.call_args.args[0]
     repo.candles("daily", cursor=page.next_cursor, **kwargs)
     assert client.query.call_args.kwargs["parameters"]["cursor_time"] == date(2026, 9, 4)
@@ -30,6 +31,15 @@ def test_candle_reads_are_market_scoped_and_cursor_bound_to_filters():
         repo.candles("1min", cursor=page.next_cursor, **kwargs)
     with pytest.raises(HTTPException):
         repo.candles("daily", cursor="garbage", **kwargs)
+    import base64
+    import json
+
+    legacy = base64.urlsafe_b64encode(json.dumps([
+        ["daily", "AAPL", "2026-09-01", "2026-09-04"],
+        "2026-09-04", "AAPL", str(ident),
+    ]).encode()).decode()
+    with pytest.raises(HTTPException, match="Legacy candle cursor"):
+        repo.candles("daily", cursor=legacy, **kwargs)
 
 
 def test_us_repository_dependency_is_request_local(monkeypatch):
@@ -91,4 +101,4 @@ def test_dashboard_data_counts_are_scoped_to_configured_universe():
     assert result["universe"]["daily_with_data"] == 480
     assert result["universe"]["no_daily_data"] == 20
     count_sql = repo.query.call_args_list[0].args[0]
-    assert "instrument_id IN (SELECT instrument_id FROM us_expected_series FINAL" in count_sql
+    assert "listing_id IN (SELECT listing_id FROM meta.expected_series FINAL" in count_sql

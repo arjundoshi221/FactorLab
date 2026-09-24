@@ -14,7 +14,7 @@ export interface USSeries {
 }
 
 export interface USInstrument {
-  instrument_id: string;
+  listing_id: string;
   symbol: string;
   name: string;
   exchange_code: string;

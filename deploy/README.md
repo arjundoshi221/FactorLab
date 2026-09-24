@@ -19,9 +19,15 @@ or diverged states, and pushes an immutable
 builds one Linux/AMD64 image, publishes it privately to GHCR, and deploys the
 exact image digest. Do not move or reuse release tags.
 
-The ClickHouse v2 migration runner is intentionally not part of this workflow.
-Production migrations must remain additive and backward-compatible; run that
-forward-only migration as its own reviewed operation.
+The ClickHouse v2 migration runner is intentionally outside this workflow.
+For the September 25, 2026 application cutover, finish the production checks,
+final Wave 9 catch-up, and operational-table exchange in
+[`clickhouse-v2-data-completion.md`](../docs/operations/clickhouse-v2-data-completion.md)
+before running the release helper. The first v2 release refuses active legacy
+writers or political cron. It starts the API and checks v2 reads before starting
+universe, India, and US writers, then installs political cron. Once v2 writers
+activate, failures stop the writers for a v2 fix-forward release; the release
+does not restore legacy collection.
 
 ### One-time GitHub and VPS setup
 
@@ -71,9 +77,10 @@ sudo docker compose --env-file production.env -f compose.production.yml logs --t
 
 The deployer serializes releases with `flock`, validates both staged and
 installed Compose configurations, starts the secret agent first, and verifies
-the agent, image pins, API health, ClickHouse-backed hub overview, and ingestion
-stability. A failed check restores the preceding bundle and image pins and
-still fails the Actions run.
+the agent, all service image pins, API health, v2 ClickHouse readiness, and
+hub reads. Before first v2 writer activation, a failed release restores the
+preceding bundle and image pins. After activation, inspect fresh v2 writes and
+raw-to-curated lineage with the runbook checks and fix forward on failure.
 
 ### Manual rollback
 

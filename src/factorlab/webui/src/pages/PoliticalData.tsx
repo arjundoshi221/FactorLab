@@ -152,7 +152,7 @@ function CoveragePanel({ coverage }: { coverage: PoliticalCoverage[] }) {
 function TradeTable({ trades }: { trades: PoliticalTrade[] }) {
   return <div className="table-wrap"><table className="political-trades-table">
     <thead><tr><th>Transaction</th><th>Legislator</th><th>Asset</th><th>Type</th><th>Amount</th><th>Filed</th><th>Source</th></tr></thead>
-    <tbody>{trades.map((trade) => <tr key={trade.trade_key}>
+    <tbody>{trades.map((trade) => <tr key={trade.political_trade_id}>
       <td data-label="Transaction"><strong>{formatDate(trade.transaction_date)}</strong><small>{trade.chamber} · {trade.state}{trade.district === null ? "" : `-${trade.district}`}</small></td>
       <td data-label="Legislator">{trade.legislator_name}<small>{trade.bioguide_id ?? "Unmatched legislator"}</small></td>
       <td data-label="Asset">{trade.ticker ? <a className="political-ticker" href={`/us?symbol=${encodeURIComponent(trade.ticker)}`}>{trade.ticker}</a> : <span>Unresolved</span>}<small>{trade.asset_name_raw}</small></td>
@@ -160,7 +160,10 @@ function TradeTable({ trades }: { trades: PoliticalTrade[] }) {
       <td data-label="Amount">{trade.amount_str || (trade.amount_min === null ? "—" : usdFormatter.format(trade.amount_min))}</td>
       <td data-label="Filed">{formatDate(trade.filing_date)}<small>{Math.max(0, Math.round((Date.parse(trade.filing_date) - Date.parse(trade.transaction_date)) / 86_400_000))} days later</small></td>
       <td data-label="Source"><a href={trade.filing_url} target="_blank" rel="noreferrer">View filing ↗</a><small>{trade.source.replaceAll("_", " ")}</small><details className="political-row-data"><summary>All fields</summary><dl>
-        <div><dt>Trade key</dt><dd>{trade.trade_key}</dd></div>
+        <div><dt>Political trade ID</dt><dd>{trade.political_trade_id}</dd></div>
+        <div><dt>Listing ID</dt><dd>{trade.listing_id ?? "Unresolved"}</dd></div>
+        <div><dt>Contract ID</dt><dd>{trade.contract_id ?? "—"}</dd></div>
+        <div><dt>Legislator entity ID</dt><dd>{trade.legislator_entity_id ?? "Unresolved"}</dd></div>
         <div><dt>Filing ID</dt><dd>{trade.filing_id}</dd></div>
         <div><dt>Owner code</dt><dd>{trade.owner_code || "—"}</dd></div>
         <div><dt>Filer type</dt><dd>{trade.filer_type || "—"}</dd></div>

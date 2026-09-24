@@ -47,11 +47,10 @@ def test_india_hub_repository_dependency_is_request_local(monkeypatch):
 
 
 INSTRUMENT_COLUMNS = [
-    "instrument_id",
+    "listing_id",
     "symbol",
     "name",
     "exchange_code",
-    "segment",
     "instrument_type",
     "status",
     "source",
@@ -90,7 +89,6 @@ def test_instrument_page_combines_unique_history_and_selected_day_checks():
                 "TCS",
                 "Tata Consultancy Services",
                 "NSE",
-                "NSE_EQ",
                 "EQ",
                 "active",
                 "upstox",
@@ -114,7 +112,6 @@ def test_instrument_page_combines_unique_history_and_selected_day_checks():
                 "INFY",
                 "Infosys",
                 "NSE",
-                "NSE_EQ",
                 "EQ",
                 "active",
                 "upstox",
@@ -152,7 +149,8 @@ def test_instrument_page_combines_unique_history_and_selected_day_checks():
     assert page.items[1].check_status == "missing"
     query, parameters = client.calls[1]
     assert "count() OVER () AS total" in query
-    assert "market_candles_1min FINAL" in query
+    assert "market.bars AS b FINAL" in query
+    assert "market.futures_contract_bars AS f FINAL" in query
     assert "FROM reference" in query
     assert parameters["search"] == "t"
 
@@ -167,7 +165,6 @@ def test_instrument_page_can_select_unconfigured_reference_instruments():
                 "AARTIDRUGS",
                 "Aarti Drugs Limited",
                 "NSE",
-                "NSE_EQ",
                 "EQ",
                 "active",
                 "upstox",
@@ -265,20 +262,20 @@ class FakeHubIndiaRepository:
             "data_as_of": None,
         }
 
-    def list_instrument_days(self, instrument_id, **kwargs):
-        self.kwargs = {"instrument_id": instrument_id, **kwargs}
+    def list_instrument_days(self, listing_id, **kwargs):
+        self.kwargs = {"listing_id": listing_id, **kwargs}
         self.day_kwargs = self.kwargs
         return {
-            "instrument_id": instrument_id,
+            "listing_id": listing_id,
             "date_from": kwargs["date_from"],
             "date_to": kwargs["date_to"],
             "items": [],
         }
 
-    def get_instrument(self, instrument_id, **kwargs):
-        self.kwargs = {"instrument_id": instrument_id, **kwargs}
+    def get_instrument(self, listing_id, **kwargs):
+        self.kwargs = {"listing_id": listing_id, **kwargs}
         return {
-            "instrument_id": instrument_id,
+            "listing_id": listing_id,
             "symbol": "TCS",
             "name": "Tata Consultancy Services",
             "exchange_code": "NSE",
@@ -337,7 +334,7 @@ def test_hub_india_routes_are_private_boundary_endpoints_without_bearer_key():
     assert instrument.status_code == 200
     assert instrument.json()["symbol"] == "TCS"
     assert repository.instrument_kwargs["scope"] == "collecting"
-    assert repository.day_kwargs["instrument_id"] == INSTRUMENT_ID
+    assert repository.day_kwargs["listing_id"] == INSTRUMENT_ID
     assert days.status_code == 200
 
 

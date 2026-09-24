@@ -1,5 +1,7 @@
 from datetime import UTC, date, datetime
+from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
 
 from factorlab.api.app import app, get_political_trades_repository
@@ -7,6 +9,10 @@ from factorlab.api.political import PoliticalTradesRepository, decode_cursor
 
 COLUMNS = [
     "trade_key",
+    "political_trade_id",
+    "listing_id",
+    "contract_id",
+    "legislator_entity_id",
     "chamber",
     "filing_id",
     "filing_date",
@@ -35,7 +41,11 @@ COLUMNS = [
 def trade_row(day: int, key_character: str = "a") -> tuple:
     timestamp = datetime(2026, 8, day, 12, tzinfo=UTC)
     return (
-        key_character * 64,
+        "00000000-0000-0000-0000-00000000000" + str(day),
+        UUID("00000000-0000-0000-0000-00000000000" + str(day)),
+        None,
+        None,
+        None,
         "house",
         f"filing-{day}",
         date(2026, 8, day),
@@ -92,15 +102,28 @@ def test_repository_filters_and_returns_cursor_page():
     )
 
     query, parameters = client.calls[0]
-    assert "FROM alt_political_trades FINAL" in query
-    assert "ORDER BY transaction_date DESC, trade_key DESC" in query
+    assert "FROM alt.political_trades AS t FINAL" in query
+    assert "ORDER BY transaction_date DESC, political_trade_id DESC" in query
     assert parameters["ticker"] == "EXM"
     assert parameters["bioguide_id"] == "P000197"
     assert parameters["fetch_limit"] == 3
     assert len(page.items) == 2
     assert page.next_cursor is not None
-    assert decode_cursor(page.next_cursor) == (date(2026, 8, 2), "b" * 64)
+    assert decode_cursor(page.next_cursor) == (
+        date(2026, 8, 2), UUID("00000000-0000-0000-0000-000000000002")
+    )
     assert page.data_as_of == datetime(2026, 8, 3, 12, tzinfo=UTC)
+
+
+def test_legacy_political_cursor_is_rejected_clearly():
+    import base64
+    import json
+
+    from fastapi import HTTPException
+
+    legacy = base64.urlsafe_b64encode(json.dumps({"date": "2026-08-02", "trade_key": "a" * 64}).encode()).decode()
+    with pytest.raises(HTTPException, match="Legacy cursor"):
+        decode_cursor(legacy)
 
 
 class FakeRepository:

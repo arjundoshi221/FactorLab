@@ -1,4 +1,48 @@
-# ClickHouse v2 remaining legacy data
+# ClickHouse v2 data completion and application cutover
+
+## September 25, 2026 cutover (Asia/Kolkata)
+
+The release is gated on complete Waves 1–4 history and the final Wave 9
+operational-table copy. Verify the September 24 production schema report below
+again against production. Waves 5–8 have no matching legacy history. Keep the
+current application ClickHouse credential for this release; the Wave 8 RBAC
+file lacks required `ref`, `raw`, and `meta` ingest grants.
+
+1. Confirm a clean, synchronized `main`, checksum journal, approved current-hash
+   crosswalks, source and `FINAL` destination counts, canonical references,
+   free disk space, and representative API results. Run migration `status` and
+   `validate --through-wave 9`. Confirm the application credential can access
+   all required v2 tables.
+2. Stop `ingest-india`, `ingest-us`, and `universe-us` and remove the political
+   cron. Record the cutover watermark and confirm no new legacy inserts. Run
+   deterministic candidate staging and approval for any newly changed source
+   hashes; inspect the pending target IDs and political correction differences.
+   Reparse political PDFs with `stage_clickhouse_v2_political.py`; stage SEC
+   listing evidence where needed. `approve_clickhouse_v2_political.py` refuses
+   changes to previously approved semantic corrections. Run final validation
+   and `apply backfill --through-wave 9 --yes` with
+   `CLICKHOUSE_MIGRATION_MAX_PARTITIONS_PER_INSERT_BLOCK=1000` on that one-off
+   process. Successful backfill files repeat; do not run them after v2 writes.
+3. Run `python scripts/cutover_clickhouse_v2.py check`. It compares `FINAL`
+   counts and latest-row values in both directions for the three operational
+   tables. Any difference is a no-go. Then run
+   `python scripts/cutover_clickhouse_v2.py exchange --yes` and rerun `check`.
+   It refuses mixed or already exchanged layouts, so a rerun cannot swap names
+   back by accident.
+4. Start the new API and check v2 overview, India, US, political, and schema
+   map reads. Then activate universe, India, and US writers and political cron
+   through the release helper. Confirm fresh `raw.archive`, `ref.*`,
+   `market.bars`, `market.futures_contract_bars`, `meta.*`, and `alt.*` rows,
+   matching raw and run IDs, coverage and recovery continuity, and no new
+   legacy inserts. The release helper waits for a fresh raw-to-curated v2 row
+   with valid raw and run references. Check every active destination over the
+   next collection cycles.
+
+Before the first v2 writer activation, a failed gate means resume legacy
+collection and postpone release. If names were exchanged, reverse the three
+exchanges before another Wave 9 backfill. After v2 writer activation, stop the
+affected writer and release a v2 fix. The release helper requires paused
+legacy writers and cron for first activation and does not run migrations.
 
 ## Application cutover preparation (2026-09-24)
 
@@ -19,14 +63,12 @@ The replacement tables use canonical listing and contract IDs in their
 logical counts and compare each canonical identity's latest values, including
 active state, dates, coverage counts, and errors. Check for duplicate legacy
 IDs mapping to one canonical identity. Any mismatch is a no-go; resume legacy
-collection. Keep Wave 8 RBAC pending. The application, API, UI, release order,
-and live v2 writes are not yet converted, so do not perform the exchange or
-activate a v2 release from this preparatory change.
+collection. Keep Wave 8 RBAC pending. Exchange names only under the cutover
+gates above.
 
 The Wave 4 data-completion extension moves legacy rows that could not fit the
-original v2 tables. It is additive. The running US and India ingest containers
-still write to the `factorlab` database; legacy remains authoritative, and no
-application cutover or RBAC change is part of this migration.
+original v2 tables. It is additive. Until the gated cutover, running US and
+India ingest containers write to `factorlab` and legacy remains authoritative.
 
 | Legacy source | V2 destination | Identity and preservation |
 | --- | --- | --- |

@@ -16,7 +16,6 @@ from fastapi.staticfiles import StaticFiles
 
 from factorlab.api.auth import require_api_key
 from factorlab.api.docker_images import DockerImagesResponse, read_docker_images_snapshot
-from factorlab.api.us import router as us_router
 from factorlab.api.hub import HubOverview, HubOverviewService, HubRepository
 from factorlab.api.india import (
     IndiaCandlesPage,
@@ -65,11 +64,12 @@ from factorlab.api.schema_map import (
     InvalidLayoutError,
     LayoutConflictError,
     SchemaLayoutUpdate,
-    SchemaMapResponse,
     SchemaMapRepository,
+    SchemaMapResponse,
     SchemaMapService,
     SharedSchemaLayout,
 )
+from factorlab.api.us import router as us_router
 
 app = FastAPI(
     title="FactorLab API",
@@ -277,30 +277,30 @@ def list_hub_india_instruments(
 
 
 @app.get(
-    "/hub/api/v1/india/instruments/{instrument_id}",
+    "/hub/api/v1/india/instruments/{listing_id}",
     response_model=IndiaHubInstrument,
     tags=["hub-india"],
 )
 def get_hub_india_instrument(
-    instrument_id: UUID,
+    listing_id: UUID,
     repository: Annotated[IndiaHubRepository, Depends(get_india_hub_repository)],
     trading_date: date | None = None,
 ) -> IndiaHubInstrument:
     """Return one instrument with its stored coverage and selected-day checks."""
 
     return repository.get_instrument(
-        instrument_id,
+        listing_id,
         trading_date=trading_date or _india_today(),
     )
 
 
 @app.get(
-    "/hub/api/v1/india/instruments/{instrument_id}/candles",
+    "/hub/api/v1/india/instruments/{listing_id}/candles",
     response_model=IndiaCandlesPage,
     tags=["hub-india"],
 )
 def list_hub_india_instrument_candles(
-    instrument_id: UUID,
+    listing_id: UUID,
     repository: Annotated[IndiaCandlesRepository, Depends(get_india_candles_repository)],
     trading_date: date | None = None,
     cursor: Annotated[str | None, Query(max_length=1024)] = None,
@@ -309,7 +309,7 @@ def list_hub_india_instrument_candles(
     """Return actual one-minute candle rows for one instrument and trading session."""
 
     return repository.list_candles(
-        instrument_id=instrument_id,
+        listing_id=listing_id,
         trading_date=trading_date or _india_today(),
         cursor=cursor,
         limit=limit,
@@ -317,12 +317,12 @@ def list_hub_india_instrument_candles(
 
 
 @app.get(
-    "/hub/api/v1/india/instruments/{instrument_id}/days",
+    "/hub/api/v1/india/instruments/{listing_id}/days",
     response_model=IndiaHubInstrumentDays,
     tags=["hub-india"],
 )
 def list_hub_india_instrument_days(
-    instrument_id: UUID,
+    listing_id: UUID,
     repository: Annotated[IndiaHubRepository, Depends(get_india_hub_repository)],
     date_from: date | None = None,
     date_to: date | None = None,
@@ -335,7 +335,7 @@ def list_hub_india_instrument_days(
     if (end - start).days > 120:
         raise HTTPException(status_code=422, detail="India instrument history cannot exceed 120 days")
     return repository.list_instrument_days(
-        instrument_id,
+        listing_id,
         date_from=start,
         date_to=end,
     )
@@ -667,20 +667,20 @@ def get_india_metrics_timeseries(
 
 
 @app.get(
-    "/api/v1/india/instruments/{instrument_id}/summary",
+    "/api/v1/india/instruments/{listing_id}/summary",
     response_model=IndiaInstrumentSummary,
     tags=["india-observability"],
     dependencies=[Depends(require_api_key)],
 )
 def get_india_instrument_summary(
-    instrument_id: UUID,
+    listing_id: UUID,
     repository: Annotated[
         IndiaObservabilityRepository, Depends(get_india_observability_repository)
     ],
 ) -> IndiaInstrumentSummary:
     """Return instrument metadata, contracts, history, gaps, and anomaly summary."""
 
-    return repository.get_instrument_summary(instrument_id)
+    return repository.get_instrument_summary(listing_id)
 
 
 @app.get(
@@ -1214,8 +1214,8 @@ def hub_india_markets() -> FileResponse:
     return _hub_index()
 
 
-@app.get("/india/instruments/{instrument_id}", include_in_schema=False)
-def hub_india_instrument(instrument_id: UUID) -> FileResponse:
+@app.get("/india/instruments/{listing_id}", include_in_schema=False)
+def hub_india_instrument(listing_id: UUID) -> FileResponse:
     return _hub_index()
 
 

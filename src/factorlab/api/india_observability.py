@@ -13,7 +13,12 @@ import pandas as pd
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
-from factorlab.api.india import IndiaInstrument, QueryClient
+from factorlab.api.india import (
+    INDIA_BAR_VERSIONS_SQL,
+    INDIA_BARS_SQL,
+    IndiaInstrument,
+    QueryClient,
+)
 from factorlab.storage.clickhouse import ClickHouseStorage
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -41,8 +46,8 @@ class IndiaDashboard(BaseModel):
 
 
 class IndiaCoverageItem(BaseModel):
-    instrument_id: UUID
-    contract_id: UUID
+    listing_id: UUID
+    contract_id: UUID | None
     symbol: str
     source: str
     universe: str
@@ -90,8 +95,8 @@ class IndiaCollectionActivity(BaseModel):
 
 
 class IndiaFreshnessItem(BaseModel):
-    instrument_id: UUID
-    contract_id: UUID
+    listing_id: UUID
+    contract_id: UUID | None
     symbol: str
     source: str
     last_bar_time: datetime | None
@@ -109,8 +114,8 @@ class IndiaFreshnessPage(BaseModel):
 
 
 class IndiaGap(BaseModel):
-    instrument_id: UUID
-    contract_id: UUID
+    listing_id: UUID
+    contract_id: UUID | None
     symbol: str
     source: str
     gap_start: datetime
@@ -131,8 +136,8 @@ class IndiaAnomaly(BaseModel):
     trading_date: date
     anomaly_type: str
     severity: Literal["warning", "critical"]
-    instrument_id: UUID
-    contract_id: UUID
+    listing_id: UUID
+    contract_id: UUID | None
     symbol: str
     source: str
     observed_value: str
@@ -160,12 +165,11 @@ class IndiaMetricsSeries(BaseModel):
 
 
 class IndiaContractSummary(BaseModel):
-    contract_id: UUID
-    trading_symbol: str
+    contract_id: UUID | None
+    underlying_listing_id: UUID
     contract_type: str
-    segment: str
-    expiry: date | None
-    status: str
+    expiry: date
+    active: bool
 
 
 class IndiaInstrumentDataSummary(BaseModel):
@@ -250,6 +254,11 @@ class IndiaObservabilityRepository:
     def __init__(self, client: QueryClient) -> None:
         self.client = client
 
+    def _query(self, sql: str, parameters: dict[str, Any] | None = None):
+        sql = sql.replace("__INDIA_BARS_FINAL__", f"({INDIA_BARS_SQL}) AS bars")
+        sql = sql.replace("__INDIA_BARS_ALL__", f"({INDIA_BAR_VERSIONS_SQL}) AS bars")
+        return self.client.query(sql, parameters=parameters)
+
     @classmethod
     def from_environment(cls) -> IndiaObservabilityRepository:
         return cls(ClickHouseStorage.from_environment().client)
@@ -257,33 +266,34 @@ class IndiaObservabilityRepository:
     def get_dashboard(self, *, trading_date: date, now: datetime | None = None) -> IndiaDashboard:
         checked_at = now or datetime.now(UTC)
         market_status, points_per_series = _session_state(trading_date, checked_at)
-        reference_result = self.client.query(
+        reference_result = self._query(
             """
             SELECT
-                (SELECT uniqExact(instrument_id) FROM ref_instruments FINAL
-                 WHERE market_code = 'IND') AS reference_instruments,
-                (SELECT count() FROM india_expected_series FINAL WHERE active) AS expected_series
+                (SELECT uniqExact(listing_id) FROM ref.listings FINAL
+                 WHERE country_code = 'IN') AS reference_instruments,
+                (SELECT count() FROM meta.expected_series FINAL
+                 WHERE country_code = 'IN' AND active) AS expected_series
             """
         )
-        market_result = self.client.query(
+        market_result = self._query(
             """
-            SELECT uniqExact(tuple(instrument_id, contract_id)) AS series_with_data,
+            SELECT uniqExact(tuple(listing_id, contract_id)) AS series_with_data,
                    count() AS data_points,
                    maxOrNull(bar_time) AS last_bar_time,
                    maxOrNull(ingested_at) AS last_ingested_at
-            FROM market_candles_1min FINAL
-            WHERE market_code = 'IND'
-              AND toDate(bar_time, 'Asia/Kolkata') = {trading_date:Date}
+            FROM __INDIA_BARS_FINAL__
+            WHERE country_code = 'IN'
+              AND trade_date = {trading_date:Date}
             """,
             parameters={"trading_date": trading_date},
         )
-        collection_result = self.client.query(
+        collection_result = self._query(
             """
             SELECT count() AS collected_on_date,
-                   countIf(toDate(bar_time, 'Asia/Kolkata') < {trading_date:Date})
+                   countIf(trade_date < {trading_date:Date})
                        AS backfilled_on_date
-            FROM market_candles_1min
-            WHERE market_code = 'IND'
+            FROM __INDIA_BARS_ALL__
+            WHERE country_code = 'IN'
               AND toDate(ingested_at, 'Asia/Kolkata') = {trading_date:Date}
             """,
             parameters={"trading_date": trading_date},
@@ -327,7 +337,7 @@ class IndiaObservabilityRepository:
     ) -> IndiaCoveragePage:
         checked_at = now or datetime.now(UTC)
         _, expected_points = _session_state(trading_date, checked_at)
-        conditions = ["expected.active"]
+        conditions = ["expected.country_code = 'IN'", "expected.active"]
         parameters: dict[str, Any] = {
             "trading_date": trading_date,
             "expected_points": expected_points,
@@ -338,26 +348,27 @@ class IndiaObservabilityRepository:
         if source:
             conditions.append("expected.source = {source:String}")
             parameters["source"] = source
-        result = self.client.query(
+        result = self._query(
             f"""
             WITH actual AS (
-                SELECT instrument_id, contract_id, source, count() AS data_points,
+                SELECT listing_id, contract_id, source, count() AS data_points,
                        min(bar_time) AS first_bar_time, max(bar_time) AS last_bar_time,
                        max(ingested_at) AS last_ingested_at
-                FROM market_candles_1min FINAL
-                WHERE market_code = 'IND'
+                FROM __INDIA_BARS_FINAL__
+                WHERE country_code = 'IN'
                   AND toDate(bar_time, 'Asia/Kolkata') = {{trading_date:Date}}
-                GROUP BY instrument_id, contract_id, source
+                GROUP BY listing_id, contract_id, source
             )
-            SELECT expected.instrument_id, expected.contract_id, expected.symbol,
+            SELECT expected.listing_id, expected.contract_id, expected.symbol,
                    expected.source, expected.universe,
                    ifNull(actual.data_points, 0) AS data_points,
                    {{expected_points:UInt16}} AS expected_data_points,
                    actual.first_bar_time, actual.last_bar_time, actual.last_ingested_at
-            FROM india_expected_series AS expected FINAL
-            LEFT JOIN actual USING (instrument_id, contract_id, source)
+            FROM meta.expected_series AS expected FINAL
+            LEFT JOIN actual ON expected.listing_id = actual.listing_id AND ifNull(expected.contract_id, toUUID('00000000-0000-0000-0000-000000000000')) = ifNull(actual.contract_id, toUUID('00000000-0000-0000-0000-000000000000')) AND expected.source = actual.source
             WHERE {" AND ".join(conditions)}
             ORDER BY expected.symbol, expected.contract_id
+            SETTINGS join_use_nulls = 1
             """,
             parameters=parameters,
         )
@@ -388,43 +399,43 @@ class IndiaObservabilityRepository:
 
     def get_collection_activity(self, *, ingestion_date: date) -> IndiaCollectionActivity:
         parameters = {"ingestion_date": ingestion_date}
-        summary = self.client.query(
+        summary = self._query(
             """
             SELECT count() AS rows_collected,
-                   uniqExact(instrument_id) AS unique_instruments,
-                   uniqExact(tuple(instrument_id, contract_id)) AS unique_series,
-                   countIf(toDate(bar_time, 'Asia/Kolkata') = {ingestion_date:Date})
+                   uniqExact(listing_id) AS unique_instruments,
+                   uniqExact(tuple(listing_id, contract_id)) AS unique_series,
+                   countIf(trade_date = {ingestion_date:Date})
                        AS current_market_date_rows,
-                   countIf(toDate(bar_time, 'Asia/Kolkata') < {ingestion_date:Date})
+                   countIf(trade_date < {ingestion_date:Date})
                        AS backfilled_rows,
-                   minOrNull(toDate(bar_time, 'Asia/Kolkata')) AS earliest_market_date,
-                   maxOrNull(toDate(bar_time, 'Asia/Kolkata')) AS latest_market_date,
+                   minOrNull(trade_date) AS earliest_market_date,
+                   maxOrNull(trade_date) AS latest_market_date,
                    minOrNull(ingested_at) AS first_ingested_at,
                    maxOrNull(ingested_at) AS last_ingested_at
-            FROM market_candles_1min
-            WHERE market_code = 'IND'
+            FROM __INDIA_BARS_ALL__
+            WHERE country_code = 'IN'
               AND toDate(ingested_at, 'Asia/Kolkata') = {ingestion_date:Date}
             """,
             parameters=parameters,
         )
-        hourly = self.client.query(
+        hourly = self._query(
             """
             SELECT formatDateTime(toStartOfHour(ingested_at, 'Asia/Kolkata'), '%H:00') AS bucket,
                    count() AS data_points,
-                   uniqExact(tuple(instrument_id, contract_id)) AS unique_series
-            FROM market_candles_1min
-            WHERE market_code = 'IND'
+                   uniqExact(tuple(listing_id, contract_id)) AS unique_series
+            FROM __INDIA_BARS_ALL__
+            WHERE country_code = 'IN'
               AND toDate(ingested_at, 'Asia/Kolkata') = {ingestion_date:Date}
             GROUP BY bucket ORDER BY bucket
             """,
             parameters=parameters,
         )
-        sources = self.client.query(
+        sources = self._query(
             """
             SELECT source AS bucket, count() AS data_points,
-                   uniqExact(tuple(instrument_id, contract_id)) AS unique_series
-            FROM market_candles_1min
-            WHERE market_code = 'IND'
+                   uniqExact(tuple(listing_id, contract_id)) AS unique_series
+            FROM __INDIA_BARS_ALL__
+            WHERE country_code = 'IN'
               AND toDate(ingested_at, 'Asia/Kolkata') = {ingestion_date:Date}
             GROUP BY source ORDER BY source
             """,
@@ -448,28 +459,29 @@ class IndiaObservabilityRepository:
         now: datetime | None = None,
     ) -> IndiaFreshnessPage:
         checked_at = now or datetime.now(UTC)
-        conditions = ["expected.active"]
+        conditions = ["expected.country_code = 'IN'", "expected.active"]
         parameters: dict[str, Any] = {}
         if source:
             conditions.append("expected.source = {source:String}")
             parameters["source"] = source
-        result = self.client.query(
+        result = self._query(
             f"""
             WITH latest AS (
-                SELECT instrument_id, contract_id, source, max(bar_time) AS last_bar_time,
+                SELECT listing_id, contract_id, source, max(bar_time) AS last_bar_time,
                        max(ingested_at) AS last_ingested_at
-                FROM market_candles_1min FINAL WHERE market_code = 'IND'
-                GROUP BY instrument_id, contract_id, source
+                FROM __INDIA_BARS_FINAL__ WHERE country_code = 'IN'
+                GROUP BY listing_id, contract_id, source
             )
-            SELECT expected.instrument_id AS instrument_id,
+            SELECT expected.listing_id AS listing_id,
                    expected.contract_id AS contract_id,
                    expected.symbol AS symbol,
                    expected.source AS source,
                    latest.last_bar_time, latest.last_ingested_at
-            FROM india_expected_series AS expected FINAL
-            LEFT JOIN latest USING (instrument_id, contract_id, source)
+            FROM meta.expected_series AS expected FINAL
+            LEFT JOIN latest ON expected.listing_id = latest.listing_id AND ifNull(expected.contract_id, toUUID('00000000-0000-0000-0000-000000000000')) = ifNull(latest.contract_id, toUUID('00000000-0000-0000-0000-000000000000')) AND expected.source = latest.source
             WHERE {" AND ".join(conditions)}
             ORDER BY latest.last_ingested_at ASC NULLS FIRST, expected.symbol
+            SETTINGS join_use_nulls = 1
             """,
             parameters=parameters,
         )
@@ -502,7 +514,7 @@ class IndiaObservabilityRepository:
         _, expected_points = _session_state(trading_date, now or datetime.now(UTC))
         if expected_points == 0:
             return IndiaGapsPage(trading_date=trading_date, items=[], limit=limit, offset=offset)
-        conditions = ["active"]
+        conditions = ["country_code = 'IN'", "active"]
         parameters: dict[str, Any] = {
             "trading_date": trading_date,
             "expected_points": expected_points,
@@ -515,24 +527,24 @@ class IndiaObservabilityRepository:
         if source:
             conditions.append("source = {source:String}")
             parameters["source"] = source
-        result = self.client.query(
+        result = self._query(
             f"""
             WITH expected AS (
-                SELECT instrument_id, contract_id, symbol, source,
+                SELECT listing_id, contract_id, symbol, source,
                        addMinutes(toDateTime(concat(toString({{trading_date:Date}}),
                                   ' 09:15:00'), 'Asia/Kolkata'), minute) AS expected_time
-                FROM india_expected_series FINAL
+                FROM meta.expected_series FINAL
                 CROSS JOIN (SELECT number AS minute FROM numbers({{expected_points:UInt16}})) AS minutes
                 WHERE {" AND ".join(conditions)}
             ), actual AS (
-                SELECT instrument_id, contract_id, source, bar_time
-                FROM market_candles_1min FINAL
-                WHERE market_code = 'IND'
+                SELECT listing_id, contract_id, source, bar_time
+                FROM __INDIA_BARS_FINAL__
+                WHERE country_code = 'IN'
                   AND toDate(bar_time, 'Asia/Kolkata') = {{trading_date:Date}}
             ), missing AS (
                 SELECT expected.* FROM expected
-                LEFT JOIN actual ON expected.instrument_id = actual.instrument_id
-                    AND expected.contract_id = actual.contract_id
+                LEFT JOIN actual ON expected.listing_id = actual.listing_id
+                    AND ifNull(expected.contract_id, toUUID('00000000-0000-0000-0000-000000000000')) = ifNull(actual.contract_id, toUUID('00000000-0000-0000-0000-000000000000'))
                     AND expected.source = actual.source
                     AND expected.expected_time = actual.bar_time
                 WHERE actual.bar_time IS NULL
@@ -541,17 +553,18 @@ class IndiaObservabilityRepository:
                            toDateTime(concat(toString({{trading_date:Date}}), ' 09:15:00'),
                                       'Asia/Kolkata'), expected_time)
                            - row_number() OVER (
-                               PARTITION BY instrument_id, contract_id, source
+                               PARTITION BY listing_id, contract_id, source
                                ORDER BY expected_time) AS gap_group
                 FROM missing
             )
-            SELECT instrument_id, contract_id, any(symbol) AS symbol, source,
+            SELECT listing_id, contract_id, any(symbol) AS symbol, source,
                    min(expected_time) AS gap_start, max(expected_time) AS gap_end,
                    count() AS missing_points
             FROM grouped
-            GROUP BY instrument_id, contract_id, source, gap_group
+            GROUP BY listing_id, contract_id, source, gap_group
             ORDER BY missing_points DESC, symbol
             LIMIT {{limit:UInt16}} OFFSET {{offset:UInt32}}
+            SETTINGS join_use_nulls = 1
             """,
             parameters=parameters,
         )
@@ -575,7 +588,7 @@ class IndiaObservabilityRepository:
     ) -> IndiaAnomaliesPage:
         checked_at = now or datetime.now(UTC)
         market_status, expected_points = _session_state(trading_date, checked_at)
-        conditions = ["expected.active"]
+        conditions = ["expected.country_code = 'IN'", "expected.active"]
         parameters: dict[str, Any] = {"trading_date": trading_date}
         if symbol:
             conditions.append("expected.symbol = {symbol:String}")
@@ -583,10 +596,10 @@ class IndiaObservabilityRepository:
         if source:
             conditions.append("expected.source = {source:String}")
             parameters["source"] = source
-        result = self.client.query(
+        result = self._query(
             f"""
             WITH latest AS (
-                SELECT instrument_id, contract_id, source, count() AS data_points,
+                SELECT listing_id, contract_id, source, count() AS data_points,
                        uniqExact(close) AS distinct_closes,
                        countIf(low > high OR open < low OR open > high OR close < low OR close > high)
                            AS ohlc_violations,
@@ -602,19 +615,19 @@ class IndiaObservabilityRepository:
                           max(high) / minIf(low, low > 0) - 1, 0) AS price_range_ratio,
                        if(avg(volume) > 0, max(volume) / avg(volume), 0) AS volume_spike_ratio,
                        max(bar_time) AS last_bar_time, max(ingested_at) AS last_ingested_at
-                FROM market_candles_1min FINAL
-                WHERE market_code = 'IND'
+                FROM __INDIA_BARS_FINAL__
+                WHERE country_code = 'IN'
                   AND toDate(bar_time, 'Asia/Kolkata') = {{trading_date:Date}}
-                GROUP BY instrument_id, contract_id, source
+                GROUP BY listing_id, contract_id, source
             ), versions AS (
-                SELECT instrument_id, contract_id, source,
+                SELECT listing_id, contract_id, source,
                        count() - uniqExact(tuple(bar_time, source)) AS duplicate_versions
-                FROM market_candles_1min
-                WHERE market_code = 'IND'
+                FROM __INDIA_BARS_ALL__
+                WHERE country_code = 'IN'
                   AND toDate(bar_time, 'Asia/Kolkata') = {{trading_date:Date}}
-                GROUP BY instrument_id, contract_id, source
+                GROUP BY listing_id, contract_id, source
             )
-            SELECT expected.instrument_id AS instrument_id,
+            SELECT expected.listing_id AS listing_id,
                    expected.contract_id AS contract_id,
                    expected.symbol AS symbol,
                    expected.source AS source,
@@ -627,11 +640,12 @@ class IndiaObservabilityRepository:
                    ifNull(latest.volume_spike_ratio, 0) AS volume_spike_ratio,
                    ifNull(versions.duplicate_versions, 0) AS duplicate_versions,
                    latest.last_ingested_at AS last_ingested_at
-            FROM india_expected_series AS expected FINAL
-            LEFT JOIN latest USING (instrument_id, contract_id, source)
-            LEFT JOIN versions USING (instrument_id, contract_id, source)
+            FROM meta.expected_series AS expected FINAL
+            LEFT JOIN latest ON expected.listing_id = latest.listing_id AND ifNull(expected.contract_id, toUUID('00000000-0000-0000-0000-000000000000')) = ifNull(latest.contract_id, toUUID('00000000-0000-0000-0000-000000000000')) AND expected.source = latest.source
+            LEFT JOIN versions ON expected.listing_id = versions.listing_id AND ifNull(expected.contract_id, toUUID('00000000-0000-0000-0000-000000000000')) = ifNull(versions.contract_id, toUUID('00000000-0000-0000-0000-000000000000')) AND expected.source = versions.source
             WHERE {" AND ".join(conditions)}
             ORDER BY expected.symbol, expected.contract_id
+            SETTINGS join_use_nulls = 1
             """,
             parameters=parameters,
         )
@@ -677,17 +691,17 @@ class IndiaObservabilityRepository:
         )
         expression = {
             "data_points": "count()",
-            "unique_instruments": "uniqExact(instrument_id)",
-            "unique_series": "uniqExact(tuple(instrument_id, contract_id))",
+            "unique_instruments": "uniqExact(listing_id)",
+            "unique_series": "uniqExact(tuple(listing_id, contract_id))",
             "ingestion_lag": "avg(dateDiff('second', bar_time, ingested_at))",
             "missing_points": (
-                "greatest((SELECT count() FROM india_expected_series FINAL WHERE active) "
+                "greatest((SELECT count() FROM meta.expected_series FINAL WHERE country_code = 'IN' AND active) "
                 f"* ({expected_bucket_points}) - count(), 0)"
             ),
             "coverage_percent": (
-                "if((SELECT count() FROM india_expected_series FINAL WHERE active) = 0, 100, "
-                f"least(count() * 100.0 / ((SELECT count() FROM india_expected_series FINAL "
-                f"WHERE active) * ({expected_bucket_points})), 100))"
+                "if((SELECT count() FROM meta.expected_series FINAL WHERE country_code = 'IN' AND active) = 0, 100, "
+                f"least(count() * 100.0 / ((SELECT count() FROM meta.expected_series FINAL "
+                f"WHERE country_code = 'IN' AND active) * ({expected_bucket_points})), 100))"
             ),
             "anomaly_count": (
                 "countIf(low > high OR open < low OR open > high OR close < low OR close > high "
@@ -695,7 +709,7 @@ class IndiaObservabilityRepository:
             ),
         }[metric]
         conditions = [
-            "market_code = 'IND'",
+            "country_code = 'IN'",
             "toDate(bar_time, 'Asia/Kolkata') >= {date_from:Date}",
             "toDate(bar_time, 'Asia/Kolkata') <= {date_to:Date}",
         ]
@@ -703,10 +717,10 @@ class IndiaObservabilityRepository:
         if source:
             conditions.append("source = {source:String}")
             parameters["source"] = source
-        result = self.client.query(
+        result = self._query(
             f"""
             SELECT {bucket} AS bucket, toFloat64({expression}) AS value
-            FROM market_candles_1min FINAL
+            FROM __INDIA_BARS_FINAL__
             WHERE {" AND ".join(conditions)}
             GROUP BY bucket ORDER BY bucket
             """,
@@ -720,17 +734,29 @@ class IndiaObservabilityRepository:
 
     def get_instrument_summary(
         self,
-        instrument_id: UUID,
+        listing_id: UUID,
         *,
         now: datetime | None = None,
     ) -> IndiaInstrumentSummary:
-        parameters = {"instrument_id": instrument_id}
-        instrument_result = self.client.query(
+        parameters = {"listing_id": listing_id}
+        instrument_result = self._query(
             """
-            SELECT instrument_id, instrument_key, trading_symbol, name, isin,
-                   exchange_code, segment, instrument_type, asset_class, currency_code,
-                   lot_size, tick_size, status, source, first_seen, last_seen, ingested_at
-            FROM ref_instruments FINAL WHERE instrument_id = {instrument_id:UUID} LIMIT 1
+            SELECT l.listing_id, s.security_id AS security_id, l.trading_symbol,
+                   e.legal_name AS name, s.isin, l.exchange_code,
+                   s.security_type, s.currency_code, l.lot_size, l.tick_size,
+                   if(l.active, 'active', 'inactive') AS status,
+                   ifNull(a.source, 'reference') AS source,
+                   e.first_seen, e.last_seen, l.ingested_at AS ingested_at
+            FROM ref.listings AS l FINAL
+            INNER JOIN ref.securities AS s FINAL ON s.security_id = l.security_id
+            INNER JOIN ref.entities AS e FINAL ON e.entity_id = s.entity_id
+            LEFT JOIN (
+                SELECT target_id, argMax(source, version) AS source
+                FROM ref.identifier_aliases FINAL
+                WHERE target_kind = 'listing' AND alias_kind = 'upstox_instrument_key'
+                GROUP BY target_id
+            ) AS a ON a.target_id = l.listing_id
+            WHERE l.listing_id = {listing_id:UUID} AND l.country_code = 'IN' LIMIT 1
             """,
             parameters=parameters,
         )
@@ -739,35 +765,36 @@ class IndiaObservabilityRepository:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Instrument not found"
             )
-        contracts_result = self.client.query(
+        contracts_result = self._query(
             """
-            SELECT contract_id, trading_symbol, contract_type, segment, expiry, status
-            FROM ref_contracts FINAL WHERE instrument_id = {instrument_id:UUID}
-            ORDER BY expiry DESC, trading_symbol
+            SELECT contract_id, underlying_listing_id, contract_type, expiry, active
+            FROM ref.contracts FINAL
+            WHERE underlying_listing_id = {listing_id:UUID}
+            ORDER BY expiry DESC, contract_id
             """,
             parameters=parameters,
         )
-        data_result = self.client.query(
-            """
+        data_result = self._query(
+            f"""
             SELECT count() AS data_points,
-                   uniqExact(toDate(bar_time, 'Asia/Kolkata')) AS trading_days,
-                   uniqExact(tuple(instrument_id, contract_id)) AS unique_series,
+                   uniqExact(trade_date) AS trading_days,
+                   uniqExact(tuple(listing_id, contract_id)) AS unique_series,
                    minOrNull(bar_time) AS first_bar_time, maxOrNull(bar_time) AS last_bar_time,
                    maxOrNull(ingested_at) AS last_ingested_at
-            FROM market_candles_1min FINAL WHERE instrument_id = {instrument_id:UUID}
+            FROM ({INDIA_BARS_SQL}) AS bars WHERE listing_id = {{listing_id:UUID}}
             """,
             parameters=parameters,
         )
         data = _rows(data_result)[0]
         today = (now or datetime.now(UTC)).astimezone(IST).date()
-        expected_result = self.client.query(
-            """
+        expected_result = self._query(
+            f"""
             SELECT count() AS expected_series,
-                   (SELECT count() FROM market_candles_1min FINAL
-                    WHERE instrument_id = {instrument_id:UUID}
-                      AND toDate(bar_time, 'Asia/Kolkata') = {today:Date}) AS today_points
-            FROM india_expected_series FINAL
-            WHERE instrument_id = {instrument_id:UUID} AND active
+                   (SELECT count() FROM ({INDIA_BARS_SQL}) AS bars
+                    WHERE listing_id = {{listing_id:UUID}}
+                      AND trade_date = {{today:Date}}) AS today_points
+            FROM meta.expected_series FINAL
+            WHERE country_code = 'IN' AND listing_id = {{listing_id:UUID}} AND active
             """,
             parameters={**parameters, "today": today},
         )
@@ -795,18 +822,19 @@ class IndiaObservabilityRepository:
         limit: int = 100,
         offset: int = 0,
     ) -> IndiaIngestionRunsPage:
-        conditions = ["market_code = 'IND'"]
+        conditions = ["country_code = 'IN'"]
         parameters: dict[str, Any] = {"limit": limit, "offset": offset}
         for value, field in [(pipeline, "pipeline"), (source, "source"), (status_filter, "status")]:
             if value:
                 conditions.append(f"{field} = {{{field}:String}}")
                 parameters[field] = value
-        result = self.client.query(
+        result = self._query(
             f"""
-            SELECT run_id, pipeline, source, universe, status, started_at, completed_at,
+            SELECT run_id, pipeline, source, universe_id AS universe,
+                   status, started_at, completed_at,
                    requested_series, successful_series, failed_series, rows_written,
                    error, metadata_json
-            FROM ingestion_runs FINAL WHERE {" AND ".join(conditions)}
+            FROM meta.ingestion_runs FINAL WHERE {" AND ".join(conditions)}
             ORDER BY started_at DESC, run_id DESC
             LIMIT {{limit:UInt16}} OFFSET {{offset:UInt32}}
             """,
@@ -819,13 +847,14 @@ class IndiaObservabilityRepository:
         )
 
     def get_ingestion_run(self, run_id: UUID) -> IndiaIngestionRun:
-        result = self.client.query(
+        result = self._query(
             """
-            SELECT run_id, pipeline, source, universe, status, started_at, completed_at,
+            SELECT run_id, pipeline, source, universe_id AS universe,
+                   status, started_at, completed_at,
                    requested_series, successful_series, failed_series, rows_written,
                    error, metadata_json
-            FROM ingestion_runs FINAL
-            WHERE market_code = 'IND' AND run_id = {run_id:UUID} LIMIT 1
+            FROM meta.ingestion_runs FINAL
+            WHERE country_code = 'IN' AND run_id = {run_id:UUID} LIMIT 1
             """,
             parameters={"run_id": run_id},
         )
@@ -838,18 +867,18 @@ class IndiaObservabilityRepository:
 
     def list_source_status(self, *, stale_after_seconds: int = 600) -> IndiaSourceStatusPage:
         checked_at = datetime.now(UTC)
-        result = self.client.query(
+        result = self._query(
             """
             WITH candles AS (
                 SELECT source, max(bar_time) AS last_bar_time,
                        max(ingested_at) AS last_ingested_at
-                FROM market_candles_1min FINAL WHERE market_code = 'IND' GROUP BY source
+                FROM __INDIA_BARS_FINAL__ WHERE country_code = 'IN' GROUP BY source
             ), runs AS (
                 SELECT source, pipeline, argMax(status, started_at) AS run_status,
                        max(started_at) AS last_run_started_at,
                        argMax(completed_at, started_at) AS last_run_completed_at,
                        maxIf(completed_at, status = 'success') AS last_success_at
-                FROM ingestion_runs FINAL WHERE market_code = 'IND'
+                FROM meta.ingestion_runs FINAL WHERE country_code = 'IN'
                 GROUP BY source, pipeline
             )
             SELECT runs.source, runs.pipeline, runs.run_status, runs.last_run_started_at,
@@ -1002,7 +1031,7 @@ def _anomalies_for_row(
             [
                 trading_date.isoformat(),
                 anomaly_type,
-                str(row["instrument_id"]),
+                str(row["listing_id"]),
                 str(row["contract_id"]),
                 str(row["source"]),
             ]
@@ -1013,7 +1042,7 @@ def _anomalies_for_row(
                 trading_date=trading_date,
                 anomaly_type=anomaly_type,
                 severity=severity,
-                instrument_id=row["instrument_id"],
+                listing_id=row["listing_id"],
                 contract_id=row["contract_id"],
                 symbol=row["symbol"],
                 source=row["source"],

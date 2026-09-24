@@ -27,6 +27,11 @@ verification_state=failed
 previous_image=unknown
 previous_release=unknown
 deployment_started=false
+writer_activated=false
+first_v2_activation=false
+if [[ ! -e $root/v2-cutover-activated ]]; then
+    first_v2_activation=true
+fi
 
 cleanup() {
     rm -rf -- "$stage"
@@ -85,7 +90,7 @@ write_image_pins() {
 }
 
 verify_current() {
-    local service response
+    local service response path
     wait_healthy cloudflare-secrets-agent 120
     for service in cloudflare-secrets-agent api ingest-india ingest-us; do
         running_with_image "$service" "$image"
@@ -93,10 +98,17 @@ verify_current() {
     if service_exists universe-us; then
         running_with_image universe-us "$image"
     fi
+    for service in bootstrap ingest-political universe-us; do
+        [[ $(compose --profile jobs config --format json | python3 -c \
+            "import json,sys; data=json.load(sys.stdin); print(data['services'][sys.argv[1]]['image'])" \
+            "$service") == "$image" ]]
+    done
     response=$(curl --fail --silent --show-error --max-time 15 http://127.0.0.1:8000/health)
     grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' <<<"$response"
-    curl --fail --silent --show-error --output /dev/null --max-time 30 \
-        http://127.0.0.1:8000/hub/api/v1/overview
+    for path in overview schema-map india/dashboard us/dashboard political/dashboard; do
+        curl --fail --silent --show-error --output /dev/null --max-time 30 \
+            "http://127.0.0.1:8000/hub/api/v1/$path"
+    done
     sleep "${FACTORLAB_STABILIZATION_SECONDS:-30}"
     for service in ingest-india ingest-us; do
         running_with_image "$service" "$image"
@@ -149,6 +161,14 @@ rollback() {
         container=$(compose ps -q "$service")
         [[ -n $container && $(docker inspect --format '{{.State.Status}}' "$container") == running ]] || return 1
     done < "$record/previous-running-images.tsv"
+    if [[ $first_v2_activation == true ]]; then
+        for service in ingest-india ingest-us; do
+            if grep -Fxq "$service" <<<"$old_services"; then
+                compose up -d --no-deps --force-recreate "$service" || return 1
+            fi
+        done
+        bash "$live/scripts/install-political-cron.sh" || return 1
+    fi
     rollback_state=succeeded
 }
 
@@ -156,8 +176,18 @@ on_error() {
     local exit_code=$?
     trap - ERR
     if [[ $deployment_started == true ]]; then
-        echo "release verification failed; restoring previous deployment" >&2
-        rollback || true
+        if [[ $writer_activated == true || -e $root/v2-cutover-activated ]]; then
+            echo "release failed after v2 writer activation; stopping writers for a v2 fix-forward release" >&2
+            compose stop ingest-india ingest-us universe-us 2>/dev/null || true
+            if [[ $first_v2_activation == true ]]; then
+                rm -f -- /etc/cron.d/factorlab-political
+                systemctl reload-or-restart cron 2>/dev/null || true
+            fi
+            rollback_state=fix-forward-required
+        else
+            echo "release verification failed before v2 writer activation; restoring previous deployment" >&2
+            rollback || true
+        fi
     else
         rm -rf -- "$record"
     fi
@@ -173,6 +203,22 @@ trap on_error ERR
     exit 1
 }
 [[ ! -e $record ]] || { echo "release record already exists: $record" >&2; exit 1; }
+
+if [[ $first_v2_activation == true ]]; then
+    for service in ingest-india ingest-us universe-us; do
+        if service_exists "$service"; then
+            container=$(compose ps -q "$service")
+            [[ -z $container ]] || {
+                echo "first v2 activation requires paused legacy writer: $service" >&2
+                exit 1
+            }
+        fi
+    done
+    [[ ! -e /etc/cron.d/factorlab-political ]] || {
+        echo "first v2 activation requires paused political cron" >&2
+        exit 1
+    }
+fi
 
 mkdir -p -- "$record"
 cp -a -- "$live" "$record/previous-deploy"
@@ -215,15 +261,31 @@ compose config --quiet
 bash "$live/scripts/prepare-host.sh"
 compose up -d --no-deps --force-recreate cloudflare-secrets-agent
 wait_healthy cloudflare-secrets-agent 120
-    compose run --rm --no-deps bootstrap
-for service in api ingest-india ingest-us; do
-    compose up -d --no-deps --force-recreate "$service"
+compose run --rm --no-deps bootstrap
+compose up -d --no-deps --force-recreate api
+running_with_image api "$image"
+for path in overview schema-map india/dashboard us/dashboard political/dashboard; do
+    curl --fail --silent --show-error --output /dev/null --max-time 30 \
+        "http://127.0.0.1:8000/hub/api/v1/$path"
 done
+activation_time=$(date -u +'%Y-%m-%dT%H:%M:%S+00:00')
+if [[ $first_v2_activation == true ]]; then
+    printf '%s\n' "$release_id" > "$root/v2-cutover-activated"
+fi
+writer_activated=true
 if service_exists universe-us; then
     compose up -d --no-deps --force-recreate universe-us
 fi
+compose up -d --no-deps --force-recreate ingest-india
+compose up -d --no-deps --force-recreate ingest-us
 
 verify_current
+if [[ $first_v2_activation == true ]]; then
+    compose --profile jobs run --rm --no-deps bootstrap \
+        python scripts/verify_clickhouse_v2_writes.py \
+        --since "$activation_time" --wait-seconds "${FACTORLAB_V2_WRITE_WAIT_SECONDS:-900}"
+    bash "$live/scripts/install-political-cron.sh"
+fi
 verification_state=succeeded
 printf '%s\n' "$image" > "$root/current-image"
 date -u +'%Y-%m-%dT%H:%M:%SZ' > "$record/activated-at"

@@ -63,7 +63,7 @@ export function USDashboardPanel({ refreshKey }: { refreshKey: string }) {
             <h3>Listed instruments</h3></div><span>{dashboard.universe.active.toLocaleString()} total</span></div>
           {instruments.length ? <div className="table-wrap"><table className="us-dashboard-table">
             <thead><tr><th>Instrument</th><th>Venue</th><th>Daily</th><th>Minute</th></tr></thead>
-            <tbody>{instruments.map((instrument) => <tr key={instrument.instrument_id}>
+            <tbody>{instruments.map((instrument) => <tr key={instrument.listing_id}>
               <td data-label="Instrument"><a className="us-symbol" href={`/us?symbol=${encodeURIComponent(instrument.symbol)}`}>{instrument.symbol}</a>
                 <small>{instrument.name}</small></td><td data-label="Venue">{instrument.exchange_code}</td>
               <td data-label="Daily"><USStatusPill status={seriesStatus(instrument, "daily")} /></td>

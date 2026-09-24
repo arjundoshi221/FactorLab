@@ -2,7 +2,7 @@
 
 Single source of truth for every env var FactorLab reads. The repo's `.env.example` should mirror this file; if they drift, this file wins.
 
-**Owner:** faraday · **Last updated:** 2026-05-13 (Phase 1)
+**Owner:** faraday · **Last updated:** 2026-09-24 (ClickHouse v2 cutover)
 
 ---
 
@@ -28,6 +28,23 @@ Everything in code is resolved through `factorlab.shared.paths`. Hardcoded `data
 ```
 DATABASE_URL=                                # Postgres (Railway). Required.
 ```
+
+## ClickHouse v2 application containers
+
+Production Compose sets `CLICKHOUSE_HOST=clickhouse`, `CLICKHOUSE_PORT=8123`,
+`CLICKHOUSE_DATABASE=default`, and `CLICKHOUSE_USERNAME=factorlab`. The
+`CLICKHOUSE_PASSWORD` comes from the runtime secret volume. Every application
+query and write uses qualified v2 names in `raw`, `ref`, `market`, `meta`, and
+`alt`; the default database is not the legacy `factorlab` database. Keep the
+existing application credential for the cutover after checking its access to
+all required v2 tables. Apply schema and backfill separately from release.
+
+For the one-off production coverage backfill only, set
+`CLICKHOUSE_MIGRATION_MAX_PARTITIONS_PER_INSERT_BLOCK=1000`. Do not put that
+setting into the application environment. Production preflight also requires
+`CLICKHOUSE_SSH_HOST` and `CLICKHOUSE_SSH_USER` on the operator workstation if
+using the migration runner's SSH tunnel; the deployment workflow uses its own
+GitHub Actions VPS secrets.
 
 ## US equities — Schwab
 

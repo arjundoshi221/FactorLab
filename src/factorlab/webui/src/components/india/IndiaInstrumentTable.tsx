@@ -46,16 +46,16 @@ export function IndiaInstrumentTable({
         </thead>
         <tbody>
           {visible.map((instrument) => (
-            <tr key={instrument.instrument_id}>
+            <tr key={instrument.listing_id}>
               <td data-label="Instrument">
-                <a className="instrument-link" href={`/india/instruments/${instrument.instrument_id}?date=${tradingDate}`}>
+                <a className="instrument-link" href={`/india/instruments/${instrument.listing_id}?date=${tradingDate}`}>
                   <strong>{instrument.symbol}</strong>
                   <small>{instrument.name || "Unnamed instrument"}</small>
                 </a>
               </td>
               <td data-label="Market">
                 <span>{instrument.exchange_code || "—"}</span>
-                <small>{instrument.segment || instrument.instrument_type || "—"}</small>
+                <small>{instrument.instrument_type || "—"}</small>
               </td>
               <td data-label="Collection">
                 <IndiaCollectionPill status={instrument.collection_status} />
@@ -81,7 +81,7 @@ export function IndiaInstrumentTable({
               <td data-label="Checks">
                 <IndiaCheckPill status={instrument.check_status} />
                 <small className="status-reason">{instrument.check_reason}</small>
-                <a className="instrument-open" href={`/india/instruments/${instrument.instrument_id}?date=${tradingDate}`}>Open instrument →</a>
+                <a className="instrument-open" href={`/india/instruments/${instrument.listing_id}?date=${tradingDate}`}>Open instrument →</a>
               </td>
             </tr>
           ))}

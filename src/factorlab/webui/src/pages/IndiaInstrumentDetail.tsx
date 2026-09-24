@@ -125,7 +125,7 @@ function CandleTable({ candles }: { candles: IndiaCandle[] }) {
   </table></div>;
 }
 
-export function IndiaInstrumentDetail({ instrumentId }: { instrumentId: string }) {
+export function IndiaInstrumentDetail({ listingId }: { listingId: string }) {
   const today = useMemo(indiaToday, []);
   const initialDate = new URLSearchParams(window.location.search).get("date") ?? today;
   const [selectedDate, setSelectedDate] = useState(initialDate);
@@ -144,25 +144,25 @@ export function IndiaInstrumentDetail({ instrumentId }: { instrumentId: string }
     const range = new URLSearchParams({ date_from: historyStart(selectedDate), date_to: selectedDate });
     setLoading(true);
     void Promise.all([
-      read<IndiaInstrumentRow>(`/hub/api/v1/india/instruments/${instrumentId}?trading_date=${selectedDate}`, controller.signal),
-      read<{ items: IndiaInstrumentDay[] }>(`/hub/api/v1/india/instruments/${instrumentId}/days?${range}`, controller.signal),
+      read<IndiaInstrumentRow>(`/hub/api/v1/india/instruments/${listingId}?trading_date=${selectedDate}`, controller.signal),
+      read<{ items: IndiaInstrumentDay[] }>(`/hub/api/v1/india/instruments/${listingId}/days?${range}`, controller.signal),
     ]).then(([nextProfile, history]) => { setProfile(nextProfile); setDays(history.items); setError(""); })
       .catch((reason: Error) => { if (reason.name !== "AbortError") setError(reason.message); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [instrumentId, selectedDate, refreshKey]);
+  }, [listingId, selectedDate, refreshKey]);
 
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams({ trading_date: selectedDate, limit: "500" });
     if (cursor) params.set("cursor", cursor);
     setCandlesLoading(true);
-    void read<IndiaCandlePage>(`/hub/api/v1/india/instruments/${instrumentId}/candles?${params}`, controller.signal)
+    void read<IndiaCandlePage>(`/hub/api/v1/india/instruments/${listingId}/candles?${params}`, controller.signal)
       .then((page) => { setCandlePage(page); setError(""); })
       .catch((reason: Error) => { if (reason.name !== "AbortError") setError(reason.message); })
       .finally(() => { if (!controller.signal.aborted) setCandlesLoading(false); });
     return () => controller.abort();
-  }, [instrumentId, selectedDate, cursor, refreshKey]);
+  }, [listingId, selectedDate, cursor, refreshKey]);
 
   useEffect(() => {
     const timer = window.setInterval(() => { if (!document.hidden && selectedDate === indiaToday()) setRefreshKey((value) => value + 1); }, 60_000);
@@ -176,7 +176,7 @@ export function IndiaInstrumentDetail({ instrumentId }: { instrumentId: string }
     setSelectedDate(dateValue);
     setCursor(null);
     setCursorHistory([]);
-    window.history.replaceState({}, "", `/india/instruments/${instrumentId}?date=${dateValue}`);
+    window.history.replaceState({}, "", `/india/instruments/${listingId}?date=${dateValue}`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -203,7 +203,7 @@ export function IndiaInstrumentDetail({ instrumentId }: { instrumentId: string }
   return <main className="india-instrument-page">
     <section className="instrument-hero">
       <a className="instrument-back" href="/india">← India instruments</a>
-      <div className="instrument-hero__main"><div><span className="eyebrow">{profile.exchange_code ?? "India"} · {profile.segment ?? profile.instrument_type ?? "instrument"}</span><h1>{profile.symbol}</h1><p>{profile.name || "Unnamed instrument"}</p></div>
+      <div className="instrument-hero__main"><div><span className="eyebrow">{profile.exchange_code ?? "India"} · {profile.instrument_type ?? "instrument"}</span><h1>{profile.symbol}</h1><p>{profile.name || "Unnamed instrument"}</p></div>
         <div className="instrument-hero__badges"><IndiaCollectionPill status={profile.collection_status} /><IndiaCheckPill status={profile.check_status} /></div></div>
       <div className="instrument-session-control"><label htmlFor="instrument-date">Trading session</label><input id="instrument-date" type="date" max={today} value={selectedDate} onChange={(event) => selectDate(event.target.value)} /><button onClick={() => setRefreshKey((value) => value + 1)} disabled={loading || candlesLoading}>{loading || candlesLoading ? "Refreshing…" : "Refresh"}</button></div>
     </section>
@@ -213,7 +213,7 @@ export function IndiaInstrumentDetail({ instrumentId }: { instrumentId: string }
       <div><dt>Trading days</dt><dd>{numberFormatter.format(profile.trading_days)}</dd></div>
       <div><dt>Stored range</dt><dd>{formatTime(profile.first_bar_time, true)} — {formatTime(profile.last_bar_time, true)}</dd></div>
       <div><dt>Latest ingestion</dt><dd>{formatTime(profile.last_ingested_at, true)}</dd></div>
-      <div><dt>Instrument ID</dt><dd><code>{profile.instrument_id}</code></dd></div>
+      <div><dt>Listing ID</dt><dd><code>{profile.listing_id}</code></dd></div>
     </dl>
     {loading || candlesLoading ? <p className="inline-loading" role="status">Checking the selected exchange session…</p> : <>
       <section className="instrument-verdict"><div><span className="eyebrow">Selected-session verdict</span><h2>{selectedDate} · {profile.check_status.replaceAll("_", " ")}</h2><p>{profile.check_reason}</p></div><div><strong>{profile.coverage_percent === null ? "—" : `${profile.coverage_percent.toFixed(1)}%`}</strong><span>{numberFormatter.format(profile.selected_data_points)} of {numberFormatter.format(profile.expected_data_points)} expected rows</span></div></section>

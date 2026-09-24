@@ -39,7 +39,7 @@ from factorlab.countries.in_.equities.upstox.instruments import (
     load_or_download,
 )
 from factorlab.countries.in_.equities.upstox.universes import load_universe
-from factorlab.storage.clickhouse import ClickHouseStorage
+from factorlab.storage.v2_india import V2IndiaStorage as ClickHouseStorage
 
 UTC = ZoneInfo("UTC")
 IST = ZoneInfo("Asia/Kolkata")

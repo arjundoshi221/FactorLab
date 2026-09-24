@@ -85,7 +85,7 @@ export function USMarkets() {
     setDetailLoading(true); setDetailError("");
     void Promise.all([
       read<USPage<USCandle>>(`/hub/api/v1/us/candles/${resolution}?${params}`, controller.signal),
-      read<USPage<USDay>>(`/hub/api/v1/us/instruments/${selected.instrument_id}/days?date_to=${end}`, controller.signal),
+      read<USPage<USDay>>(`/hub/api/v1/us/instruments/${selected.listing_id}/days?date_to=${end}`, controller.signal),
     ]).then(([prices, history]) => { setCandles(prices.items); setNext(prices.next_cursor); setDays(history.items); })
       .catch(reason => { if (!controller.signal.aborted) setDetailError(String(reason.message)); })
       .finally(() => { if (!controller.signal.aborted) setDetailLoading(false); });

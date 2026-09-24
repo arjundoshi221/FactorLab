@@ -71,7 +71,7 @@ class SchemaQueryClient:
                 ("ref_exchanges", "exchange_code", "String", 1, "", "", 1, 1, 0),
                 ("ref_exchanges", "country_code", "FixedString(2)", 2, "", "", 0, 0, 0),
             )
-        if "FROM hub_schema_layouts FINAL" in query:
+        if "FROM meta.hub_schema_layouts FINAL" in query:
             if self.saved is None:
                 return result(["revision", "schema_fingerprint", "layout_json", "updated_at"])
             return result(
@@ -81,7 +81,7 @@ class SchemaQueryClient:
         raise AssertionError(query)
 
     def insert(self, table, data, *, column_names):
-        assert table == "hub_schema_layouts"
+        assert table == "meta.hub_schema_layouts"
         self.inserts.append((table, data, column_names))
         row = data[0]
         self.saved = (row[1], row[2], row[3], row[4])
@@ -124,7 +124,7 @@ def test_schema_layout_save_is_versioned_and_round_trips():
 
     assert saved.revision == 1
     assert saved.nodes[1].collapsed is True
-    assert client.inserts[0][0] == "hub_schema_layouts"
+    assert client.inserts[0][0] == "meta.hub_schema_layouts"
     assert service.get_schema_map().layout.viewport.zoom == 0.8
 
 

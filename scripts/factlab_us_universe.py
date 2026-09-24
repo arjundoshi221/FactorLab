@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from factorlab.countries.us.equities.eodhd.configured_universe import (
     resolve_universe as legacy_resolve,
 )
-from factorlab.storage.us_clickhouse import USStorage
+from factorlab.storage.v2_us import V2USStorage as USStorage
 from factorlab.universe import create_resolver, load_config
 
 log = logging.getLogger("factorlab.us-universe")

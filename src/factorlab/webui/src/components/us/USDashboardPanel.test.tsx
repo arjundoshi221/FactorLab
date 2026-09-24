@@ -17,7 +17,7 @@ const dashboard = {
     daily: { actual: 6000, expected: 6100, missing: 100, coverage_percent: 98.36 },
   },
 };
-const instrument = { instrument_id: "id", symbol: "AAPL", name: "Apple Inc.", exchange_code: "XNAS",
+const instrument = { listing_id: "id", symbol: "AAPL", name: "Apple Inc.", exchange_code: "XNAS",
   series: [{ resolution: "1min", source: "schwab", status: "complete", expected: 390, actual: 390,
     missing: 0, available_from: null, last_bar: null, error: null },
   { resolution: "daily", source: "schwab", status: "complete", expected: 1, actual: 1,

@@ -9,9 +9,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from factorlab.countries.in_.equities.upstox.instruments import refresh_all  # noqa: E402
-from factorlab.countries.in_.equities.upstox.universes import build_universes  # noqa: E402
-from factorlab.storage.clickhouse import ClickHouseStorage  # noqa: E402
+from factorlab.countries.in_.equities.upstox.instruments import refresh_all
+from factorlab.countries.in_.equities.upstox.universes import build_universes
+from factorlab.storage.v2_india import V2IndiaStorage as ClickHouseStorage
 
 
 def main() -> None:
