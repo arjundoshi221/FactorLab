@@ -145,6 +145,25 @@ def build_full_equity_series(
     return series
 
 
+def nearest_stock_futures(instruments, instrument_lookup) -> dict[str, dict]:
+    """Select the nearest listed future for each resolved NSE cash equity."""
+
+    nearest: dict[str, dict] = {}
+    for item in instruments:
+        if item.get("segment") != "NSE_FO" or item.get("instrument_type") != "FUT":
+            continue
+        symbol = str(item.get("underlying_symbol") or "")
+        if symbol not in instrument_lookup or not item.get("instrument_key"):
+            continue
+        previous = nearest.get(symbol)
+        order = (item.get("expiry") or 0, str(item["instrument_key"]))
+        if previous is None or order < (
+            previous.get("expiry") or 0, str(previous["instrument_key"])
+        ):
+            nearest[symbol] = item
+    return nearest
+
+
 def configure_collection_universe(
     storage: ClickHouseStorage,
     universe: str,
@@ -155,9 +174,22 @@ def configure_collection_universe(
     instrument_lookup = storage.sync_instruments(instruments)
     full_equity_mode = universe == FULL_EQUITY_UNIVERSE
     if full_equity_mode:
-        series = build_full_equity_series(instruments, instrument_lookup)
-        if not series:
+        equities = build_full_equity_series(instruments, instrument_lookup)
+        if not equities:
             raise RuntimeError("The Upstox master contained no NSE cash equities")
+        nearest = nearest_stock_futures(instruments, instrument_lookup)
+        contract_lookup = storage.sync_contracts(
+            instruments,
+            instrument_lookup,
+            instrument_keys={str(item["instrument_key"]) for item in nearest.values()},
+        )
+        futures = [
+            CandleSeries(str(item["instrument_key"]), instrument_lookup[symbol],
+                         symbol, contract_lookup[str(item["instrument_key"])])
+            for symbol, item in sorted(nearest.items())
+            if str(item["instrument_key"]) in contract_lookup
+        ]
+        series = equities + futures
     else:
         contract_lookup = storage.sync_contracts(instruments, instrument_lookup)
         equity_lookup = find_equities(instruments)
@@ -178,7 +210,8 @@ def configure_collection_universe(
         "Activated %d expected series for universe %s (%s)",
         expected_count,
         universe,
-        "batched OHLC quotes" if full_equity_mode else "per-series candles",
+        "batched equity quotes and nearest futures" if full_equity_mode
+        else "per-series candles",
     )
     return series, full_equity_mode, expected_count
 
@@ -541,19 +574,17 @@ def main() -> int:
             time.sleep(max((datetime.combine(now.date() + timedelta(days=1), MARKET_OPEN_UTC, tzinfo=UTC) - now).total_seconds(), 1))
             continue
 
-        include_futures = (
-            not full_equity_mode
-            and time.monotonic() - last_future_poll >= FUT_POLL_INTERVAL_SECONDS
+        equity_series = [item for item in series if item.contract_id is None]
+        future_series = [item for item in series if item.contract_id is not None]
+        include_futures = bool(future_series) and (
+            time.monotonic() - last_future_poll >= FUT_POLL_INTERVAL_SECONDS
         )
+        requested = len(equity_series) + (len(future_series) if include_futures else 0)
         run = storage.start_ingestion_run(
             pipeline="india_intraday_1min",
             source="upstox",
             universe=args.universe,
-            requested_series=(
-                expected_count
-                if include_futures or full_equity_mode
-                else sum(item.contract_id is None for item in series)
-            ),
+            requested_series=requested,
             metadata={
                 "include_futures": include_futures,
                 "collection_method": (
@@ -568,11 +599,18 @@ def main() -> int:
             if full_equity_mode:
                 successful, failed, rows_written = poll_full_equity_once(
                     session,
-                    series,
+                    equity_series,
                     storage,
                     limiter,
                     batch_size=args.quote_batch_size,
                 )
+                if include_futures and not _shutdown:
+                    future_successful, future_failed, future_rows = poll_once(
+                        session, future_series, storage, limiter, include_futures=True,
+                    )
+                    successful += future_successful
+                    failed += future_failed
+                    rows_written += future_rows
             else:
                 successful, failed, rows_written = poll_once(
                     session,
@@ -581,11 +619,6 @@ def main() -> int:
                     limiter,
                     include_futures=include_futures,
                 )
-            requested = (
-                expected_count
-                if include_futures or full_equity_mode
-                else sum(item.contract_id is None for item in series)
-            )
             failed = max(failed, requested - successful)
             run_status = "success" if failed == 0 else "partial"
             storage.finish_ingestion_run(

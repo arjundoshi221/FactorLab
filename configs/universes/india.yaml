@@ -34,12 +34,13 @@ sebi_classification:
 universes:
 
   # Dynamic production universe resolved from the daily Upstox NSE master.
-  # It uses batched V3 OHLC quotes rather than one request per symbol.
+  # It uses batched V3 OHLC quotes for equities and per-series candles for
+  # the nearest listed single-stock futures.
   full_nse_eq:
     exchange: nse_eq
     selection: all_active_equities
     phase: 3
-    note: "Every NSE_EQ instrument whose Upstox instrument_type is EQ."
+    note: "Every NSE_EQ EQ instrument plus the nearest listed future for each eligible stock."
 
   # ── Development / testing ──────────────────────────────────────────────────
   demo:

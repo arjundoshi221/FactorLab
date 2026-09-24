@@ -134,12 +134,15 @@ class V2IndiaStorage(ClickHouseStorage):
     def sync_contracts(
         self, instruments: Sequence[Mapping[str, Any]],
         instrument_lookup: Mapping[str, uuid.UUID], *, raw_id: uuid.UUID | None = None,
+        instrument_keys: set[str] | None = None,
     ) -> dict[str, uuid.UUID]:
         from factorlab.storage.clickhouse import _epoch_ms_to_date
 
         lookup: dict[str, uuid.UUID] = {}
         for item in instruments:
             if item.get("segment") != "NSE_FO" or item.get("instrument_type") != "FUT":
+                continue
+            if instrument_keys is not None and str(item["instrument_key"]) not in instrument_keys:
                 continue
             underlying = instrument_lookup.get(str(item.get("underlying_symbol") or ""))
             key = str(item["instrument_key"])

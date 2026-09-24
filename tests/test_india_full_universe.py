@@ -48,6 +48,48 @@ def test_full_equity_series_uses_every_nse_eq_record_only_once():
     assert all(item.contract_id is None for item in result)
 
 
+def test_full_universe_activates_only_nearest_resolved_stock_futures(monkeypatch):
+    listing_id = uuid.uuid4()
+    contract_id = uuid.uuid4()
+    records = [
+        {"segment": "NSE_EQ", "instrument_type": "EQ", "instrument_key": "NSE_EQ|R",
+         "trading_symbol": "RELIANCE"},
+        {"segment": "NSE_FO", "instrument_type": "FUT", "instrument_key": "NSE_FO|LATE",
+         "underlying_symbol": "RELIANCE", "expiry": 20},
+        {"segment": "NSE_FO", "instrument_type": "FUT", "instrument_key": "NSE_FO|NEAR",
+         "underlying_symbol": "RELIANCE", "expiry": 10},
+        {"segment": "NSE_FO", "instrument_type": "FUT", "instrument_key": "NSE_FO|INDEX",
+         "underlying_symbol": "NIFTY", "expiry": 10},
+    ]
+    monkeypatch.setattr(ingest, "load_or_download", lambda *args: records)
+
+    class Storage:
+        def sync_instruments(self, instruments):
+            assert instruments is records
+            return {"RELIANCE": listing_id}
+
+        def sync_contracts(self, instruments, lookup, *, instrument_keys):
+            assert instruments is records
+            assert lookup == {"RELIANCE": listing_id}
+            assert instrument_keys == {"NSE_FO|NEAR"}
+            return {"NSE_FO|NEAR": contract_id}
+
+        def sync_expected_india_series(self, series, *, source, universe):
+            assert (source, universe) == ("upstox", "full_nse_eq")
+            assert {(item["symbol"], item["contract_id"]) for item in series} == {
+                ("RELIANCE", None), ("RELIANCE", contract_id)
+            }
+            return len(series)
+
+    series, full_mode, expected_count = ingest.configure_collection_universe(
+        Storage(), "full_nse_eq"
+    )
+    assert full_mode and expected_count == 2
+    assert [(item.instrument_key, item.contract_id) for item in series] == [
+        ("NSE_EQ|R", None), ("NSE_FO|NEAR", contract_id)
+    ]
+
+
 class FakeStorage:
     def __init__(self):
         self.writes = []

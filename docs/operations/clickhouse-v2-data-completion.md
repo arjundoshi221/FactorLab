@@ -158,3 +158,9 @@ session, confirm fresh equity and contract-futures bars with raw and run IDs,
 coverage and recovery continuity, API and UI results, and unchanged legacy
 counts. Continue checking the US and political cycles on v2; fix any failure
 forward without replaying migration backfills.
+
+The first production `full_nse_eq` release activated 2,670 cash equity series
+but no futures. The subsequent collection fix adds the nearest contract for
+each resolved single-stock future (210 in the September 24 Upstox master).
+Check that these contract series are active before the market opens, then
+verify their first live writes during the session.
