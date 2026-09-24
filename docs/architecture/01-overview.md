@@ -98,3 +98,18 @@ compute / APIs / research clients
 ```
 
 Raw retention is non-negotiable: when a parser bug surfaces months later, the only safe way back is the raw archive.
+
+### Provider contract (ClickHouse v2)
+
+`src/factorlab/shared/ingest/provider.py` codifies this flow as typed parts every new provider builds on:
+
+| Piece | Role |
+|---|---|
+| `RawCapture` | One response as received (`body` bytes, `request_key`, `transport`, `fetched_at`) |
+| `storage.archive_raw(capture, source=, source_channel=)` | Immutable `raw.archive` row; returns the `raw_id` |
+| pure `normalize(decoded capture)` | Vendor payload -> typed rows; reads only the archived bytes, so any row is replayable from raw |
+| `Provenance` | `source`, `source_channel`, `raw_id`, `ingest_run_id`, `as_of_time`, `ingested_at`, stamped by storage at write time |
+| `ingestion_run(...)` / `RunContext` | One `meta.ingestion_runs` row; `succeed_unit` / `fail_unit` isolate per-unit failures into `success` / `partial` / `failed` |
+| `Provider` protocol + `run_provider` | `source`, `pipeline`, `market_code`, `collect(ctx)` |
+
+Storage owns identity resolution (vendor id -> canonical ids via `ref.identifier_aliases`), enrichment from `ref.*` and `version`. The adapter owns only vendor facts. IBKR (`sources/ibkr/provider.py` with `storage/v2_broker.py`) is the first adopter. Schwab and Upstox follow the same pattern informally and can migrate onto the typed contract without changing their tables. The strict version of this contract (dataset sinks, provider adapters, config bindings) is specified in [07-ingestion-provider-abstraction.md](07-ingestion-provider-abstraction.md).

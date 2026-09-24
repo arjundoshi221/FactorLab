@@ -1,6 +1,6 @@
 """CI guard: scan src/factorlab/sources/ibkr/ for order-mutation patterns.
 
-The IBKR adapter is read-only by contract (docs/data-sources/06-ibkr.md §4).
+The IBKR adapter is read-only by contract (docs/data-sources/us/ibkr.md §4).
 This test scans every .py under the module tree and fails if any known
 order-placement / cancellation / modification symbol appears.
 
@@ -77,6 +77,7 @@ def test_scan_covers_every_module_file():
         "__init__.py", "client.py", "shapes.py", "contracts.py",
         "portfolio.py", "executions.py", "open_orders.py",
         "historical.py", "pacing.py", "errors.py",
+        "capture.py", "normalize.py", "provider.py",
     }
     missing = expected - set(files)
     assert not missing, f"IBKR module missing expected files: {missing}"

@@ -54,6 +54,23 @@ binding = "FACTORLAB_API_KEY"
 store_id = "REPLACE_WITH_SECRETS_STORE_ID"
 secret_name = "FACTORLAB_API_KEY"
 
+# Optional IB Gateway logins (docs/operations/ibkr-gateway-setup.md). Create the
+# secrets in the store first, then uncomment; missing bindings render as null.
+# [[secrets_store_secrets]]
+# binding = "IBKR_PAPER_PASSWORD"
+# store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+# secret_name = "IBKR_PAPER_PASSWORD"
+#
+# [[secrets_store_secrets]]
+# binding = "IBKR_LIVE_PASSWORD"
+# store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+# secret_name = "IBKR_LIVE_PASSWORD"
+#
+# [[secrets_store_secrets]]
+# binding = "IBKR_VNC_PASSWORD"
+# store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+# secret_name = "IBKR_VNC_PASSWORD"
+
 [vars]
 UPSTOX_REDIRECT_URL = "https://factorlab-upstox-oauth-callback.YOUR_SUBDOMAIN.workers.dev/oauth/callback"
 SCHWAB_CALLBACK_URL = "https://factorlab-upstox-oauth-callback.YOUR_SUBDOMAIN.workers.dev/oauth/schwab/callback"

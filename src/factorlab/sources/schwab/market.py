@@ -3,42 +3,22 @@ from __future__ import annotations
 
 import math
 import time
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
-from functools import lru_cache
-from zoneinfo import ZoneInfo
 
-import exchange_calendars as xcals
 import pandas as pd
 import requests
 
 from factorlab.core.secrets import get_secret
+from factorlab.shared.runtime.us_calendar import (  # calendar helpers re-exported for callers
+    NY,
+    bounds,
+    calendar,  # noqa: F401
+    latest_completed,  # noqa: F401
+)
 from factorlab.sources.schwab.client import get_session
 
-NY = ZoneInfo("America/New_York")
 BASE_URL = "https://api.schwabapi.com/marketdata/v1"
-
-
-@lru_cache(maxsize=1)
-def calendar():
-    return xcals.get_calendar("XNYS", start="1970-01-01", end=f"{datetime.now(UTC).year + 2}-12-31")
-
-
-def bounds(day: date):
-    cal = calendar()
-    if not cal.is_session(day.isoformat()):
-        return None
-    return (cal.session_open(day.isoformat()).to_pydatetime(),
-            cal.session_close(day.isoformat()).to_pydatetime())
-
-
-def latest_completed(now: datetime, *, grace_minutes: int = 30) -> date:
-    cal = calendar()
-    day = now.astimezone(NY).date()
-    for session in reversed(cal.sessions_in_range(day - timedelta(days=20), day)):
-        if cal.session_close(session).to_pydatetime() + timedelta(minutes=grace_minutes) <= now:
-            return session.date()
-    raise RuntimeError("No completed US session found")
 
 
 def token_ready(now: datetime | None = None) -> bool:

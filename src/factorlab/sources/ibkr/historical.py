@@ -4,7 +4,7 @@ Thin wrapper over ``ib.reqHistoricalData`` that goes through ``RateLimiter``
 and retries with exponential backoff on IBKR error 162 (pacing violation).
 
 Bulk daily backfill should still prefer EODHD; IBKR historical is for
-deep-history and validation samples per docs/data-sources/06-ibkr.md §6.
+deep-history and validation samples per docs/data-sources/us/ibkr.md §6.
 """
 
 from __future__ import annotations

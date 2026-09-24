@@ -392,7 +392,7 @@ CREATE TABLE ref.broker_metrics_map (
 ORDER BY (broker_code, vendor_metric);
 ```
 
-Seeded from the ~144 IBKR account tags (see [`docs/data-sources/06-ibkr.md`]) at
+Seeded from the ~144 IBKR account tags (see [`docs/data-sources/us/ibkr.md`]) at
 onboarding; extended per broker as new integrations land. The map is closed:
 a vendor metric with no canonical target lands in `meta.unresolved_entities`
 for review, not passed through as-is.
@@ -2222,7 +2222,7 @@ its next pass, writing a new row with a later `as_of_time`.
 
 Tall/long time series of account-level metrics. IBKR alone emits ~144 tags per
 account across segment × currency dimensions (see
-[`docs/data-sources/06-ibkr.md`](../data-sources/06-ibkr.md) §5.4). Tall keeps
+[`docs/data-sources/us/ibkr.md`](../data-sources/us/ibkr.md) §5.4). Tall keeps
 schema stable when new tags appear.
 
 ```sql
@@ -2491,7 +2491,7 @@ WHERE b.strategy_id = {strategy_uuid:UUID};
 
 Each job iterates `(broker_code='ibkr', account_mode) ∈ {paper, live}` and
 connects to the appropriate Gateway. Two Gateway instances run concurrently on
-different ports (see [`docs/data-sources/06-ibkr.md`](../data-sources/06-ibkr.md)).
+different ports (see [`docs/data-sources/us/ibkr.md`](../data-sources/us/ibkr.md)).
 
 **Resolution flow:** on ingest, look up `vendor_id` (IBKR conid) in
 `ref.identifier_aliases`. On hit: populate `listing_id`/`security_id`/`entity_id`

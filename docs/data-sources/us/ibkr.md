@@ -113,7 +113,7 @@ Paper account username is prefixed `DU…` (e.g. `DUE375963`). Live has no prefi
 
 - Gateway auto-logs-out daily; you re-authenticate each morning via IBKR Mobile 2FA push.
 - Weekly forced re-login regardless of auto-restart config.
-- **Consequence for deployment**: production ingest cannot be fully unattended without [IBC](https://github.com/IbcAlpha/IBC) automation. For now: run Gateway on the local Windows machine, treat morning login as a manual ritual.
+- **Consequence for deployment**: production keeps the Gateway (and the IBKR login) on the operator's own machine. The VPS `ibkr-snapshot` daemon reaches it read-only over Tailscale, so no IBKR credentials live on the server; snapshots taken while that machine is off are recorded as `partial`/`failed` and alerted. For unattended collection, IBC-managed Gateway containers on the VPS are an optional alternative, but live still needs an IBKR Mobile approval after each weekly re-authentication. Setup: [`docs/operations/ibkr-gateway-setup.md`](../../operations/ibkr-gateway-setup.md).
 
 ### Library
 
@@ -167,7 +167,7 @@ Running a notebook (id=1) while the same-Gateway daemon is up (id=2) is fine; tw
 
 ```
 # IBKR — read-only client, dual-account (playground + ingest scripts)
-IBKR_HOST=127.0.0.1
+IBKR_HOST=127.0.0.1                  # IBKR_HOST_PAPER / IBKR_HOST_LIVE override per mode
 IBKR_PORT_PAPER=4002                 # paper Gateway
 IBKR_PORT_LIVE=4001                  # live Gateway (run alongside)
 IBKR_CLIENT_ID=1                     # per-service; unique *per Gateway*
@@ -178,7 +178,7 @@ Notes:
 - Client IDs are per-Gateway; `clientId=2` on paper does NOT collide with `clientId=2` on live (separate sockets, separate servers).
 - No `IBKR_TRADING_MODE`, no `IBKR_LIVE_TRADING_ENABLED` — this codebase is read-only regardless of which Gateway it talks to.
 - The trade engine will define its own env prefix (e.g. `TRADE_ENGINE_IBKR_*`) so there's no accidental ambient sharing.
-- Username / password never in `.env` — each Gateway handles auth via its own login window + IBKR Mobile 2FA.
+- Username / password never in `.env` or the repo. Each Gateway handles auth via its own login window + IBKR Mobile 2FA. Only the optional VPS-hosted Gateways use stored passwords (Cloudflare Secrets Store → Gateway-only tmpfs).
 
 ### Two Gateway installations
 
@@ -199,7 +199,7 @@ Three layers, so a single mistake can't place an order:
 2. **Adapter-level** — the `IBKRReadOnlyClient` class under `src/factorlab/sources/ibkr/` does not expose `place_order`, `cancel_order`, `modify_order`, or any `MarketOrder` / `LimitOrder` constructor. Nothing to call.
 3. **Repo-level** — CI grep guard: any commit that adds `placeOrder(`, `cancelOrder(`, `modifyOrder(`, or `from ib_async import.*Order` to `src/factorlab/` fails the build.
 
-Layer 3 is not yet implemented — TODO when we build the src/ module.
+Layer 3 is `tests/sources/ibkr/test_readonly_grep.py`, which scans every module under `src/factorlab/sources/ibkr/` in CI.
 
 ---
 
@@ -349,6 +349,14 @@ If a request stalls for minutes, cancel with `ib.cancelHistoricalData()` — aba
 ---
 
 ## 7. Postgres Schema (proposed — pending migration)
+
+> **Superseded.** The implemented sink is ClickHouse `broker.positions_snapshot`,
+> `broker.account_state_snapshot`, `broker.executions` and
+> `broker.open_orders_snapshot` (Wave 7, `sql/clickhouse/v2/wave_07_schema.sql`),
+> written by `factorlab.storage.v2_broker.V2BrokerStorage`. Every snapshot is a
+> `meta.ingestion_runs` row; every Gateway response is archived to `raw.archive`
+> (`transport='tcp_socket'`) and rows are normalized from those archived bytes.
+> The Postgres design below is kept for history only.
 
 ### `market.ibkr_positions_snapshot`
 ```sql
@@ -507,6 +515,15 @@ The trade engine is a separate repo/service. Its contract with FactorLab:
 
 ## 10. Src/ module layout (proposed)
 
+> **Implemented layout** (built on `factorlab.shared.ingest.provider`):
+> `client.py` (read-only connect, per-mode endpoint, bounded retry),
+> `capture.py` (Gateway responses -> archivable JSON `RawCapture`),
+> `normalize.py` (pure payload -> `shapes.py` rows), `provider.py`
+> (`IBKRBrokerProvider`, one run unit per mode and dataset) and
+> `storage/v2_broker.py` (identity, enrichment, lineage). `portfolio.py`,
+> `executions.py` and `open_orders.py` are capture + normalize conveniences
+> without archiving, for research use.
+
 ```
 src/factorlab/sources/ibkr/
 ├── __init__.py
@@ -595,9 +612,9 @@ Sample payloads are the authoritative reference when designing schema / adapter 
 - [ ] **Which account for portfolio SoR** — paper (`DUE375963`) fine for dev; live account required for real portfolio tracking. Switch when trade engine goes live.
 - [ ] **Historical backfill scope** — which universe do we deep-backfill via IBKR (pre-2000 US names EODHD doesn't cover)? Start with S&P 500 members ever, or narrower?
 - [ ] **Validation sampling policy** — N per day? Random or stratified by liquidity?
-- [ ] **Repo-level CI grep guard** — commit-time check that `src/factorlab/` never imports `Order` / uses `placeOrder`.
+- [x] **Repo-level CI grep guard** — `tests/sources/ibkr/test_readonly_grep.py`.
 - [ ] **Trade engine repo boot** — separate GitHub repo, or a service module inside FactorLab with a hard boundary? (Recommendation: separate repo — enforces the read-only rule structurally.)
-- [ ] **Deployment target for Gateway** — local Windows machine (current) vs dedicated NUC vs container on VPS. Fully unattended deployment blocked by daily 2FA.
+- [x] **Deployment target for Gateway** — the operator's machine, reached from the VPS over Tailscale; VPS-hosted IBC containers remain optional (`ibkr-gateway` profile). See [`docs/operations/ibkr-gateway-setup.md`](../../operations/ibkr-gateway-setup.md).
 
 ---
 

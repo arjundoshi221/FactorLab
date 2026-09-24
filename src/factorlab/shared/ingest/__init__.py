@@ -6,6 +6,8 @@ Submodules:
     http        — HTTPClient: retry + disk cache + audit.raw_archive writer
                   + RateLimitDeferred exception
     backfill    — Backfiller protocol + BackfillPlan / BackfillReport + registry
+    provider    — v2 provider contract: RawCapture / Provenance / ingestion_run
+                  / Provider protocol / run_provider
 """
 
 from factorlab.shared.ingest.backfill import (
@@ -18,6 +20,18 @@ from factorlab.shared.ingest.backfill import (
     list_backfillers,
 )
 from factorlab.shared.ingest.http import HTTPClient, RateLimitDeferred
+from factorlab.shared.ingest.provider import (
+    NullProviderStorage,
+    Provenance,
+    Provider,
+    ProviderStorage,
+    RawCapture,
+    RunContext,
+    RunSummary,
+    UnitOutcome,
+    ingestion_run,
+    run_provider,
+)
 from factorlab.shared.ingest.security import (
     SECRET_QS_KEYS,
     assert_under_root,
@@ -41,4 +55,7 @@ __all__ = [
     # backfill
     "Backfiller", "BackfillPlan", "BackfillReport", "BackfillRegistry",
     "register_backfiller", "get_backfiller", "list_backfillers",
+    # provider
+    "RawCapture", "Provenance", "Provider", "ProviderStorage", "RunContext",
+    "RunSummary", "UnitOutcome", "NullProviderStorage", "ingestion_run", "run_provider",
 ]

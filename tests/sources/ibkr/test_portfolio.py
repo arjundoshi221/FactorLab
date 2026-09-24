@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from factorlab.sources.ibkr.portfolio import snapshot_account_state, snapshot_positions
@@ -44,13 +44,7 @@ def test_snapshot_positions_maps_fields(mock_ib_paper, now_utc):
     assert a.account_mode == "paper"
     assert a.country_code == "US"
     assert a.broker_code == "ibkr"
-    assert a.source == "ibkr"
-    assert a.source_channel == "paper_gateway"
-    assert a.resolution_confidence == "unresolved"
-    assert a.listing_id is None
-    assert a.security_id is None
     assert a.snapshot_time == now_utc
-    assert a.as_of_time == now_utc
     assert a.market_value_usd is None
 
     # negative position preserved (short)
@@ -76,10 +70,9 @@ def test_snapshot_positions_handles_none_prices(mock_ib_paper, now_utc):
     assert rows[0].unrealized_pnl is None
 
 
-def test_snapshot_positions_uses_live_channel_for_live_ib(mock_ib_live, now_utc):
+def test_snapshot_positions_tags_live_mode(mock_ib_live, now_utc):
     mock_ib_live.portfolio.return_value = [make_portfolio_item(account="U18065781")]
     rows = snapshot_positions(mock_ib_live, snapshot_time=now_utc)
-    assert rows[0].source_channel == "live_gateway"
     assert rows[0].account_mode == "live"
     assert rows[0].account_id == "U18065781"
 
@@ -116,7 +109,6 @@ def test_snapshot_account_state_maps_segments_and_currency(mock_ib_paper, now_ut
     assert nav_usd.value_num == Decimal("1481501.63")
     assert nav_usd.value_str is None
     assert nav_usd.account_mode == "paper"
-    assert nav_usd.source_channel == "paper_gateway"
 
     lev = by_key[("Leverage", "S", "NONE")]
     assert lev.value_num == Decimal("0.65")

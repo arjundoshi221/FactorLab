@@ -3,26 +3,26 @@ name: ibkr
 vendor_key: ibkr  # matches ref.security_aliases.vendor
 
 api:
-  protocol: tcp_socket                # NOT REST — connects to local Gateway
+  protocol: tcp_socket                # NOT REST — TWS API socket served by IB Gateway
   auth_type: local_gateway            # interactive login + 2FA on running process
-  host_env: IBKR_HOST                 # default 127.0.0.1
-  port_paper_env: IBKR_PORT_PAPER     # default 4002
-  port_live_env: IBKR_PORT_LIVE       # default 4001
-  mode_env: IBKR_TRADING_MODE        # 'paper' or 'live'
+  host_env: IBKR_HOST                 # default 127.0.0.1; IBKR_HOST_PAPER / IBKR_HOST_LIVE override
+  port_paper_env: IBKR_PORT_PAPER     # default 4002 (VPS: socat relay 4004 on ibkr-gateway-paper)
+  port_live_env: IBKR_PORT_LIVE       # default 4001 (VPS: socat relay 4003 on ibkr-gateway-live)
+  mode_env: IBKR_DEFAULT_MODE         # only when a caller does not pass a mode
   library: ib_async                   # pip install ib_async
 
 auth:
   method: local_gateway_login
-  # IB Gateway or TWS must be running locally, logged in with 2FA
-  # Daily auto-logout; weekly forced re-login
-  # IBC (github.com/IbcAlpha/IBC) for auto-restart
-  client_ids:
-    master: 0                         # monitoring/admin — sees all orders
+  # IB Gateway must be running and logged in (live: IBKR Mobile 2FA after the
+  # weekly re-authentication). On the VPS, IBC inside ghcr.io/gnzsnz/ib-gateway
+  # handles login and the daily auto-restart — docs/operations/ibkr-gateway-setup.md.
+  client_ids:                         # docs/data-sources/us/ibkr.md §4
+    reserved: 0                       # TWS/mobile manual orders report clientId 0
     research: 1                       # notebooks
-    ingester: 2                       # market data pipeline
-    signal: 3                         # signal generator
-    order: 4                          # order manager
-    reconciler: 5                     # portfolio reconciliation
+    snapshot: 2                       # us_portfolio_ibkr_snapshot (broker.* mirror)
+    historical: 3                     # historical bars
+    watchers: 4                       # open-order / execution watchers
+    trade_engine: 10                  # 10+ reserved for the separate trade engine
 
 # CRITICAL: IBKR has the strictest rate limits of any retail API
 rate_limits:

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -48,7 +47,7 @@ def test_pull_executions_maps_fill(mock_ib_paper, now_utc):
     assert r.vendor_id == "265598"
     assert r.trading_symbol == "AAPL"
     assert r.account_mode == "paper"
-    assert r.source_channel == "paper_gateway"
+    assert r.placed_by_client == 10
 
 
 def test_pull_executions_idempotent_by_exec_id(mock_ib_paper, now_utc):
@@ -116,8 +115,7 @@ def test_pull_executions_missing_commission_report(mock_ib_paper, now_utc):
     assert rows[0].commission_ccy == ""
 
 
-def test_pull_executions_uses_live_channel(mock_ib_live, now_utc):
+def test_pull_executions_tags_live_mode(mock_ib_live, now_utc):
     mock_ib_live.reqExecutions.return_value = [make_fill()]
     rows = pull_executions(mock_ib_live, now=now_utc)
-    assert rows[0].source_channel == "live_gateway"
     assert rows[0].account_mode == "live"

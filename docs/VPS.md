@@ -61,6 +61,8 @@ to the internet. ClickHouse must never be exposed publicly.
 | `ingest-india` | Long-running | Upstox intraday polling | Running; authenticated |
 | `ingest-us` | Long-running | Schwab US minute/daily collection and recovery | Running; Schwab authenticated, EODHD master blocked by invalid credential |
 | `ingest-political` | One-shot, `jobs` profile | Political reference and House trade ingestion | Daily cron installed; manual production run verified; 290 trades stored |
+| `ibkr-snapshot` | Long-running, `ibkr` profile | Read-only IBKR mirror into `broker.*` at 06:00/16:30 New York; reads the operator's IB Gateway over Tailscale | Not enabled |
+| `ibkr-gateway-paper` / `ibkr-gateway-live` | Optional, `ibkr-gateway` profile | VPS-hosted IB Gateways (IBC), alternative to the operator's Gateway; VNC `127.0.0.1:5900`/`5901` | Not used |
 | `uptime-kuma` | Optional, `ops` profile | Service monitoring | Not started |
 | `portainer` | Optional, `admin` profile | Docker administration | Not started |
 
@@ -89,6 +91,9 @@ factorlab_clickhouse_runtime
 factorlab_india_runtime
 factorlab_us_runtime
 factorlab_political_runtime
+factorlab_ibkr_paper_runtime     paper Gateway password (Gateway-only mount)
+factorlab_ibkr_live_runtime      live Gateway password (Gateway-only mount)
+factorlab_ibkr_client_runtime    ibkr-snapshot ClickHouse password
 ```
 
 These volumes use tmpfs. Values disappear after host reboot and are repopulated
@@ -106,7 +111,14 @@ CLICKHOUSE_PASSWORD
 CLICKHOUSE_PASSWORD_SHA256
 EODHD_API_KEY
 FACTORLAB_API_KEY
+IBKR_PAPER_PASSWORD      optional; only for VPS-hosted Gateways
+IBKR_LIVE_PASSWORD       optional; only for VPS-hosted Gateways
+IBKR_VNC_PASSWORD        optional; only for VPS-hosted Gateways
 ```
+
+The default IBKR setup needs none of these: `ibkr-snapshot` reads the
+operator's own Gateway over Tailscale. Setup:
+[`docs/operations/ibkr-gateway-setup.md`](operations/ibkr-gateway-setup.md).
 
 VPS permanently stores only Cloudflare Access service-token identity:
 

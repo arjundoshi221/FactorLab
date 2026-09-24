@@ -12,8 +12,6 @@ from factorlab.sources.ibkr.errors import IBKRError, IBKRReadOnlyViolation
 
 def _patch_env(monkeypatch, values: dict[str, str]) -> None:
     monkeypatch.setattr(client, "get_secret", lambda name, default=None: values.get(name, default))
-    monkeypatch.setattr(client, "load_dotenv", lambda *a, **kw: None)
-    monkeypatch.setattr(client, "find_dotenv", lambda *a, **kw: "")
 
 
 def test_readonly_false_is_rejected(monkeypatch):
@@ -108,3 +106,54 @@ def test_disconnect_is_idempotent():
     fake_ib.isConnected.return_value = False
     client.disconnect(fake_ib)  # should not raise
     fake_ib.disconnect.assert_not_called()
+
+
+def test_per_mode_host_overrides_shared_host(monkeypatch):
+    _patch_env(monkeypatch, {
+        "IBKR_HOST": "shared",
+        "IBKR_HOST_PAPER": "ibkr-gateway-paper", "IBKR_PORT_PAPER": "4004",
+        "IBKR_PORT_LIVE": "4003",
+    })
+    paper = client.gateway_config("paper", client_id=2)
+    live = client.gateway_config("live")
+    assert (paper.host, paper.port, paper.client_id) == ("ibkr-gateway-paper", 4004, 2)
+    assert (live.host, live.port, live.client_id) == ("shared", 4003, 1)
+    assert paper.source_channel == "paper_gateway"
+
+
+def test_connect_with_retry_backs_off_then_succeeds(monkeypatch):
+    attempts, sleeps = [], []
+    ib = MagicMock()
+
+    def flaky(mode, *, readonly, client_id, timeout):
+        attempts.append((mode, client_id))
+        if len(attempts) < 3:
+            raise ConnectionRefusedError("gateway restarting")
+        return ib
+
+    monkeypatch.setattr(client, "connect", flaky)
+    assert client.connect_with_retry("paper", client_id=2, attempts=3, sleep=sleeps.append) is ib
+    assert attempts == [("paper", 2)] * 3
+    assert sleeps == [5.0, 10.0]
+
+
+def test_connect_with_retry_raises_connect_error_when_exhausted(monkeypatch):
+    def down(mode, **_):
+        raise TimeoutError("no response")
+
+    monkeypatch.setattr(client, "connect", down)
+    with pytest.raises(client.IBKRConnectError, match="after 2 attempts"):
+        client.connect_with_retry("live", attempts=2, sleep=lambda _: None)
+
+
+def test_connect_with_retry_does_not_retry_config_errors(monkeypatch):
+    calls = []
+
+    def bad_config(mode, **_):
+        calls.append(mode)
+        raise IBKRError("IBKR env parse error")
+
+    monkeypatch.setattr(client, "connect", bad_config)
+    with pytest.raises(IBKRError, match="parse error"):
+        client.connect_with_retry("paper", sleep=lambda _: None)
+    assert calls == ["paper"]
