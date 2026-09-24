@@ -90,7 +90,12 @@ def main() -> None:
             if not validate(storage.client):
                 raise RuntimeError("canonical table names are not active after exchange")
     finally:
-        storage.close()
+        # The pre-cutover utility image predates ClickHouseStorage.close().
+        # Its client still needs closing after the migration check.
+        if hasattr(storage, "close"):
+            storage.close()
+        else:
+            storage.client.close()
 
 
 if __name__ == "__main__":

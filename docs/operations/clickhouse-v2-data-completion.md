@@ -110,13 +110,18 @@ India minute rows equaled v2 equity plus contract-futures rows (5,900,572),
 US minute and daily rows matched (49,920 and 21,968), and political trades
 matched (496). Legacy political membership snapshots (124,600) are compressed
 into 3,925 v2 SCD periods by the Wave 4 backfill, so raw row counts differ by
-design. Three raw archives and three ingestion runs arrived after catch-up;
-the paused-writer final backfill must include them. Wave 9 replacement tables
-are still empty and have not been exchanged; application containers still use
-legacy tables. Free ClickHouse disk was about 74 GB at preflight.
+design. The legacy India and US writers and political cron were stopped at
+`2026-09-24T16:08:42Z`. The paused-writer final backfill completed, including
+the raw archives and ingestion runs that arrived after the earlier catch-up.
+The three Wave 9 replacement tables matched their source tables exactly under
+`FINAL` and were exchanged; public `meta.expected_series`,
+`meta.session_coverage`, and `meta.recovery_state` now have canonical keys.
+Migration validation through Wave 9 passed again after the backfill. No v2
+application writer had been activated at this checkpoint. Free ClickHouse disk
+was about 74 GB at preflight.
 
-The Wave 8 RBAC phase remains pending by choice, and no application containers
-were changed.
+The Wave 8 RBAC phase remains pending by choice. Application deployment remains
+the next release step.
 
 These later-wave tables are empty: the legacy `factorlab` database has no
 corresponding fundamentals, derived, broker, book, or risk source tables.
