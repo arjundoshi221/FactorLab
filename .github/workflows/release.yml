@@ -154,7 +154,8 @@ jobs:
           set -euo pipefail
           remote_image="$IMAGE_NAME@$IMAGE_DIGEST"
           set +e
-          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=30 "$VPS_USER@$VPS_HOST" \
             "sudo bash '$RUN_DIR/deploy/scripts/deploy-release.sh' '$RELEASE_ID' '$RELEASE_COMMIT' '$remote_image' '$RUN_DIR/deploy-bundle.tar.gz'" \
             | tee deployment.log
           deploy_status=${PIPESTATUS[0]}

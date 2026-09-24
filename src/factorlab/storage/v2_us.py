@@ -253,10 +253,12 @@ class V2USStorage(V2IndiaStorage):
         return result.result_rows[0]
 
     def _bar_record(self, *, listing_id, trade_date, bar_time, resolution,
-                    source, raw_id, prices, volume, now):
+                    source, raw_id, prices, volume, now, reference=None):
         if self._active_run_id is None:
             raise RuntimeError("start an ingestion run before writing v2 bars")
-        security_id, entity_id, security_type = self._listing_reference(listing_id)
+        security_id, entity_id, security_type = (
+            reference if reference is not None else self._listing_reference(listing_id)
+        )
         session = ("regular" if resolution == "daily" or
                    time(9, 30) <= bar_time.astimezone(NY).time()
                    < time(16, 0) else
@@ -277,8 +279,18 @@ class V2USStorage(V2IndiaStorage):
             "ingested_at": now, "latency_ms": None, "version": _version(now),
         }
 
+    def _insert_daily_by_five_years(self, table, records):
+        """Bound each insert to at most 60 monthly ClickHouse partitions."""
+        windows = {}
+        for record in records:
+            window = record["trade_date"].year // 5
+            windows.setdefault(window, []).append(record)
+        for window in sorted(windows):
+            self._insert_dicts(table, windows[window])
+
     def write_daily(self, frame, *, instrument_id, symbol, raw_id, source="schwab"):
         now = datetime.now(UTC)
+        reference = self._listing_reference(instrument_id)
         records = []
         for row in frame.to_dict("records"):
             day = row["trade_date"]
@@ -287,23 +299,29 @@ class V2USStorage(V2IndiaStorage):
                 listing_id=instrument_id, trade_date=day, bar_time=bar_time,
                 resolution="daily", source=source, raw_id=raw_id,
                 prices=row, volume=row.get("volume"), now=now,
+                reference=reference,
             ))
-        self._insert_dicts("market.bars", records)
+        self._insert_daily_by_five_years("market.bars", records)
         return len(records)
 
     def write_daily_records(self, records, *, source="eodhd"):
         now = datetime.now(UTC)
         inserts = []
+        references = {}
         for item in records:
             day = item["trade_date"]
             bar_time = datetime(day.year, day.month, day.day, tzinfo=NY).astimezone(UTC)
+            listing_id = item["instrument_id"]
+            if listing_id not in references:
+                references[listing_id] = self._listing_reference(listing_id)
             inserts.append(self._bar_record(
-                listing_id=item["instrument_id"], trade_date=day,
+                listing_id=listing_id, trade_date=day,
                 bar_time=bar_time, resolution="daily", source=source,
                 raw_id=item.get("raw_id"), prices=item,
                 volume=item.get("volume"), now=now,
+                reference=references[listing_id],
             ))
-        self._insert_dicts("market.bars", inserts)
+        self._insert_daily_by_five_years("market.bars", inserts)
         return len(inserts)
 
     def write_candles_1min(self, candles, *, instrument_id, symbol,
@@ -312,6 +330,7 @@ class V2USStorage(V2IndiaStorage):
         if contract_id is not None:
             raise ValueError("US contract bars require a contract-specific v2 writer")
         now = datetime.now(UTC)
+        reference = self._listing_reference(instrument_id)
         inserts = []
         for row in candles.to_dict("records"):
             bar_time = row["timestamp"]
@@ -322,6 +341,7 @@ class V2USStorage(V2IndiaStorage):
                 listing_id=instrument_id, trade_date=bar_time.astimezone(NY).date(),
                 bar_time=bar_time, resolution="1min", source=source,
                 raw_id=raw_id, prices=row, volume=row.get("volume"), now=now,
+                reference=reference,
             ))
         self._insert_dicts("market.bars", inserts)
         return len(inserts)
@@ -392,5 +412,5 @@ class V2USStorage(V2IndiaStorage):
                     instrument_id, symbol, source, resolution,
                     day, expected, actuals.get(day, 0), now,
                 ))
-        self._insert_dicts("meta.session_coverage", records)
+        self._insert_daily_by_five_years("meta.session_coverage", records)
         return sum(item["missing"] for item in records)

@@ -57,13 +57,18 @@ def main() -> None:
     storage = ClickHouseStorage.from_environment()
     try:
         deadline = time.monotonic() + args.wait_seconds
+        last_report = 0.0
         while True:
             counts = fresh_lineage(storage.client, args.since)
             ready = not args.require_universe_ready or universe_ready(storage.client, args.since)
             if any(counts.values()) and ready:
                 print(f"Fresh v2 raw-to-curated write verified: {counts}; universe_ready={ready}")
                 return
-            if time.monotonic() >= deadline:
+            now = time.monotonic()
+            if now - last_report >= 60:
+                print(f"Waiting for v2 writes: lineage={counts}, universe_ready={ready}", flush=True)
+                last_report = now
+            if now >= deadline:
                 raise RuntimeError(
                     f"V2 write or US universe readiness missing since {args.since.isoformat()}: "
                     f"lineage={counts}, universe_ready={ready}"

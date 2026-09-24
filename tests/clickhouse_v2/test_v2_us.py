@@ -15,11 +15,13 @@ class Result:
 class Client:
     def __init__(self):
         self.inserts = []
+        self.reference_queries = 0
 
     def query(self, sql, parameters=None):
         if "FROM ref.exchanges FINAL" in sql:
             return Result([(0,)])
         if "FROM ref.listings AS l" in sql:
+            self.reference_queries += 1
             return Result([(uuid.uuid4(), uuid.uuid4(), "common")])
         raise AssertionError(sql)
 
@@ -45,6 +47,22 @@ def test_us_daily_bar_uses_local_session_date_and_run_lineage():
     assert records[0]["trade_date"] == date(2026, 9, 23)
     assert records[0]["raw_id"] == raw_id
     assert records[0]["ingest_run_id"] == run_id
+
+
+def test_us_daily_history_bounds_partitions_and_reuses_reference():
+    client = Client()
+    storage = V2USStorage(client)
+    storage._active_run_id = uuid.uuid4()
+    frame = pd.DataFrame([
+        {"trade_date": date(1985, 1, 2), "open": 1, "high": 1,
+         "low": 1, "close": 1, "volume": 1},
+        {"trade_date": date(2026, 9, 23), "open": 2, "high": 2,
+         "low": 2, "close": 2, "volume": 2},
+    ])
+    assert storage.write_daily(frame, instrument_id=uuid.uuid4(),
+                               symbol="A", raw_id=uuid.uuid4()) == 2
+    assert client.reference_queries == 1
+    assert [len(records) for table, records in client.inserts if table == "market.bars"] == [1, 1]
 
 
 def test_us_reference_maps_mic_and_seeds_verified_cboe_exchange():
