@@ -41,8 +41,8 @@ jobs:
             echo "Tag SHA does not match the tagged commit." >&2
             exit 1
           fi
-          git fetch --no-tags origin main:refs/remotes/origin/main
-          git merge-base --is-ancestor "$commit" origin/main
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$commit" FETCH_HEAD
           echo "release_id=${tag#release/}" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
 

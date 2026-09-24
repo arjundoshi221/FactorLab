@@ -87,7 +87,6 @@ def _render_bundle(payload: dict[str, Any]) -> str:
     secrets = payload["secrets"]
     clickhouse_password = _require_string(secrets, "CLICKHOUSE_PASSWORD")
     clickhouse_hash = _require_string(secrets, "CLICKHOUSE_PASSWORD_SHA256")
-    eodhd_api_key = _require_string(secrets, "EODHD_API_KEY")
     factorlab_api_key = _require_string(secrets, "FACTORLAB_API_KEY")
     calculated_hash = hashlib.sha256(clickhouse_password.encode("utf-8")).hexdigest()
     if not hmac.compare_digest(calculated_hash, clickhouse_hash.lower()):
@@ -96,7 +95,11 @@ def _render_bundle(payload: dict[str, Any]) -> str:
     _atomic_write(CLICKHOUSE_DIR / "runtime-users.xml", _clickhouse_users_xml(clickhouse_hash), 0o444)
     for directory in (INDIA_DIR, US_DIR, POLITICAL_DIR):
         _atomic_write(directory / "CLICKHOUSE_PASSWORD", clickhouse_password)
-    _atomic_write(US_DIR / "EODHD_API_KEY", eodhd_api_key)
+    eodhd_api_key = secrets.get("EODHD_API_KEY")
+    if isinstance(eodhd_api_key, str) and eodhd_api_key.strip():
+        _atomic_write(US_DIR / "EODHD_API_KEY", eodhd_api_key.strip())
+    else:
+        _remove(US_DIR / "EODHD_API_KEY")
     _atomic_write(POLITICAL_DIR / "FACTORLAB_API_KEY", factorlab_api_key)
 
     upstox = payload.get("upstox") if isinstance(payload.get("upstox"), dict) else {}

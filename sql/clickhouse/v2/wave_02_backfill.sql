@@ -1,19 +1,32 @@
+-- Normalize resolver-v1's legacy asset-class spelling. This is idempotent because
+-- subsequent runs no longer select the corrected rows.
+INSERT INTO ref.securities
+SELECT
+    security_id, entity_id, 'common', isin, cusip, figi, share_class, currency_code,
+    issue_date, maturity_date, sector_id, sector_classification, active,
+    version + 1, now64(3, 'UTC')
+FROM ref.securities FINAL
+WHERE security_type = 'equity';
+
 -- Market candles become canonical listing-keyed bars. The migration run is lineage,
 -- not a canonical business identifier.
-
 INSERT INTO market.bars
 SELECT
-    l.country_code, l.listing_id, l.security_id, s.entity_id, s.security_type,
+    l.country_code, l.listing_id, l.security_id, s.entity_id,
+    if(s.security_type = 'equity', 'common', s.security_type),
     '1min',
-    if(multiIf(
-           e.timezone = 'America/New_York', formatDateTime(c.bar_time, '%H:%M', 'America/New_York'),
-           e.timezone = 'Asia/Kolkata', formatDateTime(c.bar_time, '%H:%M', 'Asia/Kolkata'),
-           formatDateTime(c.bar_time, '%H:%M', 'UTC')) >= r.regular_open
-       AND multiIf(
-           e.timezone = 'America/New_York', formatDateTime(c.bar_time, '%H:%M', 'America/New_York'),
-           e.timezone = 'Asia/Kolkata', formatDateTime(c.bar_time, '%H:%M', 'Asia/Kolkata'),
-           formatDateTime(c.bar_time, '%H:%M', 'UTC')) < r.regular_close,
-       'regular', 'extended'),
+    multiIf(
+        multiIf(
+            e.timezone = 'America/New_York', formatDateTime(c.bar_time, '%H:%M', 'America/New_York'),
+            e.timezone = 'Asia/Kolkata', formatDateTime(c.bar_time, '%H:%M', 'Asia/Kolkata'),
+            formatDateTime(c.bar_time, '%H:%M', 'UTC')) < r.regular_open,
+        'pre',
+        multiIf(
+            e.timezone = 'America/New_York', formatDateTime(c.bar_time, '%H:%M', 'America/New_York'),
+            e.timezone = 'Asia/Kolkata', formatDateTime(c.bar_time, '%H:%M', 'Asia/Kolkata'),
+            formatDateTime(c.bar_time, '%H:%M', 'UTC')) < r.regular_close,
+        'regular',
+        'post'),
     c.bar_time,
     multiIf(
         e.timezone = 'America/New_York', toDate(c.bar_time, 'America/New_York'),
@@ -24,10 +37,14 @@ SELECT
     c.as_of_time, c.ingested_at,
     toNullable(toInt32(dateDiff('millisecond', c.as_of_time, c.ingested_at))), c.version
 FROM {{source_database}}.market_candles_1min AS c FINAL
-INNER JOIN {{source_database}}.ref_instruments AS i FINAL ON i.instrument_id = c.instrument_id
+INNER JOIN (
+    SELECT *, lower(hex(SHA256(toJSONString(tuple(*))))) AS migration_source_hash
+    FROM {{source_database}}.ref_instruments FINAL
+) AS i ON i.instrument_id = c.instrument_id
 INNER JOIN meta.migration_id_crosswalk AS x FINAL
     ON x.legacy_database = '{{source_database}}' AND x.legacy_table = 'ref_instruments'
-   AND x.legacy_key = i.instrument_key AND x.target_kind = 'listing' AND x.approved_at IS NOT NULL
+   AND x.legacy_key = i.instrument_key AND x.source_hash = i.migration_source_hash
+   AND x.target_kind = 'listing' AND x.approved_at IS NOT NULL
 INNER JOIN ref.listings AS l FINAL ON l.listing_id = x.target_id
 INNER JOIN ref.securities AS s FINAL ON s.security_id = l.security_id
 INNER JOIN ref.exchanges AS e FINAL ON e.exchange_code = l.exchange_code
@@ -37,12 +54,17 @@ INNER JOIN meta.migration_reference_enrichment AS r FINAL
 LEFT JOIN market.bars AS target FINAL
     ON target.listing_id = l.listing_id AND target.resolution = '1min'
    AND target.source = c.source AND target.bar_time = c.bar_time
-WHERE target.listing_id = toUUID('00000000-0000-0000-0000-000000000000')
-   OR c.version > target.version;
+-- Contract-keyed futures rows cannot be represented in market.bars without losing
+-- contract identity. They remain authoritative in legacy until a contract-aware
+-- backfill into market.futures_continuous is specified.
+WHERE c.contract_id = toUUID('00000000-0000-0000-0000-000000000000')
+  AND (target.listing_id = toUUID('00000000-0000-0000-0000-000000000000')
+       OR c.version > target.version);
 
 INSERT INTO market.bars
 SELECT
-    l.country_code, l.listing_id, l.security_id, s.entity_id, s.security_type,
+    l.country_code, l.listing_id, l.security_id, s.entity_id,
+    if(s.security_type = 'equity', 'common', s.security_type),
     'daily', 'regular',
     multiIf(
         e.timezone = 'America/New_York', toDateTime64(c.trade_date, 3, 'America/New_York'),
@@ -54,15 +76,20 @@ SELECT
     c.as_of_time, c.ingested_at,
     toNullable(toInt32(dateDiff('millisecond', c.as_of_time, c.ingested_at))), c.version
 FROM {{source_database}}.market_candles_daily AS c FINAL
-INNER JOIN {{source_database}}.ref_instruments AS i FINAL ON i.instrument_id = c.instrument_id
+INNER JOIN (
+    SELECT *, lower(hex(SHA256(toJSONString(tuple(*))))) AS migration_source_hash
+    FROM {{source_database}}.ref_instruments FINAL
+) AS i ON i.instrument_id = c.instrument_id
 INNER JOIN meta.migration_id_crosswalk AS x FINAL
     ON x.legacy_database = '{{source_database}}' AND x.legacy_table = 'ref_instruments'
-   AND x.legacy_key = i.instrument_key AND x.target_kind = 'listing' AND x.approved_at IS NOT NULL
+   AND x.legacy_key = i.instrument_key AND x.source_hash = i.migration_source_hash
+   AND x.target_kind = 'listing' AND x.approved_at IS NOT NULL
 INNER JOIN ref.listings AS l FINAL ON l.listing_id = x.target_id
 INNER JOIN ref.securities AS s FINAL ON s.security_id = l.security_id
 INNER JOIN ref.exchanges AS e FINAL ON e.exchange_code = l.exchange_code
 LEFT JOIN market.bars AS target FINAL
     ON target.listing_id = l.listing_id AND target.resolution = 'daily'
    AND target.source = c.source AND target.trade_date = c.trade_date
-WHERE target.listing_id = toUUID('00000000-0000-0000-0000-000000000000')
-   OR c.version > target.version;
+WHERE c.contract_id = toUUID('00000000-0000-0000-0000-000000000000')
+  AND (target.listing_id = toUUID('00000000-0000-0000-0000-000000000000')
+       OR c.version > target.version);

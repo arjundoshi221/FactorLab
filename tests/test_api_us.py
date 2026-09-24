@@ -21,6 +21,7 @@ def test_candle_reads_are_market_scoped_and_cursor_bound_to_filters():
     kwargs = dict(symbol="AAPL", date_from=date(2026, 9, 1), date_to=date(2026, 9, 4), limit=1)
     page = repo.candles("daily", cursor=None, **kwargs)
     assert page.next_cursor
+    assert client.query.call_args.kwargs["parameters"]["source"] == "schwab"
     assert "market_code = 'USA'" in client.query.call_args.args[0]
     assert "FINAL" in client.query.call_args.args[0]
     repo.candles("daily", cursor=page.next_cursor, **kwargs)
@@ -69,7 +70,7 @@ def test_us_health_includes_universe_resolver():
         "detail": source,
     })
     assert [item["source"] for item in repo.sources_status()] == [
-        "universe", "eodhd", "schwab"]
+        "universe", "schwab"]
     assert repo.overall_status()["source"] == "universe"
 
 

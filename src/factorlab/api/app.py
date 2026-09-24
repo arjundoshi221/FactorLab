@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from factorlab.api.auth import require_api_key
+from factorlab.api.docker_images import DockerImagesResponse, read_docker_images_snapshot
 from factorlab.api.us import router as us_router
 from factorlab.api.hub import HubOverview, HubOverviewService, HubRepository
 from factorlab.api.india import (
@@ -78,6 +79,15 @@ app = FastAPI(
 
 app.include_router(us_router, prefix="/api/v1/us", tags=["us"], dependencies=[Depends(require_api_key)])
 app.include_router(us_router, prefix="/hub/api/v1/us", tags=["hub-us"])
+
+
+@app.get("/hub/api/v1/docker-images", response_model=DockerImagesResponse, tags=["hub"])
+def get_hub_docker_images() -> DockerImagesResponse:
+    """Return the most recent host image inventory, including stale snapshots."""
+    try:
+        return read_docker_images_snapshot()
+    except (OSError, ValueError, TypeError) as exc:
+        raise HTTPException(status_code=503, detail="Docker image snapshot is unavailable") from exc
 
 
 def get_political_trades_repository() -> PoliticalTradesRepository:
@@ -1191,6 +1201,11 @@ def hub_home() -> FileResponse:
 
 @app.get("/roadmap", include_in_schema=False)
 def hub_roadmap() -> FileResponse:
+    return _hub_index()
+
+
+@app.get("/docker-images", include_in_schema=False)
+def hub_docker_images() -> FileResponse:
     return _hub_index()
 
 

@@ -41,7 +41,6 @@ services:
           test -s /run/secrets/clickhouse/.agent-ready &&
           test -s /run/secrets/clickhouse/runtime-users.xml &&
           test -s /run/secrets/india/CLICKHOUSE_PASSWORD &&
-          test -s /run/secrets/us/EODHD_API_KEY &&
           test -s /run/secrets/political/FACTORLAB_API_KEY
       interval: 10s
       timeout: 3s
@@ -177,6 +176,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - political_runtime:/run/secrets/app:ro
+      - /var/lib/factorlab/docker-images:/run/docker-images:ro
     ports:
       - "127.0.0.1:8000:8000"
     tmpfs:

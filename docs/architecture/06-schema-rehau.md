@@ -1009,7 +1009,9 @@ ORDER BY (country_code, underlying_listing_id, expiry, right, strike, resolution
 ### `market.futures_continuous`
 
 Rolled continuous futures series (front, back, calendar-spread). Derived from
-`market.bars` + roll rules.
+`market.futures_contract_bars` + explicit roll rules. The contract-preserving
+source table is added by the Wave 4 data-completion extension; migration does
+not infer a roll method or populate this continuous series.
 
 ```sql
 CREATE TABLE market.futures_continuous (
@@ -2023,6 +2025,12 @@ ORDER BY (country_code, pipeline, source, started_at, run_id);
 ### `meta.expected_series`, `meta.session_coverage`, `meta.recovery_state`, `meta.source_status`
 
 Unified across countries (was `us_*` + `india_*`). All FK `listing_id`.
+
+The additive Wave 4 data-completion extension supplies the concrete DDL and
+legacy field mappings for these operational tables. India expected futures
+retain a nullable canonical `contract_id` alongside the required
+`listing_id`. See `sql/clickhouse/v2/wave_04_schema_data_completion.sql`
+and `docs/operations/clickhouse-v2-data-completion.md`.
 
 ### `meta.lineage`
 

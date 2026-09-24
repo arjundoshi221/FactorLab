@@ -226,6 +226,7 @@ fi
 verify_current
 verification_state=succeeded
 printf '%s\n' "$image" > "$root/current-image"
+date -u +'%Y-%m-%dT%H:%M:%SZ' > "$record/activated-at"
 printf '%s\n' "$release_id" > "$root/current-release"
 
 echo "FACTORLAB_RESULT_PREVIOUS_IMAGE=$previous_image"

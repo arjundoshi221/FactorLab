@@ -15,12 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import yaml
 
-from factorlab.countries.us.equities.eodhd.client import EODHDClient
-from factorlab.countries.us.equities.eodhd.us_universe import (
-    normalize_bulk,
-    normalize_daily,
-    schwab_symbol,
-)
+from factorlab.countries.us.equities.eodhd.us_universe import schwab_symbol
 from factorlab.sources.schwab.market import (
     NY,
     AuthRequired,
@@ -44,7 +39,7 @@ def universe(name):
     return [(s.removesuffix(".US"), s.removesuffix(".US").replace("-", "/")) for s in symbols]
 
 
-def collect(storage, client, item, resolution, *, now, live=False):
+def collect(storage, client, item, resolution, *, now, live=False, universe_name="pilot"):
     symbol, provider, instrument_id = item
     state = storage.state(instrument_id, resolution)
     state["symbol"] = symbol
@@ -65,7 +60,7 @@ def collect(storage, client, item, resolution, *, now, live=False):
         if resolution == "1min":
             start = max(start, now - timedelta(days=60))
     handle = storage.start_ingestion_run(pipeline="us_live" if live else f"us_recovery_{resolution}",
-        market_code="USA", source="schwab", universe="pilot", requested_series=1,
+        market_code="USA", source="schwab", universe=universe_name, requested_series=1,
         metadata={"symbol": symbol, "resolution": resolution, "from": start.isoformat(), "to": end.isoformat(), "full": full and not live})
     try:
         frame, raw_id = client.candles(provider, resolution, start, end)
@@ -109,87 +104,6 @@ def safe_source_status(storage, source, status, detail):
         log.error("Source status write failed for %s: %s", source, type(exc).__name__)
 
 
-def collect_eodhd_daily(storage, client, item, *, now):
-    identifier = item["instrument_id"]
-    symbol = item["symbol"]
-    state = storage.state(identifier, "daily", source="eodhd")
-    state["symbol"] = symbol
-    target = bounds(latest_completed(now))[1]
-    full = not state["history_complete"] or not state.get("checked_through")
-    start = datetime(1970, 1, 1, tzinfo=UTC) if full else (
-        state["checked_through"] - timedelta(days=7))
-    handle = storage.start_ingestion_run(
-        pipeline="us_recovery_daily", market_code="USA", source="eodhd",
-        universe=item.get("universe", FULL_UNIVERSE), requested_series=1,
-        metadata={"symbol": symbol, "from": start.isoformat(), "to": target.isoformat(),
-                  "full": full},
-    )
-    try:
-        payload = client.get_eod(item["provider_symbol"], start.date().isoformat(), target.date().isoformat())
-        frame = normalize_daily(payload)
-        if frame.empty:
-            raise ValueError("No EODHD daily candles returned; coverage remains unresolved")
-        count = storage.write_daily(
-            frame, instrument_id=identifier, symbol=symbol, raw_id=client.last_raw_id,
-            source="eodhd")
-        first_date = frame["trade_date"].min()
-        last_date = frame["trade_date"].max()
-        first = datetime(first_date.year, first_date.month, first_date.day, tzinfo=NY).astimezone(UTC)
-        last = datetime(last_date.year, last_date.month, last_date.day, tzinfo=NY).astimezone(UTC)
-        state["available_from"] = min(state["available_from"] or first, first)
-        state["last_bar"] = max(state["last_bar"] or last, last)
-        missing = storage.coverage(
-            identifier, symbol, "daily", start, target, state["available_from"], source="eodhd") or 0
-        state.update(history_complete=True, checked_through=target,
-                     full_refreshed_at=now if full else state.get("full_refreshed_at"),
-                     error=f"Coverage incomplete: {missing} missing bars" if missing else None)
-        storage.save_state(state)
-        storage.finish_ingestion_run(
-            handle, status="partial" if missing else "success",
-            successful_series=0 if missing else 1, failed_series=1 if missing else 0,
-            rows_written=count, error=state["error"])
-        return not missing
-    except Exception as exc:
-        detail = str(exc) if isinstance(exc, (ValueError, RuntimeError)) else type(exc).__name__
-        state["error"] = detail[:300]
-        storage.save_state(state)
-        storage.finish_ingestion_run(
-            handle, status="failed", failed_series=1, error=detail[:300])
-        raise
-
-
-def collect_bulk_daily(storage, client, items, *, trading_date):
-    handle = storage.start_ingestion_run(
-        pipeline="us_bulk_daily", market_code="USA", source="eodhd",
-        universe=items[0].get("universe", FULL_UNIVERSE) if items else FULL_UNIVERSE,
-        metadata={"trading_date": trading_date.isoformat()},
-    )
-    try:
-        payload = client.get_bulk_eod("US", trading_date.isoformat())
-        lookup = {item["symbol"]: item["instrument_id"] for item in items}
-        records = normalize_bulk(payload, lookup, client.last_raw_id)
-        if len(records) < max(1, int(len(items) * 0.5)):
-            raise ValueError(
-                f"Bulk EOD response rejected: {len(records)}/{len(items)} active instruments")
-        count = storage.write_daily_records(records, source="eodhd")
-        present = storage.record_daily_snapshot_coverage(
-            items, records, trading_date, source="eodhd")
-        storage.finish_ingestion_run(
-            handle, status="success", successful_series=len(records),
-            failed_series=max(0, len(items) - len(records)), rows_written=count)
-        complete = len(records) >= int(len(items) * 0.95)
-        safe_source_status(
-            storage, "eodhd", "ready" if complete else "incomplete",
-            f"Daily prices through {trading_date}: {len(records)}/{len(items)} instruments")
-        return present
-    except Exception as exc:
-        storage.finish_ingestion_run(
-            handle, status="failed", failed_series=len(items), error=str(exc)[:300])
-        # The resumable per-symbol queue remains the entitlement-safe fallback.
-        log.warning("Bulk EOD unavailable; continuing per-symbol: %s", type(exc).__name__)
-        return set()
-
-
 def pending_daily(items, states, target_day):
     """Return instruments needing history or a per-symbol daily fallback."""
     target = bounds(target_day)[1]
@@ -215,10 +129,6 @@ def select_minute_tier(storage, client, items):
         if item is None:
             continue
         provider = schwab_symbol(item["symbol"])
-        try:
-            client.instrument(provider)
-        except (ValueError, RuntimeError, AuthRequired):
-            continue
         selected.append({**item, "provider_symbol": provider})
         if len(selected) == target:
             break
@@ -233,7 +143,6 @@ def run_full(args, storage):
         storage, "schwab", "ready" if token_ready() else "auth_required",
         "Schwab token available" if token_ready() else
         "Authenticate Schwab on the broker-auth page")
-    eodhd = EODHDClient(storage=storage)
     items = []
     pending = []
     minute_items = []
@@ -241,7 +150,7 @@ def run_full(args, storage):
     next_live = datetime.min.replace(tzinfo=UTC)
     ranked_week = None
     next_rank_attempt = datetime.min.replace(tzinfo=UTC)
-    bulk_day = None
+    daily_target = None
     last_heartbeat = datetime.min.replace(tzinfo=UTC)
     next_membership_poll = datetime.min.replace(tzinfo=UTC)
     retry_at = {}
@@ -250,14 +159,14 @@ def run_full(args, storage):
         now = datetime.now(UTC)
         local_day = now.astimezone(NY).date()
         if now >= next_membership_poll:
-            published = storage.active_expected_series(source="eodhd", resolution="daily")
+            published = storage.active_expected_series(source="schwab", resolution="daily")
             old_ids = {item["instrument_id"] for item in items}
             new_ids = {item["instrument_id"] for item in published}
             if new_ids != old_ids:
                 added = len(new_ids - old_ids)
                 removed = len(old_ids - new_ids)
                 items = published
-                states = storage.states("daily", source="eodhd") if items else {}
+                states = storage.states("daily", source="schwab") if items else {}
                 pending = pending_daily(items, states, latest_completed(now)) if items else []
                 retry_at = {key: value for key, value in retry_at.items() if key in new_ids}
                 minute_retry_at = {key: value for key, value in minute_retry_at.items()
@@ -273,27 +182,29 @@ def run_full(args, storage):
                         resolution="1min")
                     minute_items = [(item["symbol"], item["provider_symbol"],
                                      item["instrument_id"]) for item in retained]
-                # Force today's bulk filter and minute ranking to account for additions
-                # immediately instead of waiting for the next session/week.
-                bulk_day = None
+                # Force daily recovery and minute ranking to account for changes now.
+                daily_target = None
                 ranked_week = None
                 next_rank_attempt = datetime.min.replace(tzinfo=UTC)
                 log.info("Loaded configured universe: %d stocks (%d added, %d removed)",
                          len(items), added, removed)
             next_membership_poll = now + timedelta(seconds=60)
         if not items:
-            safe_source_status(storage, "eodhd", "waiting",
+            safe_source_status(storage, "schwab", "waiting",
                                "Waiting for universe-us to publish a configured universe")
             if not args.daemon:
                 return 1
             stop.wait(30)
             continue
+        if not token_ready(now) and not args.daemon:
+            safe_source_status(storage, "schwab", "auth_required",
+                               "Authenticate Schwab on the broker-auth page")
+            return 1
         target_day = latest_completed(now)
-        if bulk_day != target_day:
-            present = collect_bulk_daily(storage, eodhd, items, trading_date=target_day)
-            missing = [item for item in items if item["instrument_id"] not in present]
-            extend_pending(pending, missing)
-            bulk_day = target_day
+        if daily_target != target_day:
+            states = storage.states("daily", source="schwab")
+            extend_pending(pending, pending_daily(items, states, target_day))
+            daily_target = target_day
         week = local_day.isocalendar()[:2]
         minute_target = min(MINUTE_TIER_SIZE, len(items))
         if (token_ready(now) and now >= next_rank_attempt
@@ -339,11 +250,14 @@ def run_full(args, storage):
                     minute_pending.append(item)
             else:
                 minute_pending.append(item)
-        if pending:
+        if token_ready(now) and pending:
             item = pending.pop(0)
             if now >= retry_at.get(item["instrument_id"], datetime.min.replace(tzinfo=UTC)):
                 try:
-                    collect_eodhd_daily(storage, eodhd, item, now=now)
+                    daily_item = (item["symbol"], schwab_symbol(item["symbol"]),
+                                  item["instrument_id"])
+                    collect(storage, schwab, daily_item, "daily", now=now,
+                            universe_name=item.get("universe", FULL_UNIVERSE))
                 except Exception as exc:
                     log.error("Daily recovery %s failed: %s", item["symbol"], type(exc).__name__)
                     retry_at[item["instrument_id"]] = now + timedelta(minutes=15)
@@ -351,14 +265,17 @@ def run_full(args, storage):
             else:
                 pending.append(item)
         if (now - last_heartbeat).total_seconds() >= 60:
-            safe_source_status(storage, "eodhd", "recovering" if pending else "ready",
-                               f"{len(pending)} daily histories pending" if pending else
-                               f"{len(items)} configured equities")
+            if not token_ready(now):
+                safe_source_status(storage, "schwab", "auth_required",
+                                   "Authenticate Schwab on the broker-auth page")
+            else:
+                safe_source_status(storage, "schwab", "recovering" if pending else "ready",
+                                   f"{len(pending)} daily histories pending" if pending else
+                                   f"{len(items)} configured equities")
             last_heartbeat = now
         if not args.daemon and not pending and not minute_pending:
             return 0
         stop.wait(1 if pending else 30)
-    safe_source_status(storage, "eodhd", "stopped", "Collector stopped gracefully")
     safe_source_status(storage, "schwab", "stopped", "Collector stopped gracefully")
     return 0
 

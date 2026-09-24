@@ -49,8 +49,7 @@ class USRepository:
         return item
 
     def sources_status(self):
-        return [self.source_status("universe"), self.source_status("eodhd"),
-                self.source_status("schwab")]
+        return [self.source_status("universe"), self.source_status("schwab")]
 
     def overall_status(self):
         sources = self.sources_status()
@@ -96,7 +95,7 @@ class USRepository:
             item["series"] = []
             for resolution in ("1min", "daily"):
                 key = (item["instrument_id"], resolution)
-                source = active.get(key, "eodhd" if resolution == "daily" else "schwab")
+                source = active.get(key, "schwab")
                 state = state_map.get((*key, source), {})
                 cov = coverage_map.get((*key, source), {})
                 expected = 0
@@ -129,13 +128,13 @@ class USRepository:
             SELECT
               (SELECT count() FROM ref_instruments FINAL WHERE market_code = 'USA' AND status = 'active') AS active,
               (SELECT count() FROM us_expected_series FINAL
-                  WHERE active AND source = 'eodhd' AND resolution = 'daily') AS daily_configured,
+                  WHERE active AND source = 'schwab' AND resolution = 'daily') AS daily_configured,
               (SELECT count() FROM us_expected_series FINAL
                   WHERE active AND source = 'schwab' AND resolution = '1min') AS minute_configured,
               (SELECT uniqExact(instrument_id) FROM market_candles_daily FINAL
-                  WHERE market_code = 'USA' AND source = 'eodhd'
+                  WHERE market_code = 'USA' AND source = 'schwab'
                     AND instrument_id IN (SELECT instrument_id FROM us_expected_series FINAL
-                        WHERE active AND source = 'eodhd' AND resolution = 'daily')) AS daily_with_data,
+                        WHERE active AND source = 'schwab' AND resolution = 'daily')) AS daily_with_data,
               (SELECT uniqExact(instrument_id) FROM market_candles_1min FINAL
                   WHERE market_code = 'USA' AND source = 'schwab'
                     AND instrument_id IN (SELECT instrument_id FROM us_expected_series FINAL
@@ -153,7 +152,7 @@ class USRepository:
                 per_series = (max(0, int((min(now, session[1]) - session[0]).total_seconds() // 60))
                               if resolution == "1min" else int(now >= session[1] + timedelta(minutes=30)))
             expected = configured * per_series
-            source = "schwab" if resolution == "1min" else "eodhd"
+            source = "schwab"
             actual_rows = self.query("""SELECT sum(actual) AS actual FROM us_session_coverage FINAL
                 WHERE source = {source:String} AND resolution = {resolution:String}
                   AND trade_date = {day:Date}
@@ -182,7 +181,7 @@ class USRepository:
         expr = "trade_date" if daily else "toDate(bar_time, 'America/New_York')"
         typ = "Date" if daily else "DateTime64(3, 'UTC')"
         parameters = {"symbol": symbol.upper() if symbol else "", "start": date_from, "end": date_to, "limit": limit + 1}
-        source = "eodhd" if daily else "schwab"
+        source = "schwab"
         parameters["source"] = source
         conditions = ["market_code = 'USA'", "source = {source:String}", f"{expr} BETWEEN {{start:Date}} AND {{end:Date}}"]
         if symbol:

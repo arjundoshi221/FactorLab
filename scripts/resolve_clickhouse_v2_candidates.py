@@ -9,6 +9,7 @@ with ``approved_by`` and ``approved_at`` before any backfill can run.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import time
 import uuid
@@ -16,23 +17,26 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
+from factorlab.storage.canonical_ids import (
+    canonical_ids,
+    committee_id,
+    contract_id,
+    legislator_id,
+    political_trade_id,
+)
+
 try:
     from migrate_clickhouse_v2 import SAFE_IDENTIFIER_RE, create_client, migration_lock
 except ImportError:  # Imported as scripts.resolve_clickhouse_v2_candidates in tests.
     from scripts.migrate_clickhouse_v2 import SAFE_IDENTIFIER_RE, create_client, migration_lock
 
 
-ENTITY_NAMESPACE = uuid.UUID("7cc91b95-bef0-4d70-81a4-23757e6218cd")
-SECURITY_NAMESPACE = uuid.UUID("91529032-aef5-44f7-b33e-25f05f620d22")
-LISTING_NAMESPACE = uuid.UUID("74360588-b425-4daf-bbff-9a601f8e97e4")
-CONTRACT_NAMESPACE = uuid.UUID("f889fd4f-bc13-4450-ac2e-a477f0f07189")
-LEGISLATOR_NAMESPACE = uuid.UUID("be05fde7-382d-4a7e-b84d-d7871c082f06")
-
 EXCHANGE_CONTRACTS = {
     "NASDAQ": {"mic": "XNAS", "open": "09:30", "close": "16:00"},
     "NSE": {"mic": "XNSE", "open": "09:15", "close": "15:30"},
     "NYSE Arca": {"mic": "ARCX", "open": "09:30", "close": "16:00"},
 }
+SECURITY_TYPE_MAP = {"equity": "common", "etf": "etf"}
 
 
 def _text(value: Any) -> str:
@@ -45,25 +49,6 @@ def _text(value: Any) -> str:
 
 def _rows(result: Any) -> list[dict[str, Any]]:
     return [dict(zip(result.column_names, row, strict=True)) for row in result.result_rows]
-
-
-def canonical_ids(instrument: dict[str, Any]) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
-    isin = _text(instrument.get("isin")).strip().upper()
-    instrument_key = _text(instrument["instrument_key"])
-    security_key = f"isin:{isin}" if isin else f"legacy:factorlab:ref_instruments:{instrument_key}"
-    return (
-        uuid.uuid5(ENTITY_NAMESPACE, security_key),
-        uuid.uuid5(SECURITY_NAMESPACE, security_key),
-        uuid.uuid5(LISTING_NAMESPACE, f"factorlab:ref_instruments:{instrument_key}"),
-    )
-
-
-def contract_id(contract_key: str) -> uuid.UUID:
-    return uuid.uuid5(CONTRACT_NAMESPACE, f"factorlab:ref_contracts:{contract_key}")
-
-
-def legislator_id(bioguide_id: str) -> uuid.UUID:
-    return uuid.uuid5(LEGISLATOR_NAMESPACE, f"bioguide:{bioguide_id.upper()}")
 
 
 def _query_source_rows(client: Any, source_database: str) -> dict[str, list[dict[str, Any]]]:
@@ -89,6 +74,14 @@ def _query_source_rows(client: Any, source_database: str) -> dict[str, list[dict
         "legislators": f"""
             SELECT *, lower(hex(SHA256(toJSONString(tuple(*))))) AS source_hash
             FROM {source_database}.alt_political_legislators FINAL ORDER BY bioguide_id
+        """,
+        "committees": f"""
+            SELECT *, lower(hex(SHA256(toJSONString(tuple(*))))) AS source_hash
+            FROM {source_database}.alt_political_committees FINAL ORDER BY committee_id
+        """,
+        "political_trades": f"""
+            SELECT *, lower(hex(SHA256(toJSONString(tuple(*))))) AS source_hash
+            FROM {source_database}.alt_political_trades FINAL ORDER BY trade_key
         """,
     }
     return {name: _rows(client.query(query)) for name, query in queries.items()}
@@ -134,8 +127,11 @@ def build_plan(source: dict[str, list[dict[str, Any]]]) -> dict[str, int]:
         "listings": len(source["instruments"]),
         "contracts": len(source["contracts"]),
         "legislator_entities": len(source["legislators"]),
+        "committee_entities": len(source.get("committees", [])),
+        "political_trade_ids": len(source.get("political_trades", [])),
         "unapproved_crosswalks": (
             len(source["instruments"]) + len(source["contracts"]) + len(source["legislators"])
+            + len(source.get("committees", [])) + len(source.get("political_trades", []))
         ),
         "unapproved_reference_enrichments": len(source["countries"]) + len(source["exchanges"]),
     }
@@ -246,7 +242,10 @@ def stage_candidates(client: Any, source_database: str) -> dict[str, int]:
     }
     source_names = {
         _text(row["source"])
-        for group in ("countries", "exchanges", "instruments", "contracts", "legislators")
+        for group in (
+            "countries", "exchanges", "instruments", "contracts", "legislators",
+            "committees", "political_trades",
+        )
         for row in source[group]
     }
     source_rows = [
@@ -288,7 +287,10 @@ def stage_candidates(client: Any, source_database: str) -> dict[str, int]:
         if security not in existing_securities:
             security_rows.append(
                 [
-                    security, entity, _text(row["asset_class"]).lower(),
+                    security, entity,
+                    SECURITY_TYPE_MAP.get(
+                        _text(row["asset_class"]).lower(), _text(row["asset_class"]).lower()
+                    ),
                     _text(row.get("isin")) or None, None, None, "", _text(row["currency_code"]),
                     row["first_seen"], None, None, "", active, int(row["version"]), row["ingested_at"],
                 ]
@@ -393,6 +395,31 @@ def stage_candidates(client: Any, source_database: str) -> dict[str, int]:
         ],
     )
 
+    committee_candidates: list[tuple[dict[str, Any], uuid.UUID]] = []
+    committee_rows: list[list[Any]] = []
+    for row in source["committees"]:
+        target_id = committee_id(_text(row["committee_id"]))
+        committee_candidates.append((row, target_id))
+        if target_id in existing_entities:
+            continue
+        committee_rows.append(
+            [
+                target_id, "committee", _text(row["name"]), None, "US", "US",
+                bool(row["is_current"]), row["ingested_at"].date(),
+                row["ingested_at"].date(),
+                int(row["version"]), row["ingested_at"],
+            ]
+        )
+        existing_entities.add(target_id)
+    counts["committee_entities"] = _insert(
+        client, "ref.entities", committee_rows,
+        [
+            "entity_id", "entity_type", "legal_name", "lei", "country_of_domicile",
+            "country_of_incorp", "active", "first_seen", "last_seen", "version",
+            "ingested_at",
+        ],
+    )
+
     existing_crosswalks = _existing_crosswalks(client)
     crosswalk_rows: list[list[Any]] = []
     candidates: Iterable[tuple[str, str, dict[str, Any], uuid.UUID]] = (
@@ -402,12 +429,22 @@ def stage_candidates(client: Any, source_database: str) -> dict[str, int]:
             ("alt_political_legislators", "bioguide_id", row, target)
             for row, target in legislator_candidates
         ]
+        + [
+            ("alt_political_committees", "committee_id", row, target)
+            for row, target in committee_candidates
+        ]
+        + [
+            ("alt_political_trades", "trade_key", row, political_trade_id(_text(row["trade_key"])))
+            for row in source["political_trades"]
+        ]
     )
     for legacy_table, key_column, row, target in candidates:
         target_kind = {
             "ref_instruments": "listing",
             "ref_contracts": "contract",
             "alt_political_legislators": "entity",
+            "alt_political_committees": "entity",
+            "alt_political_trades": "political_trade",
         }[legacy_table]
         key = _text(row[key_column])
         source_hash = _text(row["source_hash"])
@@ -485,6 +522,102 @@ def report(client: Any) -> dict[str, int]:
     return {name: int(client.query(query).result_rows[0][0]) for name, query in queries.items()}
 
 
+def candidate_fingerprint(client: Any) -> str:
+    """Fingerprint the exact unapproved candidate set being reviewed."""
+
+    crosswalks = client.query(
+        "SELECT legacy_database, legacy_table, legacy_key, source_hash, target_kind, target_id "
+        "FROM meta.migration_id_crosswalk FINAL WHERE approved_at IS NULL "
+        "ORDER BY legacy_database, legacy_table, legacy_key, source_hash, target_kind, target_id"
+    ).result_rows
+    enrichments = client.query(
+        "SELECT legacy_database, legacy_table, legacy_key, source_hash, exchange_code, mic, "
+        "session_timezone, regular_open, regular_close, currency_code "
+        "FROM meta.migration_reference_enrichment FINAL WHERE approved_at IS NULL "
+        "ORDER BY legacy_database, legacy_table, legacy_key, source_hash"
+    ).result_rows
+    payload = {
+        "crosswalks": [[_text(value) for value in row] for row in crosswalks],
+        "reference_enrichments": [[_text(value) for value in row] for row in enrichments],
+    }
+    return hashlib.sha256(
+        json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def approve_candidates(client: Any, approved_by: str) -> dict[str, int | str]:
+    """Insert approved versions for the exact current unapproved candidate set."""
+
+    approved_by = approved_by.strip()
+    if not approved_by:
+        raise ValueError("approved_by must be non-empty")
+    fingerprint = candidate_fingerprint(client)
+    approved_at = datetime.now(UTC)
+    version = time.time_ns()
+    evidence = json.dumps(
+        {
+            "approval": "explicit human approval of all staged deterministic candidates",
+            "approved_by": approved_by,
+            "candidate_fingerprint": fingerprint,
+            "resolver": "factorlab-v2-candidate-resolver-v1",
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+    crosswalk_result = client.query(
+        "SELECT legacy_database, legacy_table, legacy_key, source_hash, target_kind, target_id, "
+        "ingested_at FROM meta.migration_id_crosswalk FINAL WHERE approved_at IS NULL "
+        "ORDER BY legacy_database, legacy_table, legacy_key, source_hash, target_kind"
+    )
+    crosswalk_rows = [
+        [
+            _text(row[0]), _text(row[1]), _text(row[2]), _text(row[3]), _text(row[4]), row[5],
+            approved_by, approved_at, evidence, version, approved_at,
+        ]
+        for row in crosswalk_result.result_rows
+    ]
+    approved_crosswalks = _insert(
+        client,
+        "meta.migration_id_crosswalk",
+        crosswalk_rows,
+        [
+            "legacy_database", "legacy_table", "legacy_key", "source_hash", "target_kind",
+            "target_id", "approved_by", "approved_at", "evidence", "version", "ingested_at",
+        ],
+    )
+
+    enrichment_result = client.query(
+        "SELECT legacy_database, legacy_table, legacy_key, source_hash, exchange_code, mic, "
+        "session_timezone, regular_open, regular_close, currency_code "
+        "FROM meta.migration_reference_enrichment FINAL WHERE approved_at IS NULL "
+        "ORDER BY legacy_database, legacy_table, legacy_key, source_hash"
+    )
+    enrichment_rows = [
+        [
+            _text(row[0]), _text(row[1]), _text(row[2]), _text(row[3]), _text(row[4]),
+            _text(row[5]), _text(row[6]), _text(row[7]), _text(row[8]), _text(row[9]),
+            approved_by, approved_at, evidence, version, approved_at,
+        ]
+        for row in enrichment_result.result_rows
+    ]
+    approved_enrichments = _insert(
+        client,
+        "meta.migration_reference_enrichment",
+        enrichment_rows,
+        [
+            "legacy_database", "legacy_table", "legacy_key", "source_hash", "exchange_code",
+            "mic", "session_timezone", "regular_open", "regular_close", "currency_code",
+            "approved_by", "approved_at", "evidence", "version", "ingested_at",
+        ],
+    )
+    return {
+        "approved_crosswalks": approved_crosswalks,
+        "approved_reference_enrichments": approved_enrichments,
+        "candidate_fingerprint": fingerprint,
+    }
+
+
 def _print_counts(title: str, counts: dict[str, int]) -> None:
     print(title)
     for name, count in counts.items():
@@ -498,6 +631,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("plan")
     stage = subparsers.add_parser("stage")
     stage.add_argument("--yes", action="store_true")
+    approve = subparsers.add_parser("approve")
+    approve.add_argument("--approved-by", required=True)
+    approve.add_argument("--yes", action="store_true")
     subparsers.add_parser("report")
     return parser
 
@@ -516,6 +652,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _print_counts(
                     "Candidate rows staged (all mappings remain unapproved)",
                     stage_candidates(client, args.source_database),
+                )
+        elif args.command == "approve":
+            if not args.yes:
+                print("error: approve changes migration eligibility; rerun with --yes")
+                return 2
+            with migration_lock(client):
+                _print_counts(
+                    "Candidate approval recorded",
+                    approve_candidates(client, args.approved_by),
                 )
         elif args.command == "report":
             _print_counts("Candidate resolver status", report(client))

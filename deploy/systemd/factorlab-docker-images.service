@@ -1,0 +1,6 @@
+[Unit]
+Description=Collect FactorLab Docker image inventory
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/libexec/factorlab-collect-docker-images.py

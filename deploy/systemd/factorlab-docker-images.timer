@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh FactorLab Docker image inventory every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+Unit=factorlab-docker-images.service
+
+[Install]
+WantedBy=timers.target

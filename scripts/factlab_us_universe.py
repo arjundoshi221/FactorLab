@@ -13,9 +13,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from factorlab.countries.us.equities.eodhd.client import EODHDClient
-from factorlab.countries.us.equities.eodhd.configured_universe import load_config, resolve_universe
+from factorlab.countries.us.equities.eodhd.configured_universe import (
+    resolve_universe as legacy_resolve,
+)
 from factorlab.storage.us_clickhouse import USStorage
+from factorlab.universe import create_resolver, load_config
 
 log = logging.getLogger("factorlab.us-universe")
 stop = threading.Event()
@@ -30,29 +32,43 @@ def safe_status(storage, status: str, detail: str) -> None:
         log.error("Universe status write failed: %s", type(exc).__name__)
 
 
-def sync_once(config, storage, client) -> list[dict]:
-    """Resolve fully, then update the reference master and publish membership."""
+def sync_once(config, storage, resolver) -> list[dict]:
+    """Resolve fully, then publish only validated membership."""
+    provider = config.provider
     handle = storage.start_ingestion_run(
-        pipeline="us_universe_sync", market_code="USA", source="eodhd",
+        pipeline="us_universe_sync", market_code="USA", source=provider,
         universe=config.name, requested_series=len(config.indexes),
-        metadata={"indexes": [item.symbol for item in config.indexes]},
+        metadata={"provider": provider, "indexes": [
+            getattr(item, "name", getattr(item, "symbol", "")) for item in config.indexes]},
     )
     try:
-        master, resolved = resolve_universe(config, client)
-        previous = storage.active_reference_count()
-        if len(master) < MINIMUM_MASTER_SIZE:
-            raise ValueError(f"US master rejected: only {len(master)} eligible instruments")
-        if previous and len(master) < int(previous * 0.8):
-            raise ValueError(f"US master rejected: {len(master)} is below 80% of {previous}")
-
-        lookup = storage.sync_reference_master(
-            master, getattr(client, "last_exchange_raw_id", None))
-        series = [{"instrument_id": lookup[item["symbol"]], **item} for item in resolved]
-        storage.sync_expected_series(
-            series, source="eodhd", universe=config.name, resolution="daily")
+        if getattr(config, "version", None) == 1:  # compatibility for old callers only
+            master, resolved = legacy_resolve(config, resolver)
+            previous = storage.active_reference_count()
+            if len(master) < MINIMUM_MASTER_SIZE:
+                raise ValueError(f"US master rejected: only {len(master)} eligible instruments")
+            if previous and len(master) < int(previous * 0.8):
+                raise ValueError(f"US master rejected: {len(master)} is below 80% of {previous}")
+            lookup = storage.sync_reference_master(
+                master, getattr(resolver, "last_exchange_raw_id", None))
+            series = [{"instrument_id": lookup[item["symbol"]], **item} for item in resolved]
+            storage.sync_expected_series(
+                series, source="eodhd", universe=config.name, resolution="daily")
+        else:
+            universe = resolver.resolve(config.request())
+            if isinstance(getattr(handle, "metadata", None), dict):
+                handle.metadata["provenance"] = universe.provenance
+            lookup = storage.upsert_resolved_constituents(
+                universe.constituents, source="schwab")
+            series = [{"instrument_id": lookup[item.symbol], **item.model_dump(),
+                       "provider_symbol": item.symbol}
+                      for item in universe.constituents]
+            storage.sync_expected_series(
+                series, source=config.daily_source, universe=config.name, resolution="daily")
+            storage.deactivate_expected_series(source="eodhd", resolution="daily")
         storage.finish_ingestion_run(
             handle, status="success", successful_series=len(series), rows_written=len(series))
-        safe_status(storage, "ready", f"{len(series)} configured US stocks resolved")
+        safe_status(storage, "ready", f"{provider}: {len(series)} configured US stocks resolved")
         log.info("Published %d configured US stocks", len(series))
         return series
     except Exception as exc:
@@ -64,20 +80,24 @@ def sync_once(config, storage, client) -> list[dict]:
         raise
 
 
-def run_daemon(config, storage) -> int:
+def run_daemon(config, storage, resolver=None) -> int:
+    resolver = resolver or create_resolver(config, storage)
     next_refresh = datetime.min.replace(tzinfo=UTC)
     last_heartbeat = datetime.min.replace(tzinfo=UTC)
-    last_result: tuple[str, str] = ("error", "Universe resolver has not completed")
+    last_result: tuple[str, str] = (
+        "error", f"{config.provider}: universe resolver has not completed")
     while not stop.is_set():
         now = datetime.now(UTC)
         if now >= next_refresh:
             try:
-                series = sync_once(config, storage, EODHDClient(storage=storage))
-                last_result = ("ready", f"{len(series)} configured US stocks resolved")
+                series = sync_once(config, storage, resolver)
+                last_result = (
+                    "ready", f"{config.provider}: {len(series)} configured US stocks resolved")
                 next_refresh = now + timedelta(minutes=config.refresh_interval_minutes)
             except Exception as exc:  # noqa: BLE001 - daemon retries all provider/storage failures
                 log.error("Universe refresh failed: %s", type(exc).__name__)
-                last_result = ("error", f"Universe refresh failed: {type(exc).__name__}")
+                last_result = (
+                    "error", f"{config.provider}: universe refresh failed: {type(exc).__name__}")
                 next_refresh = now + timedelta(minutes=RETRY_MINUTES)
             last_heartbeat = now
         elif (now - last_heartbeat).total_seconds() >= 60:
@@ -104,10 +124,11 @@ def main() -> int:
         log.error("Invalid universe config: %s", exc)
         return 2
     storage = USStorage.from_environment()
+    resolver = create_resolver(config, storage)
     if args.daemon:
-        return run_daemon(config, storage)
+        return run_daemon(config, storage, resolver)
     try:
-        sync_once(config, storage, EODHDClient(storage=storage))
+        sync_once(config, storage, resolver)
         return 0
     except Exception:  # noqa: BLE001 - sync_once already records sanitized failure health
         return 1

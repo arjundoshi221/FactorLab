@@ -77,6 +77,9 @@ done < "$record/previous-running-images.tsv"
 
 previous_release=$(sed -n 's/^previous_release=//p' "$record/release.env")
 previous_image=$(sed -n 's/^previous_image=//p' "$record/release.env")
-printf '%s\n' "${previous_release:-unknown}" > "$root/current-release"
+if [[ -n ${previous_release:-} && $previous_release != unknown && -d $root/releases/$previous_release ]]; then
+    date -u +'%Y-%m-%dT%H:%M:%SZ' > "$root/releases/$previous_release/activated-at"
+fi
 printf '%s\n' "${previous_image:-unknown}" > "$root/current-image"
+printf '%s\n' "${previous_release:-unknown}" > "$root/current-release"
 printf '%s\n' "Rolled back release $release_id successfully."

@@ -9,7 +9,6 @@ import pytest
 
 from factorlab.api.hub import TABLE_PROFILES, HubRepository
 from factorlab.api.us import USRepository
-from factorlab.countries.us.equities.eodhd.us_universe import normalize_daily
 from factorlab.sources.schwab.market import normalize
 from factorlab.storage.us_clickhouse import USStorage
 
@@ -30,14 +29,14 @@ def test_real_clickhouse_retries_reference_state_coverage_and_api():
     now = datetime.now(UTC)
     raw_id = storage.archive_http_response(source="schwab", source_url="https://example.test",
                                            response_body=b"{}", status_code=200)
-    lookup = storage.sync_reference_master([{
-        "symbol": symbol, "provider_symbol": f"{symbol}.US", "name": "Test equity",
-        "isin": None, "exchange_code": "XNAS", "exchange_name": "Nasdaq Stock Market",
-    }], raw_id)
+    lookup = storage.upsert_resolved_constituents([{
+        "symbol": symbol, "name": "Test equity", "exchange": "XNAS",
+        "currency": "USD", "instrument_type": "EQUITY",
+    }], raw_id=raw_id)
     ident = lookup[symbol]
     storage.sync_expected_series([{"instrument_id": ident, "symbol": symbol,
-                                  "provider_symbol": f"{symbol}.US"}],
-                                 source="eodhd", universe="test", resolution="daily")
+                                  "provider_symbol": symbol}],
+                                 source="schwab", universe="test", resolution="daily")
     storage.sync_expected_series([{"instrument_id": ident, "symbol": symbol,
                                   "provider_symbol": symbol}],
                                  source="schwab", universe="test", resolution="1min")
@@ -46,14 +45,16 @@ def test_real_clickhouse_retries_reference_state_coverage_and_api():
     assert len(frame) == 1
     for _ in range(2):
         storage.write_candles_1min(frame, instrument_id=ident, symbol=symbol, source="schwab", market_code="USA", raw_id=raw_id)
-    daily = normalize_daily([{"date": "2026-09-04", "open": 10, "high": 12,
-                              "low": 9, "close": 11, "volume": 10}])
-    daily_record = {"instrument_id": ident, "symbol": symbol, "raw_id": raw_id,
-                    **daily.iloc[0].to_dict()}
+    daily_stamp = int(datetime(2026, 9, 4, 16, tzinfo=UTC).timestamp() * 1000)
+    daily = normalize([{"datetime": daily_stamp, "open": 10, "high": 12,
+                        "low": 9, "close": 11, "volume": 10}],
+                      "daily", now=datetime(2026, 9, 5, tzinfo=UTC))
     for _ in range(2):
-        storage.write_daily_records([daily_record], source="eodhd")
+        storage.write_daily(daily, instrument_id=ident, symbol=symbol, raw_id=raw_id,
+                            source="schwab")
     storage.record_daily_snapshot_coverage(
-        [{"instrument_id": ident, "symbol": symbol}], [daily_record], date(2026, 9, 4))
+        [{"instrument_id": ident, "symbol": symbol}],
+        [{"instrument_id": ident}], date(2026, 9, 4), source="schwab")
     storage.coverage(ident, symbol, "1min", datetime(2026, 9, 4, 13, 30, tzinfo=UTC),
                      datetime(2026, 9, 4, 20, tzinfo=UTC), frame.timestamp.iloc[0].to_pydatetime())
     state = storage.state(ident, "1min")
@@ -62,7 +63,6 @@ def test_real_clickhouse_retries_reference_state_coverage_and_api():
     storage.save_state(state)
     assert storage.state(ident, "1min")["history_complete"]
     storage.source_status("ready", "Integration test", source="schwab")
-    storage.source_status("ready", "Integration test", source="eodhd")
     storage.source_status("ready", "Integration test", source="universe")
     repo = USRepository(client)
     for resolution in ("1min", "daily"):

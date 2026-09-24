@@ -183,6 +183,39 @@ CLICKHOUSE_DATABASE=<database>
 password authentication is the workstation default. If both keys are set,
 `CLICKHOUSE_SSH_KEY_PATH` wins.
 
+### Read-only query command
+
+From the repository root, after a user requests a live data check:
+
+```powershell
+python scripts/read_clickhouse.py --sql "SELECT 1 AS value"
+python scripts/read_clickhouse.py --sql-file path/to/query.sql
+```
+
+The reader loads `CLICKHOUSE_*` values from the environment or the repository
+`.env` (environment wins). It requires the configured SSH host/user and
+ClickHouse username/password/database; it has no development credential
+fallback. The remote ClickHouse host must be loopback. The SSH client uses a
+public key and strict host-key checking. Set `CLICKHOUSE_SSH_KEY_PATH` in
+`.env` to select a private key, or configure your default SSH key/agent. Add
+the VPS host key to your local `known_hosts` after verifying its fingerprint
+through a trusted channel. Password SSH is not used by this reader, even if
+`CLICKHOUSE_SSH_PASSWORD` exists in `.env`.
+
+For a new workstation, generate a dedicated key with `ssh-keygen -t ed25519`
+and have an authorized VPS administrator add its public key to the `ubuntu`
+account's `authorized_keys`. Set `CLICKHOUSE_SSH_KEY_PATH` to the private key's
+path if SSH will not find it by default. Connect once with `ssh` and accept
+the host key only after verifying the displayed fingerprint through a trusted
+channel; the reader will then use the recorded `known_hosts` entry.
+
+Each invocation opens a local-only SSH tunnel, runs one `SELECT` or `WITH`
+query with `readonly=1`, a 30-second execution limit, and server-side result
+limits, then closes the tunnel. Terminal output is capped at 30 rows and
+12 KB. Query errors omit credentials and server response bodies. This command
+does not grant standing permission to query production data; use it only for
+the user's requested read.
+
 Container-side code (VPS-native services in the Compose stack) leaves
 `CLICKHOUSE_SSH_HOST` unset and reaches ClickHouse over the private Docker
 network without a tunnel. The SSH tunnel is a workstation convenience only;

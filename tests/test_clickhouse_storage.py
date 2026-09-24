@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 
 import pandas as pd
 
-from factorlab.storage.clickhouse import ClickHouseStorage, contract_id_for, instrument_id_for
+from factorlab.storage.clickhouse import ClickHouseStorage, _version, contract_id_for, instrument_id_for
 
 
 class FakeClient:
@@ -29,6 +29,14 @@ class FakeClient:
 def test_stable_internal_ids_are_deterministic():
     assert instrument_id_for("NSE_EQ|INE002A01018") == instrument_id_for("NSE_EQ|INE002A01018")
     assert contract_id_for("NSE_FO|67003") == contract_id_for("NSE_FO|67003")
+
+
+def test_live_versions_exceed_microsecond_versions_and_increase():
+    now = datetime.now(UTC)
+    first = _version(now)
+    second = _version(now)
+    assert first > int(now.timestamp() * 1_000_000)
+    assert second > first
 
 
 def test_archived_response_is_gzipped_and_hashed():

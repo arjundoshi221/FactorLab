@@ -5,6 +5,7 @@ import { IndiaMarkets } from "./pages/IndiaMarkets";
 import { IndiaInstrumentDetail } from "./pages/IndiaInstrumentDetail";
 import { PoliticalData } from "./pages/PoliticalData";
 import { USMarkets } from "./pages/USMarkets";
+import { DockerImages } from "./pages/DockerImages";
 
 const SchemaMap = lazy(async () => {
   const module = await import("./pages/SchemaMap");
@@ -148,6 +149,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <a className={path === "/us" ? "active" : ""} href="/us">US markets</a>
           <a className={path === "/political" ? "active" : ""} href="/political">Political</a>
           <a className={path.startsWith("/schema") ? "active" : ""} href="/schema">Schema map</a>
+          <a className={path === "/docker-images" ? "active" : ""} href="/docker-images">Docker images</a>
           <a className={path === "/roadmap" ? "active" : ""} href="/roadmap">Roadmap</a>
         </nav>
         <span className="private-badge">Private system</span>
@@ -462,7 +464,7 @@ export function App() {
   }
   return (
     <Shell>
-      {path === "/roadmap" ? <Roadmap /> : path === "/schema" ? <Suspense fallback={<main className="loading-state">Loading schema canvas…</main>}><SchemaMap /></Suspense> : indiaInstrumentMatch ? <IndiaInstrumentDetail instrumentId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
+      {path === "/roadmap" ? <Roadmap /> : path === "/docker-images" ? <DockerImages /> : path === "/schema" ? <Suspense fallback={<main className="loading-state">Loading schema canvas…</main>}><SchemaMap /></Suspense> : indiaInstrumentMatch ? <IndiaInstrumentDetail instrumentId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
     </Shell>
   );
 }

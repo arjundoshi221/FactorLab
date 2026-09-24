@@ -19,7 +19,9 @@ for path in ["/health", "/us", "/india", "/hub/api/v1/overview", "/hub/api/v1/us
     print(json.dumps({"path": path, "status": response.status_code}), flush=True)
     assert response.ok, f"Acceptance failed: {path} HTTP {response.status_code}"
     if path == "/hub/api/v1/us/dashboard":
-        print(json.dumps(response.json()), flush=True)
+        dashboard = response.json()
+        assert {item["source"] for item in dashboard["sources"]} == {"universe", "schwab"}
+        print(json.dumps(dashboard), flush=True)
 assert requests.get(base + "/api/v1/us/candles/daily", timeout=30).status_code == 401
 page = requests.get(base + "/api/v1/us/instruments", headers=headers, timeout=30).json()
 if page["items"]:

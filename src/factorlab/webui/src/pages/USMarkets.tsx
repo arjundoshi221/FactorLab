@@ -27,7 +27,7 @@ export function USSummaryCard() {
     return () => { controller.abort(); window.clearInterval(timer); };
   }, []);
   return <article className="health-card">
-    <span className="eyebrow">US · EODHD + Schwab</span><h2><a href="/us">US market coverage</a></h2>
+    <span className="eyebrow">US · configured universe + Schwab</span><h2><a href="/us">US market coverage</a></h2>
     {data ? <><strong className="health-card__metric">{data.universe.active.toLocaleString()}</strong>
       <p>reference stocks · {data.universe.daily_configured} configured</p>
       <USStatusPill status={data.source.status} /><small>Configured daily universe · liquid minute tier</small></>
@@ -93,15 +93,15 @@ export function USMarkets() {
   }, [selected, resolution, cursor, dashboard]);
   const total = page.total ?? page.items.length;
   return <main className="us-markets">
-    <section className="hero"><div><span className="eyebrow">US equities · EODHD + Schwab</span>
+    <section className="hero"><div><span className="eyebrow">US equities · configured universe + Schwab</span>
       <h1>US markets</h1><p>Configured US stocks daily; up to 250 liquid names with one-minute coverage.</p></div>
       <button onClick={() => setTick(value => value + 1)} disabled={loading}>Refresh data</button></section>
     {error && <div className="notice notice--error" role="alert">{error}</div>}
     {loading && <p role="status">Loading US markets…</p>}
     {dashboard && <><USSummaryCards dashboard={dashboard} />
       {dashboard.sources.some(source => source.status === "auth_required") && <div className="notice" role="status">
-        Schwab authentication is required for minute data. <a href="https://factorlab-upstox-auth.kairo-jai.workers.dev/" target="_blank" rel="noreferrer">Open broker authentication</a></div>}</>}
-    <section className="inventory"><div className="section-heading"><div><span className="eyebrow">Full reference master</span>
+        Schwab authentication is required for universe validation and price collection. <a href="https://factorlab-upstox-auth.kairo-jai.workers.dev/" target="_blank" rel="noreferrer">Open broker authentication</a></div>}</>}
+    <section className="inventory"><div className="section-heading"><div><span className="eyebrow">US reference instruments</span>
       <h2>Instruments and coverage</h2></div><small>{total.toLocaleString()} matching stocks</small></div>
       <USUniverseTabs value={scope} onChange={value => { setScope(value); setOffset(0); setSelected(null); }} />
       <div className="table-tools"><label>Search stocks <input value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} placeholder="Symbol or company" /></label>
@@ -117,7 +117,7 @@ export function USMarkets() {
         <option value="daily">Daily prices</option><option value="1min">Selected session · one minute</option></select></label></div>
       {detailError && <p role="alert" className="notice notice--error">{detailError}</p>}
       {detailLoading ? <p role="status">Loading instrument history…</p> : <>
-        <p className="us-note">Daily data is supplied by EODHD; minute data is supplied by Schwab. Prices are USD.</p>
+        <p className="us-note">Daily and minute data are supplied by Schwab. Prices are USD.</p>
         <div className="table-scroll"><table><thead><tr><th>Session / time (New York)</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th></tr></thead>
           <tbody>{candles.map((candle, index) => <tr key={index}><td>{candle.trade_date || new Date(candle.bar_time!).toLocaleString("en-US", { timeZone: "America/New_York" })}</td>
             {[candle.open, candle.high, candle.low, candle.close].map((value, position) => <td key={position}>{Number(value).toFixed(4)}</td>)}

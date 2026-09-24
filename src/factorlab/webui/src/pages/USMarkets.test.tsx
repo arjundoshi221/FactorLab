@@ -3,10 +3,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { USMarkets } from "./USMarkets";
 
 const dashboard = { trading_date: "2026-09-04", market_status: "closed", instruments: 1,
-  source: { source: "eodhd", status: "ready", detail: "Ready" },
+  source: { source: "schwab", status: "ready", detail: "Ready" },
   sources: [{ source: "universe", status: "ready", detail: "1 configured stock resolved" },
-    { source: "eodhd", status: "ready", detail: "Daily ready" },
-    { source: "schwab", status: "ready", detail: "Minute ready" }],
+    { source: "schwab", status: "ready", detail: "Daily and minute ready" }],
   universe: { active: 1, daily_configured: 1, minute_configured: 1,
     daily_with_data: 1, minute_with_data: 1, no_daily_data: 0 }, resolutions: {
     "1min": { actual: 390, expected: 390, missing: 0, coverage_percent: 100 },
@@ -14,7 +13,7 @@ const dashboard = { trading_date: "2026-09-04", market_status: "closed", instrum
   } };
 const instrument = { instrument_id: "id", symbol: "AAPL", name: "Apple", exchange_code: "NASDAQ",
   series: ["1min", "daily"].map(resolution => ({ resolution,
-    source: resolution === "daily" ? "eodhd" : "schwab", status: "complete", expected: 1, actual: 1,
+    source: "schwab", status: "complete", expected: 1, actual: 1,
     missing: 0, available_from: "1985-01-02T05:00:00Z", last_bar: "2026-09-04T05:00:00Z", error: null })) };
 afterEach(() => vi.unstubAllGlobals());
 it("shows coverage, searches instruments, and loads daily history", async () => {

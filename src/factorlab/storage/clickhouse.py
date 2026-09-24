@@ -6,6 +6,8 @@ import gzip
 import hashlib
 import json
 import os
+import threading
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -21,6 +23,8 @@ from factorlab.core.secrets import get_secret
 _INSTRUMENT_NAMESPACE = uuid.UUID("c53d03b7-4fd7-43c8-915e-d503a04f6c9e")
 _CONTRACT_NAMESPACE = uuid.UUID("8a72760e-e469-4602-a0b4-67e3f61a3b3b")
 _NO_CONTRACT_ID = uuid.UUID(int=0)
+_VERSION_LOCK = threading.Lock()
+_LAST_VERSION = 0
 
 
 @dataclass(frozen=True)
@@ -42,7 +46,14 @@ def _utc_now() -> datetime:
 
 
 def _version(timestamp: datetime) -> int:
-    return int(timestamp.timestamp() * 1_000_000)
+    # Migration/resolver versions use nanoseconds. A live replacement must be
+    # greater even when a caller supplies an older source timestamp.
+    global _LAST_VERSION
+    with _VERSION_LOCK:
+        _LAST_VERSION = max(
+            _LAST_VERSION + 1, time.time_ns(), int(timestamp.timestamp() * 1_000_000_000)
+        )
+        return _LAST_VERSION
 
 
 def instrument_id_for(instrument_key: str) -> uuid.UUID:

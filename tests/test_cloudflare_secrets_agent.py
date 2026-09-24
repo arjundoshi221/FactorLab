@@ -116,3 +116,24 @@ def test_render_bundle_removes_schwab_token_when_refresh_fails(tmp_path, monkeyp
     assert agent._render_bundle(payload) == "upstox=missing, schwab=refresh_failed"
     assert not (us / "SCHWAB_ACCESS_TOKEN").exists()
     assert not (us / "SCHWAB_ACCESS_TOKEN.expires_at").exists()
+
+
+def test_render_bundle_does_not_require_eodhd_for_github_universe(tmp_path, monkeypatch):
+    agent = _load_agent_module()
+    _, _, us, _ = _configure_paths(agent, tmp_path, monkeypatch)
+    payload = {
+        "version": 1,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "secrets": {
+            "CLICKHOUSE_PASSWORD": "database-password",
+            "CLICKHOUSE_PASSWORD_SHA256": hashlib.sha256(b"database-password").hexdigest(),
+            "UPSTOX_ACCESS_TOKEN": None,
+            "SCHWAB_ACCESS_TOKEN": None,
+            "FACTORLAB_API_KEY": "factorlab-api-key",
+        },
+        "upstox": {"status": "missing"},
+        "schwab": {"status": "reauth_required"},
+    }
+
+    assert agent._render_bundle(payload) == "upstox=missing, schwab=reauth_required"
+    assert not (us / "EODHD_API_KEY").exists()

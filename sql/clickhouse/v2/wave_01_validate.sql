@@ -62,8 +62,7 @@ SELECT
 
 -- check: stale reference crosswalk source hashes
 SELECT count()
-FROM meta.migration_id_crosswalk AS x FINAL
-INNER JOIN (
+FROM (
     SELECT 'ref_instruments' AS legacy_table, instrument_key AS legacy_key,
            lower(hex(SHA256(toJSONString(tuple(*))))) AS source_hash
     FROM {{source_database}}.ref_instruments FINAL
@@ -76,13 +75,17 @@ INNER JOIN (
            lower(hex(SHA256(toJSONString(tuple(*)))))
     FROM {{source_database}}.alt_political_legislators FINAL
 ) AS legacy
-    ON x.legacy_table = legacy.legacy_table AND x.legacy_key = legacy.legacy_key
-WHERE x.legacy_database = '{{source_database}}' AND x.source_hash != legacy.source_hash;
+LEFT JOIN meta.migration_id_crosswalk AS x FINAL
+    ON x.legacy_database = '{{source_database}}'
+   AND x.legacy_table = legacy.legacy_table
+   AND x.legacy_key = legacy.legacy_key
+   AND x.source_hash = legacy.source_hash
+   AND x.approved_at IS NOT NULL
+WHERE x.target_id = toUUID('00000000-0000-0000-0000-000000000000');
 
 -- check: stale reference enrichment source hashes
 SELECT count()
-FROM meta.migration_reference_enrichment AS x FINAL
-INNER JOIN (
+FROM (
     SELECT 'ref_countries' AS legacy_table, toString(country_code) AS legacy_key,
            lower(hex(SHA256(toJSONString(tuple(*))))) AS source_hash
     FROM {{source_database}}.ref_countries FINAL
@@ -91,8 +94,13 @@ INNER JOIN (
            lower(hex(SHA256(toJSONString(tuple(*)))))
     FROM {{source_database}}.ref_exchanges FINAL
 ) AS legacy
-    ON x.legacy_table = legacy.legacy_table AND x.legacy_key = legacy.legacy_key
-WHERE x.legacy_database = '{{source_database}}' AND x.source_hash != legacy.source_hash;
+LEFT JOIN meta.migration_reference_enrichment AS x FINAL
+    ON x.legacy_database = '{{source_database}}'
+   AND x.legacy_table = legacy.legacy_table
+   AND x.legacy_key = legacy.legacy_key
+   AND x.source_hash = legacy.source_hash
+   AND x.approved_at IS NOT NULL
+WHERE x.legacy_key = '';
 
 -- check: unsupported legacy exchange timezones
 SELECT count() FROM meta.migration_reference_enrichment FINAL

@@ -53,6 +53,7 @@ Then use `http://127.0.0.1:8000` as the base URL.
 | `GET` | `/schema` | SSH/edge boundary | Live ClickHouse schema map and shared scratchboard |
 | `GET` | `/roadmap` | SSH/edge boundary | V1-V5 product roadmap |
 | `GET` | `/hub/api/v1/overview` | SSH/edge boundary | Cached table inventory and schedule-aware health |
+| `GET` | `/hub/api/v1/docker-images` | SSH/edge boundary | Host Docker image inventory snapshot |
 | `GET` | `/hub/api/v1/schema-map` | SSH/edge boundary | Tables, columns, engine keys, logical links, and shared layout |
 | `PUT` | `/hub/api/v1/schema-map/layout` | SSH/edge boundary | Save the version-checked canonical schema layout |
 | `GET` | `/hub/api/v1/india/dashboard` | SSH/edge boundary | Selected-day India collection health |
@@ -100,6 +101,14 @@ including empty tables. Counts come from active ClickHouse parts and are
 reported as fast stored-row counts rather than deduplicated `FINAL` counts.
 Known tables also include their domain date range, latest ingestion, rows for
 today, and a schedule-aware status. The response is cached for 55 seconds.
+
+`GET /hub/api/v1/docker-images` reads the host collector's atomic JSON
+snapshot. It returns `snapshot_at`, `release_id`, `stale`, and every locally
+stored image with its ID, tags, digests, size in bytes, creation time,
+associated container names/status/start times, latest container start, and
+current FactorLab release activation time where known. `stale` is true after
+three minutes; missing or invalid snapshots return 503. Historical deployment
+times are left null. The endpoint has no Docker socket access.
 
 ### Schema map web endpoints
 

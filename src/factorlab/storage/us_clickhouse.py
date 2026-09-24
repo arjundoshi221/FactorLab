@@ -90,6 +90,52 @@ class USStorage(ClickHouseStorage):
         self.insert_dicts("ref_instruments", reference_rows)
         return lookup
 
+    def upsert_resolved_constituents(self, constituents, *, source="schwab", raw_id=None):
+        """Upsert only resolved members, preserving all unrelated US references."""
+        now = datetime.now(UTC)
+        today = now.date()
+        symbols = [str(item["symbol"] if isinstance(item, dict) else item.symbol)
+                   for item in constituents]
+        existing_rows = rows(self.client.query("""SELECT instrument_key, first_seen
+            FROM ref_instruments FINAL
+            WHERE market_code = 'USA' AND trading_symbol IN {symbols:Array(String)}""",
+            parameters={"symbols": symbols})) if symbols else []
+        first_seen = {item["instrument_key"]: item["first_seen"] for item in existing_rows}
+        records = []
+        exchanges = {}
+        lookup = {}
+        for value in constituents:
+            item = value if isinstance(value, dict) else value.model_dump()
+            symbol = str(item["symbol"])
+            key = f"USA:{symbol}"
+            identifier = instrument_id_for(key)
+            exchange = str(item["exchange"])
+            lookup[symbol] = identifier
+            exchanges[exchange] = exchange
+            records.append({
+                "instrument_id": identifier, "instrument_key": key,
+                "trading_symbol": symbol, "name": str(item["name"]), "isin": None,
+                "exchange_code": exchange, "segment": "US_EQ", "instrument_type": "EQ",
+                "asset_class": "equity", "country_code": "US", "market_code": "USA",
+                "currency_code": str(item["currency"]), "lot_size": 1, "tick_size": None,
+                "freeze_quantity": None, "exchange_token": symbol, "status": "active",
+                "first_seen": first_seen.get(key, today), "last_seen": today,
+                "source": source, "raw_id": raw_id, "version": _version(now),
+                "ingested_at": now,
+            })
+        self.insert_dicts("ref_countries", [{
+            "country_code": "US", "name": "United States", "region": "americas",
+            "timezone": str(NY), "source": source, "version": _version(now),
+            "ingested_at": now,
+        }])
+        self.insert_dicts("ref_exchanges", [{
+            "exchange_code": code, "name": name, "country_code": "US",
+            "market_code": "USA", "currency_code": "USD", "timezone": str(NY),
+            "source": source, "version": _version(now), "ingested_at": now,
+        } for code, name in exchanges.items()])
+        self.insert_dicts("ref_instruments", records)
+        return lookup
+
     def sync_expected_series(self, series, *, source, universe, resolution):
         now = datetime.now(UTC)
         version = _version(now)
@@ -111,7 +157,23 @@ class USStorage(ClickHouseStorage):
         self.insert_dicts("us_expected_series", inserts)
         return len(current)
 
-    def active_expected_series(self, *, source="eodhd", resolution="daily"):
+    def deactivate_expected_series(self, *, source, resolution):
+        """Deactivate active expectations without deleting candles or recovery state."""
+        current = rows(self.client.query("""SELECT instrument_id, symbol, provider_symbol, universe
+            FROM us_expected_series FINAL
+            WHERE source = {source:String} AND resolution = {resolution:String} AND active""",
+            parameters={"source": source, "resolution": resolution}))
+        if not current:
+            return 0
+        now = datetime.now(UTC)
+        version = _version(now)
+        self.insert_dicts("us_expected_series", [{
+            **item, "source": source, "resolution": resolution, "active": False,
+            "version": version, "ingested_at": now,
+        } for item in current])
+        return len(current)
+
+    def active_expected_series(self, *, source="schwab", resolution="daily"):
         """Return the currently published collection universe in stable order."""
         return rows(self.client.query("""SELECT instrument_id, symbol, provider_symbol, universe,
             version, ingested_at FROM us_expected_series FINAL
@@ -237,10 +299,10 @@ class USStorage(ClickHouseStorage):
             WITH recent AS (
                 SELECT instrument_id, symbol, trade_date, close, volume
                 FROM market_candles_daily FINAL
-                WHERE market_code = 'USA' AND source = 'eodhd'
+                WHERE market_code = 'USA' AND source = 'schwab'
                   AND instrument_id IN (
                       SELECT instrument_id FROM us_expected_series FINAL
-                      WHERE source = 'eodhd' AND resolution = 'daily' AND active)
+                      WHERE source = 'schwab' AND resolution = 'daily' AND active)
                 ORDER BY instrument_id, trade_date DESC
                 LIMIT 20 BY instrument_id
             )

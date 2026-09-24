@@ -1,10 +1,22 @@
-version: 1
+version: 2
 name: us_configured
-provider: eodhd
+provider: github_csv
+daily_source: schwab
 refresh_interval_minutes: 1440
 
 indexes:
-  - symbol: GSPC.INDX
+  - name: sp500
     minimum_constituents: 450
+
+providers:
+  github_csv:
+    indexes:
+      sp500:
+        url: https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv
+        symbol_column: Symbol
+  eodhd:
+    indexes:
+      sp500:
+        symbol: GSPC.INDX
 
 extra_symbols: []

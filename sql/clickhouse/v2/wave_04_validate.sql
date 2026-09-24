@@ -3,26 +3,9 @@ SELECT count() FROM meta.migration_political_trade_enrichment FINAL
 WHERE (amount_min IS NOT NULL AND amount_max IS NOT NULL AND amount_min > amount_max)
    OR amount_bucket_id = '';
 
--- check: political source rows lack approved corrections
-SELECT
-    (SELECT count()
-     FROM {{source_database}}.alt_political_trades AS t FINAL
-     LEFT JOIN meta.migration_political_trade_enrichment AS x FINAL
-       ON x.legacy_database = '{{source_database}}' AND x.legacy_table = 'alt_political_trades'
-      AND x.legacy_key = t.trade_key AND x.approved_at IS NOT NULL
-     WHERE x.legacy_key = '')
-  + (SELECT count()
-     FROM {{source_database}}.alt_political_house_filings AS f FINAL
-     LEFT JOIN meta.migration_political_trade_enrichment AS x FINAL
-       ON x.legacy_database = '{{source_database}}'
-      AND x.legacy_table = 'alt_political_house_filings'
-      AND x.legacy_key = f.filing_id AND x.approved_at IS NOT NULL
-     WHERE x.legacy_key = '');
-
--- check: stale political enrichment source hashes
+-- check: political source rows lack approved current-hash corrections
 SELECT count()
-FROM meta.migration_political_trade_enrichment AS x FINAL
-INNER JOIN (
+FROM (
     SELECT 'alt_political_trades' AS legacy_table, toString(trade_key) AS legacy_key,
            lower(hex(SHA256(toJSONString(tuple(*))))) AS source_hash
     FROM {{source_database}}.alt_political_trades FINAL
@@ -31,18 +14,13 @@ INNER JOIN (
            lower(hex(SHA256(toJSONString(tuple(*)))))
     FROM {{source_database}}.alt_political_house_filings FINAL
 ) AS legacy
-    ON x.legacy_table = legacy.legacy_table AND x.legacy_key = legacy.legacy_key
-WHERE x.legacy_database = '{{source_database}}' AND x.source_hash != legacy.source_hash;
-
--- check: committee entities lack approved canonical mappings
-SELECT count()
-FROM {{source_database}}.alt_political_committees AS c FINAL
-LEFT JOIN meta.migration_id_crosswalk AS x FINAL
+LEFT JOIN meta.migration_political_trade_enrichment AS x FINAL
     ON x.legacy_database = '{{source_database}}'
-   AND x.legacy_table = 'alt_political_committees'
-   AND x.legacy_key = c.committee_id AND x.target_kind = 'entity'
+   AND x.legacy_table = legacy.legacy_table
+   AND x.legacy_key = legacy.legacy_key
+   AND x.source_hash = legacy.source_hash
    AND x.approved_at IS NOT NULL
-WHERE x.target_id = toUUID('00000000-0000-0000-0000-000000000000');
+WHERE x.legacy_key = '';
 
 -- check: membership legislators lack approved canonical mappings
 SELECT count() FROM (
@@ -56,10 +34,9 @@ SELECT count() FROM (
     WHERE x.target_id = toUUID('00000000-0000-0000-0000-000000000000')
 );
 
--- check: stale political canonical-ID source hashes
+-- check: political source rows lack approved current-hash canonical IDs
 SELECT count()
-FROM meta.migration_id_crosswalk AS x FINAL
-INNER JOIN (
+FROM (
     SELECT 'alt_political_trades' AS legacy_table, toString(trade_key) AS legacy_key,
            lower(hex(SHA256(toJSONString(tuple(*))))) AS source_hash
     FROM {{source_database}}.alt_political_trades FINAL
@@ -68,8 +45,13 @@ INNER JOIN (
            lower(hex(SHA256(toJSONString(tuple(*)))))
     FROM {{source_database}}.alt_political_committees FINAL
 ) AS legacy
-    ON x.legacy_table = legacy.legacy_table AND x.legacy_key = legacy.legacy_key
-WHERE x.legacy_database = '{{source_database}}' AND x.source_hash != legacy.source_hash;
+LEFT JOIN meta.migration_id_crosswalk AS x FINAL
+    ON x.legacy_database = '{{source_database}}'
+   AND x.legacy_table = legacy.legacy_table
+   AND x.legacy_key = legacy.legacy_key
+   AND x.source_hash = legacy.source_hash
+   AND x.approved_at IS NOT NULL
+WHERE x.target_id = toUUID('00000000-0000-0000-0000-000000000000');
 
 -- check: dangling political canonical IDs
 SELECT count() FROM meta.migration_political_trade_enrichment AS p FINAL
@@ -99,11 +81,31 @@ SELECT toUInt8(count() > 0 AND countIf(bioguide_id IS NOT NULL) / count() < 0.95
 FROM meta.migration_political_trade_enrichment FINAL
 WHERE legacy_table = 'alt_political_trades';
 
+-- check: approved political trades have unparsed or noncanonical amounts
+SELECT count()
+FROM meta.migration_political_trade_enrichment AS p FINAL
+WHERE p.legacy_table = 'alt_political_trades'
+  AND p.approved_at IS NOT NULL
+  AND (p.amount_min IS NULL OR p.amount_bucket_id NOT IN (
+      '$1K-$15K', '$15K-$50K', '$50K-$100K', '$100K-$250K', '$250K-$500K',
+      '$500K-$1M', '$1M-$5M', '$5M-$25M', '$25M-$50M', '$50M+'
+  ));
+
 -- check: listing resolution below 85 percent for listing-addressable assets
-SELECT toUInt8(count() > 0 AND countIf(listing_id IS NOT NULL) / count() < 0.85)
-FROM meta.migration_political_trade_enrichment FINAL
-WHERE legacy_table = 'alt_political_trades'
-  AND security_type IN ('common', 'preferred', 'adr', 'etf', 'reit', 'warrant');
+SELECT toUInt8(count() > 0 AND countIf(p.listing_id IS NOT NULL) / count() < 0.85)
+FROM (
+    SELECT trade_key, asset_type_code,
+           lower(hex(SHA256(toJSONString(tuple(*))))) AS source_hash
+    FROM {{source_database}}.alt_political_trades FINAL
+) AS t
+INNER JOIN meta.migration_political_trade_enrichment AS p FINAL
+    ON p.legacy_database = '{{source_database}}'
+   AND p.legacy_table = 'alt_political_trades'
+   AND p.legacy_key = t.trade_key
+   AND p.source_hash = t.source_hash
+WHERE p.approved_at IS NOT NULL
+  AND (t.asset_type_code = 'ST'
+       OR p.security_type IN ('common', 'preferred', 'adr', 'etf', 'reit', 'warrant'));
 
 -- check: OCC-parseable options are unresolved
 SELECT count() FROM meta.migration_political_trade_enrichment FINAL

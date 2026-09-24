@@ -1,7 +1,7 @@
 INSERT INTO meta.ingestion_runs
 SELECT
     r.run_id,
-    transform(r.market_code, ['USA', 'IND'], ['US', 'IN'], r.market_code),
+    transform(r.market_code, ['USA', 'IND', 'ALT_POLITICAL'], ['US', 'IN', 'US'], r.market_code),
     r.pipeline, r.source, r.source, r.universe, r.status, r.started_at, r.completed_at,
     r.requested_series, r.successful_series, r.failed_series, r.rows_written,
     CAST([], 'Array(UUID)'), r.error, r.metadata_json, NULL, r.version, r.ingested_at

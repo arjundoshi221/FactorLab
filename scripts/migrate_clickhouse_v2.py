@@ -26,7 +26,10 @@ MIGRATION_DIR = PROJECT_ROOT / "sql" / "clickhouse" / "v2"
 MIN_CLICKHOUSE_VERSION = (25, 3)
 LOCK_TABLE = "default._factorlab_v2_migration_lock"
 PHASES = ("schema", "backfill", "rbac")
-FILE_RE = re.compile(r"^wave_(?P<wave>\d{2})_(?P<phase>schema|views|backfill|rbac|validate)\.sql$")
+FILE_RE = re.compile(
+    r"^wave_(?P<wave>\d{2})_(?P<phase>schema|views|backfill|rbac|validate)"
+    r"(?:_[a-z][a-z0-9_]*)?\.sql$"
+)
 SAFE_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -187,6 +190,20 @@ def create_client() -> Any:
                 ) from exc
             if password:
                 break
+    settings: dict[str, int] = {}
+    max_partitions = os.getenv("CLICKHOUSE_MIGRATION_MAX_PARTITIONS_PER_INSERT_BLOCK", "")
+    if max_partitions:
+        try:
+            max_partitions_value = int(max_partitions)
+        except ValueError as exc:
+            raise MigrationError(
+                "CLICKHOUSE_MIGRATION_MAX_PARTITIONS_PER_INSERT_BLOCK must be an integer"
+            ) from exc
+        if not 100 <= max_partitions_value <= 10_000:
+            raise MigrationError(
+                "CLICKHOUSE_MIGRATION_MAX_PARTITIONS_PER_INSERT_BLOCK must be between 100 and 10000"
+            )
+        settings["max_partitions_per_insert_block"] = max_partitions_value
     return clickhouse_connect.get_client(
         host=os.getenv("CLICKHOUSE_HOST", "localhost"),
         port=int(os.getenv("CLICKHOUSE_PORT", "8443" if secure else "8123")),
@@ -194,6 +211,7 @@ def create_client() -> Any:
         password=password,
         secure=secure,
         connect_timeout=int(os.getenv("CLICKHOUSE_CONNECT_TIMEOUT", "10")),
+        settings=settings,
     )
 
 
@@ -360,9 +378,9 @@ def execute_migration(
 
 def validation_files(directory: Path, through_wave: int) -> list[Path]:
     files: list[tuple[int, Path]] = []
-    for path in directory.glob("wave_*_validate.sql"):
+    for path in directory.glob("wave_*.sql"):
         match = FILE_RE.match(path.name)
-        if match and int(match.group("wave")) <= through_wave:
+        if match and match.group("phase") == "validate" and int(match.group("wave")) <= through_wave:
             files.append((int(match.group("wave")), path))
     return [path for _, path in sorted(files)]
 
@@ -490,19 +508,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     plan = subparsers.add_parser("plan", help="show ordered migrations without connecting")
     plan.add_argument("--phase", choices=PHASES)
-    plan.add_argument("--through-wave", type=int, choices=range(9), default=8)
+    plan.add_argument("--through-wave", type=int, choices=range(10), default=8)
 
     subparsers.add_parser("status", help="show journal status and checksum drift")
 
     apply = subparsers.add_parser("apply", help="apply one phase")
     apply.add_argument("--phase", required=True, choices=PHASES)
-    apply.add_argument("--through-wave", required=True, type=int, choices=range(9))
+    apply.add_argument("--through-wave", required=True, type=int, choices=range(10))
     apply.add_argument("--yes", action="store_true", help="confirm ClickHouse mutations")
     apply.add_argument("--dry-run", action="store_true", help="print selection without connecting")
     apply.add_argument("--lock-timeout", type=int, default=3600)
 
     validate = subparsers.add_parser("validate", help="run preflight and data-quality gates")
-    validate.add_argument("--through-wave", required=True, type=int, choices=range(9))
+    validate.add_argument("--through-wave", required=True, type=int, choices=range(10))
     return parser
 
 

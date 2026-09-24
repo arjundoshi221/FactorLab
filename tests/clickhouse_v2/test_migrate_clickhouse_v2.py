@@ -32,18 +32,25 @@ def test_migrations_are_ordered_by_phase_wave_and_file(tmp_path: Path):
         "wave_02_backfill.sql",
         "wave_01_views.sql",
         "wave_01_schema.sql",
+        "wave_01_schema_data_completion.sql",
         "wave_08_rbac.sql",
         "wave_01_validate.sql",
+        "wave_01_validate_data_completion.sql",
     ):
         (tmp_path / name).write_text("SELECT 1;", encoding="utf-8")
     found = migration.discover_migrations(tmp_path)
     assert [item.migration_id for item in found] == [
         "wave_01_schema",
+        "wave_01_schema_data_completion",
         "wave_01_views",
         "wave_02_backfill",
         "wave_08_rbac",
     ]
     assert found[1].phase == "schema"
+    assert [path.name for path in migration.validation_files(tmp_path, 1)] == [
+        "wave_01_validate.sql",
+        "wave_01_validate_data_completion.sql",
+    ]
 
 
 def test_checksum_is_newline_stable_and_drift_is_fatal(tmp_path: Path):
@@ -98,6 +105,25 @@ def test_create_client_reads_production_username_and_password_file(monkeypatch, 
 
     assert captured["username"] == "factorlab"
     assert captured["password"] == "production-secret"
+
+
+def test_create_client_scopes_partition_override_to_migration_client(monkeypatch):
+    captured = {}
+    monkeypatch.setenv("CLICKHOUSE_MIGRATION_MAX_PARTITIONS_PER_INSERT_BLOCK", "1000")
+    monkeypatch.setattr(
+        "clickhouse_connect.get_client",
+        lambda **kwargs: captured.update(kwargs) or object(),
+    )
+
+    migration.create_client()
+
+    assert captured["settings"] == {"max_partitions_per_insert_block": 1000}
+
+
+def test_create_client_rejects_unsafe_partition_override(monkeypatch):
+    monkeypatch.setenv("CLICKHOUSE_MIGRATION_MAX_PARTITIONS_PER_INSERT_BLOCK", "100000")
+    with pytest.raises(migration.MigrationError, match="between 100 and 10000"):
+        migration.create_client()
 
 
 def test_failed_migration_is_resumed(monkeypatch):

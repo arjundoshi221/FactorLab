@@ -68,13 +68,61 @@ def test_deferred_objects_are_not_accidentally_runnable():
 
 
 def test_backfills_never_mutate_or_generate_canonical_ids_in_legacy():
-    for path in migration.MIGRATION_DIR.glob("wave_*_backfill.sql"):
+    for path in migration.MIGRATION_DIR.glob("wave_*backfill*.sql"):
         sql = path.read_text(encoding="utf-8")
         assert not re.search(r"\b(ALTER|DROP|TRUNCATE|DELETE|UPDATE)\b", sql, re.IGNORECASE)
         assert "generateUUIDv4" not in sql
         assert "generateUUIDv7" not in sql
         for statement in migration.split_sql(sql):
             assert re.match(r"(?:--.*\n)*\s*INSERT INTO (ref|raw|market|meta|alt)\.", statement)
+
+
+def test_wave_02_does_not_collapse_contract_keyed_bars():
+    sql = (migration.MIGRATION_DIR / "wave_02_backfill.sql").read_text(encoding="utf-8")
+    zero_contract_filter = (
+        "c.contract_id = toUUID('00000000-0000-0000-0000-000000000000')"
+    )
+    assert sql.count(zero_contract_filter) == 2
+    assert sql.count("x.source_hash = i.migration_source_hash") == 2
+    assert "'extended'" not in sql
+    assert "WHERE security_type = 'equity'" in sql
+
+    completion = (migration.MIGRATION_DIR / "wave_04_backfill_data_completion.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "INSERT INTO market.futures_contract_bars" in completion
+    assert "v2c.underlying_listing_id = l.listing_id" in completion
+    assert "INSERT INTO meta.expected_series" in completion
+
+
+def test_wave_03_maps_all_known_legacy_market_codes():
+    sql = (migration.MIGRATION_DIR / "wave_03_backfill.sql").read_text(encoding="utf-8")
+    assert "['USA', 'IND', 'ALT_POLITICAL'], ['US', 'IN', 'US']" in sql
+    assert "CAST([], 'Array(UUID)')" in sql
+
+
+def test_wave_04_requires_current_approved_political_ids():
+    sql = (migration.MIGRATION_DIR / "wave_04_validate.sql").read_text(encoding="utf-8")
+    assert "-- check: political source rows lack approved current-hash canonical IDs" in sql
+    assert "x.source_hash = legacy.source_hash" in sql
+    assert "x.approved_at IS NOT NULL" in sql
+
+
+def test_wave_09_prepares_canonical_operational_keys_without_exchanging_tables():
+    schema = (migration.MIGRATION_DIR / "wave_09_schema_application_cutover.sql").read_text(
+        encoding="utf-8"
+    )
+    backfill = (migration.MIGRATION_DIR / "wave_09_backfill_application_cutover.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "ORDER BY (country_code, listing_id, contract_id, source, resolution)" in schema
+    assert "ORDER BY (country_code, listing_id, source, resolution, trade_date)" in schema
+    assert "ORDER BY (country_code, listing_id, source, resolution)" in schema
+    assert "legacy_instrument_id UUID DEFAULT" in schema
+    assert "source_hash Nullable(FixedString(64))" in schema
+    assert "CREATE TABLE IF NOT EXISTS meta.hub_schema_layouts" in schema
+    assert "EXCHANGE TABLES" not in schema + backfill
+    assert "FROM meta.expected_series FINAL" in backfill
 
 
 @pytest.fixture(scope="module")

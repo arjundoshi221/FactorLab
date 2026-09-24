@@ -97,7 +97,28 @@ Uptime Kuma, Portainer, or persistent volumes.
 /mnt/factorlab-data/clickhouse-raw     raw HTTP archive (50 GB added disk)
 /etc/factorlab/identity                Cloudflare Access service-token files
 /etc/factorlab/us-universe.yaml        non-secret US collection universe
+/var/lib/factorlab/docker-images        host-generated image inventory snapshot
 ```
+
+## Docker image inventory
+
+`prepare-host.sh` installs and starts a root-owned systemd timer that runs once
+per minute. Its service reads local Docker image and container metadata and
+atomically replaces `/var/lib/factorlab/docker-images/snapshot.json`. The API
+mounts that directory read-only at `/run/docker-images`; it has no Docker socket
+mount. The snapshot contains IDs, tags, digests, sizes, creation times, container
+names/status/start times, and the current release activation time. It excludes
+container environment variables and mounts. The inventory covers images stored
+on this VPS, including unused and untagged images, but not unpulled registry images.
+
+The release deployer writes `releases/RELEASE_ID/activated-at` after successful
+verification; rollback updates the restored release's activation time. Older
+releases without this record display a blank activation time. The private
+`/docker-images` page and `GET /hub/api/v1/docker-images` expose the snapshot.
+The API flags snapshots older than three minutes as stale; missing or malformed
+snapshots return 503. Check the collector with
+`systemctl status factorlab-docker-images.timer` and
+`journalctl -u factorlab-docker-images.service`.
 
 ## Cloudflare no-domain contract
 
@@ -194,10 +215,12 @@ Then browse to `http://127.0.0.1:8000/`.
 
 ## US universe configuration
 
-`universe-us` resolves `/etc/factorlab/us-universe.yaml` into the active EODHD
-daily universe. It keeps the complete US common-stock master available for
-search while `ingest-us` polls the published membership. After editing the
-configuration, only the resolver needs a restart:
+`universe-us` resolves the provider-neutral version-2 configuration at
+`/etc/factorlab/us-universe.yaml`. GitHub CSV supplies current membership by
+default, Schwab validates every equity, and `ingest-us` uses Schwab for both
+daily and minute prices. Change only `provider` to select another configured
+adapter; there is no automatic fallback. After editing the configuration,
+restart the resolver:
 
 ```bash
 docker compose --env-file production.env -f compose.production.yml restart universe-us

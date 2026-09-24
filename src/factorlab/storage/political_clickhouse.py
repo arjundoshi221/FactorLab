@@ -6,15 +6,11 @@ import re
 from datetime import date, datetime, timezone
 from typing import Any, Mapping, Sequence
 
-from factorlab.storage.clickhouse import ClickHouseStorage
+from factorlab.storage.clickhouse import ClickHouseStorage, _version
 
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _version(timestamp: datetime) -> int:
-    return int(timestamp.timestamp() * 1_000_000)
 
 
 class PoliticalClickHouseStorage:

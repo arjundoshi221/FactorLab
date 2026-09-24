@@ -7,6 +7,7 @@ vi.mock("./components/us/USDashboardPanel", () => ({
 }));
 vi.mock("./pages/USMarkets", () => ({ USMarkets: () => null }));
 vi.mock("./pages/SchemaMap", () => ({ SchemaMap: () => <h1>Schema map canvas</h1> }));
+vi.mock("./pages/DockerImages", () => ({ DockerImages: () => <h1>Docker image inventory</h1> }));
 
 const overview = {
   generated_at: "2026-08-20T05:30:00Z",
@@ -74,6 +75,14 @@ describe("FactorLab Hub", () => {
     render(<App />);
     expect(screen.getByText("From data confidence to research execution.")).toBeInTheDocument();
     expect(screen.getByText("Backtesting")).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("routes Docker images without loading the dashboard", () => {
+    window.history.replaceState({}, "", "/docker-images");
+    render(<App />);
+    expect(screen.getByText("Docker image inventory")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Docker images" })).toHaveClass("active");
     expect(fetch).not.toHaveBeenCalled();
   });
 

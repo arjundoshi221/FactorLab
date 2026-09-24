@@ -88,7 +88,7 @@ def test_pending_daily_includes_incomplete_stale_and_error_states():
     assert [item["instrument_id"] for item in runner.pending_daily(items, states, target_day)] == identifiers[:3]
 
 
-def test_liquid_tier_skips_unresolved_schwab_symbols(monkeypatch):
+def test_liquid_tier_uses_resolver_validated_symbols(monkeypatch):
     monkeypatch.setattr(runner, "MINUTE_TIER_SIZE", 2)
     identifiers = [uuid4() for _ in range(3)]
     storage = Mock()
@@ -96,11 +96,11 @@ def test_liquid_tier_skips_unresolved_schwab_symbols(monkeypatch):
         {"instrument_id": identifier, "symbol": symbol}
         for identifier, symbol in zip(identifiers, ["BAD", "AAPL", "MSFT"], strict=True)]
     client = Mock()
-    client.instrument.side_effect = [ValueError("missing"), ({}, "raw"), ({}, "raw")]
     items = [{"instrument_id": identifier, "symbol": symbol, "provider_symbol": f"{symbol}.US"}
              for identifier, symbol in zip(identifiers, ["BAD", "AAPL", "MSFT"], strict=True)]
     result = runner.select_minute_tier(storage, client, items)
-    assert [item[0] for item in result] == ["AAPL", "MSFT"]
+    assert [item[0] for item in result] == ["BAD", "AAPL"]
+    client.instrument.assert_not_called()
     assert storage.sync_expected_series.call_args.kwargs == {
         "source": "schwab", "universe": "us_liquid_250", "resolution": "1min"}
 

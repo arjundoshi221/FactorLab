@@ -33,11 +33,13 @@ try {
         throw "The worktree is dirty. Commit or remove all tracked and untracked changes first."
     }
 
-    Invoke-Git -Arguments @("fetch", "--prune", "origin", "main:refs/remotes/origin/main")
+    # Fetch the branch tip into FETCH_HEAD. Combining --prune with an explicit
+    # remote-tracking refspec can delete origin/main before it is resolved.
+    Invoke-Git -Arguments @("fetch", "--no-tags", "origin", "main")
     $head = (& git rev-parse "HEAD").Trim()
-    $remoteHead = (& git rev-parse "refs/remotes/origin/main").Trim()
+    $remoteHead = (& git rev-parse "FETCH_HEAD").Trim()
     if ($LASTEXITCODE -ne 0) {
-        throw "Unable to resolve HEAD and origin/main."
+        throw "Unable to resolve HEAD and the fetched origin/main."
     }
     if ($head -ne $remoteHead) {
         throw "Local main must exactly match origin/main (unpushed, behind, and diverged states are refused)."

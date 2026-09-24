@@ -1,99 +1,52 @@
-# FactorLab — Agent Team (Nandi OS)
+# FactorLab instructions for Codex
 
-This project is **onboarded to Nandi**, the personal agent operating system at [`E:\AGENTS\`](file:///E:/AGENTS/). Every change here is owned by a Nandi specialist. Generic / unscoped agents are not used for work that has an owner — the routing table below is authoritative.
+Use this file as the repository entry point on every task. Check the relevant source files and linked runbooks before changing behavior; repository state and executable configuration are authoritative when docs disagree.
 
-- **Nandi OS spec:** [`E:\AGENTS\SPEC.md`](file:///E:/AGENTS/SPEC.md)
-- **Nandi OS map:** [`E:\AGENTS\CLAUDE.md`](file:///E:/AGENTS/CLAUDE.md)
-- **Agent definitions:** [`E:\AGENTS\.claude\agents\<name>.md`](file:///E:/AGENTS/.claude/agents/)
-- **FactorLab project memory:** [`E:\AGENTS\memory\projects\factorlab\`](file:///E:/AGENTS/memory/projects/factorlab/)
+## Working workflow
 
----
+1. Read this file and inspect `git status --short` before editing. Preserve existing user changes; do not revert, stage, or overwrite unrelated work.
+2. Trace the requested behavior through its callers, storage/API boundaries, configuration, and relevant docs. Keep provider-specific behavior at source adapters and preserve point-in-time and raw-data guarantees.
+3. Make the smallest coherent change. Update the relevant documentation when a workflow, schema, deployment topology, or operator-visible behavior changes.
+4. Run focused checks when requested or needed to establish correctness. Common commands are `python -m pytest <path>`, `python -m ruff check <path>`, and, from `src/factorlab/webui`, `npm test` and `npm run build`.
+5. Review the final diff and status. Never include `.env`, credentials, private keys, ingested data, logs, database files, or generated archives in changes.
 
-## The team that owns FactorLab
+Do not launch long-running ingestion, migration, production, or other remote operations unless the user asked for that operation. Keep credentials out of command output, docs, and commits.
 
-| Role                                  | Agent             | What they own here                                                                          |
-|---------------------------------------|-------------------|---------------------------------------------------------------------------------------------|
-| **Project manager** (single owner)    | **factorlab-pm**  | Roadmap, milestones, DoD, blockers, status. Writes `memory/projects/factorlab/`.            |
-| Head of PMO                           | donna             | Cross-project view, portfolio standards, onboarding. Reads factorlab-pm's log weekly.       |
-| **CTO** (technical direction)         | **turing**        | Architecture, ADRs, stack choices. Cross-cutting design. Delegates to his team below.       |
-| Database administrator                | codd              | Postgres / Timescale / Railway schema, migrations, indexes. (Schema is frozen this round.)  |
-| OS / scripts / Task Scheduler         | ritchie           | Windows scripts, `.bat` wrappers, scheduled jobs. The conduit for "make it run on schedule." |
-| Environment / lockfiles / `.env`      | faraday           | `pyproject.toml`, Conda env, env-var hygiene, `paths.py`.                                   |
-| Cloud / Railway                       | cerf              | Railway deploys (Postgres, Upstox auth-server). DNS / cost.                                 |
-| Containers (deferred)                 | mclean            | Not active this round — containerization is paused.                                         |
-| Code reviewer (on-demand)             | fowler            | DRY / dead code / naming pass at end of phases 3 + 5. Never auto-fired.                     |
-| **Security sentinel**                 | **heimdall**      | Gate-keeper on secrets, tokens, NAS perms, Outlook bridge. Reviews; doesn't implement.      |
-| News / political beat (read-only)     | bernstein         | Tracks legislative / regulatory events that touch FactorLab's political-data sources.       |
-| Risk / red-team / veto                | watson            | Reviews any investment-flavored change. Rare for infra work.                                 |
+## Repository map
 
-**Routing rule of thumb:**
+- `src/factorlab/`: Python application. `api/` serves HTTP endpoints; `sources/` contains provider adapters; `storage/` handles persistence; `core/` and `shared/` hold common models, configuration, and utilities; `pipeline/` and `compute/` contain processing and research logic; `countries/` and `universe/` define market-specific behavior; `webui/` is the React/TypeScript interface.
+- `tests/`: Python tests, including API, ingestion, universe, and ClickHouse migration coverage. Frontend tests live alongside the UI under `src/factorlab/webui/`.
+- `configs/`: source and universe configuration. Keep secrets in environment-managed secret stores, never in checked-in config.
+- `sql/` and `migrations/`: ClickHouse SQL and database migrations. Read the migration runbook before changing or applying production migrations.
+- `deploy/`: production Compose bundle, release helper, and deployment/rollback scripts. `deploy/README.md` is the release and server operations guide.
+- `cloudflare/`: Cloudflare Workers for Upstox authentication and OAuth callback handling. Each Worker has its own README and package scripts.
+- `docs/architecture/`: system and schema design. `docs/data-sources/`: provider and domain references. `docs/operations/`: operating runbooks. `docs/developments/`: development plans. `docs/security/`: security policy and reviews.
+- `scripts/`: ingestion, administration, migrations, verification, and repository checks. Inspect a script's help and source before running it.
+- `data/` and `logs/`: local runtime data and output; do not commit them. `.env*` files are sensitive and must not be read into reports or committed.
+Keep the repository root for maintained project files. Put task scratch scripts and temporary outputs under the ignored `.tmp/<task-name>/` directory, and remove them when that task is complete. Do not create ad hoc `.sh`, `.ps1`, logs, or generated bundles in the root. Docker image exports are disposable transfer artifacts, not source: create them only when an explicitly requested workflow needs one, store them outside the repository (or temporarily under `.tmp/docker-images/`), and remove them after the transfer is verified. Never commit image archives.
 
-- *"How should X be designed?"* → **turing**
-- *"What's the next deliverable?"* → **factorlab-pm**
-- *"Is this safe to ship?"* → **heimdall** (security) or **watson** (risk)
-- *"How does it run on Windows / at the right time?"* → **ritchie**
-- *"What's the env / package shape?"* → **faraday**
-- *"Where does the data live?"* → **codd** (DB) or **ritchie** (NAS) or **faraday** (`paths.py`)
-- *"Did we already decide this?"* → search `memory/projects/factorlab/decisions.md` and `memory/infra/decisions.md`
+For system and schema questions, consult `docs/architecture/`. For environment variables and live operations, consult `docs/operations/`. For deployment, read `deploy/README.md`; for the VPS topology and service state, read `docs/VPS.md`.
 
-Independent specialists run in parallel — one message, multiple Agent calls.
+For user-requested live ClickHouse data questions, use `python scripts/read_clickhouse.py --sql "SELECT ..."` (or `--sql-file`) and return only the relevant compact results. See `docs/VPS.md` for one-time SSH key setup. Do not run live queries without a user request.
 
----
+## Production image and runtime
 
-## How the agents see this project
+The production image is built from the repository `Dockerfile`. Its Node 22 build stage installs the web UI from `package-lock.json` and compiles it to `dist/`. Its Python 3.12 runtime stage installs the FactorLab package and copies in `src/`, `scripts/`, `configs/`, `sql/`, and the compiled UI at `/app/web-dist`. `FACTORLAB_WEB_DIST` points the API at the compiled UI. The image is shared by the API and ingestion services; Compose supplies a service-specific command for each one. Some services can use distinct image pins, so preserve the per-service image variables in `deploy/compose.production.yml`.
 
-Every Nandi agent reads from and writes to its own memory namespace. They do **not** scribble into each other's directories.
+At runtime, Compose starts the Cloudflare secrets agent, which writes fetched runtime credentials into memory-backed volumes. ClickHouse uses persistent host mounts for curated and raw data. The one-shot bootstrap applies ClickHouse setup before ingestion and API services start. The API and ClickHouse ports bind to VPS loopback and are accessed through an SSH tunnel. Read `deploy/compose.production.yml` and `docs/VPS.md` for the authoritative services, ports, mounts, and dependency order; never put secret values in the image or deployment bundle.
 
-```
-E:\AGENTS\memory\
-├── projects\factorlab\              ← factorlab-pm writes; donna + nandi read
-│   ├── plan.md
-│   ├── outcomes.md
-│   ├── architecture.md
-│   ├── decisions.md
-│   ├── blockers.md
-│   ├── log.md
-│   └── docs\
-├── infra\                           ← turing + team write
-│   ├── decisions.md                 (ADRs; turing)
-│   ├── architecture.md              (turing)
-│   ├── containers\                  (mclean)
-│   ├── databases\                   (codd)
-│   ├── cloud\                       (cerf)
-│   ├── envs\                        (faraday)
-│   ├── os\                          (ritchie)
-│   └── runbooks\                    (turing curates; team contributes)
-├── security\                        ← heimdall writes
-├── news\                            ← lois + desk write
-└── shared\decisions\                ← cross-agent decisions
-```
+## Development and verification
 
-The matching project layout for code lives in this repo — see `docs/operations/` for runbooks once Phase 7 is complete.
+Python requires 3.12 or newer. Install the project and development tools with `python -m pip install -e ".[dev,notify]"`. The CI backend check is `python -m pytest`. Use focused tests for a narrow change, and do not claim a check passed unless it was run.
 
----
+The web UI uses Node 22 and npm. From `src/factorlab/webui`, install from the lockfile with `npm ci`; run `npm test` and `npm run build` for UI changes. `npm run dev` starts the local Vite server.
 
-## Current state (2026-05-13)
+Pre-commit hooks enforce secret, data-path, key, size, YAML/JSON, and whitespace checks. See `.pre-commit-config.yaml` and `docs/CONTRIBUTING.md`. Do not bypass a hook to make a change pass.
 
-FactorLab is **live, in Phase 0 of a restructure**. See [`memory/projects/factorlab/plan.md`](file:///E:/AGENTS/memory/projects/factorlab/plan.md) for the eight phases. The active restructure plan also lives at `C:\Users\arjd2\.claude\plans\factorlab-foundations-2026Q2.md`.
+## Production deployment
 
-Headline outcomes of the restructure:
+Use the repository deployment script as the sole release entry point: from the repo root on Windows, run `./deploy/release.ps1` in PowerShell. Do not reproduce its release steps manually in chat or by running Docker, SSH, image-build, or tag commands yourself. The script requires a clean worktree on `main` exactly synchronized with `origin/main`; it pushes an immutable release tag. That tag starts `.github/workflows/release.yml`, which runs Python and UI checks, builds the Linux/AMD64 image, publishes it to private GHCR, and deploys the exact image digest to the VPS. The workflow verifies the services and attempts rollback if deployment checks fail.
 
-1. `country × domain` taxonomy for every script and source module.
-2. `src/factorlab/shared/{paths,runtime,notify,ingest,storage}` as the one place duplicated patterns live.
-3. Raw vendor dumps stay in repo (canonical) and are mirrored to `E:\NAS\factorlab\raw\` by a weekly one-way sync script.
-4. One notifier (`notify(...)`) routes through this device's Outlook via a host-side daemon.
-5. One backfill CLI dispatcher (`factlab_backfill.py`) with per-source `Backfiller` implementations.
+Before invoking or modifying a release, read `deploy/README.md` and inspect the current worktree. Do not move or reuse release tags. Production schema migrations are separate reviewed, forward-only operations and are not run by the release workflow. After a deployment, use the runbook to inspect the GitHub Actions summary and VPS health; do not infer success just because the release script printed that the workflow started.
 
-**No containers in this round.** Everything runs locally via Windows Task Scheduler and the Conda env at `C:\Users\arjd2\.conda\envs\factorlab\python.exe`.
-
----
-
-## For collaborators (humans and agents)
-
-- Read [`docs/README.md`](docs/README.md) for the system overview.
-- Read [`memory/projects/factorlab/plan.md`](file:///E:/AGENTS/memory/projects/factorlab/plan.md) for what's actually being built right now.
-- Before opening a PR, identify which Nandi specialist owns the change and route accordingly.
-- All architectural decisions are recorded in `memory/infra/decisions.md` (ADR format). Don't reopen a decided question without an ADR amendment.
-- Heimdall reviews every change that touches secrets, tokens, OAuth flows, or new external network surface.
-
-Nandi orchestrates; specialists execute. There is no "general-purpose agent" for this project.
+Do not deploy, create release tags, run production migrations, or operate on the VPS unless the user explicitly requests that operation. Never expose ClickHouse or the private hub directly to the public internet. Do not disable SSH host-key checking. Production secrets belong in the configured secret stores and runtime secret volumes; do not copy them into source files or logs.

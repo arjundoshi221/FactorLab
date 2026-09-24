@@ -69,7 +69,7 @@ export function USDashboardPanel({ refreshKey }: { refreshKey: string }) {
               <td data-label="Daily"><USStatusPill status={seriesStatus(instrument, "daily")} /></td>
               <td data-label="Minute"><USStatusPill status={seriesStatus(instrument, "1min")} /></td>
             </tr>)}</tbody>
-          </table></div> : <p className="us-dashboard-empty">The provider master has not populated the US universe yet.</p>}
+          </table></div> : <p className="us-dashboard-empty">The resolver has not published the configured US universe yet.</p>}
         </article>
         <article className="us-dashboard-block">
           <div className="us-dashboard-block__heading"><div><span className="eyebrow">Pipeline activity</span>
