@@ -3,7 +3,9 @@ no Gateway is ever contacted."""
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -155,3 +157,21 @@ def mock_ib_live() -> MagicMock:
     ib.openTrades.return_value = []
     ib.managedAccounts.return_value = ["U18065781"]
     return ib
+
+
+WAVE_07_DDL = Path(__file__).resolve().parents[3] / "sql" / "clickhouse" / "v2" / "wave_07_schema.sql"
+_COLUMN_RE = re.compile(r"^\s*([a-z_][a-z0-9_]*)\s+[A-Z]")
+
+
+def wave7_columns(table: str) -> set[str]:
+    """Column names of a ``broker.*`` table, parsed from the Wave 7 DDL."""
+    text = WAVE_07_DDL.read_text(encoding="utf-8")
+    start = text.index(f"CREATE TABLE IF NOT EXISTS {table} (")
+    body = text[start:text.index("\nENGINE", start)]
+    columns = set()
+    for line in body.splitlines()[1:]:
+        code = line.split("--", 1)[0]
+        match = _COLUMN_RE.match(code)
+        if match and match.group(1) != "INDEX":
+            columns.add(match.group(1))
+    return columns

@@ -2,13 +2,16 @@
 
 **Owner:** factorlab-pm · **Last updated:** 2026-06-16
 
+> **Stale (2026-09-24):** Postgres references below predate the ClickHouse v2 cutover. The target ingestion model (provider adapters → engine → DB-service sinks) is [07-ingestion-provider-abstraction.md](07-ingestion-provider-abstraction.md); this inventory is refreshed in its phase P8.
+
 Living index of every script/module that fetches, parses, or upserts data.
 
 ## Country × domain matrix
 
 | Country | Domain                                                         | Vendors / sources                                                              |
 |---------|----------------------------------------------------------------|--------------------------------------------------------------------------------|
-| US      | equities                                                       | Schwab (REST + live), EODHD (daily), IBKR (future)                             |
+| US      | equities                                                       | Schwab (REST + live), EODHD (daily)                                            |
+| US      | broker mirror                                                  | IBKR (read-only positions / account / executions / open orders → `broker.*`)   |
 | US      | political (alt-data)                                           | House Clerk · Senate eFD · Senate Stock Watcher · FEC · Congress.gov · LDA · USASpending · Finnhub-contracts |
 | IN      | equities                                                       | Upstox (intraday + futures)                                                    |
 | EU/APAC | equities                                                       | (future EODHD multi-market)                                                    |
@@ -24,6 +27,7 @@ Living index of every script/module that fetches, parses, or upserts data.
 | `scripts/us/equities/schwab/us_equities_schwab_eod.py`                             | daily       | Daily post-close cron (R3K, last 7d)             |
 | `scripts/us/equities/blackrock/us_equities_blackrock_universe.py`                        | maintenance | Quarterly (BlackRock IWV → universe yamls)       |
 | `scripts/us/equities/eodhd/us_equities_eodhd_daily.py`                           | daily       | EOD (EODHD)                                      |
+| `scripts/us/ibkr/us_portfolio_ibkr_snapshot.py`                                    | daily       | Daemon, 06:00 + 16:30 New York (IBKR paper + live) |
 | `scripts/us/political/us_political_backfill.py`                       | backfill    | Manual (4-phase)                                 |
 | `scripts/us/political/us_political_daily.py --mode daily`            | daily       | Mon–Sat 17:30 IST                                |
 | `scripts/us/political/us_political_daily.py --mode weekly`           | daily       | Sun 17:30 IST                                    |

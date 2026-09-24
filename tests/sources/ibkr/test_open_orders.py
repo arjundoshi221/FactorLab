@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 
 import pytest
@@ -49,8 +49,6 @@ def test_snapshot_open_orders_maps_fields(mock_ib_paper, now_utc):
     assert r.status == "Submitted"
     assert r.account_id == "DUE375963"
     assert r.account_mode == "paper"
-    assert r.source_channel == "paper_gateway"
-    assert r.resolution_confidence == "unresolved"
     assert r.snapshot_time == now_utc
 
 
@@ -69,8 +67,7 @@ def test_snapshot_open_orders_naive_time_rejected(mock_ib_paper):
         snapshot_open_orders(mock_ib_paper, snapshot_time=datetime(2026, 9, 19))
 
 
-def test_snapshot_open_orders_live_channel(mock_ib_live, now_utc):
+def test_snapshot_open_orders_tags_live_mode(mock_ib_live, now_utc):
     mock_ib_live.openTrades.return_value = [make_trade()]
     rows = snapshot_open_orders(mock_ib_live, snapshot_time=now_utc)
-    assert rows[0].source_channel == "live_gateway"
     assert rows[0].account_mode == "live"

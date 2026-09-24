@@ -13,6 +13,10 @@ interface Env {
   CLICKHOUSE_PASSWORD_SHA256: SecretBinding;
   EODHD_API_KEY: SecretBinding;
   FACTORLAB_API_KEY: SecretBinding;
+  // Optional IB Gateway logins; absent bindings or secrets render as null.
+  IBKR_PAPER_PASSWORD?: SecretBinding;
+  IBKR_LIVE_PASSWORD?: SecretBinding;
+  IBKR_VNC_PASSWORD?: SecretBinding;
   UPSTOX_REDIRECT_URL: string;
   SCHWAB_CALLBACK_URL: string;
   CF_ACCESS_TEAM_DOMAIN: string;
@@ -380,18 +384,34 @@ async function verifiedAccess(request: Request, env: Env): Promise<boolean> {
   }
 }
 
+async function optionalSecret(binding: SecretBinding | undefined): Promise<string | null> {
+  if (!binding) return null;
+  try {
+    const value = await binding.get();
+    return value.trim() ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 async function runtimeSecrets(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") return textResponse("Method not allowed.", 405);
   if (!await verifiedAccess(request, env)) return textResponse("Cloudflare Access required.", 403);
 
   const record = await tokenRecord(env);
   const valid = record !== null && Date.parse(record.expires_at) > Date.now();
-  const [clickhousePassword, clickhouseHash, eodhdKey, factorlabApiKey, schwab] = await Promise.all([
+  const [
+    clickhousePassword, clickhouseHash, eodhdKey, factorlabApiKey, schwab,
+    ibkrPaperPassword, ibkrLivePassword, ibkrVncPassword,
+  ] = await Promise.all([
     env.CLICKHOUSE_PASSWORD.get(),
     env.CLICKHOUSE_PASSWORD_SHA256.get(),
     env.EODHD_API_KEY.get(),
     env.FACTORLAB_API_KEY.get(),
     resolveSchwabRuntimeToken(env),
+    optionalSecret(env.IBKR_PAPER_PASSWORD),
+    optionalSecret(env.IBKR_LIVE_PASSWORD),
+    optionalSecret(env.IBKR_VNC_PASSWORD),
   ]);
   const accessToken = valid && record ? await decryptAccessToken(env, record) : null;
   return jsonResponse({
@@ -404,6 +424,9 @@ async function runtimeSecrets(request: Request, env: Env): Promise<Response> {
       SCHWAB_ACCESS_TOKEN: schwab.token,
       EODHD_API_KEY: eodhdKey,
       FACTORLAB_API_KEY: factorlabApiKey,
+      IBKR_PAPER_PASSWORD: ibkrPaperPassword,
+      IBKR_LIVE_PASSWORD: ibkrLivePassword,
+      IBKR_VNC_PASSWORD: ibkrVncPassword,
     },
     upstox: record ? {
       status: valid ? "valid" : "expired",

@@ -137,3 +137,36 @@ def test_render_bundle_does_not_require_eodhd_for_github_universe(tmp_path, monk
 
     assert agent._render_bundle(payload) == "upstox=missing, schwab=reauth_required"
     assert not (us / "EODHD_API_KEY").exists()
+
+
+def test_render_bundle_writes_ibkr_gateway_and_client_secrets(tmp_path, monkeypatch):
+    agent = _load_agent_module()
+    _configure_paths(agent, tmp_path, monkeypatch)
+    paper, live, ibkr_client = (tmp_path / name for name in ("ibkr-paper", "ibkr-live", "ibkr-client"))
+    for directory in (paper, live, ibkr_client):
+        directory.mkdir()
+    monkeypatch.setattr(agent, "IBKR_PAPER_DIR", paper)
+    monkeypatch.setattr(agent, "IBKR_LIVE_DIR", live)
+    monkeypatch.setattr(agent, "IBKR_CLIENT_DIR", ibkr_client)
+    (live / "TWS_PASSWORD").write_text("stale-live-password")
+    payload = {
+        "version": 1,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "secrets": {
+            "CLICKHOUSE_PASSWORD": "database-password",
+            "CLICKHOUSE_PASSWORD_SHA256": hashlib.sha256(b"database-password").hexdigest(),
+            "FACTORLAB_API_KEY": "factorlab-api-key",
+            "IBKR_PAPER_PASSWORD": "paper-password",
+            "IBKR_LIVE_PASSWORD": None,
+            "IBKR_VNC_PASSWORD": "vnc-password",
+        },
+        "upstox": {"status": "missing"},
+        "schwab": {"status": "missing"},
+    }
+
+    assert agent._render_bundle(payload) == "upstox=missing, schwab=missing, ibkr=paper"
+    assert (paper / "TWS_PASSWORD").read_text() == "paper-password"
+    assert (paper / "VNC_SERVER_PASSWORD").read_text() == "vnc-password"
+    assert not (live / "TWS_PASSWORD").exists()
+    assert (live / "VNC_SERVER_PASSWORD").read_text() == "vnc-password"
+    assert (ibkr_client / "CLICKHOUSE_PASSWORD").read_text() == "database-password"

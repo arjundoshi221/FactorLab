@@ -254,6 +254,24 @@ sudo sh /opt/factorlab/deploy/scripts/run-political-ingest.sh
 sudo tail -n 100 /var/lib/factorlab/logs/political-cron.log
 ```
 
+## IBKR broker mirror (optional)
+
+`ibkr-snapshot` (the `ibkr` Compose profile) writes `broker.*` from a read-only
+IB Gateway. By default that Gateway runs on the operator's machine and is
+reached over Tailscale (`IBKR_HOST_*`, `IBKR_PORT_*` in `production.env`). No
+IBKR credentials are stored on the VPS. The profile is off until
+`FACTORLAB_IBKR_ENABLED=true`. When it's on, `deploy-release.sh` and
+`rollback-release.sh` add `--profile ibkr` and verify that `ibkr-snapshot` runs
+on the release image.
+
+Optional VPS-hosted Gateways (`ibkr-gateway` profile,
+`FACTORLAB_IBKR_VPS_GATEWAYS=true`) are treated like ClickHouse. They are
+started with `up -d` and never force-recreated, and pinned separately with
+`IBKR_GATEWAY_IMAGE`, so their logged-in sessions survive releases.
+
+Setup, network rules and troubleshooting:
+[`docs/operations/ibkr-gateway-setup.md`](../docs/operations/ibkr-gateway-setup.md).
+
 ## DBeaver
 
 ```bash

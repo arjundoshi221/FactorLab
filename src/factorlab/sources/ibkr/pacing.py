@@ -1,6 +1,6 @@
 """IBKR pacing (rate-limit) helpers.
 
-IBKR historical-data pacing (per docs/data-sources/06-ibkr.md §6):
+IBKR historical-data pacing (per docs/data-sources/us/ibkr.md §6):
 
 * Global cap: 60 requests / 600s rolling window. We cap at 50 for headroom.
 * Identical-request cooldown: 15 seconds.
@@ -21,7 +21,7 @@ from factorlab.sources.ibkr.errors import IBKRPacingError
 
 log = logging.getLogger(__name__)
 
-# Defaults tuned to docs/data-sources/06-ibkr.md §6
+# Defaults tuned to docs/data-sources/us/ibkr.md §6
 DEFAULT_WINDOW_SEC = 600.0
 DEFAULT_MAX_REQUESTS = 50
 DEFAULT_IDENTICAL_COOLDOWN_SEC = 15.0

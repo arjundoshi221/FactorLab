@@ -29,12 +29,21 @@ if [[ -e $root/v2-cutover-activated ]]; then
 fi
 
 compose() {
-    docker compose --env-file "$live/production.env" -f "$live/compose.production.yml" "$@"
+    local profiles=()
+    if grep -Eqx 'FACTORLAB_IBKR_ENABLED=(true|1|yes)' "$live/production.env"; then
+        profiles+=(--profile ibkr)
+    fi
+    if grep -Eqx 'FACTORLAB_IBKR_VPS_GATEWAYS=(true|1|yes)' "$live/production.env"; then
+        profiles+=(--profile ibkr-gateway)
+    fi
+    docker compose --env-file "$live/production.env" -f "$live/compose.production.yml" \
+        "${profiles[@]}" "$@"
 }
 
 current_services=$(compose config --services)
 previous_services=$(cat "$record/previous-services.txt")
-for service in cloudflare-secrets-agent api ingest-india ingest-us universe-us; do
+for service in cloudflare-secrets-agent api ingest-india ingest-us universe-us \
+    ibkr-snapshot ibkr-gateway-paper ibkr-gateway-live; do
     if grep -Fxq "$service" <<<"$current_services" && ! grep -Fxq "$service" <<<"$previous_services"; then
         compose stop "$service"
         compose rm -f "$service"
@@ -74,7 +83,8 @@ curl --fail --silent --show-error --output /dev/null --max-time 30 \
     http://127.0.0.1:8000/hub/api/v1/overview
 sleep "${FACTORLAB_STABILIZATION_SECONDS:-30}"
 while IFS=$'\t' read -r service expected_image; do
-    [[ $service == ingest-india || $service == ingest-us || $service == universe-us ]] || continue
+    [[ $service == ingest-india || $service == ingest-us || $service == universe-us ||
+        $service == ibkr-snapshot ]] || continue
     container=$(compose ps -q "$service")
     [[ -n $container && $(docker inspect --format '{{.State.Status}}' "$container") == running ]]
 done < "$record/previous-running-images.tsv"

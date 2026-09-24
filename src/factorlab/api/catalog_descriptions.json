@@ -151,7 +151,7 @@
         "value_num": "numeric cast (majority path)",
         "value_str": "when broker returns non-numeric"
       },
-      "description": "Tall/long time series of account-level metrics. IBKR alone emits ~144 tags per account across segment × currency dimensions (see docs/data-sources/06-ibkr.md §5.4). Tall keeps schema stable when new tags appear."
+      "description": "Tall/long time series of account-level metrics. IBKR alone emits ~144 tags per account across segment × currency dimensions (see docs/data-sources/us/ibkr.md §5.4). Tall keeps schema stable when new tags appear."
     },
     "broker.applied_corporate_actions": {
       "columns": {

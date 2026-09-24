@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from factorlab.shared.ingest.provider import RawCapture
 from factorlab.storage.clickhouse import (
     _NO_CONTRACT_ID,
     ClickHouseStorage,
@@ -77,6 +78,24 @@ class V2IndiaStorage(ClickHouseStorage):
             "version": _version(now), "ingested_at": now,
         }])
 
+    def archive_raw(self, capture: RawCapture, *, source: str, source_channel: str) -> uuid.UUID:
+        """Persist one provider response to immutable ``raw.archive`` and return its id."""
+        raw_id = uuid.uuid4()
+        self._insert_dicts("raw.archive", [{
+            "raw_id": raw_id, "source": source, "source_channel": source_channel,
+            "transport": capture.transport, "country_code": self.country_code,
+            "source_url": capture.source_url,
+            "request_key": capture.request_key, "status_code": capture.status_code,
+            "response_headers": json.dumps(dict(capture.headers), sort_keys=True),
+            "response_body": gzip.compress(capture.body), "content_type": capture.content_type,
+            "content_encoding": "gzip",
+            "response_sha256": hashlib.sha256(capture.body).hexdigest(),
+            "fetched_at": capture.fetched_at, "window_start_at": None, "event_count": None,
+            "as_of_time": capture.fetched_at,
+            "metadata_json": json.dumps(dict(capture.metadata), sort_keys=True),
+        }])
+        return raw_id
+
     def archive_http_response(
         self, *, source: str, source_url: str, response_body: bytes,
         status_code: int, response_headers: Mapping[str, str] | None = None,
@@ -84,21 +103,12 @@ class V2IndiaStorage(ClickHouseStorage):
         metadata: Mapping[str, Any] | None = None,
         fetched_at: datetime | None = None,
     ) -> uuid.UUID:
-        now = fetched_at or datetime.now(UTC)
-        raw_id = uuid.uuid4()
-        self._insert_dicts("raw.archive", [{
-            "raw_id": raw_id, "source": source, "source_channel": source,
-            "transport": "http", "country_code": self.country_code, "source_url": source_url,
-            "request_key": fetch_key, "status_code": status_code,
-            "response_headers": json.dumps(dict(response_headers or {}), sort_keys=True),
-            "response_body": gzip.compress(response_body), "content_type": content_type,
-            "content_encoding": "gzip",
-            "response_sha256": hashlib.sha256(response_body).hexdigest(),
-            "fetched_at": now, "window_start_at": None, "event_count": None,
-            "as_of_time": now,
-            "metadata_json": json.dumps(dict(metadata or {}), sort_keys=True),
-        }])
-        return raw_id
+        return self.archive_raw(RawCapture(
+            body=response_body, request_key=fetch_key, transport="http",
+            fetched_at=fetched_at or datetime.now(UTC), source_url=source_url,
+            content_type=content_type, status_code=status_code,
+            headers=dict(response_headers or {}), metadata=dict(metadata or {}),
+        ), source=source, source_channel=source)
 
     def seed_india_reference_data(self) -> None:
         """Refuse collection unless the migrated exchange and currency exist."""

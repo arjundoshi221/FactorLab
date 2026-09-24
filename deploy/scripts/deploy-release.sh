@@ -22,6 +22,10 @@ record=$root/releases/$release_id
 lock=/var/lock/factorlab-release.lock
 stage=$(mktemp -d "$root/.release-stage.XXXXXX")
 managed=(cloudflare-secrets-agent api ingest-india ingest-us)
+# Optional IBKR broker mirror (FACTORLAB_IBKR_ENABLED=true in production.env) and
+# optional VPS Gateways (FACTORLAB_IBKR_VPS_GATEWAYS=true). Gateways hold a
+# logged-in IBKR session: never force-recreated by releases.
+ibkr_gateways=(ibkr-gateway-paper ibkr-gateway-live)
 rollback_state=not-required
 verification_state=failed
 previous_image=unknown
@@ -49,7 +53,15 @@ if ! flock -n 9; then
 fi
 
 compose() {
-    docker compose --env-file "$live/production.env" -f "$live/compose.production.yml" "$@"
+    local profiles=()
+    if grep -Eqx 'FACTORLAB_IBKR_ENABLED=(true|1|yes)' "$live/production.env"; then
+        profiles+=(--profile ibkr)
+    fi
+    if grep -Eqx 'FACTORLAB_IBKR_VPS_GATEWAYS=(true|1|yes)' "$live/production.env"; then
+        profiles+=(--profile ibkr-gateway)
+    fi
+    docker compose --env-file "$live/production.env" -f "$live/compose.production.yml" \
+        "${profiles[@]}" "$@"
 }
 
 wait_healthy() {
@@ -113,6 +125,9 @@ verify_current() {
         running_with_image "$service" "$image"
     done
     running_with_image universe-us "$image"
+    if service_exists ibkr-snapshot; then
+        running_with_image ibkr-snapshot "$image"
+    fi
     for service in bootstrap ingest-political universe-us; do
         [[ $(compose --profile jobs config --format json | python3 -c \
             "import json,sys; data=json.load(sys.stdin); print(data['services'][sys.argv[1]]['image'])" \
@@ -129,6 +144,9 @@ verify_current() {
         running_with_image "$service" "$image"
     done
     running_with_image universe-us "$image"
+    if service_exists ibkr-snapshot; then
+        running_with_image ibkr-snapshot "$image"
+    fi
 }
 
 rollback() {
@@ -137,7 +155,7 @@ rollback() {
     rollback_state=failed
 
     old_services=$(cat "$record/previous-services.txt")
-    for service in "${managed[@]}" universe-us; do
+    for service in "${managed[@]}" universe-us ibkr-snapshot "${ibkr_gateways[@]}"; do
         if ! grep -Fxq "$service" <<<"$old_services" && service_exists "$service"; then
             compose stop "$service"
             compose rm -f "$service"
@@ -169,7 +187,8 @@ rollback() {
     wait_http /hub/api/v1/overview || return 1
     sleep "${FACTORLAB_STABILIZATION_SECONDS:-30}"
     while IFS=$'\t' read -r service old_image; do
-        [[ $service == ingest-india || $service == ingest-us || $service == universe-us ]] || continue
+        [[ $service == ingest-india || $service == ingest-us || $service == universe-us ||
+            $service == ibkr-snapshot ]] || continue
         container=$(compose ps -q "$service")
         [[ -n $container && $(docker inspect --format '{{.State.Status}}' "$container") == running ]] || return 1
     done < "$record/previous-running-images.tsv"
@@ -239,7 +258,7 @@ if [[ -f $root/current-release ]]; then
 fi
 compose config --services > "$record/previous-services.txt"
 : > "$record/previous-running-images.tsv"
-for service in "${managed[@]}" universe-us; do
+for service in "${managed[@]}" universe-us ibkr-snapshot; do
     if service_exists "$service"; then
         container=$(compose ps -q "$service")
         if [[ -n $container && $(docker inspect --format '{{.State.Status}}' "$container") == running ]]; then
@@ -288,6 +307,14 @@ writer_activated=true
 compose up -d --no-deps --force-recreate universe-us
 compose up -d --no-deps --force-recreate ingest-india
 compose up -d --no-deps --force-recreate ingest-us
+if service_exists ibkr-gateway-paper; then
+    # Without --force-recreate, Compose only replaces a Gateway whose image or
+    # configuration changed, so routine releases keep the IBKR session alive.
+    compose up -d --no-deps "${ibkr_gateways[@]}"
+fi
+if service_exists ibkr-snapshot; then
+    compose up -d --no-deps --force-recreate ibkr-snapshot
+fi
 
 verify_current
 if [[ $activation_incomplete == true ]]; then

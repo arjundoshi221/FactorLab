@@ -1,10 +1,18 @@
-"""Row shapes for the ``broker.*`` mirror tables (schema-rehaul §9).
+"""Normalized IBKR broker facts for the ``broker.*`` mirror tables (schema-rehaul §9).
 
-Field names and types map 1:1 to the CREATE TABLE columns. Timestamps are
-UTC-aware ``datetime`` (asserted at construction); numbers are ``Decimal``;
-canonical FactorLab IDs (``listing_id``, ``security_id``, ``entity_id``,
-``contract_id``) are nullable ``UUID`` — populated later by the identifier
-resolver (Wave 1).
+Each shape holds only what the broker reported plus the snapshot identity
+(broker, account, mode, country). Columns owned by the storage layer are
+added at write time by :class:`factorlab.storage.v2_broker.V2BrokerStorage`:
+
+* identity — ``listing_id``/``security_id``/``contract_id``/``entity_id`` and
+  ``resolution_confidence``, resolved from the conid via ``ref.identifier_aliases``;
+* enrichment — ``metric_canonical`` (``ref.broker_metrics_map``),
+  ``execution_method_id`` (``ref.execution_methods``), ``strategy_id``;
+* provenance — ``source``, ``source_channel``, ``raw_id``, ``ingest_run_id``,
+  ``as_of_time``, ``ingested_at``, ``version``.
+
+Timestamps are UTC-aware ``datetime`` (asserted at construction); numbers are
+``Decimal``.
 """
 
 from __future__ import annotations
@@ -13,15 +21,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
-from uuid import UUID
 
 Mode = Literal["paper", "live"]
 BrokerCode = Literal["ibkr"]
-Source = Literal["ibkr"]
 SourceChannel = Literal["paper_gateway", "live_gateway"]
-ResolutionConfidence = Literal[
-    "exact", "high", "medium", "low", "unresolved", "manual_override"
-]
 Side = Literal["BUY", "SELL", "SSHORT"]
 ProductType = Literal[
     "common", "etf", "adr", "option", "future", "index", "forex", "bond", "fund", "other"
@@ -40,6 +43,11 @@ SEC_TYPE_TO_PRODUCT: dict[str, ProductType] = {
 }
 
 
+def source_channel_for(mode: Mode) -> SourceChannel:
+    """Return the ``source_channel`` recorded for rows captured from ``mode``'s Gateway."""
+    return f"{mode}_gateway"  # type: ignore[return-value]
+
+
 def _require_utc(name: str, value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{name} must be a UTC-aware datetime, got naive: {value!r}")
@@ -48,24 +56,17 @@ def _require_utc(name: str, value: datetime) -> datetime:
 
 @dataclass(frozen=True, slots=True)
 class PositionSnapshot:
-    """Row for ``broker.positions_snapshot`` (rehaul §9.1)."""
+    """Broker facts for one ``broker.positions_snapshot`` row (rehaul §9.1)."""
 
     snapshot_time: datetime
     broker_code: BrokerCode
     account_id: str
     account_mode: Mode
     country_code: str  # ISO-3166 alpha-2; 'US' for both IBKR accounts today
-    # canonical FactorLab IDs — nullable until resolver populates
-    listing_id: UUID | None
-    security_id: UUID | None
-    contract_id: UUID | None
-    entity_id: UUID | None
     product_type: ProductType
-    # vendor-native fallback
     vendor_id: str  # IBKR conid as string
     trading_symbol: str
     currency: str
-    # position
     position: Decimal
     avg_cost: Decimal | None
     market_price: Decimal | None
@@ -73,23 +74,14 @@ class PositionSnapshot:
     unrealized_pnl: Decimal | None
     realized_pnl_ytd: Decimal | None
     market_value_usd: Decimal | None
-    # resolution audit
-    resolution_confidence: ResolutionConfidence
-    # provenance + PIT
-    source: Source
-    source_channel: SourceChannel
-    as_of_time: datetime
-    ingested_at: datetime
 
     def __post_init__(self) -> None:
         _require_utc("snapshot_time", self.snapshot_time)
-        _require_utc("as_of_time", self.as_of_time)
-        _require_utc("ingested_at", self.ingested_at)
 
 
 @dataclass(frozen=True, slots=True)
 class AccountStateRow:
-    """Row for ``broker.account_state_snapshot`` (rehaul §9.2).
+    """Broker facts for one ``broker.account_state_snapshot`` row (rehaul §9.2).
 
     Tall/long — one row per (metric, segment, currency) tuple. IBKR emits
     ~144 tags per account across segment/currency dimensions.
@@ -105,20 +97,14 @@ class AccountStateRow:
     currency: str  # 'USD' | 'BASE' | 'NONE' | ...
     value_num: Decimal | None
     value_str: str | None
-    source: Source
-    source_channel: SourceChannel
-    as_of_time: datetime
-    ingested_at: datetime
 
     def __post_init__(self) -> None:
         _require_utc("snapshot_time", self.snapshot_time)
-        _require_utc("as_of_time", self.as_of_time)
-        _require_utc("ingested_at", self.ingested_at)
 
 
 @dataclass(frozen=True, slots=True)
 class ExecutionRecord:
-    """Row for ``broker.executions`` (rehaul §9.3). PK = ``exec_id``."""
+    """Broker facts for one ``broker.executions`` row (rehaul §9.3). PK = ``exec_id``."""
 
     exec_id: str  # IBKR immutable exec id
     broker_code: BrokerCode
@@ -128,10 +114,8 @@ class ExecutionRecord:
     order_id: int
     perm_id: int
     placed_by_client: int | None
-    listing_id: UUID | None
-    security_id: UUID | None
-    contract_id: UUID | None
-    entity_id: UUID | None
+    order_ref: str | None
+    route_pref: str  # '' when the fill does not reveal the routing preference
     product_type: ProductType
     vendor_id: str
     trading_symbol: str
@@ -145,21 +129,14 @@ class ExecutionRecord:
     commission: Decimal | None
     commission_ccy: str
     realized_pnl: Decimal | None
-    resolution_confidence: ResolutionConfidence
-    source: Source
-    source_channel: SourceChannel
-    as_of_time: datetime
-    ingested_at: datetime
 
     def __post_init__(self) -> None:
         _require_utc("exec_time", self.exec_time)
-        _require_utc("as_of_time", self.as_of_time)
-        _require_utc("ingested_at", self.ingested_at)
 
 
 @dataclass(frozen=True, slots=True)
 class OpenOrderSnapshot:
-    """Row for ``broker.open_orders_snapshot`` (rehaul §9.4)."""
+    """Broker facts for one ``broker.open_orders_snapshot`` row (rehaul §9.4)."""
 
     snapshot_time: datetime
     broker_code: BrokerCode
@@ -169,10 +146,7 @@ class OpenOrderSnapshot:
     perm_id: int
     order_id: int
     placed_by_client: int | None
-    listing_id: UUID | None
-    security_id: UUID | None
-    contract_id: UUID | None
-    entity_id: UUID | None
+    order_ref: str | None
     product_type: ProductType
     vendor_id: str
     trading_symbol: str
@@ -186,13 +160,6 @@ class OpenOrderSnapshot:
     limit_price: Decimal | None
     aux_price: Decimal | None
     status: str
-    resolution_confidence: ResolutionConfidence
-    source: Source
-    source_channel: SourceChannel
-    as_of_time: datetime
-    ingested_at: datetime
 
     def __post_init__(self) -> None:
         _require_utc("snapshot_time", self.snapshot_time)
-        _require_utc("as_of_time", self.as_of_time)
-        _require_utc("ingested_at", self.ingested_at)

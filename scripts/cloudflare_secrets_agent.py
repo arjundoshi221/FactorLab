@@ -26,6 +26,13 @@ TOKEN_FILE = INDIA_DIR / "UPSTOX_ACCESS_TOKEN"
 TOKEN_EXPIRY_FILE = INDIA_DIR / "UPSTOX_ACCESS_TOKEN.expires_at"
 SCHWAB_TOKEN_FILE = US_DIR / "SCHWAB_ACCESS_TOKEN"
 SCHWAB_TOKEN_EXPIRY_FILE = US_DIR / "SCHWAB_ACCESS_TOKEN.expires_at"
+# IBKR volumes are optional: rendered only when mounted into this container.
+IBKR_PAPER_DIR = Path("/run/secrets/ibkr-paper")
+IBKR_LIVE_DIR = Path("/run/secrets/ibkr-live")
+IBKR_CLIENT_DIR = Path("/run/secrets/ibkr-client")
+# The IB Gateway image runs as a non-root user and this agent drops CAP_CHOWN,
+# so Gateway login files are world-readable inside their Gateway-only tmpfs.
+GATEWAY_SECRET_MODE = 0o444
 
 
 def _atomic_write(path: Path, value: str, mode: int = 0o400) -> None:
@@ -101,6 +108,7 @@ def _render_bundle(payload: dict[str, Any]) -> str:
     else:
         _remove(US_DIR / "EODHD_API_KEY")
     _atomic_write(POLITICAL_DIR / "FACTORLAB_API_KEY", factorlab_api_key)
+    ibkr_status = _render_ibkr(secrets, clickhouse_password)
 
     upstox = payload.get("upstox") if isinstance(payload.get("upstox"), dict) else {}
     access_token = secrets.get("UPSTOX_ACCESS_TOKEN")
@@ -132,7 +140,43 @@ def _render_bundle(payload: dict[str, Any]) -> str:
 
     generated_at = payload.get("generated_at", "unknown")
     _atomic_write(CLICKHOUSE_DIR / ".agent-ready", str(generated_at), 0o444)
-    return f"upstox={upstox.get('status', 'missing')}, schwab={schwab.get('status', 'missing')}"
+    status = f"upstox={upstox.get('status', 'missing')}, schwab={schwab.get('status', 'missing')}"
+    return f"{status}, ibkr={ibkr_status}" if ibkr_status is not None else status
+
+
+def _optional_secret(secrets: dict[str, Any], name: str) -> str | None:
+    value = secrets.get(name)
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _render_ibkr(secrets: dict[str, Any], clickhouse_password: str) -> str | None:
+    """Render IB Gateway logins and the snapshot client's ClickHouse password.
+
+    Returns ``None`` when no IBKR volume is mounted, else the modes whose
+    Gateway password is present (``paper+live``, ``paper``, ``none``...).
+    """
+    if IBKR_CLIENT_DIR.is_dir():
+        _atomic_write(IBKR_CLIENT_DIR / "CLICKHOUSE_PASSWORD", clickhouse_password)
+    vnc_password = _optional_secret(secrets, "IBKR_VNC_PASSWORD")
+    mounted = False
+    ready = []
+    for mode, directory in (("paper", IBKR_PAPER_DIR), ("live", IBKR_LIVE_DIR)):
+        if not directory.is_dir():
+            continue
+        mounted = True
+        for file_name, value in (
+            ("TWS_PASSWORD", _optional_secret(secrets, f"IBKR_{mode.upper()}_PASSWORD")),
+            ("VNC_SERVER_PASSWORD", vnc_password),
+        ):
+            if value is None:
+                _remove(directory / file_name)
+            else:
+                _atomic_write(directory / file_name, value, GATEWAY_SECRET_MODE)
+        if (directory / "TWS_PASSWORD").exists():
+            ready.append(mode)
+    if not mounted and not IBKR_CLIENT_DIR.is_dir():
+        return None
+    return "+".join(ready) or "none"
 
 
 def _expire_local_token() -> None:

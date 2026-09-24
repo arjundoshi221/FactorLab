@@ -14,6 +14,36 @@ x-clickhouse-client-env: &clickhouse-client-env
   CLICKHOUSE_USERNAME: factorlab
   FACTORLAB_PERSIST_SECRETS: "false"
 
+# Optional VPS-hosted IB Gateways (IBC-managed) for the read-only IBKR mirror,
+# `ibkr-gateway` profile. The default deployment instead points ibkr-snapshot at a
+# Gateway on the operator's machine over Tailscale; see
+# docs/operations/ibkr-gateway-setup.md. Gateways keep a logged-in session, so
+# releases never force-recreate them.
+x-ibkr-gateway: &ibkr-gateway
+  image: ${IBKR_GATEWAY_IMAGE:-ghcr.io/gnzsnz/ib-gateway:stable}
+  restart: unless-stopped
+  networks: [backend]
+  security_opt:
+    - no-new-privileges:true
+  mem_limit: ${IBKR_GATEWAY_MEM_LIMIT:-1200m}
+  stop_grace_period: 30s
+  depends_on:
+    cloudflare-secrets-agent:
+      condition: service_healthy
+  profiles: [ibkr-gateway]
+
+x-ibkr-gateway-env: &ibkr-gateway-env
+  READ_ONLY_API: "yes"
+  TIME_ZONE: America/New_York
+  AUTO_RESTART_TIME: ${IBKR_AUTO_RESTART_TIME:-11:45 PM}
+  TWOFA_TIMEOUT_ACTION: restart
+  RELOGIN_AFTER_TWOFA_TIMEOUT: "yes"
+  EXISTING_SESSION_DETECTED_ACTION: primary
+  TWS_ACCEPT_INCOMING: reject
+  JAVA_HEAP_SIZE: ${IBKR_JAVA_HEAP_SIZE:-768}
+  TWS_PASSWORD_FILE: /run/secrets/ibkr/TWS_PASSWORD
+  VNC_SERVER_PASSWORD_FILE: /run/secrets/ibkr/VNC_SERVER_PASSWORD
+
 services:
   cloudflare-secrets-agent:
     <<: *factorlab-service
@@ -30,6 +60,9 @@ services:
       - india_runtime:/run/secrets/india
       - us_runtime:/run/secrets/us
       - political_runtime:/run/secrets/political
+      - ibkr_paper_runtime:/run/secrets/ibkr-paper
+      - ibkr_live_runtime:/run/secrets/ibkr-live
+      - ibkr_client_runtime:/run/secrets/ibkr-client
     read_only: true
     tmpfs:
       - /tmp:size=2m,mode=0700
@@ -163,6 +196,57 @@ services:
       - political_runtime:/run/secrets/app:ro
     profiles: [jobs]
 
+  ibkr-gateway-paper:
+    <<: *ibkr-gateway
+    environment:
+      <<: *ibkr-gateway-env
+      TRADING_MODE: paper
+      TWS_USERID: ${IBKR_PAPER_USERNAME:-}
+    volumes:
+      - ibkr_paper_runtime:/run/secrets/ibkr:ro
+    ports:
+      - "127.0.0.1:${IBKR_PAPER_VNC_PORT:-5900}:5900"
+
+  ibkr-gateway-live:
+    <<: *ibkr-gateway
+    environment:
+      <<: *ibkr-gateway-env
+      TRADING_MODE: live
+      TWS_USERID: ${IBKR_LIVE_USERNAME:-}
+    volumes:
+      - ibkr_live_runtime:/run/secrets/ibkr:ro
+    ports:
+      - "127.0.0.1:${IBKR_LIVE_VNC_PORT:-5901}:5900"
+
+  ibkr-snapshot:
+    <<: *factorlab-service
+    command:
+      - python
+      - scripts/us/ibkr/us_portfolio_ibkr_snapshot.py
+      - --daemon
+      - --run-on-start
+      - --modes
+      - ${IBKR_SNAPSHOT_MODES:-paper,live}
+    environment:
+      <<: *clickhouse-client-env
+      FACTORLAB_SECRETS_DIR: /run/secrets/app
+      # Laptop Gateway over Tailscale: its Tailscale IP with ports 4002/4001.
+      # VPS Gateways (ibkr-gateway profile): the defaults below.
+      IBKR_HOST_PAPER: ${IBKR_HOST_PAPER:-ibkr-gateway-paper}
+      IBKR_PORT_PAPER: ${IBKR_PORT_PAPER:-4004}
+      IBKR_HOST_LIVE: ${IBKR_HOST_LIVE:-ibkr-gateway-live}
+      IBKR_PORT_LIVE: ${IBKR_PORT_LIVE:-4003}
+      IBKR_SNAPSHOT_TIMES: ${IBKR_SNAPSHOT_TIMES:-06:00,16:30}
+      IBKR_SNAPSHOT_LOCK: /tmp/ibkr-snapshot.lock
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - ibkr_client_runtime:/run/secrets/app:ro
+    mem_limit: 384m
+    stop_grace_period: 60s
+    profiles: [ibkr]
+
   api:
     <<: *factorlab-service
     image: ${FACTORLAB_API_IMAGE:-factorlab:latest}
@@ -226,5 +310,14 @@ volumes:
     driver: local
     driver_opts: *tmpfs-options
   political_runtime:
+    driver: local
+    driver_opts: *tmpfs-options
+  ibkr_paper_runtime:
+    driver: local
+    driver_opts: *tmpfs-options
+  ibkr_live_runtime:
+    driver: local
+    driver_opts: *tmpfs-options
+  ibkr_client_runtime:
     driver: local
     driver_opts: *tmpfs-options
