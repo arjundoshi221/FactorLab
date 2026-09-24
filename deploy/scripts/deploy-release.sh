@@ -62,6 +62,19 @@ wait_healthy() {
     return 1
 }
 
+wait_http() {
+    local path=$1 timeout=${2:-120} deadline
+    deadline=$((SECONDS + timeout))
+    while (( SECONDS < deadline )); do
+        if curl --fail --silent --output /dev/null --max-time 30 \
+            "http://127.0.0.1:8000$path"; then
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
+}
+
 service_exists() {
     compose config --services | grep -Fxq "$1"
 }
@@ -103,11 +116,11 @@ verify_current() {
             "import json,sys; data=json.load(sys.stdin); print(data['services'][sys.argv[1]]['image'])" \
             "$service") == "$image" ]]
     done
+    wait_http /health
     response=$(curl --fail --silent --show-error --max-time 15 http://127.0.0.1:8000/health)
     grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' <<<"$response"
     for path in overview schema-map india/dashboard us/dashboard political/dashboard; do
-        curl --fail --silent --show-error --output /dev/null --max-time 30 \
-            "http://127.0.0.1:8000/hub/api/v1/$path"
+        wait_http "/hub/api/v1/$path"
     done
     sleep "${FACTORLAB_STABILIZATION_SECONDS:-30}"
     for service in ingest-india ingest-us; do
@@ -152,9 +165,8 @@ rollback() {
         [[ $(docker inspect --format '{{.Config.Image}}' "$container") == "$old_image" ]] || return 1
     done < "$record/previous-running-images.tsv"
     wait_healthy cloudflare-secrets-agent 120 || return 1
-    curl --fail --silent --show-error --output /dev/null --max-time 15 http://127.0.0.1:8000/health || return 1
-    curl --fail --silent --show-error --output /dev/null --max-time 30 \
-        http://127.0.0.1:8000/hub/api/v1/overview || return 1
+    wait_http /health || return 1
+    wait_http /hub/api/v1/overview || return 1
     sleep "${FACTORLAB_STABILIZATION_SECONDS:-30}"
     while IFS=$'\t' read -r service old_image; do
         [[ $service == ingest-india || $service == ingest-us || $service == universe-us ]] || continue
@@ -264,9 +276,9 @@ wait_healthy cloudflare-secrets-agent 120
 compose run --rm --no-deps bootstrap
 compose up -d --no-deps --force-recreate api
 running_with_image api "$image"
+wait_http /health
 for path in overview schema-map india/dashboard us/dashboard political/dashboard; do
-    curl --fail --silent --show-error --output /dev/null --max-time 30 \
-        "http://127.0.0.1:8000/hub/api/v1/$path"
+    wait_http "/hub/api/v1/$path"
 done
 activation_time=$(date -u +'%Y-%m-%dT%H:%M:%S+00:00')
 if [[ $first_v2_activation == true ]]; then
