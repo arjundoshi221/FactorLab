@@ -151,10 +151,13 @@ def test_schwab_validator_batches_and_rejects_non_equity_foreign_or_unresolved()
                 "reference": {"exchangeName": "NYSE ARCA", "currency": "USD"}},
         "SHOP": {"symbol": "SHOP", "assetMainType": "EQUITY",
                  "reference": {"exchangeName": "NASDAQ", "currency": "CAD"}},
+        "CBOE": {"symbol": "CBOE", "assetMainType": "EQUITY",
+                 "reference": {"exchangeName": "CBOE", "exchange": "Z"}},
         "errors": {"invalidSymbols": ["BAD"]},
     }, "raw")
-    result = SchwabEquityValidator(client).validate(["AAPL", "BAD", "SHOP", "SPY"])
-    assert [item.symbol for item in result] == ["AAPL"]
+    result = SchwabEquityValidator(client).validate(["AAPL", "BAD", "CBOE", "SHOP", "SPY"])
+    assert [(item.symbol, item.exchange) for item in result] == [
+        ("AAPL", "XNAS"), ("CBOE", "BATS")]
 
 
 def test_worker_publication_is_schwab_only_and_deactivates_legacy(monkeypatch):

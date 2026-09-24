@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, time, timedelta
@@ -12,6 +13,16 @@ from factorlab.storage.clickhouse import _decimal, _integer, _version
 from factorlab.storage.us_clickhouse import rows
 from factorlab.storage.v2_india import V2IndiaStorage
 from factorlab.storage.v2_reference import UnresolvedReference
+
+US_EXCHANGE_CODES = {
+    "XNAS": "NASDAQ", "XNYS": "NYSE", "ARCX": "NYSE Arca",
+    "XASE": "NYSE American", "BATS": "Cboe BZX",
+    "CBOE": "Cboe BZX", "Z": "Cboe BZX",
+}
+US_EXTRA_EXCHANGES = {
+    "NYSE American": ("XASE", "NYSE American"),
+    "Cboe BZX": ("BATS", "Cboe BZX Exchange"),
+}
 
 
 class V2USStorage(V2IndiaStorage):
@@ -24,12 +35,35 @@ class V2USStorage(V2IndiaStorage):
         )
         return int(result.result_rows[0][0])
 
+    def _ensure_us_exchange(self, exchange: str) -> None:
+        definition = US_EXTRA_EXCHANGES.get(exchange)
+        if definition is None:
+            return
+        exists = self.client.query(
+            "SELECT count() FROM ref.exchanges FINAL "
+            "WHERE exchange_code = {exchange:String}",
+            parameters={"exchange": exchange},
+        ).result_rows[0][0]
+        if exists:
+            return
+        mic, name = definition
+        now = datetime.now(UTC)
+        self._insert_dicts("ref.exchanges", [{
+            "exchange_code": exchange, "mic": mic, "name": name,
+            "country_code": "US", "currency_code": "USD",
+            "timezone": "America/New_York",
+            "sessions": json.dumps({"regular": {"open": "09:30", "close": "16:00"}}),
+            "active": True, "version": _version(now), "ingested_at": now,
+        }])
+
     def _upsert_us(self, item: Mapping[str, Any], *, source: str,
                    key: str, provider_symbol: str, raw_id: uuid.UUID | None = None) -> uuid.UUID:
         symbol = str(item["symbol"])
-        exchange = str(item.get("exchange_code") or item.get("exchange") or "")
+        provider_exchange = str(item.get("exchange_code") or item.get("exchange") or "")
+        exchange = US_EXCHANGE_CODES.get(provider_exchange, provider_exchange)
         if not exchange:
             raise UnresolvedReference(f"exchange unresolved for {symbol}")
+        self._ensure_us_exchange(exchange)
         security_type = "etf" if str(item.get("assetType") or "").upper() == "ETF" else "common"
         try:
             _, _, listing_id = self.references.upsert_listing({

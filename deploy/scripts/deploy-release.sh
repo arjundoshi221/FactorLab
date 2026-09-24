@@ -32,6 +32,10 @@ first_v2_activation=false
 if [[ ! -e $root/v2-cutover-activated ]]; then
     first_v2_activation=true
 fi
+activation_incomplete=$first_v2_activation
+if [[ ! -e /etc/cron.d/factorlab-political ]]; then
+    activation_incomplete=true
+fi
 
 cleanup() {
     rm -rf -- "$stage"
@@ -191,7 +195,7 @@ on_error() {
         if [[ $writer_activated == true || -e $root/v2-cutover-activated ]]; then
             echo "release failed after v2 writer activation; stopping writers for a v2 fix-forward release" >&2
             compose stop ingest-india ingest-us universe-us 2>/dev/null || true
-            if [[ $first_v2_activation == true ]]; then
+            if [[ $activation_incomplete == true ]]; then
                 rm -f -- /etc/cron.d/factorlab-political
                 systemctl reload-or-restart cron 2>/dev/null || true
             fi
@@ -292,10 +296,11 @@ compose up -d --no-deps --force-recreate ingest-india
 compose up -d --no-deps --force-recreate ingest-us
 
 verify_current
-if [[ $first_v2_activation == true ]]; then
+if [[ $activation_incomplete == true ]]; then
     compose --profile jobs run --rm --no-deps bootstrap \
         python scripts/verify_clickhouse_v2_writes.py \
-        --since "$activation_time" --wait-seconds "${FACTORLAB_V2_WRITE_WAIT_SECONDS:-900}"
+        --since "$activation_time" --wait-seconds "${FACTORLAB_V2_WRITE_WAIT_SECONDS:-900}" \
+        --require-universe-ready
     bash "$live/scripts/install-political-cron.sh"
 fi
 verification_state=succeeded

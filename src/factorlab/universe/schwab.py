@@ -10,6 +10,8 @@ SUPPORTED_EXCHANGES = {
     "P": "ARCX", "NYSE ARCA": "ARCX",
     "Q": "XNAS", "NASDAQ": "XNAS", "NASDAQ GLOBAL MARKET": "XNAS",
     "NASDAQ GLOBAL SELECT": "XNAS", "NASDAQ CAPITAL MARKET": "XNAS",
+    # Cboe's equities feed identifies Z as BZX; the equities MIC is BATS.
+    "Z": "BATS", "CBOE": "BATS", "CBOE BZX": "BATS",
 }
 
 
