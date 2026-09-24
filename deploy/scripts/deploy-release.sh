@@ -112,9 +112,7 @@ verify_current() {
     for service in cloudflare-secrets-agent api ingest-india ingest-us; do
         running_with_image "$service" "$image"
     done
-    if service_exists universe-us; then
-        running_with_image universe-us "$image"
-    fi
+    running_with_image universe-us "$image"
     for service in bootstrap ingest-political universe-us; do
         [[ $(compose --profile jobs config --format json | python3 -c \
             "import json,sys; data=json.load(sys.stdin); print(data['services'][sys.argv[1]]['image'])" \
@@ -130,9 +128,7 @@ verify_current() {
     for service in ingest-india ingest-us; do
         running_with_image "$service" "$image"
     done
-    if service_exists universe-us; then
-        running_with_image universe-us "$image"
-    fi
+    running_with_image universe-us "$image"
 }
 
 rollback() {
@@ -289,9 +285,7 @@ if [[ $first_v2_activation == true ]]; then
     printf '%s\n' "$release_id" > "$root/v2-cutover-activated"
 fi
 writer_activated=true
-if service_exists universe-us; then
-    compose up -d --no-deps --force-recreate universe-us
-fi
+compose up -d --no-deps --force-recreate universe-us
 compose up -d --no-deps --force-recreate ingest-india
 compose up -d --no-deps --force-recreate ingest-us
 
