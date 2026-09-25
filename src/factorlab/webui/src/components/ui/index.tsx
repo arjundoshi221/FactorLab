@@ -97,6 +97,26 @@ export function Tabs<T extends string>({ tabs, active, onChange, label }: {
   );
 }
 
+export interface MarketOption { code: string; label: string; detail?: string }
+
+/** All / India / US switch; an empty code means every market. */
+export function MarketSwitch({ options, value, onChange, label = "Market" }: {
+  options: MarketOption[]; value: string; onChange: (code: string) => void; label?: string;
+}) {
+  return (
+    <div className="market-switch" role="group" aria-label={label}>
+      <span className="market-switch__label">{label}</span>
+      {[{ code: "", label: "All markets" }, ...options].map((option) => (
+        <button key={option.code || "all"} type="button" aria-pressed={value === option.code}
+          className={value === option.code ? "is-active" : ""} onClick={() => onChange(option.code)}>
+          {option.label}
+          {"detail" in option && option.detail && <small>{option.detail}</small>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export interface Bar { label: string; value: number }
 
 /** Accessible bar chart: bars for the eye, a caption and titles for exact values. */

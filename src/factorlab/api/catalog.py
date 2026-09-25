@@ -9,7 +9,7 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -34,6 +34,8 @@ from factorlab.api.catalog_query import (
     build_rows_query,
     build_stats_query,
     clean_row,
+    country_filter,
+    country_of,
     csv_max_rows,
     describe_request,
     ensure_preview_allowed,
@@ -69,7 +71,13 @@ ROWS_TTL_SECONDS = 30
 STATS_TTL_SECONDS = 1_800
 ACTIVITY_TTL_SECONDS = 600
 PIPELINES_TTL_SECONDS = 60
+MARKETS_TTL_SECONDS = 600
 PROBLEM_STATUSES = ("failed", "partial")
+MARKET_LABELS = {"IN": "India", "US": "US", "*": "Global"}
+PIPELINE_COUNTRIES = {"India": "IN", "US": "US", "Political": "US"}
+# Namespaces whose populated tables are split into per-market figures. raw.archive is left out:
+# its payload-heavy parts make a full scan too costly for a catalog refresh.
+MARKET_NAMESPACES = frozenset({"market", "meta", "ref", "alt"})
 
 
 # ── Response models ──────────────────────────────────────────────────────────
@@ -85,6 +93,17 @@ class CatalogNamespace(BaseModel):
     stored_rows: int
     bytes_on_disk: int
     status_counts: dict[str, int]
+
+
+class MarketSlice(BaseModel):
+    """One market's share of a table that stores several countries together."""
+
+    country_code: str
+    label: str
+    stored_rows: int
+    first_data_at: str | None
+    last_data_at: str | None
+    last_ingested_at: datetime | None
 
 
 class CatalogTableSummary(BaseModel):
@@ -105,6 +124,7 @@ class CatalogTableSummary(BaseModel):
     columns: list[str]
     column_notes: dict[str, str]
     previewable: bool
+    markets: list[MarketSlice] = []
 
 
 class CatalogIndex(BaseModel):
@@ -356,6 +376,14 @@ def _as_datetime(value: Any) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
+def _iso(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime) and value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
 def _rows(result: Any) -> list[dict[str, Any]]:
     return [dict(zip(result.column_names, row, strict=True)) for row in result.result_rows]
 
@@ -498,6 +526,7 @@ class CatalogService:
         self.slots = slots or QuerySlots(3)
         self._cache = _TTLCache()
         self._schema_lock = threading.Lock()
+        self._markets_lock = threading.Lock()
 
     # metadata ---------------------------------------------------------------
 
@@ -533,9 +562,67 @@ class CatalogService:
             last_data_at=_as_datetime(hub.last_data_at) if hub else None,
         )
 
-    def table_info(self, name: str) -> TableInfo:
+    def table_info(self, name: str, country: str | None = None) -> TableInfo:
         schema_table = self._schema_table(name)
-        return self._table_info(schema_table, self._overview_tables().get(name))
+        info = self._table_info(schema_table, self._overview_tables().get(name))
+        if country is not None:
+            # Anchor time windows on this market's newest row, not the table's overall newest row.
+            market = next((item for item in self._markets().get(name, []) if item.country_code == country), None)
+            if market is not None and market.last_data_at:
+                info = replace(info, last_data_at=_as_datetime(market.last_data_at))
+        return info
+
+    def _markets(self) -> dict[str, list[MarketSlice]]:
+        """Per-market rows, coverage, and freshness for populated tables with a country_code column."""
+
+        cached = self._cache.get("markets", self.clock())
+        if cached is not None:
+            return cached
+        with self._markets_lock:
+            cached = self._cache.get("markets", self.clock())
+            if cached is not None:
+                return cached
+            hub_tables = self._overview_tables()
+            markets: dict[str, list[MarketSlice]] = {}
+            for table in self._schema().tables:
+                names = [column.name for column in table.columns]
+                hub = hub_tables.get(table.name)
+                if (
+                    "country_code" not in names
+                    or table.name.split(".", 1)[0] not in MARKET_NAMESPACES
+                    or table.engine in {"View", "MaterializedView"}
+                    or not (hub.stored_rows if hub else table.stored_rows)
+                ):
+                    continue
+                time_column = _time_column(table.name, names)
+                first = f"min(`{time_column}`)" if time_column else "NULL"
+                last = f"max(`{time_column}`)" if time_column else "NULL"
+                ingested = "max(`ingested_at`)" if "ingested_at" in names else "NULL"
+                try:
+                    result = self._query(
+                        f"SELECT toString(country_code) AS country, count() AS rows, {first} AS first_data_at, "
+                        f"{last} AS last_data_at, {ingested} AS last_ingested_at "
+                        f"FROM {table.name} GROUP BY country ORDER BY rows DESC LIMIT 20",
+                        {}, query_settings("markets", max_rows=20),
+                    )
+                except CatalogError:
+                    continue
+                slices = [
+                    MarketSlice(
+                        country_code=str(row["country"]).strip(),
+                        label=MARKET_LABELS.get(str(row["country"]).strip(), str(row["country"]).strip()),
+                        stored_rows=int(row["rows"]),
+                        first_data_at=_iso(row["first_data_at"]),
+                        last_data_at=_iso(row["last_data_at"]),
+                        last_ingested_at=_as_datetime(row["last_ingested_at"]),
+                    )
+                    for row in _rows(result)
+                    if str(row["country"]).strip()
+                ]
+                if slices:
+                    markets[table.name] = slices
+            self._cache.put("markets", markets, self.clock() + MARKETS_TTL_SECONDS)
+            return markets
 
     def _summary(self, schema_table: SchemaTable, hub: HubTable | None) -> CatalogTableSummary:
         text = table_text(schema_table.name)
@@ -559,6 +646,7 @@ class CatalogService:
             columns=column_names,
             column_notes={key: value for key, value in text.columns.items() if key in column_names},
             previewable=not is_view and env_flag("FACTORLAB_CATALOG_PREVIEW") and not preview_denied(schema_table.name),
+            markets=self._markets().get(schema_table.name, []),
         )
 
     def index(self) -> CatalogIndex:
@@ -660,7 +748,7 @@ class CatalogService:
             raise translate_database_error(exc) from exc
 
     def rows(self, name: str, request: RowsRequest) -> RowsPage:
-        info = self.table_info(name)
+        info = self.table_info(name, country_of(request.filters))
         ensure_preview_allowed(info)
         built = build_rows_query(info, request, now=self.now())
         key = ("rows", built.sql, json.dumps(built.parameters, sort_keys=True, default=str))
@@ -691,7 +779,8 @@ class CatalogService:
         return page
 
     def csv_export(self, name: str, request: RowsRequest) -> tuple[str, dict[str, str], Iterator[str]]:
-        info = self.table_info(name)
+        country = country_of(request.filters)
+        info = self.table_info(name, country)
         ensure_preview_allowed(info, csv=True)
         built = build_rows_query(info, request, now=self.now(), kind="csv")
         cap = csv_max_rows()
@@ -729,17 +818,18 @@ class CatalogService:
             finally:
                 self.slots.release()
 
-        filename = f"{name}_{self.now():%Y-%m-%d}.csv"
+        filename = f"{name}{f'_{country.lower()}' if country else ''}_{self.now():%Y-%m-%d}.csv"
         return filename, dict(describe_request(request, built.window)), generate()
 
-    def stats(self, name: str) -> TableStats:
-        info = self.table_info(name)
+    def stats(self, name: str, country: str | None = None) -> TableStats:
+        info = self.table_info(name, country)
         ensure_preview_allowed(info)
-        key = ("stats", name)
+        filters = country_filter(info, country)
+        key = ("stats", name, country)
         cached = self._cache.get(key, self.clock())
         if cached is not None:
             return cached
-        built = build_stats_query(info, now=self.now())
+        built = build_stats_query(info, now=self.now(), filters=filters)
         self.slots.acquire()
         try:
             result = self._query(built.sql, built.parameters, built.settings)
@@ -772,17 +862,18 @@ class CatalogService:
         self._cache.put(key, stats, self.clock() + STATS_TTL_SECONDS)
         return stats
 
-    def activity(self, name: str, grain: Literal["day", "month"]) -> TableActivity:
-        info = self.table_info(name)
+    def activity(self, name: str, grain: Literal["day", "month"], country: str | None = None) -> TableActivity:
+        info = self.table_info(name, country)
         if info.is_view:
             raise CatalogError("Views have no stored rows to chart.")
-        key = ("activity", name, grain)
+        filters = country_filter(info, country)
+        key = ("activity", name, grain, country)
         cached = self._cache.get(key, self.clock())
         if cached is not None:
             return cached
         buckets: list[ActivityBucket] = []
         if info.time_column and info.stored_rows:
-            built = build_activity_query(info, grain, now=self.now())
+            built = build_activity_query(info, grain, now=self.now(), filters=filters)
             self.slots.acquire()
             try:
                 result = self._query(built.sql, built.parameters, built.settings)
@@ -793,7 +884,10 @@ class CatalogService:
                 for row in _rows(result)
                 if row["bucket"] is not None
             ]
-        pipelines = [item.id for item in writers_of(name)]
+        pipelines = [
+            item.id for item in writers_of(name)
+            if country is None or PIPELINE_COUNTRIES.get(item.market) == country
+        ]
         runs: list[PipelineRun] = []
         if pipelines:
             result = self._query(

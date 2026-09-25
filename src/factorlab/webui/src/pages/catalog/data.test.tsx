@@ -15,6 +15,17 @@ const bars: CatalogTableSummary = {
   first_data_at: "1985-01-02T00:00:00+00:00", last_data_at: "2026-09-25T04:55:00+00:00",
   last_ingested_at: "2026-09-25T04:56:00+00:00", status: "not_expected", status_reason: "Tracked per market.",
   column_count: 3, columns: ["bar_time", "close", "source"], column_notes: { close: "Closing price" }, previewable: true,
+  markets: [
+    { country_code: "IN", label: "India", stored_rows: 9_000_000, first_data_at: "2026-08-01T03:45:00+00:00",
+      last_data_at: "2026-09-25T04:55:00+00:00", last_ingested_at: "2026-09-25T04:56:00+00:00" },
+    { country_code: "US", label: "US", stored_rows: 1_000_000, first_data_at: "1985-01-02",
+      last_data_at: "2026-09-24T19:59:00+00:00", last_ingested_at: "2026-09-24T20:05:00+00:00" },
+  ],
+};
+
+const futures: CatalogTableSummary = {
+  ...bars, name: "market.futures_contract_bars", title: "Futures contract bars", summary: "India single-stock futures.",
+  stored_rows: 400_000, markets: [{ ...bars.markets![0], stored_rows: 400_000 }],
 };
 
 const catalog: CatalogIndex = {
@@ -29,10 +40,13 @@ const catalog: CatalogIndex = {
   ],
   tables: [
     { ...bars },
+    futures,
     { ...bars, name: "market.options_bars", title: "Options bars", summary: "Reserved.", stored_rows: 0, bytes_on_disk: 0,
-      first_data_at: null, last_data_at: null, last_ingested_at: null, status: "not_configured", columns: ["strike"], column_notes: {} },
+      first_data_at: null, last_data_at: null, last_ingested_at: null, status: "not_configured", columns: ["strike"],
+      column_notes: {}, markets: [] },
     { ...bars, name: "alt.political_trades", namespace: "alt", title: "Congressional trades", summary: "Disclosed trades.",
-      stored_rows: 500, status: "healthy", columns: ["ticker_raw", "amount_min"], column_notes: { ticker_raw: "The ticker as filed" } },
+      stored_rows: 500, status: "healthy", columns: ["ticker_raw", "amount_min"], column_notes: { ticker_raw: "The ticker as filed" },
+      markets: [] },
   ],
 };
 
@@ -134,6 +148,29 @@ describe("data catalog home", () => {
     expect(screen.getByRole("heading", { name: "Alternative data" })).toBeInTheDocument();
   });
 
+  it("splits market data by India and US", async () => {
+    window.history.replaceState({}, "", "/data?ns=market");
+    vi.stubGlobal("fetch", respond({ "/hub/api/v1/catalog/pipelines": pipelines, "/hub/api/v1/catalog": catalog }));
+    render(<DataHome />);
+    const switcher = await screen.findByRole("group", { name: "Market" });
+    expect(within(switcher).getByRole("button", { name: /All markets/ })).toHaveAttribute("aria-pressed", "true");
+    const results = screen.getByRole("heading", { name: "Market data" }).closest("section")!;
+    expect(within(results).getByText("Futures contract bars")).toBeInTheDocument();
+
+    fireEvent.click(within(switcher).getByRole("button", { name: /^US/ }));
+    expect(window.location.search).toBe("?ns=market&market=US");
+    expect(within(results).queryByText("Futures contract bars")).not.toBeInTheDocument();
+    expect(screen.getByText(/1 table has no US data/)).toBeInTheDocument();
+    const card = within(results).getByText("Price bars").closest("a")!;
+    expect(card).toHaveAttribute("href", "/data/tables/market.bars?market=US");
+    expect(within(card).getByText("US rows")).toBeInTheDocument();
+    expect(within(card).getByText("10L")).toBeInTheDocument();
+
+    fireEvent.click(within(switcher).getByRole("button", { name: /^India/ }));
+    expect(within(results).getByText("Futures contract bars")).toBeInTheDocument();
+    expect(within(within(results).getByText("Price bars").closest("a")!).getByText("90L")).toBeInTheDocument();
+  });
+
   it("explains a failed load and retries", async () => {
     const fetchMock = respond({});
     vi.stubGlobal("fetch", fetchMock);
@@ -185,6 +222,39 @@ describe("table detail", () => {
     expect(new URLSearchParams(window.location.search).get("f.source")).toBeNull();
   });
 
+  it("scopes the preview, CSV, profile, and figures to the chosen market", async () => {
+    window.history.replaceState({}, "", "/data/tables/market.bars?tab=preview&market=US");
+    const fetchMock = respond({
+      "/hub/api/v1/catalog/tables/market.bars/rows": rows,
+      "/hub/api/v1/catalog/tables/market.bars/stats": { table: "market.bars", generated_at: NOW, sample_rows: 10, sample_limit: 100000,
+        window_start: null, window_end: null, columns: [] },
+      "/hub/api/v1/catalog/tables/market.bars": detail,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TableDetail name="market.bars" />);
+    await screen.findByText("101.500000");
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/rows?f.country_code=eq%3AUS"))).toBe(true);
+    expect(screen.getByRole("link", { name: /Download CSV/ })).toHaveAttribute(
+      "href", "/hub/api/v1/catalog/tables/market.bars/rows.csv?f.country_code=eq%3AUS",
+    );
+    expect(screen.getByText("Market", { selector: ".data-active-filters__market" })).toHaveTextContent("Market US");
+
+    fireEvent.click(screen.getByRole("button", { name: "1 day" }));
+    expect(new URLSearchParams(window.location.search).get("end")).toBe("2026-09-24T19:59:01.000Z");
+
+    fireEvent.click(screen.getByRole("tab", { name: /Columns/ }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/stats?country=US"))).toBe(true));
+    expect(new URLSearchParams(window.location.search).get("market")).toBe("US");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Overview" }));
+    expect(screen.getByText("US rows")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "By market" })).toHaveTextContent("India");
+
+    fireEvent.click(within(screen.getByRole("group", { name: "Market" })).getByRole("button", { name: /All markets/ }));
+    expect(new URLSearchParams(window.location.search).get("market")).toBeNull();
+    expect(screen.getByText("Rows stored")).toBeInTheDocument();
+  });
+
   it("shows why previews are unavailable and surfaces API errors", async () => {
     window.history.replaceState({}, "", "/data/tables/market.bars?tab=preview");
     vi.stubGlobal("fetch", respond({
@@ -213,6 +283,18 @@ describe("pipelines", () => {
     expect(within(cards[1]).getByText("8.1L")).toBeInTheDocument();
     expect(screen.getByText("503 equities")).toBeInTheDocument();
     expect(screen.getByText("need attention", { exact: false, selector: ".data-hero__facts span" })).toHaveTextContent("1 need attention");
+  });
+
+  it("filters pipelines by market", async () => {
+    window.history.replaceState({}, "", "/data/pipelines");
+    vi.stubGlobal("fetch", respond({ "/hub/api/v1/catalog/pipelines": pipelines }));
+    render(<Pipelines />);
+    await screen.findAllByRole("article");
+    fireEvent.click(within(screen.getByRole("group", { name: "Market" })).getByRole("button", { name: /^India/ }));
+    expect(window.location.search).toBe("?market=India");
+    const cards = screen.getAllByRole("article");
+    expect(cards).toHaveLength(1);
+    expect(within(cards[0]).getByRole("heading", { name: "India intraday bars" })).toBeInTheDocument();
   });
 });
 

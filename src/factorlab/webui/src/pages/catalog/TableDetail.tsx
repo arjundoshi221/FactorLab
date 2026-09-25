@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
-import { BarChart, EmptyState, ErrorBanner, MetricCard, Skeleton, StatusPill, Tabs, type TabItem } from "../../components/ui";
-import { tableHref, type CatalogTableDetail, type TableActivity, type TableStats } from "../../dataTypes";
+import { BarChart, EmptyState, ErrorBanner, MarketSwitch, MetricCard, Skeleton, StatusPill, Tabs, type TabItem } from "../../components/ui";
+import { marketLabel, marketSlice, tableHref, type CatalogTableDetail, type TableActivity, type TableStats } from "../../dataTypes";
 import { errorMessage, useRemote } from "../../shared/api";
 import { formatBytes, formatCompact, formatNumber, formatPercent, formatRange, formatRelative, formatTime } from "../../shared/format";
 import { useUrlParams } from "../../shared/urlState";
@@ -22,20 +22,46 @@ function KeyBadges({ column }: { column: CatalogTableDetail["column_details"][nu
   );
 }
 
-function Overview({ detail }: { detail: CatalogTableDetail }) {
+function Overview({ detail, market }: { detail: CatalogTableDetail; market: string }) {
   const outgoing = detail.related.filter((item) => item.direction === "out");
   const incoming = detail.related.filter((item) => item.direction === "in");
+  const slice = market ? marketSlice(detail, market) : null;
+  const rows = slice ? slice.stored_rows : detail.stored_rows;
+  const first = slice ? slice.first_data_at : detail.first_data_at;
+  const last = slice ? slice.last_data_at : detail.last_data_at;
+  const updated = slice ? slice.last_ingested_at : detail.last_ingested_at;
   return (
     <div className="data-overview">
       <section className="metric-grid" aria-label="Table facts">
-        <MetricCard label={detail.kind === "view" ? "Kind" : "Rows stored"} value={detail.kind === "view" ? "View" : formatCompact(detail.stored_rows)}
-          detail={detail.kind === "view" ? "Computed when queried" : `${formatNumber(detail.stored_rows)} physical rows`} />
-        <MetricCard label="Covers" value={<span className="data-metric-range">{formatRange(detail.first_data_at, detail.last_data_at)}</span>}
+        <MetricCard label={detail.kind === "view" ? "Kind" : slice ? `${slice.label} rows` : "Rows stored"}
+          value={detail.kind === "view" ? "View" : formatCompact(rows)}
+          detail={detail.kind === "view" ? "Computed when queried" : `${formatNumber(rows)} physical rows`} />
+        <MetricCard label="Covers" value={<span className="data-metric-range">{formatRange(first, last)}</span>}
           detail={detail.preview.time_column ? `Based on ${detail.preview.time_column}` : "No time column"} />
-        <MetricCard label="Last updated" value={detail.last_ingested_at ? formatRelative(detail.last_ingested_at) : "—"}
-          detail={detail.last_ingested_at ? formatTime(detail.last_ingested_at) : "Nothing ingested yet"} />
-        <MetricCard label="Size" value={formatBytes(detail.bytes_on_disk)} detail={`${detail.column_count} columns`} />
+        <MetricCard label="Last updated" value={updated ? formatRelative(updated) : "—"}
+          detail={updated ? formatTime(updated) : "Nothing ingested yet"} />
+        <MetricCard label="Size" value={formatBytes(detail.bytes_on_disk)} detail={`${detail.column_count} columns · all markets`} />
       </section>
+      {(detail.markets?.length ?? 0) > 1 && (
+        <section className="data-panel data-market-breakdown" aria-label="By market">
+          <h3>By market</h3>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Market</th><th className="numeric">Rows</th><th>Covers</th><th>Last updated</th></tr></thead>
+              <tbody>
+                {detail.markets!.map((item) => (
+                  <tr key={item.country_code} className={item.country_code === market ? "is-current" : ""}>
+                    <td data-label="Market"><strong>{item.label}</strong> <code>{item.country_code}</code></td>
+                    <td data-label="Rows" className="numeric">{formatNumber(item.stored_rows)}</td>
+                    <td data-label="Covers">{formatRange(item.first_data_at, item.last_data_at)}</td>
+                    <td data-label="Last updated" title={formatTime(item.last_ingested_at)}>{formatRelative(item.last_ingested_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
       <div className="data-overview__grid">
         <div>
           {detail.notes.length > 0 && (
@@ -105,16 +131,18 @@ function Overview({ detail }: { detail: CatalogTableDetail }) {
   );
 }
 
-function Columns({ detail }: { detail: CatalogTableDetail }) {
+function Columns({ detail, market }: { detail: CatalogTableDetail; market: string }) {
   const profiled = detail.preview.enabled && detail.stored_rows > 0;
-  const stats = useRemote<TableStats>(profiled ? `/hub/api/v1/catalog/tables/${detail.name}/stats` : null);
+  const stats = useRemote<TableStats>(
+    profiled ? `/hub/api/v1/catalog/tables/${detail.name}/stats${market ? `?country=${market}` : ""}` : null,
+  );
   const byName = useMemo(() => new Map((stats.data?.columns ?? []).map((item) => [item.name, item])), [stats.data]);
   return (
     <section className="data-columns" aria-label="Columns">
       <p className="data-note">
         {profiled
           ? stats.data
-            ? `Profile based on the most recent ${formatNumber(stats.data.sample_rows)} stored rows${stats.data.window_start ? " in the latest window" : ""}.`
+            ? `Profile based on the most recent ${formatNumber(stats.data.sample_rows)} stored${market ? ` ${marketLabel(market)}` : ""} rows${stats.data.window_start ? " in the latest window" : ""}.`
             : stats.error ? "" : "Profiling the most recent rows…"
           : "Column profiles appear once the table has data."}
       </p>
@@ -149,10 +177,12 @@ function Columns({ detail }: { detail: CatalogTableDetail }) {
   );
 }
 
-function Activity({ detail }: { detail: CatalogTableDetail }) {
+function Activity({ detail, market }: { detail: CatalogTableDetail; market: string }) {
   const [params, setParams] = useUrlParams();
   const grain = params.get("grain") === "month" ? "month" : "day";
-  const activity = useRemote<TableActivity>(`/hub/api/v1/catalog/tables/${detail.name}/activity?grain=${grain}`);
+  const activity = useRemote<TableActivity>(
+    `/hub/api/v1/catalog/tables/${detail.name}/activity?grain=${grain}${market ? `&country=${market}` : ""}`,
+  );
   const bars = (activity.data?.buckets ?? []).map((item) => ({ label: item.bucket, value: item.rows }));
   return (
     <section className="data-activity" aria-label="Activity">
@@ -167,7 +197,7 @@ function Activity({ detail }: { detail: CatalogTableDetail }) {
       </div>
       {activity.error ? <ErrorBanner onRetry={activity.refresh}>{errorMessage(activity.error, "Activity could not be loaded.")}</ErrorBanner> : null}
       {activity.loading && !activity.data ? <Skeleton rows={3} /> : bars.length ? (
-        <BarChart bars={bars} caption={`Stored rows by ${grain} of ${activity.data?.time_column ?? "time"}`} />
+        <BarChart bars={bars} caption={`Stored${market ? ` ${marketLabel(market)}` : ""} rows by ${grain} of ${activity.data?.time_column ?? "time"}`} />
       ) : activity.data ? <EmptyState title="No rows to chart yet." /> : null}
       <h3>Recent collection runs</h3>
       {activity.data && <RunList runs={activity.data.runs} now={Date.now()} />}
@@ -198,6 +228,18 @@ export function TableDetail({ name }: { name: string }) {
     { id: "preview", label: "Preview rows", disabled: data.kind === "view" },
     { id: "activity", label: "Activity", disabled: data.kind === "view" },
   ];
+  const markets = (data.markets ?? []).filter((item) => item.stored_rows > 0);
+  const requestedMarket = params.get("market") ?? "";
+  const market = markets.some((item) => item.country_code === requestedMarket) ? requestedMarket : "";
+
+  function chooseMarket(code: string) {
+    setParams((query) => {
+      if (code) query.set("market", code);
+      else query.delete("market");
+      // A window or filter chosen for one market rarely fits another.
+      ["start", "end", "page", "f.country_code"].forEach((key) => query.delete(key));
+    });
+  }
   return (
     <main className="data-page data-table-page">
       <nav className="data-breadcrumbs" aria-label="Breadcrumb">
@@ -214,15 +256,22 @@ export function TableDetail({ name }: { name: string }) {
           <small>{data.status_reason}</small>
         </div>
       </header>
+      {markets.length > 1 && (
+        <MarketSwitch
+          value={market}
+          onChange={chooseMarket}
+          options={markets.map((item) => ({ code: item.country_code, label: item.label, detail: `${formatCompact(item.stored_rows)} rows` }))}
+        />
+      )}
       <Tabs label="Table sections" tabs={tabs} active={tab} onChange={(next) => setParams((query) => {
-        [...query.keys()].forEach((key) => { if (key !== "tab" && next !== "preview") query.delete(key); });
+        [...query.keys()].forEach((key) => { if (key !== "tab" && key !== "market" && next !== "preview") query.delete(key); });
         query.set("tab", next);
       }, true)} />
       <div className="data-tab-panel" role="tabpanel">
-        {tab === "overview" && <Overview detail={data} />}
-        {tab === "columns" && <Columns detail={data} />}
-        {tab === "preview" && <TablePreview detail={data} />}
-        {tab === "activity" && <Activity detail={data} />}
+        {tab === "overview" && <Overview detail={data} market={market} />}
+        {tab === "columns" && <Columns key={market} detail={data} market={market} />}
+        {tab === "preview" && <TablePreview detail={data} market={market} />}
+        {tab === "activity" && <Activity key={market} detail={data} market={market} />}
       </div>
       <footer>FactorLab data catalog · Times in IST unless marked UTC</footer>
     </main>

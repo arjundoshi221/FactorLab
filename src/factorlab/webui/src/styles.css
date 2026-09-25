@@ -632,6 +632,24 @@ footer { color: #59636c; border-top: 1px solid var(--line); padding: 26px 0 40px
 .data-table-card__match { color: var(--muted); font-size: 10px; }
 .data-table-card__match code { margin-left: 4px; padding: 2px 4px; color: var(--ink); background: #1e252c; font: 500 10px var(--mono); }
 
+/* Market switch (India / US) */
+.market-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 22px; padding: 10px 12px; border: 1px solid var(--line); background: var(--panel-soft); }
+.market-switch__label { margin-right: 6px; color: var(--muted); font: 500 9px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.market-switch button { display: inline-flex; align-items: baseline; gap: 6px; padding: 8px 12px; color: #c8ced3; background: transparent; border: 1px solid var(--line); font-weight: 600; }
+.market-switch button small { color: var(--muted); font: 400 10px var(--mono); }
+.market-switch button:hover { color: var(--ink); border-color: #4a535c; }
+.market-switch button.is-active { color: #10140c; background: var(--lime); border-color: var(--lime); }
+.market-switch button.is-active small { color: #2c3a1a; }
+.data-table-page .market-switch { margin: 0 0 4px; }
+.data-market-tag { margin-left: 8px; padding: 2px 6px; color: var(--lime); border: 1px solid rgba(184, 243, 90, .35); font: 600 9px var(--mono); letter-spacing: .04em; text-transform: uppercase; vertical-align: middle; }
+.data-table-card__markets, .data-namespace__markets { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 10px; }
+.data-table-card__markets b, .data-namespace__markets b { color: #d5dadd; font: 600 10px var(--mono); }
+.data-active-filters .data-active-filters__market { border-color: rgba(116, 168, 255, .35); background: rgba(116, 168, 255, .08); padding-right: 10px; }
+.data-active-filters__market strong { color: var(--blue); }
+.data-active-filters__market small { color: var(--muted); }
+.data-market-breakdown table { min-width: 560px; }
+.data-market-breakdown tr.is-current td { background: #141a14; }
+
 /* Table page */
 .data-breadcrumbs { padding-top: 28px; color: var(--muted); font: 400 11px var(--mono); }
 .data-breadcrumbs a { color: #aab3ba; text-decoration: none; }

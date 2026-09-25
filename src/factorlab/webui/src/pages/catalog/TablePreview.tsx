@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 
 import { EmptyState, ErrorBanner } from "../../components/ui";
-import type { Cell, CatalogColumn, CatalogTableDetail, RowsPage } from "../../dataTypes";
+import { marketLabel, marketSlice, type Cell, type CatalogColumn, type CatalogTableDetail, type RowsPage } from "../../dataTypes";
 import { errorMessage, useRemote } from "../../shared/api";
 import { formatNumber, formatTime } from "../../shared/format";
 import { useUrlParams } from "../../shared/urlState";
@@ -125,7 +125,7 @@ function FilterBuilder({ columns, onAdd }: { columns: CatalogColumn[]; onAdd: (f
   );
 }
 
-export function TablePreview({ detail }: { detail: CatalogTableDetail }) {
+export function TablePreview({ detail, market = "" }: { detail: CatalogTableDetail; market?: string }) {
   const [params, setParams] = useUrlParams();
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const columns = useMemo(() => detail.column_details.filter((column) => !column.hidden), [detail]);
@@ -139,6 +139,7 @@ export function TablePreview({ detail }: { detail: CatalogTableDetail }) {
   const end = params.get("end") ?? "";
 
   const query = new URLSearchParams();
+  if (market) query.append("f.country_code", `eq:${market}`);
   filters.forEach((item) => query.append(`f.${item.column}`, item.operator + (item.value ? `:${item.value}` : "")));
   if (params.get("sort")) query.set("sort", sort);
   if (params.get("dir")) query.set("dir", direction);
@@ -158,14 +159,20 @@ export function TablePreview({ detail }: { detail: CatalogTableDetail }) {
     list.forEach((item) => next.append(`f.${item.column}`, item.operator + (item.value ? `:${item.value}` : "")));
   }
 
+  // Presets count back from the newest row of the chosen market, or of the whole table.
+  const slice = market ? marketSlice(detail, market) : null;
+  const anchorEnd = slice?.last_data_at
+    ? new Date(new Date(slice.last_data_at).valueOf() + 1000).toISOString()
+    : detail.preview.default_end;
+
   function setWindow(days: number | null) {
     update((next) => {
-      if (days === null || !detail.preview.default_end) {
+      if (days === null || !anchorEnd) {
         next.delete("start");
         next.delete("end");
         return;
       }
-      const anchor = new Date(detail.preview.default_end).valueOf();
+      const anchor = new Date(anchorEnd).valueOf();
       next.set("end", new Date(anchor).toISOString());
       next.set("start", new Date(anchor - days * DAY).toISOString());
     });
@@ -225,8 +232,13 @@ export function TablePreview({ detail }: { detail: CatalogTableDetail }) {
         <FilterBuilder columns={columns} onAdd={(filter) => update((next) => writeFilters(next, [...filters, filter]))} />
       </div>
 
-      {filters.length > 0 && (
+      {(filters.length > 0 || market) && (
         <ul className="data-active-filters" aria-label="Active filters">
+          {market && (
+            <li className="data-active-filters__market">
+              Market <strong>{marketLabel(market)}</strong> <small>(<code>country_code</code> = {market})</small>
+            </li>
+          )}
           {filters.map((item, index) => (
             <li key={`${item.column}-${index}`}>
               <code>{item.column}</code> {operatorLabel(byName.get(item.column), item.operator)} {item.value && <strong>{item.value}</strong>}
@@ -234,7 +246,7 @@ export function TablePreview({ detail }: { detail: CatalogTableDetail }) {
                 onClick={() => update((next) => writeFilters(next, filters.filter((_, position) => position !== index)))}>×</button>
             </li>
           ))}
-          <li><button type="button" className="data-link-button" onClick={() => update((next) => writeFilters(next, []))}>Clear all</button></li>
+          {filters.length > 0 && <li><button type="button" className="data-link-button" onClick={() => update((next) => writeFilters(next, []))}>Clear filters</button></li>}
         </ul>
       )}
 

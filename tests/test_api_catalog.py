@@ -371,6 +371,56 @@ def test_pipeline_status_respects_market_hours():
     assert pipeline_status(us_live, {}, None, [], NOW)[0] == "not_expected"
 
 
+US_LAST_BAR = datetime(2026, 9, 24, 19, 59, tzinfo=UTC)
+MARKETS = Result(
+    ["country", "rows", "first_data_at", "last_data_at", "last_ingested_at"],
+    [("IN", 9_000_000, datetime(2026, 8, 1, 3, 45, tzinfo=UTC), LAST_BAR, LAST_BAR),
+     ("US", 1_000_000, date(1985, 1, 2), US_LAST_BAR, US_LAST_BAR)],
+)
+
+
+def test_index_and_detail_split_market_tables_by_country(client_and_service):
+    fake, _, http = client_and_service
+    fake.rows["FROM market.bars GROUP BY country"] = MARKETS
+    body = http.get("/hub/api/v1/catalog").json()
+    tables = {item["name"]: item for item in body["tables"]}
+    markets = {item["country_code"]: item for item in tables["market.bars"]["markets"]}
+    assert markets["IN"]["label"] == "India" and markets["IN"]["stored_rows"] == 9_000_000
+    assert markets["US"]["first_data_at"] == "1985-01-02"
+    assert markets["US"]["last_data_at"].startswith("2026-09-24T19:59")
+    assert tables["ref.listings"]["markets"] == []  # no country_code column
+    breakdown = next(call for call in fake.data_calls() if "GROUP BY country" in call[0])
+    assert breakdown[2]["log_comment"] == "hub-catalog:markets" and breakdown[2]["readonly"] == 2
+    detail = http.get("/hub/api/v1/catalog/tables/market.bars").json()
+    assert [item["country_code"] for item in detail["markets"]] == ["IN", "US"]
+
+
+def test_market_scoped_previews_anchor_on_that_markets_latest_rows(client_and_service):
+    fake, _, http = client_and_service
+    fake.rows["FROM market.bars GROUP BY country"] = MARKETS
+    http.get("/hub/api/v1/catalog/tables/market.bars/rows", params={"f.country_code": "eq:US"})
+    sql, parameters, _ = last_data_call(fake)
+    assert "`country_code` = {p2:String}" in sql and parameters["p2"] == "US"
+    assert parameters["p1"] == "2026-09-24 19:59:01.000"  # window ends just after the latest US bar
+
+    fake.rows["FROM (SELECT"] = Result(["__rows"], [(0,)])
+    assert http.get("/hub/api/v1/catalog/tables/market.bars/stats", params={"country": "IN"}).status_code == 200
+    sql, parameters, _ = last_data_call(fake)
+    assert "`country_code` = {p2:String}" in sql and parameters["p2"] == "IN"
+
+    fake.rows["GROUP BY bucket"] = Result(["bucket", "rows"], [(date(2026, 9, 24), 7)])
+    body = http.get("/hub/api/v1/catalog/tables/market.bars/activity", params={"country": "US"}).json()
+    activity = next(call for call in fake.data_calls() if "GROUP BY bucket" in call[0])
+    assert "US" in activity[1].values() and body["buckets"][0]["rows"] == 7
+    runs = [call for call in fake.data_calls() if "LIMIT 10" in call[0]]
+    assert runs and "india_intraday_1min" not in runs[-1][1]["pipelines"]
+
+    csv = http.get("/hub/api/v1/catalog/tables/ref.listings/rows.csv")
+    assert csv.status_code == 200
+    assert http.get("/hub/api/v1/catalog/tables/market.bars/stats", params={"country": "usa"}).status_code == 422
+    assert http.get("/hub/api/v1/catalog/tables/ref.listings/stats", params={"country": "IN"}).status_code == 400
+
+
 def test_pipeline_runs_page_validates_inputs(client_and_service):
     fake, _, http = client_and_service
     assert http.get("/hub/api/v1/catalog/pipelines/unknown_pipeline/runs").status_code == 404

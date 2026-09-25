@@ -295,10 +295,11 @@ def get_catalog_rows_csv(
 @app.get("/hub/api/v1/catalog/tables/{name}/stats", response_model=TableStats, tags=["hub-catalog"])
 def get_catalog_stats(
     service: Annotated[CatalogService, Depends(get_catalog_service)], name: CatalogTableName,
+    country: Annotated[str | None, Query(pattern=r"^[A-Z]{2}$")] = None,
 ) -> TableStats:
     """Null share, approximate distinct values, and ranges over the latest sample of rows."""
 
-    return _catalog_call(lambda: service.stats(name))
+    return _catalog_call(lambda: service.stats(name, country))
 
 
 @app.get("/hub/api/v1/catalog/tables/{name}/activity", response_model=TableActivity, tags=["hub-catalog"])
@@ -306,10 +307,11 @@ def get_catalog_activity(
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     name: CatalogTableName,
     grain: Literal["day", "month"] = "day",
+    country: Annotated[str | None, Query(pattern=r"^[A-Z]{2}$")] = None,
 ) -> TableActivity:
     """Stored rows per day or month, and recent runs of the pipelines that write the table."""
 
-    return _catalog_call(lambda: service.activity(name, grain))
+    return _catalog_call(lambda: service.activity(name, grain, country))
 
 
 @app.get(

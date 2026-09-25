@@ -5,11 +5,16 @@ export interface CatalogNamespace {
   stored_rows: number; bytes_on_disk: number; status_counts: Partial<Record<HubStatus, number>>;
 }
 
+export interface MarketSlice {
+  country_code: string; label: string; stored_rows: number; first_data_at: string | null; last_data_at: string | null;
+  last_ingested_at: string | null;
+}
+
 export interface CatalogTableSummary {
   name: string; namespace: string; title: string; summary: string; kind: "table" | "view"; engine: string;
   stored_rows: number; bytes_on_disk: number; first_data_at: string | null; last_data_at: string | null;
   last_ingested_at: string | null; status: HubStatus; status_reason: string; column_count: number;
-  columns: string[]; column_notes: Record<string, string>; previewable: boolean;
+  columns: string[]; column_notes: Record<string, string>; previewable: boolean; markets?: MarketSlice[];
 }
 
 export interface CatalogIndex {
@@ -82,6 +87,24 @@ export interface PipelinesResponse {
 
 export interface PipelineRunsPage { pipeline: string; items: PipelineRun[]; limit: number; offset: number; has_more: boolean }
 
-export function tableHref(name: string, tab?: string): string {
-  return `/data/tables/${name}${tab ? `?tab=${tab}` : ""}`;
+export function tableHref(name: string, tab?: string, market?: string): string {
+  const query = new URLSearchParams();
+  if (tab) query.set("tab", tab);
+  if (market) query.set("market", market);
+  const text = query.toString();
+  return `/data/tables/${name}${text ? `?${text}` : ""}`;
+}
+
+export const MARKETS: { code: string; label: string }[] = [
+  { code: "IN", label: "India" },
+  { code: "US", label: "US" },
+];
+
+export function marketLabel(code: string): string {
+  return MARKETS.find((item) => item.code === code)?.label ?? code;
+}
+
+/** The slice of a table for one market, or null when the table is not split or has no rows there. */
+export function marketSlice(table: { markets?: MarketSlice[] }, market: string): MarketSlice | null {
+  return table.markets?.find((item) => item.country_code === market && item.stored_rows > 0) ?? null;
 }

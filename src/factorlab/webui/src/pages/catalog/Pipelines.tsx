@@ -1,9 +1,10 @@
 import { useState } from "react";
 
-import { ErrorBanner, Skeleton, StatusPill, type HubStatus } from "../../components/ui";
+import { ErrorBanner, MarketSwitch, Skeleton, StatusPill, type HubStatus } from "../../components/ui";
 import { tableHref, type PipelineCard, type PipelineRunsPage, type PipelinesResponse } from "../../dataTypes";
 import { errorMessage, useRemote } from "../../shared/api";
 import { formatCompact, formatDate, formatRelative, formatTime } from "../../shared/format";
+import { useUrlParams } from "../../shared/urlState";
 import { RunList } from "./RunList";
 
 const GROUPS: { status: HubStatus[]; label: string }[] = [
@@ -90,6 +91,7 @@ function Card({ pipeline, now }: { pipeline: PipelineCard; now: number }) {
 
 export function Pipelines() {
   const remote = useRemote<PipelinesResponse>("/hub/api/v1/catalog/pipelines", 60_000);
+  const [params, setParams] = useUrlParams();
   const data = remote.data;
   if (remote.loading && !data) return <main className="data-page"><Skeleton rows={6} /></main>;
   if (!data) {
@@ -102,7 +104,12 @@ export function Pipelines() {
   }
   const now = new Date(data.generated_at).valueOf();
   const order: HubStatus[] = ["attention", "missing", "healthy", "not_expected", "unknown", "not_configured"];
-  const pipelines = [...data.pipelines].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
+  const markets = [...new Set(data.pipelines.map((item) => item.market))];
+  const requested = params.get("market") ?? "";
+  const market = markets.includes(requested) ? requested : "";
+  const pipelines = data.pipelines
+    .filter((item) => !market || item.market === market)
+    .sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
   return (
     <main className="data-page">
       <section className="data-hero data-hero--compact">
@@ -118,6 +125,13 @@ export function Pipelines() {
         </div>
       </section>
       {remote.error ? <ErrorBanner onRetry={remote.refresh}>{errorMessage(remote.error)} Showing the last loaded status.</ErrorBanner> : null}
+      <MarketSwitch
+        value={market}
+        onChange={(code) => setParams((query) => { if (code) query.set("market", code); else query.delete("market"); })}
+        options={markets.map((item) => ({
+          code: item, label: item, detail: `${data.pipelines.filter((pipeline) => pipeline.market === item).length} pipelines`,
+        }))}
+      />
       <section className="data-pipeline-grid" aria-label="Pipelines">
         {pipelines.map((pipeline) => <Card key={pipeline.id} pipeline={pipeline} now={now} />)}
       </section>

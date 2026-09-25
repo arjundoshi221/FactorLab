@@ -38,7 +38,7 @@ JSON_CELL_CHARS = 500
 CSV_CELL_CHARS = 4_096
 
 TypeClass = Literal["text", "enum", "number", "decimal", "integer", "datetime", "date", "uuid", "bool", "complex"]
-QueryKind = Literal["rows", "csv", "stats", "activity"]
+QueryKind = Literal["rows", "csv", "stats", "activity", "markets"]
 
 # raw.archive holds full vendor HTTP responses. Only these metadata columns are ever selected;
 # a column added later stays hidden until it is reviewed and listed here.
@@ -370,14 +370,15 @@ def resolve_window(table: TableInfo, start: datetime | None, end: datetime | Non
 def query_settings(kind: QueryKind, *, max_rows: int) -> dict[str, Any]:
     """Resource limits and read-only mode applied to every catalog query."""
 
-    heavy = kind in {"activity", "stats"}
+    heavy = kind in {"activity", "stats", "markets"}
     return {
         "readonly": 2,
         "max_execution_time": 20 if heavy else 15,
         "max_result_rows": max_rows,
         "result_overflow_mode": "break",
         "max_result_bytes": 25_000_000 if kind == "csv" else 8_000_000,
-        "max_rows_to_read": 200_000_000 if kind == "activity" else 50_000_000,
+        # Whole-table scans (per-market totals, activity charts) read one or two narrow columns.
+        "max_rows_to_read": 500_000_000 if kind == "markets" else 200_000_000 if kind == "activity" else 50_000_000,
         "max_bytes_to_read": 4_000_000_000,
         "read_overflow_mode": "throw",
         "max_memory_usage": 1_000_000_000,
@@ -474,6 +475,30 @@ def _where(table: TableInfo, window: Window | None, filters: Iterable[Filter], p
     return f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
 
+COUNTRY_CODE = re.compile(r"^[A-Z]{2}$")
+
+
+def country_filter(table: TableInfo, country: str | None) -> tuple[Filter, ...]:
+    """Scope a query to one market through the table's ``country_code`` column."""
+
+    if country is None:
+        return ()
+    if not COUNTRY_CODE.fullmatch(country):
+        raise CatalogError("Markets are two-letter country codes such as IN or US.")
+    if table.column("country_code") is None:
+        raise CatalogError("This table is not split by market.")
+    return (Filter(column="country_code", operator="eq", value=country),)
+
+
+def country_of(filters: Iterable[Filter]) -> str | None:
+    """The market a request is scoped to, when it filters country_code to one value."""
+
+    for item in filters:
+        if item.column == "country_code" and item.operator == "eq" and COUNTRY_CODE.fullmatch(item.value.strip()):
+            return item.value.strip()
+    return None
+
+
 def build_rows_query(
     table: TableInfo, request: RowsRequest, *, now: datetime, kind: Literal["rows", "csv"] = "rows",
 ) -> BuiltQuery:
@@ -519,12 +544,12 @@ def build_rows_query(
     )
 
 
-def build_stats_query(table: TableInfo, *, now: datetime) -> BuiltQuery:
+def build_stats_query(table: TableInfo, *, now: datetime, filters: tuple[Filter, ...] = ()) -> BuiltQuery:
     """Summarize each visible column over the most recent sample of stored rows."""
 
     window = resolve_window(table, None, None, now=now)
     parameters = _Parameters()
-    where = _where(table, window, (), parameters)
+    where = _where(table, window, filters, parameters)
     columns = visible_columns(table)
     order = f"ORDER BY `{table.time_column}` DESC" if table.time_column else ""
     inner = ", ".join(
@@ -559,7 +584,9 @@ def build_stats_query(table: TableInfo, *, now: datetime) -> BuiltQuery:
     )
 
 
-def build_activity_query(table: TableInfo, grain: Literal["day", "month"], *, now: datetime) -> BuiltQuery:
+def build_activity_query(
+    table: TableInfo, grain: Literal["day", "month"], *, now: datetime, filters: tuple[Filter, ...] = (),
+) -> BuiltQuery:
     if not table.time_column:
         raise CatalogError("This table has no time column to chart.")
     anchor = table.last_data_at or now
@@ -568,7 +595,7 @@ def build_activity_query(table: TableInfo, grain: Literal["day", "month"], *, no
     span = timedelta(days=90) if grain == "day" else timedelta(days=366 * 3)
     window = Window(start=anchor - span, end=anchor + timedelta(seconds=1))
     parameters = _Parameters()
-    where = _where(table, window, (), parameters)
+    where = _where(table, window, filters, parameters)
     bucket = "toStartOfDay" if grain == "day" else "toStartOfMonth"
     sql = (
         f"SELECT toDate({bucket}(`{table.time_column}`)) AS bucket, count() AS rows "
