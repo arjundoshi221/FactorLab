@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -43,6 +43,23 @@ def test_daily_uses_new_york_date_and_excludes_incomplete_session():
                              "daily", now=datetime(2026, 9, 8, 15, tzinfo=UTC))
     assert list(frame.trade_date) == [date(2026, 9, 4)]
     assert "adj_close" not in frame
+
+
+def test_invalid_historical_bar_does_not_discard_valid_daily_history():
+    client = market.MarketClient(Mock())
+    client.get = Mock(return_value=({"candles": [
+        bar("2026-09-03T05:00:00+00:00", low=-1),
+        bar("2026-09-04T05:00:00+00:00"),
+    ]}, "archived-response"))
+
+    frame, raw_id = client.candles(
+        "ACGL", "daily", datetime(1970, 1, 1, tzinfo=UTC),
+        datetime(2026, 9, 4, 21, tzinfo=UTC),
+    )
+
+    assert raw_id == "archived-response"
+    assert list(frame.trade_date) == [date(2026, 9, 4)]
+    assert frame.attrs["invalid_candles"] == 1
 
 
 @pytest.mark.parametrize("update", [{"high": 8}, {"volume": -1}, {"volume": 1.2}, {"close": float("nan")}])

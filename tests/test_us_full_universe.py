@@ -88,6 +88,18 @@ def test_pending_daily_includes_incomplete_stale_and_error_states():
     assert [item["instrument_id"] for item in runner.pending_daily(items, states, target_day)] == identifiers[:3]
 
 
+def test_schwab_health_stays_incomplete_after_daily_queue_drains():
+    storage = Mock()
+    storage.unresolved_series.return_value = 3
+    assert runner.collection_status(storage, [], [{}] * 503) == (
+        "incomplete", "3 series have unresolved errors or gaps")
+    assert runner.collection_status(storage, [{}], [{}] * 503) == (
+        "recovering", "1 daily histories pending")
+    storage.unresolved_series.return_value = 0
+    assert runner.collection_status(storage, [], [{}] * 503) == (
+        "ready", "503 configured equities")
+
+
 def test_liquid_tier_uses_resolver_validated_symbols(monkeypatch):
     monkeypatch.setattr(runner, "MINUTE_TIER_SIZE", 2)
     identifiers = [uuid4() for _ in range(3)]

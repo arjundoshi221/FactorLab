@@ -140,6 +140,20 @@ client = auth.client_from_token_file(
 | Daily | **20+ years** (some back to 1985) |
 | Weekly/monthly | Full history |
 
+### V2 collection quality
+
+Schwab can return daily history with negative adjusted prices or inconsistent
+high/low values. The raw HTTP response is archived first. The v2 collector keeps
+valid daily candles, excludes invalid ones from `market.bars`, and records the
+skipped count as a partial ingestion run and a `meta.recovery_state` error. A
+later daily update continues from the checkpoint; a full history refresh checks
+the invalid rows again. `history_complete` means the response was traversed, not
+that every vendor candle passed validation.
+
+Minute coverage compares stored bars with the exchange's minute grid. A missing
+minute can also be absent from Schwab's response, so investigate the archived
+response before treating a coverage gap as a lost write.
+
 ## Endpoints
 
 | Endpoint | Use | Notes |

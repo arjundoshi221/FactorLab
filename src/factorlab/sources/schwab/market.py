@@ -129,6 +129,7 @@ class MarketClient:
 def normalize(records, resolution, *, now):
     """Daily timestamps denote US session dates; minute timestamps denote bar starts."""
     rows = []
+    invalid_candles = 0
     sessions = {}
     for record in records:
         stamp = datetime.fromtimestamp(record["datetime"] / 1000, UTC)
@@ -153,9 +154,16 @@ def normalize(records, resolution, *, now):
                 or values[2] > min(values[0], values[1], values[3])
                 or not isinstance(volume, (int, float)) or not math.isfinite(volume)
                 or volume < 0 or int(volume) != volume):
-            raise ValueError("Invalid OHLCV candle")
+            if resolution != "daily":
+                raise ValueError("Invalid OHLCV candle")
+            invalid_candles += 1
+            continue
         rows.append({"timestamp": stamp, "trade_date": day,
                      **{k: record[k] for k in ("open", "high", "low", "close", "volume")}})
     key = "trade_date" if resolution == "daily" else "timestamp"
-    return (pd.DataFrame(rows).drop_duplicates(key, keep="last").sort_values(key)
-            if rows else pd.DataFrame())
+    if not rows and invalid_candles:
+        raise ValueError("Invalid OHLCV candle")
+    frame = (pd.DataFrame(rows).drop_duplicates(key, keep="last").sort_values(key)
+             if rows else pd.DataFrame())
+    frame.attrs["invalid_candles"] = invalid_candles
+    return frame

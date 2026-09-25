@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
+import pandas as pd
 import pytest
 
 from factorlab.sources.schwab.market import normalize
@@ -58,3 +59,37 @@ def test_checkpoint_is_written_only_after_candles_and_coverage():
     with pytest.raises(RuntimeError):
         runner.collect(storage, client, ("AAPL", "AAPL", ident), "daily", now=now)
     assert storage.finish_ingestion_run.call_args.kwargs["status"] == "failed"
+
+
+def test_skipped_provider_candles_remain_visible_without_blocking_next_daily_update():
+    now = datetime(2026, 9, 8, 21, tzinfo=UTC)
+    ident = instrument_id_for("schwab:USA:ACGL")
+    storage = Mock()
+    storage.state.return_value = {"instrument_id": ident, "history_complete": False,
+        "available_from": None, "last_bar": None, "checked_through": None,
+        "full_refreshed_at": None, "error": None}
+    storage.write_daily.return_value = 1
+    storage.coverage.return_value = 0
+    frame = pd.DataFrame([{"timestamp": pd.Timestamp("2026-09-04T05:00:00Z"),
+        "trade_date": datetime(2026, 9, 4, tzinfo=UTC).date()}])
+    frame.attrs["invalid_candles"] = 2
+    client = Mock()
+    client.candles.return_value = (frame, "archived-response")
+
+    assert runner.collect(storage, client, ("ACGL", "ACGL", ident), "daily", now=now)
+    saved = storage.save_state.call_args.args[0]
+    assert saved["history_complete"] is True
+    assert saved["error"] == "Invalid Schwab candles: 2 skipped"
+    assert storage.finish_ingestion_run.call_args.kwargs["status"] == "partial"
+    assert runner.pending_daily([{"instrument_id": ident}], {ident: saved},
+                                datetime(2026, 9, 4, tzinfo=UTC).date()) == []
+
+    prior_error = saved["error"]
+    assert runner.pending_daily([{"instrument_id": ident}], {ident: saved},
+                                datetime(2026, 9, 9, tzinfo=UTC).date())
+    storage.state.return_value = saved
+    frame.attrs["invalid_candles"] = 0
+    runner.collect(storage, client, ("ACGL", "ACGL", ident), "daily",
+                   now=now + timedelta(days=1))
+    assert storage.save_state.call_args.args[0]["error"] == prior_error
+    storage.gap_start.assert_not_called()

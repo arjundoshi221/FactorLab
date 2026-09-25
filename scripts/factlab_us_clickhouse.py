@@ -53,7 +53,8 @@ def collect(storage, client, item, resolution, *, now, live=False, universe_name
         start = datetime(1970, 1, 1, tzinfo=UTC) if resolution == "daily" else now - timedelta(days=60)
     else:
         start = state["checked_through"] - timedelta(days=7)
-        if state.get("error"):
+        if state.get("error") and not str(state["error"]).startswith(
+                "Invalid Schwab candles:"):
             gap = storage.gap_start(instrument_id, resolution, now)
             if gap:
                 start = min(start, gap)
@@ -66,6 +67,8 @@ def collect(storage, client, item, resolution, *, now, live=False, universe_name
         frame, raw_id = client.candles(provider, resolution, start, end)
         if frame.empty:
             raise ValueError("No regular-session candles returned; coverage remains unresolved")
+        invalid_candles = int(frame.attrs.get("invalid_candles", 0))
+        prior_error = state.get("error")
         count = (storage.write_daily(frame, instrument_id=instrument_id, symbol=symbol, raw_id=raw_id)
                  if resolution == "daily" else storage.write_candles_1min(frame,
                     instrument_id=instrument_id, symbol=symbol, raw_id=raw_id, source="schwab", market_code="USA"))
@@ -78,13 +81,21 @@ def collect(storage, client, item, resolution, *, now, live=False, universe_name
             state.update(history_complete=True, checked_through=end)
             if full:
                 state["full_refreshed_at"] = now
-        state["error"] = f"Coverage incomplete: {missing} missing bars" if missing else None
+        invalid_detail = None
+        if invalid_candles:
+            invalid_detail = f"Invalid Schwab candles: {invalid_candles} skipped"
+        elif not full and isinstance(prior_error, str) and prior_error.startswith(
+                "Invalid Schwab candles:"):
+            invalid_detail = prior_error
+        coverage_detail = f"Coverage incomplete: {missing} missing bars" if missing else None
+        state["error"] = "; ".join(filter(None, (invalid_detail, coverage_detail))) or None
         storage.save_state(state)
-        storage.finish_ingestion_run(handle, status="partial" if missing else "success",
-            successful_series=0 if missing else 1, failed_series=1 if missing else 0, rows_written=count,
+        partial = bool(state["error"])
+        storage.finish_ingestion_run(handle, status="partial" if partial else "success",
+            successful_series=0 if partial else 1, failed_series=1 if partial else 0, rows_written=count,
             error=state["error"])
         log.info("%s %s: %d rows through %s", symbol, resolution, count, last.isoformat())
-        return not missing
+        return not missing or bool(invalid_detail)
     except Exception as exc:
         # Exception messages here are our own sanitized descriptions, never HTTP response bodies.
         detail = str(exc) if isinstance(exc, (ValueError, AuthRequired, RuntimeError)) else type(exc).__name__
@@ -107,12 +118,24 @@ def safe_source_status(storage, source, status, detail):
 def pending_daily(items, states, target_day):
     """Return instruments needing history or a per-symbol daily fallback."""
     target = bounds(target_day)[1]
-    return [item for item in items if (
-        not states.get(item["instrument_id"], {}).get("history_complete")
-        or not states.get(item["instrument_id"], {}).get("checked_through")
-        or states[item["instrument_id"]]["checked_through"] < target
-        or states[item["instrument_id"]].get("error")
-    )]
+    pending = []
+    for item in items:
+        state = states.get(item["instrument_id"], {})
+        error = state.get("error")
+        if (not state.get("history_complete") or not state.get("checked_through")
+                or state["checked_through"] < target
+                or (error and not str(error).startswith("Invalid Schwab candles:"))):
+            pending.append(item)
+    return pending
+
+
+def collection_status(storage, pending, items):
+    if pending:
+        return "recovering", f"{len(pending)} daily histories pending"
+    unresolved = storage.unresolved_series(source="schwab")
+    if unresolved:
+        return "incomplete", f"{unresolved} series have unresolved errors or gaps"
+    return "ready", f"{len(items)} configured equities"
 
 
 def extend_pending(pending, additions):
@@ -269,9 +292,7 @@ def run_full(args, storage):
                 safe_source_status(storage, "schwab", "auth_required",
                                    "Authenticate Schwab on the broker-auth page")
             else:
-                safe_source_status(storage, "schwab", "recovering" if pending else "ready",
-                                   f"{len(pending)} daily histories pending" if pending else
-                                   f"{len(items)} configured equities")
+                safe_source_status(storage, "schwab", *collection_status(storage, pending, items))
             last_heartbeat = now
         if not args.daemon and not pending and not minute_pending:
             return 0
