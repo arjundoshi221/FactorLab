@@ -10,11 +10,22 @@ from typing import Annotated, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, HTTPException, Path, Query
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from factorlab.api.auth import require_api_key
+from factorlab.api.catalog import (
+    CatalogIndex,
+    CatalogService,
+    CatalogTableDetail,
+    PipelineRunsPage,
+    PipelinesResponse,
+    RowsPage,
+    TableActivity,
+    TableStats,
+)
+from factorlab.api.catalog_query import CatalogError, RowsRequest, parse_filters, parse_timestamp
 from factorlab.api.docker_images import DockerImagesResponse, read_docker_images_snapshot
 from factorlab.api.hub import HubOverview, HubOverviewService, HubRepository
 from factorlab.api.india import (
@@ -70,6 +81,7 @@ from factorlab.api.schema_map import (
     SharedSchemaLayout,
 )
 from factorlab.api.us import router as us_router
+from factorlab.storage.clickhouse import ClickHouseStorage
 
 app = FastAPI(
     title="FactorLab API",
@@ -160,6 +172,144 @@ def get_hub_overview(
         return service.get_overview()
     except Exception as exc:
         raise HTTPException(status_code=503, detail="FactorLab data store is unavailable") from exc
+
+
+@lru_cache
+def get_catalog_service() -> CatalogService:
+    """Create the data catalog on a session-free client that is safe to share across threads."""
+
+    return CatalogService(
+        ClickHouseStorage.from_environment(autogenerate_session_id=False).client,
+        get_hub_overview_service(),
+    )
+
+
+CatalogTableName = Annotated[str, Path(pattern=r"^[a-z_]+\.[a-z0-9_]+$", max_length=128)]
+
+
+def _catalog_call(call):
+    try:
+        return call()
+    except CatalogError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="The data catalog is temporarily unavailable") from exc
+
+
+def _rows_request(
+    request: Request, sort: str | None, direction: str, limit: int, offset: int,
+    start: str | None, end: str | None,
+) -> RowsRequest:
+    return RowsRequest(
+        filters=parse_filters(request.query_params.multi_items()),
+        sort=sort,
+        descending=direction != "asc",
+        limit=limit,
+        offset=offset,
+        start=parse_timestamp(start, "start") if start else None,
+        end=parse_timestamp(end, "end") if end else None,
+    )
+
+
+@app.get("/hub/api/v1/catalog", response_model=CatalogIndex, tags=["hub-catalog"])
+def get_catalog(service: Annotated[CatalogService, Depends(get_catalog_service)]) -> CatalogIndex:
+    """Every v2 table and view with plain-language descriptions, coverage, and health."""
+
+    return _catalog_call(service.index)
+
+
+@app.get("/hub/api/v1/catalog/pipelines", response_model=PipelinesResponse, tags=["hub-catalog"])
+def get_catalog_pipelines(
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+) -> PipelinesResponse:
+    """Schedule-aware health of every collection pipeline over the last seven days."""
+
+    return _catalog_call(service.pipelines)
+
+
+@app.get("/hub/api/v1/catalog/pipelines/{pipeline_id}/runs", response_model=PipelineRunsPage, tags=["hub-catalog"])
+def get_catalog_pipeline_runs(
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    pipeline_id: Annotated[str, Path(pattern=r"^[a-z0-9_]+$", max_length=64)],
+    status: Literal["running", "success", "partial", "failed", "cancelled"] | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    offset: Annotated[int, Query(ge=0, le=5_000)] = 0,
+) -> PipelineRunsPage:
+    """Recent runs of one pipeline, newest first."""
+
+    return _catalog_call(lambda: service.pipeline_runs(pipeline_id, status=status, limit=limit, offset=offset))
+
+
+@app.get("/hub/api/v1/catalog/tables/{name}", response_model=CatalogTableDetail, tags=["hub-catalog"])
+def get_catalog_table(
+    service: Annotated[CatalogService, Depends(get_catalog_service)], name: CatalogTableName,
+) -> CatalogTableDetail:
+    """One table's description, columns, keys, relationships, writers, and preview policy."""
+
+    return _catalog_call(lambda: service.table_detail(name))
+
+
+@app.get("/hub/api/v1/catalog/tables/{name}/rows", response_model=RowsPage, tags=["hub-catalog"])
+def get_catalog_rows(
+    request: Request,
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    name: CatalogTableName,
+    sort: Annotated[str | None, Query(max_length=64)] = None,
+    direction: Annotated[Literal["asc", "desc"], Query(alias="dir")] = "desc",
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0, le=5_000)] = 0,
+    start: Annotated[str | None, Query(max_length=40)] = None,
+    end: Annotated[str | None, Query(max_length=40)] = None,
+) -> RowsPage:
+    """A bounded, filtered page of rows; filters are ``f.<column>=<operator>:<value>``."""
+
+    return _catalog_call(
+        lambda: service.rows(name, _rows_request(request, sort, direction, limit, offset, start, end))
+    )
+
+
+@app.get("/hub/api/v1/catalog/tables/{name}/rows.csv", tags=["hub-catalog"])
+def get_catalog_rows_csv(
+    request: Request,
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    name: CatalogTableName,
+    sort: Annotated[str | None, Query(max_length=64)] = None,
+    direction: Annotated[Literal["asc", "desc"], Query(alias="dir")] = "desc",
+    start: Annotated[str | None, Query(max_length=40)] = None,
+    end: Annotated[str | None, Query(max_length=40)] = None,
+) -> StreamingResponse:
+    """Stream the filtered view as CSV, capped at FACTORLAB_CATALOG_CSV_MAX_ROWS (at most 10,000)."""
+
+    filename, headers, body = _catalog_call(
+        lambda: service.csv_export(name, _rows_request(request, sort, direction, 1, 0, start, end))
+    )
+    return StreamingResponse(
+        body,
+        media_type="text/csv; charset=utf-8",
+        headers={**headers, "Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store"},
+    )
+
+
+@app.get("/hub/api/v1/catalog/tables/{name}/stats", response_model=TableStats, tags=["hub-catalog"])
+def get_catalog_stats(
+    service: Annotated[CatalogService, Depends(get_catalog_service)], name: CatalogTableName,
+) -> TableStats:
+    """Null share, approximate distinct values, and ranges over the latest sample of rows."""
+
+    return _catalog_call(lambda: service.stats(name))
+
+
+@app.get("/hub/api/v1/catalog/tables/{name}/activity", response_model=TableActivity, tags=["hub-catalog"])
+def get_catalog_activity(
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    name: CatalogTableName,
+    grain: Literal["day", "month"] = "day",
+) -> TableActivity:
+    """Stored rows per day or month, and recent runs of the pipelines that write the table."""
+
+    return _catalog_call(lambda: service.activity(name, grain))
 
 
 @app.get(
@@ -1236,4 +1386,19 @@ def hub_schema_map() -> FileResponse:
 
 @app.get("/schema/v2", include_in_schema=False)
 def hub_v2_schema_map() -> FileResponse:
+    return _hub_index()
+
+
+@app.get("/data", include_in_schema=False)
+def hub_data_catalog() -> FileResponse:
+    return _hub_index()
+
+
+@app.get("/data/pipelines", include_in_schema=False)
+def hub_data_pipelines() -> FileResponse:
+    return _hub_index()
+
+
+@app.get("/data/tables/{name}", include_in_schema=False)
+def hub_data_table(name: CatalogTableName) -> FileResponse:
     return _hub_index()

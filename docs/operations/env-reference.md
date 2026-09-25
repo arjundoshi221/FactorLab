@@ -46,6 +46,17 @@ setting into the application environment. Production preflight also requires
 using the migration runner's SSH tunnel; the deployment workflow uses its own
 GitHub Actions VPS secrets.
 
+## Hub data catalog
+
+Set in `deploy/production.env`; Compose passes them to the `api` service.
+
+```
+FACTORLAB_CATALOG_PREVIEW=on                 # off: disable row previews, CSV, and column profiles
+FACTORLAB_CATALOG_CSV=on                     # off: disable CSV downloads only
+FACTORLAB_CATALOG_CSV_MAX_ROWS=10000         # CSV row cap; values above 10000 are clamped
+FACTORLAB_CATALOG_PREVIEW_DENY=              # comma-separated db.table or db.* patterns to block previews
+```
+
 ## US equities — Schwab
 
 ```

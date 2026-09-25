@@ -74,7 +74,8 @@ class ClickHouseStorage:
         self._tunnel = tunnel
 
     @classmethod
-    def from_environment(cls) -> "ClickHouseStorage":
+    def from_environment(cls, **client_options: Any) -> "ClickHouseStorage":
+        """Connect from environment settings; ``client_options`` pass through to clickhouse_connect."""
         ssh_host = os.getenv("CLICKHOUSE_SSH_HOST")
         remote_host = os.getenv("CLICKHOUSE_HOST", "localhost")
         remote_port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
@@ -92,6 +93,7 @@ class ClickHouseStorage:
                 username=os.getenv("CLICKHOUSE_USERNAME", "factorlab"),
                 password=get_secret("CLICKHOUSE_PASSWORD", "factorlab_dev"),
                 database=os.getenv("CLICKHOUSE_DATABASE", "factorlab"),
+                **client_options,
             )
         except Exception:
             if tunnel is not None:

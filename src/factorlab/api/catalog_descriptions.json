@@ -1,0 +1,662 @@
+{
+  "generated_by": "scripts/generate_catalog_descriptions.py (do not edit; override in catalog_curated.json)",
+  "tables": {
+    "alt.political_committee_memberships": {
+      "columns": {
+        "committee_entity_id": "FK ref.entities (entity_type='committee')",
+        "effective_from": "SCD-2",
+        "effective_to": "NULL = current",
+        "legislator_entity_id": "FK ref.entities (entity_type='person_legislator')",
+        "majority_status": "'majority','minority'",
+        "rank": "seniority rank within committee",
+        "role": "'chair','ranking','vice_chair','member','ex_officio'"
+      },
+      "description": "Fixed from the daily-snapshot bloat (105K rows in 6 weeks → target ~30K period rows)."
+    },
+    "alt.political_committees": {
+      "columns": {
+        "committee_entity_id": "FK ref.entities (entity_type='committee')",
+        "committee_id": "source-native",
+        "effective_from": "SCD-2 for renaming/merging"
+      }
+    },
+    "alt.political_contracts": {
+      "description": "Same shape template. All resolve to (entity_id, security_id when applicable, legislator_entity_id for legislators). All FK canonical dims. All SCD-2 where attributes change over time. Detailed schemas defined in Wave 4 build-out."
+    },
+    "alt.political_fec_contributions": {
+      "description": "Same shape template. All resolve to (entity_id, security_id when applicable, legislator_entity_id for legislators). All FK canonical dims. All SCD-2 where attributes change over time. Detailed schemas defined in Wave 4 build-out."
+    },
+    "alt.political_filings": {
+      "columns": {
+        "amends_filing_id": "immediate predecessor",
+        "filing_id": "source-native",
+        "filing_type": "'P' (PTR), 'FD' (annual), 'A' (amendment)",
+        "legislator_entity_id": "FK ref.entities",
+        "original_filing_id": "chain root (materialized at ingest)",
+        "trade_count": "denorm from alt.political_trades count"
+      },
+      "description": "Filing HEADERS. One row per filing. Amendments handled the same way as fundamentals.filings — chain via amends_filing_id + original_filing_id."
+    },
+    "alt.political_lobbying": {
+      "description": "Same shape template. All resolve to (entity_id, security_id when applicable, legislator_entity_id for legislators). All FK canonical dims. All SCD-2 where attributes change over time. Detailed schemas defined in Wave 4 build-out."
+    },
+    "alt.political_trades": {
+      "columns": {
+        "amount_bucket_id": "'$1K-$15K','$15K-$50K',...,$50M+'",
+        "amount_currency": "ISO-4217; default 'USD' for US House/Senate PTRs; set explicitly when EU/UK filings ingest",
+        "amount_min": "NEVER default; NULL if unextractable",
+        "amount_str_raw": "provenance",
+        "asset_name_raw": "what filing said",
+        "bioguide_id": "persistent Bioguide id",
+        "chamber": "'house','senate'",
+        "contract_id": "FK ref.contracts (options only; OCC-parsed)",
+        "country_code": "'US' (extends when EU/UK filings ingested)",
+        "entity_id": "FK ref.entities (issuer)",
+        "filing_asset_type_code": "what filing said: 'ST','OP','MF','BD','CT','GS','HN','OT'",
+        "filing_id": "source-native",
+        "ingest_run_id": "FK meta.ingestion_runs",
+        "legislator_entity_id": "FK ref.entities (person_legislator)",
+        "legislator_name_raw": "provenance only",
+        "listing_id": "FK ref.listings (venue-scoped tradable)",
+        "owner_code": "'self','spouse','child','joint','dependent_child'",
+        "political_trade_id": "factorlab canonical",
+        "raw_id": "FK raw.archive",
+        "security_id": "FK ref.securities (security-level)",
+        "security_type": "factorlab-canonical: 'common','preferred','adr'",
+        "source_channel": "'house_clerk_ptr','senate_efd','ssw_backfill'",
+        "ticker_raw": "what filing said",
+        "transaction_type": "'purchase','sale_full','sale_partial','exchange'"
+      }
+    },
+    "alt.research_arxiv": {
+      "description": "Reserve names; build when data flows. All follow the same canonical-FK-plus-provenance pattern."
+    },
+    "alt.social_reddit_posts": {
+      "columns": {
+        "mentioned_entities": "FK ref.entities",
+        "mentioned_listings": "FK ref.listings, resolved from body",
+        "post_id": "vendor-native"
+      }
+    },
+    "book.attribution": {
+      "columns": {
+        "assigned_by": "'rule_trade_engine','rule_order_ref_tag', 'manual_pm','manual_ops','backfill_heuristic'",
+        "computation_id": "FK derived.computations — resolver run that produced this row. NULL for manual assignments.",
+        "execution_id": "FK broker.executions.exec_id",
+        "strategy_id": "FK book.strategies (matches trade_names.strategy_id)",
+        "theme_id": "FK book.themes",
+        "trade_name_id": "FK book.trade_names"
+      },
+      "description": "broker.executions.strategy_id tells you which strategy generated a fill. It does *not* tell you which trade_name under that strategy the fill belongs to — a mean-reversion strategy can be running five pair trade_names simultaneously and a single AMD fill could belong to any of them. Without this bridge, trade_name-level PnL requires guessing from timestamp + ticker, and any theme-level rollup requires the same guess."
+    },
+    "book.strategies": {
+      "columns": {
+        "author_entity_id": "who authored it (points at ref.entities for a person)",
+        "code_version": "git sha at strategy freeze",
+        "config_hash": "config version pin for backtest reproducibility",
+        "live_account_ids": "same as above for live accounts",
+        "paper_account_ids": "FK ref.broker_accounts — inverse denorm of ref.broker_accounts.strategy_ids; nightly meta.integrity_checks asserts both sides agree",
+        "strategy_id": "factorlab canonical",
+        "universe_id": "which ref.universes it operates on"
+      },
+      "description": "The trade engine will run multiple strategies through one or more broker accounts. Every execution, cash flow, and open order needs an attribution key — *which strategy generated this?* Without a strategies registry, PnL slicing by strategy is impossible and \"how did strategy X do this week on paper\" has no answer. Also the anchor for derived.forward_test_attribution. Moved from derived.strategies strategies are authored, not computed."
+    },
+    "book.themes": {
+      "columns": {
+        "author_entity_id": "FK ref.entities (person who originally authored the thesis)",
+        "name": "'ai_infra_buildout','glp1_disruption','us_onshoring'",
+        "owner_entity_id": "FK ref.entities (current sponsor / responsible PM; may differ after handoff) —",
+        "parent_theme_id": "FK book.themes (self-ref)",
+        "tags": "'macro','sectoral','event','structural','china_exposure','ai','glp1',...",
+        "theme_id": "factorlab canonical",
+        "thesis": "the actual investment thesis (long-form)"
+      },
+      "description": "Strategies express *how* we trade (mean-reversion, cross-sectional value, event-driven). Themes express *what* we're betting on in the world (AI infrastructure buildout, GLP-1 healthcare disruption, US onshoring). One theme can be expressed by many trade names across many strategies; one strategy can express many themes. Without a themes dim, \"how is the AI theme doing this week\" requires a name-regex over positions and never rolls up cleanly. Risk numbers live in risk.budgets — this dim stays a pure descriptor."
+    },
+    "book.trade_legs": {
+      "columns": {
+        "leg_side": "'long' | 'short' — renamed from side to disambiguate from book.trade_names.side which uses a wholly different enum ('long_only','pair','basket',...)",
+        "listing_id": "FK ref.listings",
+        "security_id": "FK ref.securities (denorm for query speed)",
+        "target_notional": "absolute; NULL if only pct is set",
+        "target_weight_pct": "% of trade_name notional",
+        "trade_name_id": "FK book.trade_names"
+      },
+      "description": "book.trade_names describes the bet. book.trade_legs describes *what the PM wants the trade_name to look like* — target weights, entry prices, stops, take-profits per leg. This is intent, not fills. Actual fills live in broker.executions. A discretionary single-name trade_name has one leg, a pair has two, a basket has N. Reconciliation of intent vs actual (\"we're 30% underweight the AMD short leg — trade engine hasn't caught up\") is the join between this table and broker.positions_snapshot filtered by trade_name_id."
+    },
+    "book.trade_names": {
+      "columns": {
+        "base_currency": "ISO-4217; the ccy the PM authored the thesis in — enables MTM PnL in the \"native\" ccy for the trade_name (a JPY-only pair trade is priced in JPY, not fund base). NULL not allowed — PM must pick one at creation.",
+        "exit_criteria": "what would make us close",
+        "name": "'nvda_amd_datacenter_capex_q3_2026'",
+        "opened_by_entity_id": "FK ref.entities",
+        "owner_entity_id": "FK ref.entities (currently responsible PM)",
+        "priority": "conviction rating; PM dashboard groups by; alert thresholds tighten on 'high'",
+        "side": "'long_only','short_only','pair','basket', 'long_short','event_driven'",
+        "status": "'draft','active','paused','closed','stopped_out'",
+        "strategy_id": "FK book.strategies (NULL = discretionary)",
+        "target_hold_horizon_days": "planned duration; NULL = open-ended",
+        "theme_id": "FK book.themes (required)",
+        "thesis": "what we're betting on",
+        "trade_name_id": "factorlab canonical"
+      },
+      "description": "A trade_name is the *unit of investment thesis* — a coherent set of position legs expressing one named bet. \"Long NVDA, short AMD on datacenter capex\" is one trade_name, even though it lives across two symbols and two sides. Without this table, PnL attribution stops at the position level and you cannot answer *\"did the pair thesis work — did the NVDA-vs-AMD spread pay off?\"* Trade names sit under a theme and (optionally) under a strategy — a discretionary macro trade_name may have no strategy but is still a theme expression."
+    },
+    "broker.account_state_snapshot": {
+      "columns": {
+        "currency": "'USD','BASE','NONE'",
+        "metric": "vendor-native tag (IBKR: 'NetLiquidation', 'BuyingPower','MaintMarginReq',...)",
+        "metric_canonical": "factorlab-canonical; populated at ingest from ref.broker_metrics_map(broker_code, vendor_metric) →canonical_metric; e.g. 'net_liquidation', 'buying_power','maint_margin_req'",
+        "segment": "''|'S'|'C'|'P' (agg/Securities/Commodities/Paxos)",
+        "value_num": "numeric cast (majority path)",
+        "value_str": "when broker returns non-numeric"
+      },
+      "description": "Tall/long time series of account-level metrics. IBKR alone emits ~144 tags per account across segment × currency dimensions (see docs/data-sources/06-ibkr.md §5.4). Tall keeps schema stable when new tags appear."
+    },
+    "broker.applied_corporate_actions": {
+      "columns": {
+        "action_type": "'split','reverse_split','dividend','spinoff', 'merger','tender','symbol_change','delisting'",
+        "cash_impact": "signed",
+        "corp_action_id": "FK ref.corporate_actions (the global event)",
+        "event_time": "when the action applied to this account",
+        "ratio_den": "1 for 2:1 split",
+        "ratio_num": "2 for 2:1 split",
+        "security_id": "security affected in this account",
+        "source": "'ibkr' | 'ref.corporate_actions'",
+        "triggers_expected_drift": "true → next snapshot delta is EXPECTED"
+      },
+      "description": "ref.corporate_actions records that URNU had a 2:1 split on some date. But *\"did that action hit MY portfolio, and by how much?\"* is not derivable from that dim alone — depends on whether the account held the security on the record date. Without this table, post-split position count doubling looks like a mystery position adjustment and reconciliation can't distinguish \"corporate action\" from \"actual drift.\" This is the link between global corp-action events and per-account impact."
+    },
+    "broker.cash_flows": {
+      "columns": {
+        "amount": "signed; positive = credit, negative = debit",
+        "cash_flow_type": "'dividend','interest','deposit','withdrawal', 'fx_conversion','commission','tax_withholding', 'fee','corporate_action_cash','sweep','other'",
+        "description": "IBKR-provided memo",
+        "event_time": "when the cash event occurred (broker-reported)",
+        "ex_date": "for dividends",
+        "linked_corp_action_id": "when tied to a corporate action (dividend, tender)",
+        "linked_exec_id": "when tied to a specific fill (commission)",
+        "pay_date": "for dividends",
+        "security_id": "for dividends/corporate-action cash",
+        "source": "'ibkr'",
+        "source_channel": "'flex_report_cash','account_updates_stream'",
+        "strategy_id": "FK book.strategies; populated when attributable",
+        "trade_name_id": "FK book.trade_names — populated only for cash_flow_type IN ('commission','fx_conversion') via the linked_exec_id → book.attribution.trade_name_id join; NULL for dividends/interest/deposits/ withdrawals (those grains are theme/strategy/ account, not trade_name — commission-per- trade_name is the specific analysis this column unlocks: post-trade cost per named bet)"
+      },
+      "description": "NAV changes for reasons other than trades and price moves — dividends arrive, cash accrues interest, deposits/withdrawals happen, IBKR auto-converts currencies, tax gets withheld on foreign dividends. Without capturing these, every dividend arrival looks like unexplained NAV drift and reconciliation becomes noisy-and-eventually-meaningless. IBKR exposes cash flows via ib.flexReport() (batch, T+1) and via accountUpdates real-time cashUpdate events. This table is the destination for both paths."
+    },
+    "broker.executions": {
+      "columns": {
+        "exchange": "ACTUAL fill venue (ARCA, NASDAQ, IEX, ...)",
+        "exec_id": "broker exec id (unique, immutable)",
+        "execution_method_id": "FK ref.execution_methods",
+        "liquidity_flag": "'ADDED'|'REMOVED'|'ROUTED'|''",
+        "order_id": "broker session-scoped",
+        "order_ref": "IBKR Order.orderRef free-text annotation",
+        "perm_id": "broker-durable (join key)",
+        "placed_by_client": "IBKR API clientId; e.g. trade-engine ID",
+        "route_pref": "'SMART' (IBKR chose venue) | pinned exchange",
+        "side": "'BUY'|'SELL'|'SSHORT'",
+        "strategy_id": "FK book.strategies; populated by trade engine"
+      },
+      "description": "Immutable event log — fills for orders placed by ANY client (trade engine, manual GUI order, etc.). Each fill is one row keyed by the broker's exec ID."
+    },
+    "broker.open_orders_snapshot": {
+      "columns": {
+        "execution_method_id": "FK ref.execution_methods",
+        "order_type": "'LMT','MKT','MOC','MOO','LOC','LOO','STP','STPLMT',...",
+        "perm_id": "durable join key",
+        "status": "'PreSubmitted','Submitted','Cancelled','Filled','Inactive',...",
+        "strategy_id": "FK book.strategies",
+        "time_in_force": "'DAY','GTC','IOC','FOK',..."
+      },
+      "description": "Time series of unfilled orders. Observed, not owned — the trade engine places; we mirror so PnL reconstruction can see intent alongside fills."
+    },
+    "broker.order_events": {
+      "columns": {
+        "event_seq": "ordinal within perm_id (0-indexed)",
+        "event_type": "'submitted_to_broker','ack_from_broker', 'accepted_by_exchange','modified', 'partial_fill','filled', 'cancelled_by_api','cancelled_by_exchange', 'rejected','expired','inactive'",
+        "execution_method_id": "FK ref.execution_methods",
+        "message": "IBKR-provided text, e.g. \"Order too aggressive\"",
+        "new_state": "IBKR status enum: 'PendingSubmit','PreSubmitted','Submitted', 'ApiPending','PendingCancel','ApiCancelled', 'Cancelled','Filled','Inactive','PartiallyFilled'",
+        "order_id": "session-scoped",
+        "perm_id": "durable order ID (join key to executions/open_orders)",
+        "route_before": "'SMART' | pinned exchange",
+        "source": "'ibkr'",
+        "source_channel": "'trade_log_stream','trade_log_batch_pull'",
+        "strategy_id": "FK book.strategies"
+      },
+      "description": "broker.executions captures fills only. broker.open_orders_snapshot is a 5-min photograph that loses everything between snapshots. Neither table lets you answer *\"what was the original limit price before we modified it?\"* or *\"how long did the order sit before filling?\"* or *\"why did the exchange reject it?\"* Order-lifecycle events — placed / accepted / modified / partially-filled / cancelled / rejected — are the raw material for slippage decomposition, latency profiling, execution-quality analysis, and backtest-vs-live cost-model calibration. ib_async exposes them for free via Trade.log;"
+    },
+    "broker.positions_snapshot": {
+      "columns": {
+        "contract_id": "FUT/OPT",
+        "fx_rate_source_time": "timestamp of the FX quote used",
+        "fx_rate_to_base": "e.g. USD→SGD if base_currency='SGD'",
+        "market_value_usd": "FX-normalized at snapshot_time (broker-reported)",
+        "position": "signed; negative = short",
+        "source": "always the broker: 'ibkr'",
+        "source_channel": "'paper_gateway','live_gateway'",
+        "vendor_id": "IBKR conid as string"
+      },
+      "description": "Time series of positions. Cadence: pre-open snapshot, EOD snapshot, on-demand."
+    },
+    "derived.backtest_returns": {
+      "description": "Same pattern."
+    },
+    "derived.backtest_runs": {
+      "description": "Same pattern."
+    },
+    "derived.computations": {
+      "columns": {
+        "code_version": "git sha",
+        "dataset": "'factor_momentum_12_1','signal_value_composite'",
+        "input_query": "SQL of what it read",
+        "parameters": "JSON"
+      }
+    },
+    "derived.factors": {
+      "columns": {
+        "computation_id": "FK derived.computations",
+        "factor_definition_hash": "guards against formula drift",
+        "factor_id": "'momentum_12_1','value_ep','quality_roic'",
+        "rank_pct": "cross-sectional percentile in universe",
+        "sector_id": "denormalized",
+        "universe_id": "context of rank"
+      }
+    },
+    "derived.forward_test_attribution": {
+      "columns": {
+        "account_id": "paper account, FK ref.broker_accounts",
+        "backtest_return": "from derived.backtest_returns",
+        "base_currency": "denormalized from ref.broker_accounts",
+        "computation_id": "FK derived.computations",
+        "divergence": "paper - backtest",
+        "divergence_pct": "divergence / |backtest|",
+        "paper_nav_return": "from broker.nav_daily day-over-day",
+        "strategy_id": "FK book.strategies"
+      },
+      "description": "Paper trading only earns its keep if you can score its performance against the backtest that predicted it. This table is the single query surface for *\"strategy X, paper return - backtest return, per day\"* — the primary forward-test health check. Populated daily from broker.nav_daily (paper account associated with the strategy) joined against derived.backtest_returns for the same strategy on the same day. strategy_id is the canonical FactorLab UUID from book.strategies."
+    },
+    "derived.portfolios": {
+      "description": "Same pattern."
+    },
+    "derived.signals": {
+      "description": "Same pattern."
+    },
+    "fundamentals.consensus_estimates": {
+      "description": "Same pattern: filing header + line items + optional PIT snapshot MV."
+    },
+    "fundamentals.filings": {
+      "columns": {
+        "accepted_at": "when regulator accepted",
+        "accession_number": "SEC-native",
+        "amendment_seq": "0 = original, 1 = first amendment, ...",
+        "amends_filing_id": "immediate predecessor in restatement chain",
+        "entity_id": "FK ref.entities",
+        "filed_at": "exact filing timestamp",
+        "filing_date": "when filed with regulator",
+        "fiscal_period": "'Q1','Q2','Q3','Q4','FY'",
+        "form_type": "'10-K','10-Q','8-K','20-F','40-F','NPORT-P','13F-HR','13F-NT','SC 13G','4','3','5'",
+        "is_amended": "has been superseded by a later filing",
+        "is_amendment": "this filing itself is an amendment",
+        "original_filing_id": "root of restatement chain (self if no amendments) materialized at ingest: O(1) chain-root lookup without recursive CTE",
+        "period_end": "reporting period end (for 10-K/Q)",
+        "period_type": "'annual','quarterly','ytd','ttm','other'",
+        "source": "'sec_edgar','eodhd','simplywall'"
+      }
+    },
+    "fundamentals.line_items": {
+      "columns": {
+        "context_ref": "XBRL context",
+        "dimensions": "XBRL segments as JSON",
+        "period_start": "for range items (Q revenue: start=Apr 1, end=Jun 30)",
+        "period_type": "'point','duration'",
+        "statement": "'income','balance','cashflow','equity_changes','notes'",
+        "tag": "'us-gaap:Revenues','us-gaap:NetIncomeLoss', or standardized 'revenue','net_income', 'ebitda','fcf','shares_diluted'",
+        "tag_standard": "'us-gaap','ifrs','factorlab_standardized'",
+        "unit": "'currency','shares','ratio','count','usd_per_share'"
+      }
+    },
+    "market.bars": {
+      "columns": {
+        "bar_time": "bar OPEN time (convention)",
+        "entity_id": "denormalized (may be NULL for indices)",
+        "oi": "open interest, contracts",
+        "product_type": "'common','preferred','adr','etf','etn','reit', 'warrant','index','index_future', 'single_stock_future','vol_future','vol_etp'",
+        "resolution": "'5s','1min','5min','15min','1h','daily','weekly','monthly'",
+        "security_id": "denormalized",
+        "session": "'regular','pre','post','open_auction','close_auction'",
+        "settlement_price": "exchange settlement",
+        "trade_date": "session-local date, denormalized for pruning",
+        "turnover": "listing-currency notional",
+        "volume": "shares (spot) OR contracts (derivative)"
+      },
+      "description": "The primary market data table. All linear products, all resolutions, all countries, all vendors."
+    },
+    "market.futures_continuous": {
+      "columns": {
+        "active_contract_id": "which contract this row came from",
+        "roll_adjustment": "cumulative price adjustment applied",
+        "roll_method": "'volume','open_interest','first_notice','custom_5d_before_expiry'",
+        "roll_position": "'c1','c2','c3','...' (front, back, ...)",
+        "underlying_listing_id": "'the front NIFTY future' concept"
+      },
+      "description": "Rolled continuous futures series (front, back, calendar-spread). Derived from market.futures_contract_bars + explicit roll rules. The contract-preserving source table is added by the Wave 4 data-completion extension; migration does not infer a roll method or populate this continuous series."
+    },
+    "market.fx_rates": {
+      "columns": {
+        "fix_convention": "'spot','wm_reuters_4pm_london','ecb','close'",
+        "resolution": "'1min','1h','daily'"
+      }
+    },
+    "market.options_bars": {
+      "columns": {
+        "contract_id": "FK ref.contracts",
+        "right": "'C' / 'P'",
+        "trade_date": "same conventions as bars",
+        "underlying_price": "for reproducibility"
+      }
+    },
+    "market.orderbook_l2": {
+      "description": "Reserve names; do not build until microstructure research or execution demands them. Different storage tier (much bigger)."
+    },
+    "market.trades": {
+      "description": "Reserve names; do not build until microstructure research or execution demands them. Different storage tier (much bigger)."
+    },
+    "meta.expected_series": {
+      "description": "Unified across countries (was us_* + india_*). All FK listing_id."
+    },
+    "meta.ingestion_runs": {
+      "columns": {
+        "country_code": "'*' for global",
+        "listing_ids_touched": "which listings this batch wrote to",
+        "parent_run_id": "for cascading pipelines"
+      }
+    },
+    "meta.lineage": {
+      "columns": {
+        "dataset": "'market.bars','fundamentals.line_items','derived.factors'",
+        "produced_by": "'ingest','backfill','recovery','recompute'",
+        "row_business_key": "hash of (listing_id, resolution, bar_time, source) etc."
+      }
+    },
+    "meta.reconciliation_drift": {
+      "columns": {
+        "curr_snapshot_time": "snapshot that revealed the drift",
+        "delta": "pre-computed human-readable diff",
+        "drift_type": "'position_qty','position_missing','position_extra', 'nav','cash','open_order'",
+        "expected_value": "string-typed to accept any drift shape",
+        "prev_snapshot_time": "snapshot we compared against",
+        "resolved_by": "'auto_next_snapshot','manual','ignore'",
+        "security_key": "vendor_id or listing_id::text for position drifts",
+        "severity": "'info','warn','critical'"
+      },
+      "description": "The reconciliation contract in §11.7 states *\"FactorLab detects drift, the trade engine acts on it.\"* Without a queryable table, drift detection produces logs but no durable record — the trade engine has nothing to consume. This is the join surface: the trade engine's boot check is SELECT count(*) FROM meta.reconciliation_drift WHERE broker_code=? AND account_id=? AND resolved_at IS NULL."
+    },
+    "meta.recovery_state": {
+      "description": "Unified across countries (was us_* + india_*). All FK listing_id."
+    },
+    "meta.session_coverage": {
+      "description": "Unified across countries (was us_* + india_*). All FK listing_id."
+    },
+    "meta.source_status": {
+      "description": "Unified across countries (was us_* + india_*). All FK listing_id."
+    },
+    "meta.unresolved_entities": {
+      "columns": {
+        "alias_kind": "matches ref.identifier_aliases.alias_kind",
+        "alias_value": "the raw vendor id",
+        "context_json": "caller-provided context (row hash, security_type guess, etc.)",
+        "occurrence_count": "how many facts referenced this unresolved id",
+        "resolved_by": "'auto_resolver','manual_override'",
+        "resolved_target_kind": "'entity','security','listing','contract'",
+        "source": "FK ref.sources (which ingester surfaced it)"
+      },
+      "description": "Every ingester (broker, political, market data) that maps a vendor ID → canonical FactorLab UUID will encounter misses — new tickers, renamed instruments, freshly-onboarded senators, unknown option OCC symbols. §13.9 (Entity resolution failure policy) states \"never silently drop\" — unresolved rows land here for review + resolver-next-pass retry. Also the source table backing the resolution_confidence='unresolved' values across every fact table."
+    },
+    "raw.archive": {
+      "columns": {
+        "country_code": "NULL for global payloads (GLEIF, SEC EDGAR whole-market)",
+        "fetched_at": "for streams: window_end_at",
+        "request_key": "vendor-native fetch key (symbol, batch id, url tail)",
+        "transport": "'http','websocket','tcp_socket','grpc','file','sftp'"
+      }
+    },
+    "ref.adjustment_factors": {
+      "columns": {
+        "computation_id": "lineage",
+        "price_factor": "multiply raw prices by this to get adjusted",
+        "volume_factor": "multiply raw volumes by this"
+      },
+      "description": "Materialized/computed daily-cumulative adjustment factors per listing."
+    },
+    "ref.broker_accounts": {
+      "columns": {
+        "account_id": "IBKR-native: 'DUE375963','U18065781'",
+        "account_mode": "'paper' | 'live'",
+        "account_type": "'individual','joint','ira','trust','corp'",
+        "base_currency": "'USD','SGD','INR' — account's booking currency",
+        "booking_country": "'US','SG','IN'",
+        "broker_code": "'ibkr' (later: 'schwab','upstox',...)",
+        "margin_type": "'cash','margin','portfolio_margin'",
+        "purpose": "'forward_test','production','client_mandate_<code>'",
+        "strategy_ids": "FK book.strategies — CANONICAL: this is the source of truth for \"which strategies run on this account\". book.strategies.paper_account_ids / live_account_ids are the denormalized inverse maintained for query speed; nightly integrity check asserts the two agree."
+      },
+      "description": "Every row in broker.* carries account_id, account_mode, country_code, and implicitly a base_currency. Without this dim table, that metadata is hardcoded in ingesters (paper DUE375963 = US-booked USD, live U18065781 = SG-booked SGD, etc.) and every downstream query has to re-derive account context. This makes \"add a new account\" a code change instead of a row insert, and any cross-account rollup (\"total USD-equivalent NAV across all live accounts\") requires manual FX plumbing."
+    },
+    "ref.broker_metrics_map": {
+      "columns": {
+        "broker_code": "'ibkr','schwab',...",
+        "canonical_metric": "factorlab-canonical: 'net_liquidation','buying_power','cash','equity', 'maint_margin_req','init_margin_req', 'excess_liquidity','cushion','leverage','sma',...",
+        "vendor_metric": "vendor-native tag: 'NetLiquidation','BuyingPower',..."
+      },
+      "description": "broker.account_state_snapshot carries metric values verbatim from the vendor — IBKR emits 'NetLiquidation', 'BuyingPower', 'MaintMarginReq'; Schwab uses different names for the same concepts. Without a canonical mapping, every downstream MV (broker.nav_daily, broker.margin_state_daily) hardcodes vendor-specific metric names and breaks the day a second broker lands. This dim maps (broker_code, vendor_metric) → canonical_metric so cross-broker rollups work uniformly."
+    },
+    "ref.contracts": {
+      "columns": {
+        "contract_id": "factorlab canonical for the derivative",
+        "contract_type": "'future','call','put'",
+        "exercise_style": "'american','european',''",
+        "multiplier": "shares per contract",
+        "right": "'C','P','' (futures)",
+        "strike": "options only",
+        "underlying_listing_id": "FK ref.listings (underlying)"
+      },
+      "description": "The derivative contract layer. Options + futures."
+    },
+    "ref.corporate_actions": {
+      "columns": {
+        "action_type": "'split','dividend','spinoff','rights', 'delisting','ticker_change','merger'",
+        "cash_amount": "dividend / cash-in-lieu",
+        "ex_date": "primary sort key",
+        "listing_id": "if action is listing-scoped",
+        "old_symbol": "ticker change",
+        "security_id": "FK ref.securities",
+        "split_from": "2 in a 2:1 split",
+        "split_to": "1 in a 2:1 split"
+      }
+    },
+    "ref.countries": {
+      "columns": {
+        "country_code": "ISO-3166 alpha-2, single source of truth",
+        "default_currency": "ISO-4217 alpha-3",
+        "region": "'americas','emea','apac'",
+        "timezone": "IANA"
+      }
+    },
+    "ref.currencies": {
+      "columns": {
+        "currency_code": "ISO-4217",
+        "is_deliverable": "'INR' is non-deliverable offshore"
+      }
+    },
+    "ref.dataset_versions": {
+      "columns": {
+        "computation_id": "FK derived.computations, if it was a full recompute",
+        "dataset": "'market.bars_adjusted','fundamentals.snapshots_pit_eom', 'ref.universe_membership.r3k','ref.adjustment_factors'",
+        "materialized_from": "when this version's data starts",
+        "methodology_note": "what changed vs prior version",
+        "version_tag": "'v1','v2','v2.1'"
+      },
+      "description": "Every time a curated dataset is materially rewritten (adjustment methodology change, fundamentals tag-mapping revision, universe reconstruction rules), record the version. Downstream compute (backtests, factor calcs) pins to dataset_version for reproducibility."
+    },
+    "ref.entities": {
+      "columns": {
+        "entity_id": "factorlab canonical",
+        "entity_type": "discriminator — 'issuer', 'person_legislator','person_pm', 'person_analyst','person_committee_member', 'committee','organization', 'government_body','other'",
+        "lei": "ISO-17442"
+      },
+      "description": "The issuer / company / person / committee / organization layer. LEI-keyed where the entity is a legal person; other identity kinds keyed by canonical FactorLab UUID."
+    },
+    "ref.entity_relationships": {
+      "columns": {
+        "relationship": "'ma','spinoff','rename','subsidiary'"
+      }
+    },
+    "ref.exchanges": {
+      "columns": {
+        "country_code": "FK ref.countries",
+        "currency_code": "FK ref.currencies (native trading ccy)",
+        "exchange_code": "'NASDAQ','NYSE','NSE','LSE','TSE','HKEX','SGX'",
+        "mic": "ISO-10383 (XNAS, XNYS, XNSE)",
+        "sessions": "JSON: pre/regular/post windows"
+      }
+    },
+    "ref.execution_methods": {
+      "columns": {
+        "algo_strategy": "populated for category='algo' (matches Order.algoStrategy)",
+        "api_client_id": "populated for category='api'; NULL for manual/algo",
+        "category": "'api' | 'manual' | 'algo'",
+        "method_id": "'api_trade_engine_v1','api_research_notebook', 'manual_gui_or_mobile','manual_tagged_mobile', 'algo_vwap','algo_adaptive'",
+        "valid_to": "SCD-2 (clientId reassigned or service retired)"
+      },
+      "description": "broker.executions needs to answer *\"where did this fill originate — a specific API service, a manual GUI order, mobile, an algo?\"* IBKR only exposes Execution.clientId (the API clientId that placed it, or 0 for manual). This dim table maps clientId → a human-meaningful method label so downstream slippage/attribution queries can group by origin without hardcoding numeric IDs."
+    },
+    "ref.holidays": {
+      "columns": {
+        "exchange_code": "exchange-specific holidays",
+        "market_state": "'closed','early_close','late_open', 'muhurat_only','open_only'",
+        "override_close": "'HH:MM' local, if early close",
+        "override_open": "'HH:MM' local, if late open"
+      }
+    },
+    "ref.identifier_aliases": {
+      "columns": {
+        "alias_kind": "'ticker','isin','cusip','figi','lei', 'sedol','openfigi','bloomberg', 'schwab_conid','ibkr_conid','eodhd_symbol', 'upstox_instrument_key','fec_candidate_id', 'bioguide','cik','ric','permid'",
+        "scope_country": "ticker namespaces are country-scoped",
+        "scope_exchange": "for MIC-scoped tickers",
+        "source": "who told us this",
+        "target_kind": "'entity','security','listing','contract'",
+        "valid_to": "SCD-2 (ticker reassignment)"
+      },
+      "description": "The universal resolver. Any vendor ID → canonical UUID."
+    },
+    "ref.legislator_terms": {
+      "columns": {
+        "bioguide_id": "persistent legislator ID (Bioguide)",
+        "chamber": "'house','senate'",
+        "congress_number": "term Congress",
+        "district": "house only",
+        "in_office": "current-term flag",
+        "legislator_entity_id": "FK ref.entities",
+        "seat_class": "senate class 1/2/3",
+        "term_end": "known at term start (fixed length)"
+      },
+      "description": "Legislators are entities (ref.entities rows with entity_type='person_legislator'). Their term-scoped attributes (chamber, state, district, party, seat class) change across terms and live here, SCD-2. Former legislators keep their entity_id forever, so historical trade attribution never breaks when a member retires or changes chamber."
+    },
+    "ref.listing_migrations": {
+      "columns": {
+        "effective_date": "last trade date on old / first on new",
+        "migration_type": "'venue_change','delisting_relisting', 'reverse_merger','spinoff','dual_listing_collapse'",
+        "new_listing_id": "FK ref.listings",
+        "old_listing_id": "FK ref.listings",
+        "price_adjustment": "ratio to apply to old-listing prices to align"
+      },
+      "description": "Handles cases where the same real-world security moves venues (Alibaba NYSE→HKEX ADR, dual-listing consolidation, delisting-relisting on pink sheets) or where corporate events create a new listing_id that logically continues an old one (spinoffs, reverse mergers). SCD-2 on ref.identifier_aliases only covers ticker changes on the *same* listing; this table covers listing-to-listing continuity for return-series construction."
+    },
+    "ref.listings": {
+      "columns": {
+        "country_code": "denormalized from exchange",
+        "exchange_code": "FK ref.exchanges",
+        "is_primary": "primary listing for the security",
+        "last_traded": "delisting date",
+        "listing_id": "factorlab canonical for market data",
+        "local_symbol": "exchange-native symbol if different",
+        "mic": "ISO-10383",
+        "security_id": "FK ref.securities",
+        "trading_symbol": "'AAPL', 'TCS', '7203'"
+      },
+      "description": "The venue-scoped tradable. This is the primary factorlab_id for market data."
+    },
+    "ref.sectors": {
+      "columns": {
+        "classification": "'gics','icb','naics','trbc'",
+        "level": "2,4,6,8",
+        "sector_id": "'10','1010','101010','10101010' (GICS 2/4/6/8)"
+      }
+    },
+    "ref.securities": {
+      "columns": {
+        "currency_code": "FK ref.currencies (denomination)",
+        "entity_id": "FK ref.entities (entity_type='issuer')",
+        "maturity_date": "bonds, options, futures",
+        "sector_classification": "'gics','icb','naics','trbc' — pairs with sector_id, matches ref.sectors.classification",
+        "sector_id": "FK ref.sectors —",
+        "security_id": "factorlab canonical",
+        "security_type": "'common','preferred','adr','etf','etn', 'reit','warrant','right','mutual_fund', 'index','future','option','bond','fx_pair'",
+        "share_class": "'A','B','C','' (single class)"
+      },
+      "description": "The claim / instrument layer. ISIN-keyed."
+    },
+    "ref.sessions": {
+      "columns": {
+        "day_of_week": "0-6",
+        "session": "'pre','regular','post','open_auction','close_auction'",
+        "starts_at": "'HH:MM' local"
+      }
+    },
+    "ref.sources": {
+      "columns": {
+        "auth_type": "'oauth2','api_key','none','scraping'",
+        "countries": "['US'], ['IN'], ['US','GB','JP',...] or ['*'] for global",
+        "kind": "'market','fundamentals','political','social','research'",
+        "source_id": "'schwab','upstox','eodhd','ibkr','sec_edgar', 'house_clerk_ptr','fec','reddit','arxiv'"
+      }
+    },
+    "ref.universe_membership": {
+      "columns": {
+        "effective_from": "inclusive",
+        "effective_to": "inclusive; NULL = current",
+        "reason": "'reconstitution','ipo','delisting','merger'",
+        "weight": "for weighted indices"
+      }
+    },
+    "ref.universes": {
+      "columns": {
+        "provider": "'russell','msci','sp','nse','custom'",
+        "rebalance_freq": "'quarterly','annual','continuous'",
+        "universe_id": "'r3k','r1k','sp500','nifty50','nifty500','custom_watchlist'"
+      }
+    },
+    "research.owned_listings": {
+      "description": "Research-time helper for joins against alt-data facts that key on listing_id. Wraps broker.positions_snapshot with a filter for resolved, held, live positions and takes the latest snapshot per listing."
+    },
+    "risk.budgets": {
+      "columns": {
+        "concentration_limit": "e.g. max sector weight",
+        "effective_to": "NULL = currently active",
+        "gross_exposure_pct_cap": "max gross / NAV",
+        "max_drawdown_pct": "soft stop at scope level",
+        "max_position_pct": "max single-name weight",
+        "net_exposure_pct_cap": "max |net| / NAV",
+        "scope": "'fund','strategy','theme','trade_name'",
+        "scope_id": "UUID as string; for scope='fund' the sentinel 'default_fund' is used until ref.funds exists; for the other three scopes this is the UUID from book.strategies / book.themes / book.trade_names",
+        "set_by_entity_id": "FK ref.entities",
+        "stop_loss_pct": "hard stop at scope level",
+        "var_1d_bps_cap": "1-day 95% VaR in basis points of NAV"
+      },
+      "description": "Every level of the fund hierarchy needs a risk allocation — the fund has a gross-exposure cap, a strategy has a VaR budget, a theme has a max drawdown before we review, a trade_name has a stop-loss. These budgets change over time (halved GLP-1 exposure after the LLY drawdown, doubled AI budget after the NVDA re-rating) — the table must be versioned."
+    }
+  }
+}

@@ -171,6 +171,10 @@ services:
     environment:
       <<: *clickhouse-client-env
       FACTORLAB_SECRETS_DIR: /run/secrets/app
+      FACTORLAB_CATALOG_PREVIEW: ${FACTORLAB_CATALOG_PREVIEW:-on}
+      FACTORLAB_CATALOG_CSV: ${FACTORLAB_CATALOG_CSV:-on}
+      FACTORLAB_CATALOG_CSV_MAX_ROWS: ${FACTORLAB_CATALOG_CSV_MAX_ROWS:-10000}
+      FACTORLAB_CATALOG_PREVIEW_DENY: ${FACTORLAB_CATALOG_PREVIEW_DENY:-}
     depends_on:
       bootstrap:
         condition: service_completed_successfully

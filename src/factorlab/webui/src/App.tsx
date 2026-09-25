@@ -7,18 +7,20 @@ import { PoliticalData } from "./pages/PoliticalData";
 import { USMarkets } from "./pages/USMarkets";
 import { DockerImages } from "./pages/DockerImages";
 
+import { StatusPill, type HubStatus } from "./components/ui";
+import { formatBytes, formatCompact, formatDate, formatTime } from "./shared/format";
+import { DataHome } from "./pages/catalog/DataHome";
+import { Pipelines } from "./pages/catalog/Pipelines";
+
 const SchemaMap = lazy(async () => {
   const module = await import("./pages/SchemaMap");
   return { default: module.SchemaMap };
 });
 
-type HubStatus =
-  | "healthy"
-  | "attention"
-  | "missing"
-  | "not_expected"
-  | "not_configured"
-  | "unknown";
+const TableDetail = lazy(async () => {
+  const module = await import("./pages/catalog/TableDetail");
+  return { default: module.TableDetail };
+});
 
 interface HubTable {
   name: string;
@@ -86,69 +88,25 @@ const statusFilters: Record<StatusFilter, { label: string; matches: (status: Hub
   not_expected: { label: "No daily rule", matches: (status) => status === "not_expected" },
 };
 
-const statusCopy: Record<HubStatus, string> = {
-  healthy: "Healthy",
-  attention: "Needs attention",
-  missing: "Missing",
-  not_expected: "Not expected",
-  not_configured: "Not configured",
-  unknown: "Unknown",
-};
-
 const numberFormatter = new Intl.NumberFormat("en-IN");
-const compactFormatter = new Intl.NumberFormat("en-IN", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return `${(bytes / 1024 ** exponent).toFixed(exponent === 0 ? 0 : 1)} ${units[exponent]}`;
-}
-
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.valueOf())) return value.slice(0, 10);
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "Asia/Kolkata",
-  }).format(parsed);
-}
-
-function formatTime(value: string | null): string {
-  if (!value) return "Never";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.valueOf())) return value;
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Kolkata",
-    timeZoneName: "short",
-  }).format(parsed);
-}
-
-function StatusPill({ status }: { status: HubStatus }) {
-  return (
-    <span className={`status status--${status}`}>
-      <span className="status__dot" aria-hidden="true" />
-      {statusCopy[status]}
-    </span>
-  );
-}
+const operationsLinks = [
+  { href: "/", label: "Dashboard", active: (path: string) => path === "/" },
+  { href: "/india", label: "India markets", active: (path: string) => path.startsWith("/india") },
+  { href: "/us", label: "US markets", active: (path: string) => path === "/us" },
+  { href: "/political", label: "Political", active: (path: string) => path === "/political" },
+  { href: "/schema", label: "Schema map", active: (path: string) => path.startsWith("/schema") },
+  { href: "/docker-images", label: "Docker images", active: (path: string) => path === "/docker-images" },
+  { href: "/roadmap", label: "Roadmap", active: (path: string) => path === "/roadmap" },
+];
 
 function Shell({ children }: { children: React.ReactNode }) {
   const path = window.location.pathname;
+  const inOperations = operationsLinks.some((link) => link.active(path));
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="FactorLab Data Hub home">
+        <a className="brand" href="/data" aria-label="FactorLab Data Hub home">
           <span className="brand__mark">FL</span>
           <span>
             <strong>FactorLab</strong>
@@ -156,13 +114,16 @@ function Shell({ children }: { children: React.ReactNode }) {
           </span>
         </a>
         <nav aria-label="Primary navigation">
-          <a className={path === "/" ? "active" : ""} href="/">Dashboard</a>
-          <a className={path.startsWith("/india") ? "active" : ""} href="/india">India markets</a>
-          <a className={path === "/us" ? "active" : ""} href="/us">US markets</a>
-          <a className={path === "/political" ? "active" : ""} href="/political">Political</a>
-          <a className={path.startsWith("/schema") ? "active" : ""} href="/schema">Schema map</a>
-          <a className={path === "/docker-images" ? "active" : ""} href="/docker-images">Docker images</a>
-          <a className={path === "/roadmap" ? "active" : ""} href="/roadmap">Roadmap</a>
+          <a className={path === "/data" || path.startsWith("/data/tables") ? "active" : ""} href="/data">Data catalog</a>
+          <a className={path === "/data/pipelines" ? "active" : ""} href="/data/pipelines">Pipelines</a>
+          <details className={`nav-menu${inOperations ? " is-active" : ""}`}>
+            <summary>Operations</summary>
+            <div className="nav-menu__panel">
+              {operationsLinks.map((link) => (
+                <a key={link.href} className={link.active(path) ? "active" : ""} href={link.href}>{link.label}</a>
+              ))}
+            </div>
+          </details>
         </nav>
         <span className="private-badge">Private system</span>
       </header>
@@ -341,7 +302,7 @@ function Dashboard() {
       )}
 
       <section className="metric-grid" aria-label="Database totals">
-        <SummaryCard label="Stored rows" value={compactFormatter.format(data.summary.stored_rows)} detail="Fast physical count" />
+        <SummaryCard label="Stored rows" value={formatCompact(data.summary.stored_rows)} detail="Fast physical count" />
         <SummaryCard label="On disk" value={formatBytes(data.summary.bytes_on_disk)} detail={`${domains.length - 1} v2 namespaces`} />
         <SummaryCard label="Tables populated" value={`${data.summary.populated_tables}/${data.summary.table_count}`} detail={data.summary.view_count ? `Plus ${data.summary.view_count} research views` : "Empty tables stay visible"} />
         <SummaryCard label="Needs attention" value={numberFormatter.format(data.summary.attention_tables)} detail={`${data.summary.healthy_tables} evaluated healthy`} />
@@ -484,6 +445,18 @@ function Roadmap() {
 export function App() {
   const path = window.location.pathname;
   const indiaInstrumentMatch = path.match(/^\/india\/instruments\/([0-9a-f-]+)$/i);
+  const tableMatch = path.match(/^\/data\/tables\/([a-z_]+\.[a-z0-9_]+)$/);
+  if (path === "/data") return <Shell><DataHome /></Shell>;
+  if (path === "/data/pipelines") return <Shell><Pipelines /></Shell>;
+  if (tableMatch) {
+    return (
+      <Shell>
+        <Suspense fallback={<main className="loading-state">Loading table…</main>}>
+          <TableDetail key={tableMatch[1]} name={tableMatch[1]} />
+        </Suspense>
+      </Shell>
+    );
+  }
   if (path === "/schema/v2") {
     return (
       <Shell>

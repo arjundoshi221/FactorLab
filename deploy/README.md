@@ -140,6 +140,44 @@ snapshots return 503. Check the collector with
 `systemctl status factorlab-docker-images.timer` and
 `journalctl -u factorlab-docker-images.service`.
 
+## Data catalog
+
+The hub's Data section (`/data`, `/data/tables/<db>.<table>`, `/data/pipelines`)
+serves `GET /hub/api/v1/catalog/*`. Table descriptions ship in the image as
+`src/factorlab/api/catalog_descriptions.json`, generated from the schema design
+doc and DDL comments with `python scripts/generate_catalog_descriptions.py`,
+plus hand-written `catalog_curated.json`. A test fails when either falls behind
+the v2 schema.
+
+Row previews, CSV downloads (at most 10,000 rows), column profiles, and activity
+charts run against the application ClickHouse credential. They are not gated by
+a login, so every query is bounded in the API:
+- table and column names must exist in the live catalog;
+- filter values are bound parameters;
+- large tables are read one time window at a time;
+- each query carries `readonly=2`, `max_execution_time`, `max_rows_to_read`,
+  result-size, and memory limits, tagged `log_comment='hub-catalog:<kind>'`;
+- at most three preview queries run at once.
+
+`raw.archive` previews select only metadata columns; response bodies, headers,
+and metadata JSON never reach SQL, and URLs omit query strings. String cells are
+scrubbed of token-like values. Inspect catalog query cost on the VPS with:
+
+```sql
+SELECT log_comment, count(), max(query_duration_ms), max(read_rows)
+FROM system.query_log
+WHERE log_comment LIKE 'hub-catalog%' AND event_time > now() - INTERVAL 1 DAY
+GROUP BY log_comment;
+```
+
+Switches in `production.env` (applied on the next `api` recreate):
+`FACTORLAB_CATALOG_PREVIEW=off` disables rows, CSV, and profiles;
+`FACTORLAB_CATALOG_CSV=off` disables CSV only; `FACTORLAB_CATALOG_CSV_MAX_ROWS`
+lowers the CSV cap; `FACTORLAB_CATALOG_PREVIEW_DENY` takes comma-separated
+`db.table` or `db.*` patterns. Metadata stays visible when previews are off.
+The catalog is not part of the release verification gate, so a catalog failure
+cannot stop ingestion writers.
+
 ## Cloudflare no-domain contract
 
 `cloudflare/upstox-auth-worker` runs on a protected `workers.dev` hostname.

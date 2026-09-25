@@ -1,0 +1,179 @@
+{
+  "namespaces": {
+    "alt": {"title": "Alternative data", "summary": "Non-price signals such as US congressional trade disclosures, committees, and filings."},
+    "book": {"title": "Investment book", "summary": "Strategies, themes, and trade ideas written by portfolio managers. Reserved; no data is collected yet."},
+    "broker": {"title": "Broker mirror", "summary": "Positions, executions, orders, and cash flows mirrored from broker accounts. Reserved; no data is collected yet."},
+    "derived": {"title": "Derived research", "summary": "Reproducible computed outputs such as factors and forward-test attribution. Reserved; no data is computed yet."},
+    "fundamentals": {"title": "Fundamentals", "summary": "Point-in-time company filings and financial statement line items. Reserved; no data is collected yet."},
+    "market": {"title": "Market data", "summary": "Price and volume bars for India and US listings, including India single-stock futures contracts."},
+    "meta": {"title": "Data operations", "summary": "How collection is running: every ingestion run, the series we expect, daily coverage, recovery progress, and source health."},
+    "raw": {"title": "Raw archive", "summary": "The untouched vendor responses every curated row was built from, kept for audit and replay."},
+    "ref": {"title": "Reference", "summary": "The shared dictionary: countries, exchanges, companies, securities, listings, contracts, and identifier mappings."},
+    "research": {"title": "Research views", "summary": "Read-only views that apply point-in-time rules over the stored tables."},
+    "risk": {"title": "Risk", "summary": "Risk budgets set by the risk function. Reserved; no data is collected yet."}
+  },
+  "tables": {
+    "book.attribution": {"title": "Trade attribution", "summary": "Reserved for linking each execution to the trade idea it belongs to. No data is collected yet."},
+    "book.strategies": {"title": "Strategies", "summary": "Reserved for the trading strategies run through broker accounts. No data is collected yet."},
+    "book.themes": {"title": "Investment themes", "summary": "Reserved for the themes portfolio managers invest behind. No data is collected yet."},
+    "book.trade_legs": {"title": "Trade legs", "summary": "Reserved for the target positions that make up each trade idea. No data is collected yet."},
+    "book.trade_names": {"title": "Trade ideas", "summary": "Reserved for named investment ideas and their thesis. No data is collected yet."},
+    "broker.account_state_snapshot": {"title": "Account snapshots", "summary": "Reserved for broker account values such as net liquidation and buying power over time. No data is collected yet."},
+    "broker.applied_corporate_actions": {"title": "Applied corporate actions", "summary": "Reserved for splits and dividends as they affected each account. No data is collected yet."},
+    "broker.cash_flows": {"title": "Cash flows", "summary": "Reserved for dividends, interest, fees, deposits, and withdrawals per account. No data is collected yet."},
+    "broker.executions": {"title": "Executions", "summary": "Reserved for every fill reported by the broker. No data is collected yet."},
+    "broker.open_orders_snapshot": {"title": "Open orders", "summary": "Reserved for snapshots of unfilled orders. No data is collected yet."},
+    "broker.order_events": {"title": "Order events", "summary": "Reserved for the full life cycle of each order: placed, modified, cancelled, filled. No data is collected yet."},
+    "broker.positions_snapshot": {"title": "Positions", "summary": "Reserved for position snapshots per broker account. No data is collected yet."},
+    "derived.computations": {"title": "Computations", "summary": "Reserved for a record of each reproducible computation run. No data is computed yet."},
+    "derived.factors": {"title": "Factors", "summary": "Reserved for computed factor values per listing and date. No data is computed yet."},
+    "derived.forward_test_attribution": {"title": "Forward-test attribution", "summary": "Reserved for scoring paper-trading results against their backtests. No data is computed yet."},
+    "fundamentals.filings": {"title": "Company filings", "summary": "Reserved for regulatory filings such as 10-K and 10-Q headers. No data is collected yet."},
+    "fundamentals.line_items": {"title": "Financial line items", "summary": "Reserved for individual values from financial statements, as first reported. No data is collected yet."},
+    "ref.session_windows_effective": {"title": "Effective session windows", "summary": "A view that combines trading sessions with holiday overrides to give each exchange's actual hours."},
+    "risk.budgets": {"title": "Risk budgets", "summary": "Reserved for exposure and loss limits at each level of the fund. No data is collected yet."},
+    "alt.political_committee_memberships": {"title": "Committee memberships", "summary": "Which member of Congress sits on which committee, with their role, as dated periods (a row is current while effective_to is empty)."},
+    "alt.political_committees": {"title": "Congressional committees", "summary": "House and Senate committees and subcommittees, with jurisdiction and links, per Congress."},
+    "alt.political_filings": {"title": "Disclosure filings", "summary": "One row per House financial disclosure filing (periodic transaction reports, annual reports, amendments), with a link to the original document."},
+    "alt.political_trades": {
+      "title": "Congressional trades",
+      "summary": "Individual securities trades disclosed by members of Congress, with the disclosed amount range, who owned the asset, and the matched ticker or company when it could be resolved.",
+      "notes": [
+        "Amounts are disclosed as ranges; use amount_min and amount_max rather than a single value.",
+        "transaction_date is when the trade happened; filing_date is when it was disclosed, often weeks later.",
+        "listing_id is empty when the asset could not be matched confidently; check resolution_confidence."
+      ],
+      "columns": {
+        "chamber": "house or senate.",
+        "transaction_type": "purchase, sale_full, sale_partial, or exchange.",
+        "owner_code": "Whose account held the asset: self, spouse, joint, or a dependent child.",
+        "amount_bucket_id": "The disclosed dollar range, e.g. $1K-$15K.",
+        "ticker_raw": "The ticker exactly as written in the filing, before any matching."
+      }
+    },
+    "alt.social_reddit_posts": {"title": "Reddit posts", "summary": "Reserved for social media posts that mention listed securities. No data is collected yet."},
+    "market.bars": {
+      "title": "Price bars",
+      "summary": "Open, high, low, close, and volume for every collected listing: India NSE equities every minute, and US equities every minute and every day.",
+      "notes": [
+        "Filter by resolution: 1-minute and daily bars are stored in the same table.",
+        "bar_time is the start of the bar in UTC; trade_date is the local trading day.",
+        "Prices are in the listing's own currency (INR for India, USD for the US).",
+        "Volume is shares for equities; do not add it across different product types."
+      ],
+      "columns": {
+        "country_code": "IN for India, US for the United States.",
+        "listing_id": "The listing's FactorLab ID; look it up in ref.listings for the symbol and exchange.",
+        "resolution": "Bar length, e.g. 1min or daily.",
+        "bar_time": "When the bar starts, in UTC.",
+        "trade_date": "The local trading day the bar belongs to.",
+        "source": "The data vendor, e.g. upstox or schwab.",
+        "raw_id": "The raw.archive response this bar was parsed from."
+      }
+    },
+    "market.futures_contract_bars": {
+      "title": "Futures contract bars",
+      "summary": "1-minute bars for individual India single-stock futures contracts, one series per contract and expiry, with open interest.",
+      "notes": [
+        "Each contract is a separate series; no continuous roll is applied.",
+        "Look up the contract's expiry and underlying in ref.contracts."
+      ],
+      "columns": {
+        "contract_id": "The futures contract's FactorLab ID in ref.contracts.",
+        "underlying_listing_id": "The stock the future is written on, in ref.listings.",
+        "oi": "Open interest: contracts outstanding at the end of the bar."
+      }
+    },
+    "market.futures_continuous": {"title": "Continuous futures", "summary": "Reserved for rolled front- and back-month futures series. Not computed yet."},
+    "market.fx_rates": {"title": "Currency rates", "summary": "Reserved for foreign exchange rate bars used to convert between currencies. No data is collected yet."},
+    "market.options_bars": {"title": "Options bars", "summary": "Reserved for option contract price bars with greeks. No data is collected yet."},
+    "market.quotes": {"title": "Quotes", "summary": "Reserved for bid and ask quotes, built when trade execution needs them. No data is collected yet."},
+    "meta.expected_series": {
+      "title": "Collection plan",
+      "summary": "Every price series FactorLab is set up to collect, by country, source, and bar length, and whether it is currently active.",
+      "notes": ["active = true means the series is collected today; inactive rows are kept for history."]
+    },
+    "meta.expected_series_canonical": {"title": "Collection plan (pre-cutover copy)", "summary": "A frozen copy of the collection plan from before the v2 cutover on 24 September 2026. Nothing writes to it."},
+    "meta.hub_schema_layouts": {"title": "Schema map layouts", "summary": "Saved positions of tables on the hub's schema map canvas."},
+    "meta.ingestion_runs": {
+      "title": "Ingestion runs",
+      "summary": "One row per collection run: which pipeline ran, when, whether it succeeded, how many series and rows it handled, and any error.",
+      "notes": [
+        "A run first appears as running and is then updated to success, partial, failed, or cancelled.",
+        "US history pipelines record one run per symbol, so they produce many rows."
+      ],
+      "columns": {
+        "pipeline": "The collection job, e.g. india_intraday_1min or us_live.",
+        "status": "running, success, partial, failed, or cancelled.",
+        "rows_written": "Rows the run inserted into curated tables.",
+        "error": "Why the run failed or was partial, when it did."
+      }
+    },
+    "meta.lineage": {"title": "Row lineage", "summary": "Links curated rows back to the raw responses and computations that produced them."},
+    "meta.migration_id_crosswalk": {"title": "Migration ID map", "summary": "How identifiers from the legacy database were mapped to v2 IDs during the migration."},
+    "meta.migration_political_trade_enrichment": {"title": "Migration political enrichment", "summary": "Reviewed corrections applied to political trades while migrating them to v2."},
+    "meta.migration_reference_enrichment": {"title": "Migration reference enrichment", "summary": "Reviewed exchange and currency details applied to reference data during the v2 migration."},
+    "meta.migration_runs": {"title": "Migration runs", "summary": "Each run of the v2 migration tool and its outcome."},
+    "meta.reconciliation_drift": {"title": "Broker reconciliation drift", "summary": "Reserved for differences detected between FactorLab and broker records. No data is collected yet."},
+    "meta.recovery_state": {
+      "title": "History recovery",
+      "summary": "For each series, how far back history has been loaded, whether it is complete, and the last recovery error.",
+      "columns": {"history_complete": "True once the full available history has been loaded.", "checked_through": "The latest time coverage has been verified up to."}
+    },
+    "meta.recovery_state_canonical": {"title": "History recovery (pre-cutover copy)", "summary": "A frozen copy of recovery progress from before the v2 cutover. Nothing writes to it."},
+    "meta.schema_migrations": {"title": "Schema migrations", "summary": "Each schema file applied to the v2 databases, with its checksum and status."},
+    "meta.session_coverage": {
+      "title": "Daily coverage",
+      "summary": "For each series and trading day, how many bars were expected, how many were collected, and how many are missing.",
+      "columns": {"expected": "Bars expected for the day.", "actual": "Bars actually stored.", "missing": "Bars still missing."}
+    },
+    "meta.session_coverage_canonical": {"title": "Daily coverage (pre-cutover copy)", "summary": "A frozen copy of daily coverage from before the v2 cutover. Nothing writes to it."},
+    "meta.source_status": {"title": "Source health", "summary": "The latest status each data source reported, such as ready, recovering, or waiting for sign-in, with details."},
+    "meta.unresolved_entities": {"title": "Unmatched identifiers", "summary": "Vendor identifiers that could not yet be matched to a FactorLab company, security, or listing, with how often they appeared."},
+    "raw.archive": {
+      "title": "Raw vendor responses",
+      "summary": "Every HTTP response FactorLab received from a data vendor, kept unchanged so curated data can be audited and rebuilt.",
+      "notes": ["Response bodies and headers are not shown in the hub; URLs are shown without query strings."]
+    },
+    "ref.adjustment_factors": {"title": "Price adjustment factors", "summary": "Reserved for split and dividend adjustment factors per listing. Not computed yet."},
+    "ref.broker_accounts": {"title": "Broker accounts", "summary": "Reserved for the broker accounts FactorLab mirrors. No data is collected yet."},
+    "ref.broker_metrics_map": {"title": "Broker metric names", "summary": "Reserved mapping from broker-specific metric names to FactorLab's standard names."},
+    "ref.contracts": {
+      "title": "Derivative contracts",
+      "summary": "Futures and options contracts, with their underlying listing, expiry, lot size, and multiplier.",
+      "columns": {"expiry": "The contract's last trading date.", "contract_type": "future, call, or put."}
+    },
+    "ref.corporate_actions": {"title": "Corporate actions", "summary": "Reserved for splits, dividends, mergers, and ticker changes. No data is collected yet."},
+    "ref.countries": {"title": "Countries", "summary": "Countries FactorLab covers, with their default currency and time zone."},
+    "ref.currencies": {"title": "Currencies", "summary": "ISO currency codes used across FactorLab."},
+    "ref.dataset_versions": {"title": "Dataset versions", "summary": "Reserved for recording when a curated dataset's methodology changes."},
+    "ref.entities": {"title": "Companies and people", "summary": "Issuers, companies, members of Congress, committees, and other organizations, each with a stable FactorLab ID."},
+    "ref.entity_relationships": {"title": "Entity relationships", "summary": "Reserved for mergers, spin-offs, renames, and parent–subsidiary links between entities."},
+    "ref.exchanges": {"title": "Exchanges", "summary": "Stock exchanges and trading venues, with their ISO market code (MIC), country, currency, and time zone."},
+    "ref.execution_methods": {"title": "Execution methods", "summary": "Reserved list of how orders are placed (API service, manual, algorithm)."},
+    "ref.holidays": {"title": "Market holidays", "summary": "Exchange holidays and special sessions. Not populated yet."},
+    "ref.identifier_aliases": {
+      "title": "Identifier mappings",
+      "summary": "Maps every vendor code (tickers, ISINs, Upstox instrument keys, Bioguide IDs, and more) to the FactorLab ID it refers to, with validity dates.",
+      "columns": {"alias_kind": "The kind of code, e.g. ticker, isin, or upstox_instrument_key.", "alias_value": "The code itself.", "target_id": "The FactorLab ID it maps to."}
+    },
+    "ref.legislator_terms": {"title": "Congressional terms", "summary": "Each member of Congress's terms in office, with chamber, state, district, and party."},
+    "ref.listing_migrations": {"title": "Listing moves", "summary": "Reserved for securities that moved between exchanges or were relisted."},
+    "ref.listings": {
+      "title": "Listings",
+      "summary": "Every tradable listing: a security on a specific exchange, with its trading symbol. This is the ID that price data uses.",
+      "notes": ["Join market.bars.listing_id to ref.listings.listing_id to get symbols and exchanges."],
+      "columns": {"trading_symbol": "The symbol traders use, e.g. AAPL or TCS.", "mic": "The exchange's ISO 10383 market code.", "active": "Whether the listing is currently trading."}
+    },
+    "ref.sectors": {"title": "Sectors", "summary": "Reserved for industry classifications such as GICS. Not populated yet."},
+    "ref.securities": {"title": "Securities", "summary": "The instruments themselves (a company's common stock, an ETF, a future), independent of where they trade."},
+    "ref.sessions": {"title": "Trading sessions", "summary": "Reserved for exchange trading hours by day of week. Not populated yet."},
+    "ref.sources": {"title": "Data sources", "summary": "The vendors and feeds FactorLab collects from."},
+    "ref.universe_membership": {"title": "Universe membership", "summary": "Reserved for which listings belonged to an index or universe on each date."},
+    "ref.universes": {"title": "Universes", "summary": "Reserved for index and watchlist definitions such as the S&P 500 or NIFTY 50."},
+    "research.bars": {"title": "Point-in-time bars", "summary": "Price bars as they were known on a chosen date. Query it with an asof_date parameter."},
+    "research.owned_listings": {"title": "Owned listings", "summary": "Listings held in broker accounts on a given date, for joining against other data."},
+    "research.political_trades": {"title": "Point-in-time political trades", "summary": "Congressional trades as they had been disclosed by a chosen date."},
+    "research.universe_membership": {"title": "Point-in-time universes", "summary": "Universe members as of a chosen date."}
+  }
+}

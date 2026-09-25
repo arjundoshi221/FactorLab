@@ -110,6 +110,23 @@ describe("FactorLab Hub", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("groups navigation into data pages and an operations menu", () => {
+    window.history.replaceState({}, "", "/docker-images");
+    render(<App />);
+    expect(screen.getByRole("link", { name: "Data catalog" })).toHaveAttribute("href", "/data");
+    expect(screen.getByRole("link", { name: "Pipelines" })).toHaveAttribute("href", "/data/pipelines");
+    expect(screen.getByText("Operations").closest("details")).toHaveClass("is-active");
+    expect(screen.getByRole("link", { name: "FactorLab Data Hub home" })).toHaveAttribute("href", "/data");
+  });
+
+  it("routes data pages without loading the ops dashboard", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: false, status: 503, json: async () => ({ detail: "Catalog down" }) } as Response);
+    window.history.replaceState({}, "", "/data/tables/market.bars");
+    render(<App />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Catalog down");
+    expect(vi.mocked(fetch).mock.calls.every(([url]) => String(url).startsWith("/hub/api/v1/catalog"))).toBe(true);
+  });
+
   it("renders the schema map route without loading the dashboard", async () => {
     window.history.replaceState({}, "", "/schema");
     render(<App />);
