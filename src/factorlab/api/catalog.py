@@ -9,10 +9,8 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
-from functools import lru_cache
-from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -51,6 +49,7 @@ from factorlab.api.catalog_query import (
     type_class,
     validate_table_name,
 )
+from factorlab.api.catalog_text import namespace_text, table_text
 from factorlab.api.hub import (
     V2_TABLE_PROFILES,
     HubOverviewService,
@@ -60,7 +59,6 @@ from factorlab.api.hub import (
 )
 from factorlab.api.schema_map import (
     V2_DATABASES,
-    V2_DOMAINS,
     SchemaMapRepository,
     SchemaMapResponse,
     SchemaTable,
@@ -312,53 +310,6 @@ class PipelineRunsPage(BaseModel):
     has_more: bool
 
 
-# ── Descriptions ─────────────────────────────────────────────────────────────
-
-
-@lru_cache(maxsize=1)
-def _descriptions() -> tuple[dict[str, Any], dict[str, Any]]:
-    directory = Path(__file__).resolve().parent
-    generated = json.loads((directory / "catalog_descriptions.json").read_text(encoding="utf-8"))
-    curated = json.loads((directory / "catalog_curated.json").read_text(encoding="utf-8"))
-    return generated.get("tables", {}), curated
-
-
-def _humanize(name: str) -> str:
-    text = name.split(".", 1)[-1].replace("_", " ").strip()
-    return text[:1].upper() + text[1:]
-
-
-@dataclass(frozen=True)
-class TableText:
-    title: str
-    summary: str
-    design_notes: str | None
-    notes: list[str]
-    columns: dict[str, str]
-
-
-def table_text(name: str) -> TableText:
-    generated, curated = _descriptions()
-    design = generated.get(name, {})
-    manual = curated.get("tables", {}).get(name, {})
-    columns = {**design.get("columns", {}), **manual.get("columns", {})}
-    design_notes = design.get("description")
-    summary = manual.get("summary") or design_notes or "No description has been written for this table yet."
-    return TableText(
-        title=manual.get("title") or _humanize(name),
-        summary=summary,
-        design_notes=design_notes if design_notes and design_notes != summary else None,
-        notes=list(manual.get("notes", [])),
-        columns=columns,
-    )
-
-
-def namespace_text(namespace: str) -> tuple[str, str]:
-    _, curated = _descriptions()
-    entry = curated.get("namespaces", {}).get(namespace, {})
-    return entry.get("title") or V2_DOMAINS.get(namespace, namespace), entry.get("summary", "")
-
-
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -518,9 +469,7 @@ class CatalogService:
     ) -> None:
         self.client = client
         self.overview = overview
-        self.schema_repository = schema_repository or SchemaMapRepository(
-            client, database="factorlab_v2", databases=V2_DATABASES, qualify_names=True, layout_id="v2"
-        )
+        self.schema_repository = schema_repository or SchemaMapRepository(client)
         self.clock = clock
         self.now = now
         self.slots = slots or QuerySlots(3)

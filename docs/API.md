@@ -56,12 +56,11 @@ Then use `http://127.0.0.1:8000` as the base URL.
 |---|---|---|---|
 | `GET` | `/` | SSH/edge boundary | FactorLab Data Hub dashboard |
 | `GET` | `/india` | SSH/edge boundary | India instrument and trading-session explorer |
-| `GET` | `/schema` | SSH/edge boundary | Live ClickHouse schema map and shared scratchboard |
+| `GET` | `/schema` | SSH/edge boundary | Schema explorer: v2 areas, tables, columns, and links in plain language |
 | `GET` | `/roadmap` | SSH/edge boundary | V1-V5 product roadmap |
 | `GET` | `/hub/api/v1/overview` | SSH/edge boundary | Cached table inventory and schedule-aware health |
 | `GET` | `/hub/api/v1/docker-images` | SSH/edge boundary | Host Docker image inventory snapshot |
-| `GET` | `/hub/api/v1/schema-map` | SSH/edge boundary | Tables, columns, engine keys, logical links, and shared layout |
-| `PUT` | `/hub/api/v1/schema-map/layout` | SSH/edge boundary | Save the version-checked canonical schema layout |
+| `GET` | `/hub/api/v1/schema-map` | SSH/edge boundary | v2 areas, tables, columns with descriptions, keys, and categorized logical links |
 | `GET` | `/hub/api/v1/india/dashboard` | SSH/edge boundary | Selected-day India collection health |
 | `GET` | `/hub/api/v1/india/instruments` | SSH/edge boundary | Unique instruments with coverage and value checks |
 | `GET` | `/hub/api/v1/india/instruments/{id}/days` | SSH/edge boundary | Exchange-session checks for one instrument |
@@ -125,12 +124,19 @@ times are left null. The endpoint has no Docker socket access.
 ### Schema map web endpoints
 
 `GET /hub/api/v1/schema-map` reads live `system.tables` and `system.columns`
-metadata, then adds reviewed logical relationships because ClickHouse does not
-enforce foreign keys. `PUT /hub/api/v1/schema-map/layout` stores only table
-positions, collapsed state, and viewport in `meta.hub_schema_layouts`; it requires
-the current layout revision and schema fingerprint, returning `409` for a stale
-layout and `422` when the live schema has changed. No table rows or query tools
-are exposed by these endpoints.
+for the v2 databases (`ref`, `market`, `fundamentals`, `alt`, `book`, `risk`,
+`derived`, `broker`, `meta`, `raw`, `research`) and is cached for 60 seconds.
+Each table and column carries the plain-language title, summary, notes, and
+description from `src/factorlab/api/catalog_curated.json` and
+`catalog_descriptions.json`; `areas` describes each database. ClickHouse does
+not enforce foreign keys, so relationships are inferred from shared column names
+(`V2_FK_TARGETS`) and tagged `identity`, `lineage` (`raw_id`, `ingest_run_id`,
+`computation_id`), or `lookup` (country, currency, exchange, and source codes).
+`/hub/api/v1/schema-map/v2` is an alias kept for old bookmarks. When the v2
+databases are absent, the response is built from the bundled migration DDL and
+carries a "Preview mode" warning. The schema explorer lays out every view
+automatically; saved layouts and their `PUT …/layout` endpoints were removed with
+the legacy map. No table rows are exposed here (see the data catalog endpoints).
 
 ### India Markets web endpoints
 

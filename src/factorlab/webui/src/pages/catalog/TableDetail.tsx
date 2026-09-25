@@ -97,6 +97,9 @@ function Overview({ detail, market }: { detail: CatalogTableDetail; market: stri
           </section>
           <section className="data-panel">
             <h3>Related tables</h3>
+            <p className="data-note">
+              <a href={`/schema?table=${encodeURIComponent(detail.name)}&sel=${encodeURIComponent(detail.name)}`}>See how it connects in the schema explorer →</a>
+            </p>
             {detail.related.length === 0 && <p className="data-muted">No links to other tables were found.</p>}
             {outgoing.length > 0 && (
               <>

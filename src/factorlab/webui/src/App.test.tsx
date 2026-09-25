@@ -6,7 +6,7 @@ vi.mock("./components/us/USDashboardPanel", () => ({
   USDashboardPanel: () => <a href="/us">US universe and collection</a>,
 }));
 vi.mock("./pages/USMarkets", () => ({ USMarkets: () => null }));
-vi.mock("./pages/SchemaMap", () => ({ SchemaMap: () => <h1>Schema map canvas</h1> }));
+vi.mock("./pages/schema/SchemaExplorer", () => ({ SchemaExplorer: () => <h1>Schema map canvas</h1> }));
 vi.mock("./pages/DockerImages", () => ({ DockerImages: () => <h1>Docker image inventory</h1> }));
 
 const overview = {

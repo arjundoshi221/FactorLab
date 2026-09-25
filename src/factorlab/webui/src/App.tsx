@@ -12,9 +12,9 @@ import { formatBytes, formatCompact, formatDate, formatTime } from "./shared/for
 import { DataHome } from "./pages/catalog/DataHome";
 import { Pipelines } from "./pages/catalog/Pipelines";
 
-const SchemaMap = lazy(async () => {
-  const module = await import("./pages/SchemaMap");
-  return { default: module.SchemaMap };
+const SchemaExplorer = lazy(async () => {
+  const module = await import("./pages/schema/SchemaExplorer");
+  return { default: module.SchemaExplorer };
 });
 
 const TableDetail = lazy(async () => {
@@ -95,7 +95,6 @@ const operationsLinks = [
   { href: "/india", label: "India markets", active: (path: string) => path.startsWith("/india") },
   { href: "/us", label: "US markets", active: (path: string) => path === "/us" },
   { href: "/political", label: "Political", active: (path: string) => path === "/political" },
-  { href: "/schema", label: "Schema map", active: (path: string) => path.startsWith("/schema") },
   { href: "/docker-images", label: "Docker images", active: (path: string) => path === "/docker-images" },
   { href: "/roadmap", label: "Roadmap", active: (path: string) => path === "/roadmap" },
 ];
@@ -115,6 +114,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         </a>
         <nav aria-label="Primary navigation">
           <a className={path === "/data" || path.startsWith("/data/tables") ? "active" : ""} href="/data">Data catalog</a>
+          <a className={path.startsWith("/schema") ? "active" : ""} href="/schema">Schema</a>
           <a className={path === "/data/pipelines" ? "active" : ""} href="/data/pipelines">Pipelines</a>
           <details className={`nav-menu${inOperations ? " is-active" : ""}`}>
             <summary>Operations</summary>
@@ -457,18 +457,18 @@ export function App() {
       </Shell>
     );
   }
-  if (path === "/schema/v2") {
+  if (path === "/schema" || path === "/schema/v2") {
     return (
       <Shell>
-        <Suspense fallback={<main className="loading-state">Loading v2 schema canvas...</main>}>
-          <SchemaMap version="v2" />
+        <Suspense fallback={<main className="loading-state">Loading the schema explorer…</main>}>
+          <SchemaExplorer />
         </Suspense>
       </Shell>
     );
   }
   return (
     <Shell>
-      {path === "/roadmap" ? <Roadmap /> : path === "/docker-images" ? <DockerImages /> : path === "/schema" ? <Suspense fallback={<main className="loading-state">Loading schema canvas…</main>}><SchemaMap /></Suspense> : indiaInstrumentMatch ? <IndiaInstrumentDetail listingId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
+      {path === "/roadmap" ? <Roadmap /> : path === "/docker-images" ? <DockerImages /> : indiaInstrumentMatch ? <IndiaInstrumentDetail listingId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
     </Shell>
   );
 }

@@ -1,18 +1,17 @@
 from datetime import UTC, datetime
 
-import pytest
 from fastapi.testclient import TestClient
 
-from factorlab.api.app import app, get_schema_map_service, get_v2_schema_map_service
-from factorlab.api.schema_map import (
-    V2_DATABASES,
-    LayoutConflictError,
-    LayoutNode,
-    LayoutViewport,
-    SchemaLayoutUpdate,
-    SchemaMapRepository,
-    SchemaMapService,
-)
+from factorlab.api.app import app, get_schema_map_service
+from factorlab.api.schema_map import V2_DATABASES, SchemaMapRepository, SchemaMapService
+
+TABLE_COLUMNS = [
+    "database", "name", "engine", "stored_rows", "bytes_on_disk", "primary_key", "sorting_key", "partition_key",
+]
+COLUMN_COLUMNS = [
+    "database", "table", "name", "type", "position", "default_kind", "default_expression",
+    "is_in_primary_key", "is_in_sorting_key", "is_in_partition_key",
+]
 
 
 class QueryResult:
@@ -25,250 +24,111 @@ def result(columns, *rows):
     return QueryResult(columns, list(rows))
 
 
-class SchemaQueryClient:
+class V2SchemaQueryClient:
     def __init__(self):
-        self.saved = None
-        self.inserts = []
+        self.calls = []
 
     def query(self, query, parameters=None):
+        self.calls.append(query)
         if "FROM system.tables AS tables" in query:
+            assert parameters == {"databases": list(V2_DATABASES)}
             return result(
-                [
-                    "name",
-                    "engine",
-                    "stored_rows",
-                    "bytes_on_disk",
-                    "primary_key",
-                    "sorting_key",
-                    "partition_key",
-                ],
-                ("ref_countries", "ReplacingMergeTree", 2, 100, "country_code", "country_code", ""),
-                (
-                    "ref_exchanges",
-                    "ReplacingMergeTree",
-                    3,
-                    200,
-                    "exchange_code",
-                    "exchange_code",
-                    "",
-                ),
+                TABLE_COLUMNS,
+                ("ref", "listings", "ReplacingMergeTree", 10, 500, "listing_id", "listing_id", ""),
+                ("ref", "countries", "ReplacingMergeTree", 2, 50, "country_code", "country_code", ""),
+                ("raw", "archive", "MergeTree", 9, 900, "source", "source, fetched_at", ""),
+                ("market", "bars", "ReplacingMergeTree", 100, 5000, "", "listing_id, bar_time", "toYYYYMM(bar_time)"),
+                ("research", "bars", "View", 0, 0, "", "", ""),
             )
         if "FROM system.columns" in query:
+            assert parameters == {"databases": list(V2_DATABASES)}
             return result(
-                [
-                    "table",
-                    "name",
-                    "type",
-                    "position",
-                    "default_kind",
-                    "default_expression",
-                    "is_in_primary_key",
-                    "is_in_sorting_key",
-                    "is_in_partition_key",
-                ],
-                ("ref_countries", "country_code", "FixedString(2)", 1, "", "", 1, 1, 0),
-                ("ref_countries", "name", "String", 2, "", "", 0, 0, 0),
-                ("ref_exchanges", "exchange_code", "String", 1, "", "", 1, 1, 0),
-                ("ref_exchanges", "country_code", "FixedString(2)", 2, "", "", 0, 0, 0),
-            )
-        if "FROM meta.hub_schema_layouts FINAL" in query:
-            if self.saved is None:
-                return result(["revision", "schema_fingerprint", "layout_json", "updated_at"])
-            return result(
-                ["revision", "schema_fingerprint", "layout_json", "updated_at"],
-                self.saved,
+                COLUMN_COLUMNS,
+                ("ref", "listings", "listing_id", "UUID", 1, "", "", 1, 1, 0),
+                ("ref", "listings", "country_code", "FixedString(2)", 2, "", "", 0, 0, 0),
+                ("ref", "countries", "country_code", "FixedString(2)", 1, "", "", 1, 1, 0),
+                ("raw", "archive", "raw_id", "UUID", 1, "", "", 0, 1, 0),
+                ("market", "bars", "listing_id", "UUID", 1, "", "", 0, 1, 0),
+                ("market", "bars", "bar_time", "DateTime64(3, 'UTC')", 2, "", "", 0, 1, 1),
+                ("market", "bars", "raw_id", "Nullable(UUID)", 3, "", "", 0, 0, 0),
+                ("research", "bars", "bar_time", "DateTime64(3, 'UTC')", 1, "", "", 0, 0, 0),
             )
         raise AssertionError(query)
 
-    def insert(self, table, data, *, column_names):
-        assert table == "meta.hub_schema_layouts"
-        self.inserts.append((table, data, column_names))
-        row = data[0]
-        self.saved = (row[1], row[2], row[3], row[4])
+
+def test_schema_map_describes_v2_tables_columns_areas_and_link_categories():
+    schema = SchemaMapRepository(V2SchemaQueryClient()).get_schema_map(now=datetime(2026, 9, 26, tzinfo=UTC))
+    tables = {table.name: table for table in schema.tables}
+
+    bars = tables["market.bars"]
+    assert bars.namespace == "market" and bars.title == "Price bars" and bars.kind == "table"
+    assert bars.summary.startswith("Open, high, low, close")
+    assert any(note.startswith("Filter by resolution") for note in bars.notes)
+    assert next(column for column in bars.columns if column.name == "bar_time").description == "When the bar starts, in UTC."
+    assert tables["research.bars"].kind == "view"
+
+    assert [area.id for area in schema.areas] == ["ref", "market", "raw", "research"]
+    assert schema.areas[1].title == "Market data"
+
+    categories = {(item.source.table, item.source.column): item.category for item in schema.relationships}
+    assert categories[("market.bars", "listing_id")] == "identity"
+    assert categories[("market.bars", "raw_id")] == "lineage"
+    assert categories[("ref.listings", "country_code")] == "lookup"
+    optional = next(item for item in schema.relationships if item.source.column == "raw_id")
+    assert optional.optional is True
+    assert not hasattr(schema, "layout")
 
 
-def test_schema_map_returns_live_columns_keys_and_reviewed_relationships():
-    schema = SchemaMapRepository(SchemaQueryClient()).get_schema_map(
-        now=datetime(2026, 9, 18, tzinfo=UTC)
-    )
-
-    assert schema.database == "factorlab"
-    assert [table.name for table in schema.tables] == ["ref_countries", "ref_exchanges"]
-    assert schema.tables[0].columns[0].in_sorting_key is True
-    assert schema.tables[1].stored_rows == 3
-    relationship = next(
-        item for item in schema.relationships if item.source.table == "ref_exchanges"
-    )
-    assert relationship.source.column == "country_code"
-    assert relationship.target.table == "ref_countries"
-    assert relationship.enforced is False
-    assert len(schema.schema_fingerprint) == 64
-    assert schema.layout.revision == 0
-
-
-def test_schema_layout_save_is_versioned_and_round_trips():
-    client = SchemaQueryClient()
-    service = SchemaMapService(SchemaMapRepository(client))
-    schema = service.get_schema_map()
-    update = SchemaLayoutUpdate(
-        base_revision=0,
-        schema_fingerprint=schema.schema_fingerprint,
-        nodes=[
-            LayoutNode(table="ref_countries", x=10, y=20),
-            LayoutNode(table="ref_exchanges", x=410, y=20, collapsed=True),
-        ],
-        viewport=LayoutViewport(x=5, y=8, zoom=0.8),
-    )
-
-    saved = service.save_layout(update)
-
-    assert saved.revision == 1
-    assert saved.nodes[1].collapsed is True
-    assert client.inserts[0][0] == "meta.hub_schema_layouts"
-    assert service.get_schema_map().layout.viewport.zoom == 0.8
-
-
-def test_schema_layout_rejects_stale_revision():
-    client = SchemaQueryClient()
-    service = SchemaMapService(SchemaMapRepository(client))
-    schema = service.get_schema_map()
-    client.saved = (
-        2,
-        schema.schema_fingerprint,
-        '{"nodes":[],"viewport":{"x":0,"y":0,"zoom":1}}',
-        datetime(2026, 9, 18, tzinfo=UTC),
-    )
-
-    with pytest.raises(LayoutConflictError):
-        service.save_layout(
-            SchemaLayoutUpdate(
-                base_revision=1,
-                schema_fingerprint=schema.schema_fingerprint,
-                nodes=[],
-            )
-        )
-
-
-def test_schema_map_endpoints_use_private_service():
-    service = SchemaMapService(SchemaMapRepository(SchemaQueryClient()))
+def test_schema_service_caches_and_both_paths_serve_the_same_map():
+    client = V2SchemaQueryClient()
+    now = [0.0]
+    service = SchemaMapService(SchemaMapRepository(client), clock=lambda: now[0])
     app.dependency_overrides[get_schema_map_service] = lambda: service
+    try:
+        http = TestClient(app)
+        first = http.get("/hub/api/v1/schema-map")
+        alias = http.get("/hub/api/v1/schema-map/v2")
+        assert http.put("/hub/api/v1/schema-map/layout", json={}).status_code in {404, 405}
+        assert http.put("/hub/api/v1/schema-map/v2/layout", json={}).status_code in {404, 405}
+    finally:
+        app.dependency_overrides.clear()
+
+    assert first.status_code == alias.status_code == 200
+    assert first.json() == alias.json()
+    assert len([call for call in client.calls if "system.tables" in call]) == 1
+    now[0] = 61.0
+    assert service.get_schema_map() is not None  # after the TTL a fresh read happens
+    assert len([call for call in client.calls if "system.tables" in call]) == 2
+
+
+def test_schema_map_reports_503_when_clickhouse_is_down():
+    class Broken:
+        def get_schema_map(self):
+            raise RuntimeError("down")
+
+    app.dependency_overrides[get_schema_map_service] = lambda: Broken()
     try:
         response = TestClient(app).get("/hub/api/v1/schema-map")
     finally:
         app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    assert response.json()["tables"][0]["name"] == "ref_countries"
+    assert response.status_code == 503
 
 
-class V2SchemaQueryClient(SchemaQueryClient):
+class EmptyV2SchemaQueryClient:
     def query(self, query, parameters=None):
         if "FROM system.tables AS tables" in query:
-            assert parameters == {"databases": list(V2_DATABASES)}
-            return result(
-                [
-                    "database",
-                    "name",
-                    "engine",
-                    "stored_rows",
-                    "bytes_on_disk",
-                    "primary_key",
-                    "sorting_key",
-                    "partition_key",
-                ],
-                ("ref", "listings", "ReplacingMergeTree", 10, 500, "listing_id", "listing_id", ""),
-                ("market", "bars", "ReplacingMergeTree", 100, 5000, "", "listing_id", "resolution"),
-            )
-        if "FROM system.columns" in query:
-            assert parameters == {"databases": list(V2_DATABASES)}
-            return result(
-                [
-                    "database",
-                    "table",
-                    "name",
-                    "type",
-                    "position",
-                    "default_kind",
-                    "default_expression",
-                    "is_in_primary_key",
-                    "is_in_sorting_key",
-                    "is_in_partition_key",
-                ],
-                ("ref", "listings", "listing_id", "UUID", 1, "", "", 1, 1, 0),
-                ("market", "bars", "listing_id", "UUID", 1, "", "", 0, 1, 0),
-            )
-        return super().query(query, parameters)
+            return result(TABLE_COLUMNS)
+        raise AssertionError(query)
 
 
-def test_v2_schema_map_qualifies_tables_across_databases_and_uses_separate_layout():
-    client = V2SchemaQueryClient()
-    schema = SchemaMapRepository(
-        client,
-        database="factorlab_v2",
-        databases=V2_DATABASES,
-        qualify_names=True,
-        layout_id="v2",
-    ).get_schema_map(now=datetime(2026, 9, 20, tzinfo=UTC))
-
-    assert schema.database == "factorlab_v2"
-    assert [table.name for table in schema.tables] == ["ref.listings", "market.bars"]
-    assert schema.tables[0].domain == "Reference"
-    assert schema.tables[1].domain == "Market data"
-    relationship = schema.relationships[0]
-    assert relationship.source.table == "market.bars"
-    assert relationship.target.table == "ref.listings"
-
-
-def test_v2_schema_map_endpoint_uses_v2_service():
-    service = SchemaMapService(
-        SchemaMapRepository(
-            V2SchemaQueryClient(),
-            database="factorlab_v2",
-            databases=V2_DATABASES,
-            qualify_names=True,
-            layout_id="v2",
-        )
-    )
-    app.dependency_overrides[get_v2_schema_map_service] = lambda: service
-    try:
-        response = TestClient(app).get("/hub/api/v1/schema-map/v2")
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    assert response.json()["tables"][1]["name"] == "market.bars"
-
-
-class EmptyV2SchemaQueryClient(SchemaQueryClient):
-    def query(self, query, parameters=None):
-        if "FROM system.tables AS tables" in query:
-            return result(
-                [
-                    "database",
-                    "name",
-                    "engine",
-                    "stored_rows",
-                    "bytes_on_disk",
-                    "primary_key",
-                    "sorting_key",
-                    "partition_key",
-                ]
-            )
-        return super().query(query, parameters)
-
-
-def test_v2_schema_map_falls_back_to_migration_ddl_preview_when_databases_are_absent():
-    schema = SchemaMapRepository(
-        EmptyV2SchemaQueryClient(),
-        database="factorlab_v2",
-        databases=V2_DATABASES,
-        qualify_names=True,
-        layout_id="v2",
-    ).get_schema_map(now=datetime(2026, 9, 21, tzinfo=UTC))
+def test_schema_map_falls_back_to_migration_ddl_preview_when_databases_are_absent():
+    schema = SchemaMapRepository(EmptyV2SchemaQueryClient()).get_schema_map(now=datetime(2026, 9, 21, tzinfo=UTC))
 
     namespaces = {table.name.split(".", 1)[0] for table in schema.tables}
     assert namespaces == set(V2_DATABASES)
     assert len(schema.tables) >= 60
-    assert next(table for table in schema.tables if table.name == "market.bars").columns
-    assert next(table for table in schema.tables if table.name == "research.bars").engine == "View"
+    bars = next(table for table in schema.tables if table.name == "market.bars")
+    assert bars.columns and bars.title == "Price bars"
+    assert next(table for table in schema.tables if table.name == "research.bars").kind == "view"
     assert schema.warnings[0].startswith("Preview mode:")
+    assert len(schema.areas) == len(V2_DATABASES)

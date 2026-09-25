@@ -72,13 +72,9 @@ from factorlab.api.political_observability import (
     PoliticalTickerSummary,
 )
 from factorlab.api.schema_map import (
-    InvalidLayoutError,
-    LayoutConflictError,
-    SchemaLayoutUpdate,
     SchemaMapRepository,
     SchemaMapResponse,
     SchemaMapService,
-    SharedSchemaLayout,
 )
 from factorlab.api.us import router as us_router
 from factorlab.storage.clickhouse import ClickHouseStorage
@@ -141,16 +137,9 @@ def get_hub_overview_service() -> HubOverviewService:
 
 @lru_cache
 def get_schema_map_service() -> SchemaMapService:
-    """Create the live schema reader and canonical layout store."""
+    """Create the cached v2 schema reader shared by the explorer and the release check."""
 
     return SchemaMapService(SchemaMapRepository.from_environment())
-
-
-@lru_cache
-def get_v2_schema_map_service() -> SchemaMapService:
-    """Create the multi-database v2 schema reader and its separate layout store."""
-
-    return SchemaMapService(SchemaMapRepository.v2_from_environment())
 
 
 @app.get("/health", tags=["operations"])
@@ -319,73 +308,24 @@ def get_catalog_activity(
     response_model=SchemaMapResponse,
     tags=["hub"],
 )
+@app.get(
+    "/hub/api/v1/schema-map/v2",
+    response_model=SchemaMapResponse,
+    tags=["hub"],
+    include_in_schema=False,
+)
 def get_hub_schema_map(
     service: Annotated[SchemaMapService, Depends(get_schema_map_service)],
 ) -> SchemaMapResponse:
-    """Return live ClickHouse metadata, logical links, and the shared layout."""
+    """Every v2 table and view with plain-language descriptions and categorized logical links.
+
+    ``/schema-map/v2`` is kept as an alias for bookmarks from before the legacy map was removed.
+    """
 
     try:
         return service.get_schema_map()
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Schema metadata is unavailable") from exc
-
-
-@app.put(
-    "/hub/api/v1/schema-map/layout",
-    response_model=SharedSchemaLayout,
-    tags=["hub"],
-)
-def save_hub_schema_layout(
-    update: SchemaLayoutUpdate,
-    service: Annotated[SchemaMapService, Depends(get_schema_map_service)],
-) -> SharedSchemaLayout:
-    """Replace the shared layout when the caller still has the current revision."""
-
-    try:
-        return service.save_layout(update)
-    except LayoutConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except InvalidLayoutError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="The shared layout could not be saved") from exc
-
-
-@app.get(
-    "/hub/api/v1/schema-map/v2",
-    response_model=SchemaMapResponse,
-    tags=["hub"],
-)
-def get_hub_v2_schema_map(
-    service: Annotated[SchemaMapService, Depends(get_v2_schema_map_service)],
-) -> SchemaMapResponse:
-    """Return live metadata for every FactorLab v2 ClickHouse namespace."""
-
-    try:
-        return service.get_schema_map()
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="V2 schema metadata is unavailable") from exc
-
-
-@app.put(
-    "/hub/api/v1/schema-map/v2/layout",
-    response_model=SharedSchemaLayout,
-    tags=["hub"],
-)
-def save_hub_v2_schema_layout(
-    update: SchemaLayoutUpdate,
-    service: Annotated[SchemaMapService, Depends(get_v2_schema_map_service)],
-) -> SharedSchemaLayout:
-    """Save the independent shared layout for the multi-database v2 map."""
-
-    try:
-        return service.save_layout(update)
-    except LayoutConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except InvalidLayoutError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="The v2 layout could not be saved") from exc
 
 
 @app.get(

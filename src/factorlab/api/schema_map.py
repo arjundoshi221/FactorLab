@@ -1,12 +1,13 @@
-"""Live ClickHouse schema metadata and shared canvas layout for the private hub."""
+"""Live v2 ClickHouse schema metadata, described in plain language, for the hub's schema explorer."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-import math
 import re
 import threading
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
 
+from factorlab.api.catalog_text import namespace_text, table_text
 from factorlab.storage.clickhouse import ClickHouseStorage
 
 
@@ -27,14 +29,6 @@ class SchemaMapClient(Protocol):
         self, query: str, parameters: dict[str, Any] | None = None
     ) -> SchemaMapResult: ...
 
-    def insert(
-        self,
-        table: str,
-        data: list[list[Any]],
-        *,
-        column_names: list[str],
-    ) -> Any: ...
-
 
 class SchemaColumn(BaseModel):
     name: str
@@ -46,11 +40,17 @@ class SchemaColumn(BaseModel):
     in_primary_key: bool = False
     in_sorting_key: bool = False
     in_partition_key: bool = False
+    description: str | None = None
 
 
 class SchemaTable(BaseModel):
     name: str
+    namespace: str = ""
     domain: str
+    title: str = ""
+    summary: str = ""
+    notes: list[str] = Field(default_factory=list)
+    kind: Literal["table", "view"] = "table"
     engine: str
     stored_rows: int
     bytes_on_disk: int
@@ -60,9 +60,18 @@ class SchemaTable(BaseModel):
     columns: list[SchemaColumn]
 
 
+class SchemaArea(BaseModel):
+    id: str
+    title: str
+    summary: str
+
+
 class RelationshipEndpoint(BaseModel):
     table: str
     column: str
+
+
+RelationshipCategory = Literal["identity", "lineage", "lookup"]
 
 
 class SchemaRelationship(BaseModel):
@@ -73,111 +82,20 @@ class SchemaRelationship(BaseModel):
     cardinality: Literal["many_to_one"] = "many_to_one"
     optional: bool = False
     enforced: Literal[False] = False
-
-
-class LayoutNode(BaseModel):
-    table: str
-    x: float
-    y: float
-    collapsed: bool = False
-
-
-class LayoutViewport(BaseModel):
-    x: float = 0
-    y: float = 0
-    zoom: float = Field(default=1, ge=0.05, le=4)
-
-
-class SharedSchemaLayout(BaseModel):
-    revision: int = 0
-    schema_fingerprint: str = ""
-    nodes: list[LayoutNode] = Field(default_factory=list)
-    viewport: LayoutViewport = Field(default_factory=LayoutViewport)
-    updated_at: datetime | None = None
+    category: RelationshipCategory = "identity"
 
 
 class SchemaMapResponse(BaseModel):
     generated_at: datetime
-    database: str
     schema_fingerprint: str
+    areas: list[SchemaArea]
     tables: list[SchemaTable]
     relationships: list[SchemaRelationship]
-    layout: SharedSchemaLayout
     warnings: list[str] = Field(default_factory=list)
-
-
-class SchemaLayoutUpdate(BaseModel):
-    base_revision: int = Field(ge=0)
-    schema_fingerprint: str
-    nodes: list[LayoutNode]
-    viewport: LayoutViewport = Field(default_factory=LayoutViewport)
-
-
-class LayoutConflictError(RuntimeError):
-    """The shared layout changed after the caller loaded it."""
-
-
-class InvalidLayoutError(ValueError):
-    """The submitted layout does not match the live schema."""
 
 
 def _rows(result: SchemaMapResult) -> list[dict[str, Any]]:
     return [dict(zip(result.column_names, row, strict=True)) for row in result.result_rows]
-
-
-def _domain_for(table_name: str) -> str:
-    if table_name.startswith("alt_political_"):
-        return "Political"
-    if table_name.startswith("market_"):
-        return "Market data"
-    if table_name.startswith("ref_"):
-        return "Reference"
-    if table_name.startswith("raw_"):
-        return "Raw archive"
-    if table_name.startswith("india_"):
-        return "India operations"
-    if table_name.startswith("us_"):
-        return "US operations"
-    if table_name.startswith("hub_"):
-        return "Hub internals"
-    if table_name == "ingestion_runs":
-        return "Operations"
-    return "Unclassified"
-
-
-# ClickHouse does not enforce foreign keys. These reviewed links describe the
-# joins used by FactorLab and are intentionally kept separate from engine keys.
-LOGICAL_RELATIONSHIPS: tuple[tuple[str, str, str, str], ...] = (
-    ("ref_exchanges", "country_code", "ref_countries", "country_code"),
-    ("ref_instruments", "country_code", "ref_countries", "country_code"),
-    ("ref_instruments", "exchange_code", "ref_exchanges", "exchange_code"),
-    ("ref_instruments", "raw_id", "raw_http_archive", "raw_id"),
-    ("ref_contracts", "instrument_id", "ref_instruments", "instrument_id"),
-    ("ref_contracts", "raw_id", "raw_http_archive", "raw_id"),
-    ("market_candles_1min", "instrument_id", "ref_instruments", "instrument_id"),
-    ("market_candles_1min", "contract_id", "ref_contracts", "contract_id"),
-    ("market_candles_1min", "raw_id", "raw_http_archive", "raw_id"),
-    ("market_candles_daily", "instrument_id", "ref_instruments", "instrument_id"),
-    ("market_candles_daily", "contract_id", "ref_contracts", "contract_id"),
-    ("market_candles_daily", "raw_id", "raw_http_archive", "raw_id"),
-    ("alt_political_legislators", "raw_id", "raw_http_archive", "raw_id"),
-    ("alt_political_committees", "parent_committee_id", "alt_political_committees", "committee_id"),
-    ("alt_political_committees", "raw_id", "raw_http_archive", "raw_id"),
-    ("alt_political_committee_memberships", "committee_id", "alt_political_committees", "committee_id"),
-    ("alt_political_committee_memberships", "bioguide_id", "alt_political_legislators", "bioguide_id"),
-    ("alt_political_committee_memberships", "raw_id", "raw_http_archive", "raw_id"),
-    ("alt_political_house_filings", "bioguide_id", "alt_political_legislators", "bioguide_id"),
-    ("alt_political_house_filings", "raw_id", "raw_http_archive", "raw_id"),
-    ("alt_political_trades", "country_code", "ref_countries", "country_code"),
-    ("alt_political_trades", "filing_id", "alt_political_house_filings", "filing_id"),
-    ("alt_political_trades", "bioguide_id", "alt_political_legislators", "bioguide_id"),
-    ("alt_political_trades", "raw_id", "raw_http_archive", "raw_id"),
-    ("india_expected_series", "instrument_id", "ref_instruments", "instrument_id"),
-    ("india_expected_series", "contract_id", "ref_contracts", "contract_id"),
-    ("us_expected_series", "instrument_id", "ref_instruments", "instrument_id"),
-    ("us_recovery_state", "instrument_id", "ref_instruments", "instrument_id"),
-    ("us_session_coverage", "instrument_id", "ref_instruments", "instrument_id"),
-)
 
 V2_DATABASES: tuple[str, ...] = (
     "ref",
@@ -240,6 +158,21 @@ V2_FK_TARGETS: dict[str, tuple[str, str]] = {
     "account_id": ("ref.broker_accounts", "account_id"),
     "computation_id": ("derived.computations", "computation_id"),
 }
+
+# Links that join almost every table to the same few targets. The explorer hides them by
+# default so the business relationships stay readable.
+LINEAGE_COLUMNS = frozenset({"raw_id", "ingest_run_id", "computation_id"})
+LOOKUP_COLUMNS = frozenset({
+    "country_code", "currency_code", "amount_currency", "base_currency", "exchange_code", "source", "source_id",
+})
+
+
+def relationship_category(column: str) -> RelationshipCategory:
+    if column in LINEAGE_COLUMNS:
+        return "lineage"
+    if column in LOOKUP_COLUMNS:
+        return "lookup"
+    return "identity"
 
 
 def _split_v2_sql(sql: str) -> list[str]:
@@ -409,57 +342,44 @@ def _planned_v2_tables() -> tuple[SchemaTable, ...]:
     return tuple(sorted(tables, key=lambda table: table.name))
 
 
-class SchemaMapRepository:
-    """Read live schema metadata and persist a canonical hub layout."""
 
-    def __init__(
-        self,
-        client: SchemaMapClient,
-        *,
-        database: str = "factorlab",
-        databases: tuple[str, ...] | None = None,
-        qualify_names: bool = False,
-        layout_id: str = "default",
-    ) -> None:
+def _describe(table: SchemaTable) -> SchemaTable:
+    """Attach plain-language titles and descriptions to one table and its columns."""
+
+    text = table_text(table.name)
+    table.namespace = table.name.split(".", 1)[0]
+    table.title = text.title
+    table.summary = text.summary
+    table.notes = text.notes
+    table.kind = "view" if table.engine in {"View", "MaterializedView"} else "table"
+    for column in table.columns:
+        column.description = text.columns.get(column.name)
+    return table
+
+
+class SchemaMapRepository:
+    """Read live v2 schema metadata across every v2 database."""
+
+    def __init__(self, client: SchemaMapClient, *, databases: tuple[str, ...] = V2_DATABASES) -> None:
         self.client = client
-        self.database = database
-        self.databases = databases or (database,)
-        self.qualify_names = qualify_names
-        self.layout_id = layout_id
+        self.databases = databases
 
     @classmethod
     def from_environment(cls) -> SchemaMapRepository:
-        return cls.v2_from_environment()
-
-    @classmethod
-    def v2_from_environment(cls) -> SchemaMapRepository:
-        return cls(
-            ClickHouseStorage.from_environment().client,
-            database="factorlab_v2",
-            databases=V2_DATABASES,
-            qualify_names=True,
-            layout_id="v2",
-        )
+        return cls(ClickHouseStorage.from_environment().client)
 
     def get_schema_map(self, *, now: datetime | None = None) -> SchemaMapResponse:
         tables = self._tables()
-        planned_preview = self.qualify_names and not tables
+        planned_preview = not tables
         if planned_preview:
             tables = [table.model_copy(deep=True) for table in _planned_v2_tables()]
-            column_lookup = {
-                (table.name, column.name): column
-                for table in tables
-                for column in table.columns
-            }
         else:
-            columns = self._columns()
             columns_by_table: dict[str, list[SchemaColumn]] = {table.name: [] for table in tables}
-            column_lookup: dict[tuple[str, str], SchemaColumn] = {}
-            for column in columns:
-                table_name = str(column.pop("table"))
+            for column in self._columns():
+                table_name = str(column["table"])
                 if table_name not in columns_by_table:
                     continue
-                model = SchemaColumn(
+                columns_by_table[table_name].append(SchemaColumn(
                     name=str(column["name"]),
                     type=str(column["type"]),
                     position=int(column["position"]),
@@ -469,12 +389,11 @@ class SchemaMapRepository:
                     in_primary_key=bool(column["is_in_primary_key"]),
                     in_sorting_key=bool(column["is_in_sorting_key"]),
                     in_partition_key=bool(column["is_in_partition_key"]),
-                )
-                columns_by_table[table_name].append(model)
-                column_lookup[(table_name, model.name)] = model
-
+                ))
             for table in tables:
                 table.columns = sorted(columns_by_table[table.name], key=lambda item: item.position)
+        tables = [_describe(table) for table in tables]
+        column_lookup = {(table.name, column.name): column for table in tables for column in table.columns}
 
         fingerprint_payload = [
             (table.name, table.engine, [(column.name, column.type) for column in table.columns])
@@ -483,105 +402,63 @@ class SchemaMapRepository:
         fingerprint = hashlib.sha256(
             json.dumps(fingerprint_payload, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
-        relationships: list[SchemaRelationship] = []
         warnings: list[str] = []
         if planned_preview:
             warnings.append(
                 "Preview mode: these objects come from the bundled migration DDL; row counts remain zero "
                 "until the v2 databases are created."
             )
-        relationship_specs = (
-            self._v2_relationships(column_lookup) if self.qualify_names else LOGICAL_RELATIONSHIPS
-        )
-        for source_table, source_column, target_table, target_column in relationship_specs:
-            source = column_lookup.get((source_table, source_column))
-            target = column_lookup.get((target_table, target_column))
-            if source is None or target is None:
-                warnings.append(
-                    f"Logical relationship unavailable: {source_table}.{source_column} -> "
-                    f"{target_table}.{target_column}"
-                )
-                continue
-            relationships.append(
-                SchemaRelationship(
-                    id=f"{source_table}.{source_column}->{target_table}.{target_column}",
-                    source=RelationshipEndpoint(table=source_table, column=source_column),
-                    target=RelationshipEndpoint(table=target_table, column=target_column),
-                    optional=source.nullable,
-                )
+        relationships = [
+            SchemaRelationship(
+                id=f"{source_table}.{source_column}->{target_table}.{target_column}",
+                source=RelationshipEndpoint(table=source_table, column=source_column),
+                target=RelationshipEndpoint(table=target_table, column=target_column),
+                optional=column_lookup[(source_table, source_column)].nullable,
+                category=relationship_category(source_column),
             )
-
-        layout = self.get_layout()
+            for source_table, source_column, target_table, target_column in self._v2_relationships(column_lookup)
+        ]
+        present = {table.namespace for table in tables}
+        areas = [
+            SchemaArea(id=database, title=namespace_text(database)[0], summary=namespace_text(database)[1])
+            for database in self.databases
+            if database in present
+        ]
         return SchemaMapResponse(
             generated_at=now or datetime.now(UTC),
-            database=self.database,
             schema_fingerprint=fingerprint,
+            areas=areas,
             tables=tables,
             relationships=relationships,
-            layout=layout,
             warnings=warnings,
         )
 
     def _tables(self) -> list[SchemaTable]:
-        if self.qualify_names:
-            result = self.client.query(
-                """
-                WITH parts AS (
-                    SELECT database, table, sum(rows) AS stored_rows,
-                           sum(bytes_on_disk) AS bytes_on_disk
-                    FROM system.parts
-                    WHERE active AND has({databases:Array(String)}, database)
-                    GROUP BY database, table
-                )
-                SELECT tables.database, tables.name, tables.engine,
-                       ifNull(parts.stored_rows, 0) AS stored_rows,
-                       ifNull(parts.bytes_on_disk, 0) AS bytes_on_disk,
-                       tables.primary_key, tables.sorting_key, tables.partition_key
-                FROM system.tables AS tables
-                LEFT JOIN parts
-                  ON parts.database = tables.database AND parts.table = tables.name
-                WHERE has({databases:Array(String)}, tables.database)
-                ORDER BY tables.database, tables.name
-                """,
-                parameters={"databases": list(self.databases)},
-            )
-            return [
-                SchemaTable(
-                    name=f"{row['database']}.{row['name']}",
-                    domain=V2_DOMAINS.get(str(row["database"]), str(row["database"])),
-                    engine=str(row["engine"]),
-                    stored_rows=int(row["stored_rows"] or 0),
-                    bytes_on_disk=int(row["bytes_on_disk"] or 0),
-                    primary_key=str(row["primary_key"] or ""),
-                    sorting_key=str(row["sorting_key"] or ""),
-                    partition_key=str(row["partition_key"] or ""),
-                    columns=[],
-                )
-                for row in _rows(result)
-            ]
         result = self.client.query(
             """
             WITH parts AS (
-                SELECT table, sum(rows) AS stored_rows, sum(bytes_on_disk) AS bytes_on_disk
+                SELECT database, table, sum(rows) AS stored_rows,
+                       sum(bytes_on_disk) AS bytes_on_disk
                 FROM system.parts
-                WHERE active AND database = {database:String}
-                GROUP BY table
+                WHERE active AND has({databases:Array(String)}, database)
+                GROUP BY database, table
             )
-            SELECT tables.name, tables.engine,
+            SELECT tables.database, tables.name, tables.engine,
                    ifNull(parts.stored_rows, 0) AS stored_rows,
                    ifNull(parts.bytes_on_disk, 0) AS bytes_on_disk,
                    tables.primary_key, tables.sorting_key, tables.partition_key
             FROM system.tables AS tables
-            LEFT JOIN parts ON parts.table = tables.name
-            WHERE tables.database = {database:String}
-            ORDER BY tables.name
+            LEFT JOIN parts
+              ON parts.database = tables.database AND parts.table = tables.name
+            WHERE has({databases:Array(String)}, tables.database)
+            ORDER BY tables.database, tables.name
             """,
-            parameters={"database": self.database},
+            parameters={"databases": list(self.databases)},
         )
         return [
             SchemaTable(
-                name=str(row["name"]),
-                domain=_domain_for(str(row["name"])),
+                name=f"{row['database']}.{row['name']}",
+                domain=V2_DOMAINS.get(str(row["database"]), str(row["database"])),
                 engine=str(row["engine"]),
                 stored_rows=int(row["stored_rows"] or 0),
                 bytes_on_disk=int(row["bytes_on_disk"] or 0),
@@ -594,32 +471,20 @@ class SchemaMapRepository:
         ]
 
     def _columns(self) -> list[dict[str, Any]]:
-        if self.qualify_names:
-            result = self.client.query(
-                """
-                SELECT database, table, name, type, position, default_kind, default_expression,
-                       is_in_primary_key, is_in_sorting_key, is_in_partition_key
-                FROM system.columns
-                WHERE has({databases:Array(String)}, database)
-                ORDER BY database, table, position
-                """,
-                parameters={"databases": list(self.databases)},
-            )
-            rows = _rows(result)
-            for row in rows:
-                row["table"] = f"{row['database']}.{row['table']}"
-            return rows
         result = self.client.query(
             """
-            SELECT table, name, type, position, default_kind, default_expression,
+            SELECT database, table, name, type, position, default_kind, default_expression,
                    is_in_primary_key, is_in_sorting_key, is_in_partition_key
             FROM system.columns
-            WHERE database = {database:String}
-            ORDER BY table, position
+            WHERE has({databases:Array(String)}, database)
+            ORDER BY database, table, position
             """,
-            parameters={"database": self.database},
+            parameters={"databases": list(self.databases)},
         )
-        return _rows(result)
+        rows = _rows(result)
+        for row in rows:
+            row["table"] = f"{row['database']}.{row['table']}"
+        return rows
 
     def _v2_relationships(
         self, column_lookup: dict[tuple[str, str], SchemaColumn]
@@ -636,105 +501,24 @@ class SchemaMapRepository:
                 relationships.add((source_table, source_column, target_table, target_column))
         return tuple(sorted(relationships))
 
-    def get_layout(self) -> SharedSchemaLayout:
-        result = self.client.query(
-            """
-            SELECT revision, schema_fingerprint, layout_json, updated_at
-            FROM meta.hub_schema_layouts FINAL
-            WHERE layout_id = {layout_id:String}
-            LIMIT 1
-            """,
-            parameters={"layout_id": self.layout_id},
-        )
-        rows = _rows(result)
-        if not rows:
-            return SharedSchemaLayout()
-        row = rows[0]
-        payload = json.loads(str(row["layout_json"]))
-        return SharedSchemaLayout(
-            revision=int(row["revision"]),
-            schema_fingerprint=str(row["schema_fingerprint"]),
-            nodes=payload.get("nodes", []),
-            viewport=payload.get("viewport", {}),
-            updated_at=row["updated_at"],
-        )
-
-    def save_layout(
-        self,
-        *,
-        revision: int,
-        schema_fingerprint: str,
-        nodes: list[LayoutNode],
-        viewport: LayoutViewport,
-        updated_at: datetime,
-    ) -> SharedSchemaLayout:
-        payload = json.dumps(
-            {
-                "nodes": [node.model_dump() for node in nodes],
-                "viewport": viewport.model_dump(),
-            },
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        self.client.insert(
-            "meta.hub_schema_layouts",
-            [[self.layout_id, revision, schema_fingerprint, payload, updated_at]],
-            column_names=[
-                "layout_id",
-                "revision",
-                "schema_fingerprint",
-                "layout_json",
-                "updated_at",
-            ],
-        )
-        return SharedSchemaLayout(
-            revision=revision,
-            schema_fingerprint=schema_fingerprint,
-            nodes=nodes,
-            viewport=viewport,
-            updated_at=updated_at,
-        )
-
 
 class SchemaMapService:
-    """Serialize canonical layout updates and reject stale or invalid saves."""
+    """Share one schema read between the deploy gate, the explorer, and repeated page loads."""
 
-    def __init__(self, repository: SchemaMapRepository) -> None:
+    def __init__(
+        self, repository: SchemaMapRepository, *, ttl_seconds: float = 60.0,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self.repository = repository
+        self.ttl_seconds = ttl_seconds
+        self.clock = clock
         self._lock = threading.Lock()
+        self._cached: SchemaMapResponse | None = None
+        self._expires_at = 0.0
 
     def get_schema_map(self) -> SchemaMapResponse:
-        return self.repository.get_schema_map()
-
-    def save_layout(self, update: SchemaLayoutUpdate) -> SharedSchemaLayout:
         with self._lock:
-            schema = self.repository.get_schema_map()
-            current = schema.layout
-            if update.base_revision != current.revision:
-                raise LayoutConflictError(
-                    f"Layout revision {current.revision} is newer than {update.base_revision}."
-                )
-            if update.schema_fingerprint != schema.schema_fingerprint:
-                raise InvalidLayoutError("The database schema changed; reload before saving.")
-
-            current_tables = {table.name for table in schema.tables}
-            submitted_tables = [node.table for node in update.nodes]
-            if len(submitted_tables) != len(set(submitted_tables)):
-                raise InvalidLayoutError("Each table may appear only once in a layout.")
-            if set(submitted_tables) != current_tables:
-                raise InvalidLayoutError("The layout must contain every live table exactly once.")
-            values = [
-                value
-                for node in update.nodes
-                for value in (node.x, node.y)
-            ] + [update.viewport.x, update.viewport.y, update.viewport.zoom]
-            if any(not math.isfinite(value) or abs(value) > 1_000_000 for value in values):
-                raise InvalidLayoutError("Layout coordinates must be finite and within bounds.")
-
-            return self.repository.save_layout(
-                revision=current.revision + 1,
-                schema_fingerprint=schema.schema_fingerprint,
-                nodes=update.nodes,
-                viewport=update.viewport,
-                updated_at=datetime.now(UTC),
-            )
+            if self._cached is None or self.clock() >= self._expires_at:
+                self._cached = self.repository.get_schema_map()
+                self._expires_at = self.clock() + self.ttl_seconds
+            return self._cached

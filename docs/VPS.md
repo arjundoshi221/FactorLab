@@ -137,8 +137,7 @@ by the Access application protecting
 Hub:     GET /
 Roadmap: GET /roadmap
 Hub data: GET /hub/api/v1/overview
-Schema map: GET /schema and GET /hub/api/v1/schema-map
-Schema layout: PUT /hub/api/v1/schema-map/layout
+Schema explorer: GET /schema and GET /hub/api/v1/schema-map
 Health:  GET /health
 Trades:  GET /api/v1/political/trades
 India:   GET /api/v1/india/candles/1min

@@ -8,11 +8,17 @@ export interface SchemaColumn {
   in_primary_key: boolean;
   in_sorting_key: boolean;
   in_partition_key: boolean;
+  description?: string | null;
 }
 
 export interface SchemaTable {
   name: string;
+  namespace: string;
   domain: string;
+  title: string;
+  summary: string;
+  notes: string[];
+  kind: "table" | "view";
   engine: string;
   stored_rows: number;
   bytes_on_disk: number;
@@ -22,10 +28,19 @@ export interface SchemaTable {
   columns: SchemaColumn[];
 }
 
+export interface SchemaArea {
+  id: string;
+  title: string;
+  summary: string;
+}
+
 export interface RelationshipEndpoint {
   table: string;
   column: string;
 }
+
+/** identity: what a row is about; lineage: where it came from; lookup: shared codes like country. */
+export type RelationshipCategory = "identity" | "lineage" | "lookup";
 
 export interface SchemaRelationship {
   id: string;
@@ -35,35 +50,14 @@ export interface SchemaRelationship {
   cardinality: "many_to_one";
   optional: boolean;
   enforced: false;
-}
-
-export interface LayoutNode {
-  table: string;
-  x: number;
-  y: number;
-  collapsed: boolean;
-}
-
-export interface LayoutViewport {
-  x: number;
-  y: number;
-  zoom: number;
-}
-
-export interface SharedSchemaLayout {
-  revision: number;
-  schema_fingerprint: string;
-  nodes: LayoutNode[];
-  viewport: LayoutViewport;
-  updated_at: string | null;
+  category: RelationshipCategory;
 }
 
 export interface SchemaMapResponse {
   generated_at: string;
-  database: string;
   schema_fingerprint: string;
+  areas: SchemaArea[];
   tables: SchemaTable[];
   relationships: SchemaRelationship[];
-  layout: SharedSchemaLayout;
   warnings: string[];
 }
