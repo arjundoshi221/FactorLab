@@ -25,6 +25,13 @@ from factorlab.storage.clickhouse import (
 from factorlab.storage.v2_reference import UnresolvedReference, V2ReferenceWriter
 
 IST = ZoneInfo("Asia/Kolkata")
+MAX_UINT64 = 2**64 - 1
+
+
+def _unsigned_count(value: Any) -> int | None:
+    """Treat provider sentinels outside ClickHouse's UInt64 range as missing."""
+    count = _integer(value)
+    return count if count is not None and 0 <= count <= MAX_UINT64 else None
 
 
 def _session(bar_time: datetime) -> str:
@@ -242,8 +249,8 @@ class V2IndiaStorage(ClickHouseStorage):
                     "trade_date": bar_time.astimezone(IST).date(),
                     **{key: _decimal(candle.get(key), 6)
                        for key in ("open", "high", "low", "close")},
-                    "volume": _integer(candle.get("volume")),
-                    "oi": _integer(candle.get("oi")), "source": source,
+                    "volume": _unsigned_count(candle.get("volume")),
+                    "oi": _unsigned_count(candle.get("oi")), "source": source,
                     "raw_id": item.get("raw_id"), "ingest_run_id": self._active_run_id,
                     "as_of_time": now, "ingested_at": now, "version": _version(now),
                 }

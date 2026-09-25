@@ -63,3 +63,21 @@ def test_raw_response_and_contract_bars_preserve_lineage_and_local_date():
     assert records[0]["raw_id"] == raw_id
     assert records[0]["ingest_run_id"] == run_id
     assert not any(table == "market.bars" for table, _ in client.inserts)
+
+
+def test_negative_provider_open_interest_is_stored_as_missing():
+    listing, contract = uuid.uuid4(), uuid.uuid4()
+    client = Client(listing, contract)
+    storage = V2IndiaStorage(client)
+    storage._active_run_id = uuid.uuid4()
+    frame = pd.DataFrame([{
+        "timestamp": datetime(2026, 9, 25, 6, 30, tzinfo=UTC),
+        "open": 100, "high": 101, "low": 99, "close": 100,
+        "volume": 50, "oi": -1,
+    }])
+
+    assert storage.write_candles_1min(
+        frame, instrument_id=listing, contract_id=contract, symbol="TESTFUT",
+    ) == 1
+    assert client.inserts[-1][1][0]["oi"] is None
+    assert client.inserts[-1][1][0]["volume"] == 50

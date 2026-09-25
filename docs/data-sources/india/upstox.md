@@ -534,6 +534,10 @@ ClickHouse in one operation. A sweep is aligned just after the minute boundary
 and the close grace period runs through 15:32 IST so the final 15:29 candle can
 be finalized.
 
+For curated bars, negative or out-of-range Upstox volume/open-interest values
+are stored as NULL because the ClickHouse columns are unsigned. The original
+provider response remains in the raw archive.
+
 Full-universe mode intentionally does not run the older per-symbol intraday
 recovery loop: that endpoint accepts one instrument per request and would turn
 each sweep into thousands of calls. Historical backfill for the full universe
