@@ -295,8 +295,8 @@ if [[ $activation_incomplete == true ]]; then
         python scripts/verify_clickhouse_v2_writes.py \
         --since "$activation_time" --wait-seconds "${FACTORLAB_V2_WRITE_WAIT_SECONDS:-900}" \
         --require-universe-ready
-    bash "$live/scripts/install-political-cron.sh"
 fi
+bash "$live/scripts/install-political-cron.sh"
 verification_state=succeeded
 printf '%s\n' "$image" > "$root/current-image"
 date -u +'%Y-%m-%dT%H:%M:%SZ' > "$record/activated-at"

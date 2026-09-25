@@ -131,9 +131,13 @@ def normalize(records, resolution, *, now):
     rows = []
     invalid_candles = 0
     sessions = {}
+    first_session = calendar().first_session.date()
+    last_session = calendar().last_session.date()
     for record in records:
         stamp = datetime.fromtimestamp(record["datetime"] / 1000, UTC)
         day = stamp.astimezone(NY).date()
+        if not first_session <= day <= last_session:
+            continue
         if day not in sessions:
             sessions[day] = bounds(day)
         session = sessions[day]

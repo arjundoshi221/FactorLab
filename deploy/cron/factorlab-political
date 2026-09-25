@@ -3,4 +3,4 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 MAILTO=""
 
 # Daily at 02:15 UTC. The installer refuses to install this on a non-UTC host.
-15 2 * * * root /usr/bin/flock -n -E 75 /run/lock/factorlab-political.lock /opt/factorlab/deploy/scripts/run-political-ingest.sh >> /var/lib/factorlab/logs/political-cron.log 2>&1
+15 2 * * * root /usr/bin/flock -n -E 75 /run/lock/factorlab-political.lock /bin/sh /opt/factorlab/deploy/scripts/run-political-ingest.sh >> /var/lib/factorlab/logs/political-cron.log 2>&1

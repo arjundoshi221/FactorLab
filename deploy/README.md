@@ -212,7 +212,7 @@ user-crontab deployments.
 Run and inspect it without waiting for cron:
 
 ```bash
-sudo /opt/factorlab/deploy/scripts/run-political-ingest.sh
+sudo sh /opt/factorlab/deploy/scripts/run-political-ingest.sh
 sudo tail -n 100 /var/lib/factorlab/logs/political-cron.log
 ```
 

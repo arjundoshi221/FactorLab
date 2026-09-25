@@ -45,6 +45,14 @@ def test_daily_uses_new_york_date_and_excludes_incomplete_session():
     assert "adj_close" not in frame
 
 
+def test_daily_skips_provider_history_before_calendar_start():
+    frame = market.normalize([
+        bar("1969-12-31T05:00:00+00:00"),
+        bar("1970-01-02T05:00:00+00:00"),
+    ], "daily", now=datetime(1970, 1, 5, tzinfo=UTC))
+    assert list(frame.trade_date) == [date(1970, 1, 2)]
+
+
 def test_invalid_historical_bar_does_not_discard_valid_daily_history():
     client = market.MarketClient(Mock())
     client.get = Mock(return_value=({"candles": [

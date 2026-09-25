@@ -164,3 +164,29 @@ but no futures. The subsequent collection fix adds the nearest contract for
 each resolved single-stock future (210 in the September 24 Upstox master).
 Check that these contract series are active before the market opens, then
 verify their first live writes during the session.
+
+## September 25 live-session audit
+
+At 09:59 UTC, `market.bars FINAL` held 436,573 India equity bars for the
+session across 2,660 listings, and `market.futures_contract_bars FINAL` held
+76,259 bars across all 210 active contracts. Every audited bar had a matching
+`raw.archive` row and `meta.ingestion_runs FINAL` row. The latest India runs
+were successful. The legacy India minute, US minute, US daily, and political
+trade counts remained at their cutover watermarks. The API overview, India,
+US, and political dashboards returned HTTP 200. All application containers
+were running the same pinned v2 image without restarts.
+
+The September 25 political cron attempt failed because the deployed script
+lost its executable mode. A locked manual catch-up completed at 10:02 UTC and
+archived the latest legislative and filing responses. The cron now invokes
+the script with `/bin/sh`, and releases reinstall the cron entry. Recheck the
+next scheduled execution.
+
+India intraday bars are live, but no India rows exist in `meta.session_coverage`
+or `meta.recovery_state`. Their current keys also lack `contract_id`, so they
+cannot represent separate futures contract coverage or recovery state. This
+remains an open operational-schema and writer task; do not describe India
+coverage or recovery continuity as verified. US daily recovery also had two
+symbols blocked by pre-1970 Schwab bars falling outside the configured
+exchange calendar. A fix to skip those out-of-range bars is being released;
+verify the US source status becomes `ready` afterward.
