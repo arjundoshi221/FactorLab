@@ -133,3 +133,22 @@ def test_order_ref_and_manual_client_id_are_kept(mock_ib_paper, now_utc):
     assert row.order_ref == "rebalance-42"
     assert row.placed_by_client == 0
     assert row.route_pref == ""
+
+
+def test_ledger_tags_stay_distinct_metrics(mock_ib_live, now_utc):
+    """Real live payload shape: $LEDGER-* tags must not collapse into one metric."""
+    mock_ib_live.accountValues.return_value = [
+        make_account_value(account="U1", tag="$LEDGER-CashBalance", value="10", currency="USD"),
+        make_account_value(account="U1", tag="$LEDGER-NetLiquidationByCurrency", value="20",
+                           currency="USD"),
+        make_account_value(account="U1", tag="$LEDGER-CashBalance", value="30", currency="BASE"),
+        make_account_value(account="U1", tag="NetLiquidation-S", value="40", currency="USD"),
+        make_account_value(account="U1", tag="NetLiquidation", value="50", currency="USD"),
+    ]
+    rows = normalize_capture(capture_account_values(mock_ib_live, fetched_at=now_utc).body)
+    keys = [(r.metric, r.segment, r.currency) for r in rows]
+    assert len(set(keys)) == len(rows) == 5
+    assert ("$LEDGER-CashBalance", "", "USD") in keys
+    assert ("$LEDGER-NetLiquidationByCurrency", "", "USD") in keys
+    assert ("NetLiquidation", "S", "USD") in keys
+    assert ("NetLiquidation", "", "USD") in keys

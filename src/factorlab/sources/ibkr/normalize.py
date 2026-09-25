@@ -36,6 +36,7 @@ DEFAULT_COUNTRY_CODE = "US"
 BROKER_CODE = "ibkr"
 
 _SENTINEL_ABS = Decimal("1e30")
+_SEGMENTS = frozenset({"S", "C", "P"})  # securities / commodities / Paxos crypto
 _LEGACY_EXEC_TIME_FMT = "%Y%m%d %H:%M:%S"
 # IBKR lastLiquidity: 0 = None, 1 = Added, 2 = Removed, 3 = Liquidity Routed Out, 4 = Auction
 _LIQUIDITY_MAP = {0: "", 1: "ADDED", 2: "REMOVED", 3: "ROUTED", 4: "AUCTION"}
@@ -170,15 +171,19 @@ def normalize_account_state(payload: CapturedPayload, *,
                             metrics: set[str] | None = None) -> list[AccountStateRow]:
     """One row per (metric, segment, currency); ``metrics`` whitelists base tags.
 
-    Segments come from the tag suffix (``-S``/``-C``/``-P``); the base tag is
-    what goes into ``metric``.
+    Segments come from a segment suffix (``-S``/``-C``/``-P``), which is
+    stripped from ``metric``. Any other hyphenated tag is kept whole: IBKR's
+    per-currency ledger tags (``$LEDGER-CashBalance``, ...) are distinct metrics.
     """
     rows: list[AccountStateRow] = []
     for value in _records(payload, "account_values"):
         tag = _text(value.get("tag"))
-        base_tag, _, suffix = tag.partition("-")
-        segment = suffix if suffix in ("S", "C", "P") else ""
-        if metrics is not None and base_tag not in metrics:
+        base_tag, _, suffix = tag.rpartition("-")
+        if suffix in _SEGMENTS and base_tag:
+            metric, segment = base_tag, suffix
+        else:
+            metric, segment = tag, ""
+        if metrics is not None and metric not in metrics:
             continue
         raw = value.get("value")
         number = to_decimal(raw)
@@ -188,7 +193,7 @@ def normalize_account_state(payload: CapturedPayload, *,
             account_id=_text(value.get("account")),
             account_mode=payload.mode,
             country_code=country_code,
-            metric=base_tag,
+            metric=metric,
             segment=segment,
             currency=_text(value.get("currency")) or "NONE",
             value_num=number,
