@@ -13,9 +13,9 @@ import re
 import zipfile
 from datetime import date, datetime
 from typing import Any
-from xml.etree import ElementTree
 
 import pdfplumber
+from defusedxml import ElementTree  # remote XML: refuse entity expansion and external refs
 
 _INDEX_URL = (
     "https://disclosures-clerk.house.gov/public_disc/financial-pdfs/{year}FD.ZIP"

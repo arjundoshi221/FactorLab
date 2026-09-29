@@ -2,6 +2,9 @@ import io
 import zipfile
 from datetime import date
 
+import pytest
+from defusedxml import EntitiesForbidden
+
 from factorlab.sources.political.house_clerk import (
     parse_house_filing_index,
     parse_house_ptr_text,
@@ -45,6 +48,18 @@ def test_house_index_keeps_only_ptr_filings():
     assert filings[0]["filing_id"] == "20000001"
     assert filings[0]["filing_date"] == date(2026, 7, 1)
     assert filings[0]["state_district_raw"] == "CA12"
+
+
+def test_house_index_refuses_entity_expansion():
+    payload = _house_zip(
+        '<?xml version="1.0"?>'
+        '<!DOCTYPE d [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;">]>'
+        "<FinancialDisclosure><Member><FilingType>&b;</FilingType></Member>"
+        "</FinancialDisclosure>"
+    )
+
+    with pytest.raises(EntitiesForbidden):
+        parse_house_filing_index(payload, 2026)
 
 
 def test_ptr_parser_handles_wrapped_asset_metadata_and_page_duplicates():
