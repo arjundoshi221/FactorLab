@@ -1,0 +1,15 @@
+# Build context for components/secrets-agent/Dockerfile: the workspace manifests, the
+# libraries and providers it may need, and this component. Everything else stays out.
+*
+!pyproject.toml
+!uv.lock
+!libs/
+!providers/
+!components/*/pyproject.toml
+!components/secrets-agent/
+**/__pycache__
+**/*.pyc
+**/tests
+**/node_modules
+**/dist
+**/.venv

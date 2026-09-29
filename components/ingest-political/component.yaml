@@ -1,0 +1,24 @@
+# Deployable component manifest (validated by tools/components.py; see
+# docs/architecture/08-repository-layout.md).
+schema: 1
+name: ingest-political
+kind: python
+package: factorlab-component-ingest-political
+summary: Congressional references, House filing index and PTR trades into ClickHouse v2.
+image: ghcr.io/arjundoshi221/factorlab-ingest-political
+dockerfile: components/ingest-political/Dockerfile
+entrypoint: factorlab-ingest-political
+providers: [house_clerk, congress_legislators]
+secrets: [CLICKHOUSE_PASSWORD]
+services:
+  - name: ingest-political
+    command: ["bootstrap", "--ptr-limit", "${POLITICAL_PTR_LIMIT:-20}"]
+    mode: scheduled
+    schedule: "15 2 * * *"
+health: {kind: exit-zero}
+platform:
+  image_var: FACTORLAB_INGEST_POLITICAL_IMAGE
+  rollback: writer
+  data_contract: 1
+  user: "10001"
+  logs: /var/log/factorlab/ingest-political

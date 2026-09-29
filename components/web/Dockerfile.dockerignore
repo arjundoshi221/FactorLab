@@ -1,0 +1,6 @@
+# Build context for components/web/Dockerfile: the UI sources only.
+*
+!components/web/
+**/node_modules
+**/dist
+**/*.tsbuildinfo

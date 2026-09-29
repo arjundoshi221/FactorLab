@@ -1,0 +1,24 @@
+# Deployable component manifest (validated by tools/components.py; see
+# docs/architecture/08-repository-layout.md).
+schema: 1
+name: ingest-broker
+kind: python
+package: factorlab-component-ingest-broker
+summary: Read-only IBKR account mirror into broker.*.
+image: ghcr.io/arjundoshi221/factorlab-ingest-broker
+dockerfile: components/ingest-broker/Dockerfile
+entrypoint: factorlab-ingest-broker
+providers: [ibkr]
+secrets: [CLICKHOUSE_PASSWORD, IBKR_CLIENT_ID]
+services:
+  - name: ibkr-snapshot
+    command: ["snapshot", "--daemon", "--run-on-start", "--modes", "${IBKR_SNAPSHOT_MODES:-paper,live}"]
+    mode: daemon
+    profile: ibkr
+health: {kind: heartbeat, service: ibkr_broker_snapshot, max_age: 300}
+platform:
+  image_var: FACTORLAB_INGEST_BROKER_IMAGE
+  rollback: writer
+  data_contract: 1
+  user: "10001"
+  logs: /var/log/factorlab/ingest-broker

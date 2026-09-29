@@ -1,0 +1,22 @@
+# Deployable component manifest (validated by tools/components.py; see
+# docs/architecture/08-repository-layout.md).
+schema: 1
+name: api
+kind: python
+package: factorlab-component-api
+summary: FastAPI read API and hub backend (Cloudflare Access is its only auth).
+image: ghcr.io/arjundoshi221/factorlab-api
+dockerfile: components/api/Dockerfile
+entrypoint: factorlab-api
+providers: []
+secrets: [CLICKHOUSE_PASSWORD, FACTORLAB_API_KEY]
+services:
+  - name: api
+    command: []
+    mode: daemon
+health: {kind: http, url: http://127.0.0.1:8000/health}
+platform:
+  image_var: FACTORLAB_API_IMAGE
+  rollback: auto
+  user: "10001"
+  logs: /var/log/factorlab/api

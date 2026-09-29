@@ -1,0 +1,22 @@
+# Deployable component manifest (validated by tools/components.py; see
+# docs/architecture/08-repository-layout.md).
+schema: 1
+name: schema-migrator
+kind: python
+package: factorlab-component-schema-migrator
+summary: One-shot ClickHouse v2 readiness gate; reviewed forward-only migrations.
+image: ghcr.io/arjundoshi221/factorlab-schema-migrator
+dockerfile: components/schema-migrator/Dockerfile
+entrypoint: factorlab-db
+providers: []
+secrets: [CLICKHOUSE_PASSWORD]
+services:
+  - name: bootstrap
+    command: ["bootstrap"]
+    mode: run-on-deploy
+health: {kind: exit-zero}
+platform:
+  image_var: FACTORLAB_SCHEMA_MIGRATOR_IMAGE
+  rollback: forward-only
+  user: "10001"
+  logs: /var/log/factorlab/schema-migrator

@@ -1,0 +1,16 @@
+# Build context for components/ingest-political/Dockerfile: the workspace manifests, the
+# libraries and providers it may need, and this component. Everything else stays out.
+*
+!pyproject.toml
+!uv.lock
+!libs/
+!providers/
+!components/*/pyproject.toml
+!components/ingest-political/
+!configs/
+**/__pycache__
+**/*.pyc
+**/tests
+**/node_modules
+**/dist
+**/.venv

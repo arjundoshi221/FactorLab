@@ -1,0 +1,20 @@
+# Deployable component manifest (validated by tools/components.py; see
+# docs/architecture/08-repository-layout.md).
+schema: 1
+name: web
+kind: static
+summary: The hub UI as static files behind non-root nginx on :8080.
+image: ghcr.io/arjundoshi221/factorlab-web
+dockerfile: components/web/Dockerfile
+providers: []
+secrets: []
+services:
+  - name: web
+    command: []
+    mode: daemon
+health: {kind: http, url: "http://127.0.0.1:8080/healthz"}
+platform:
+  image_var: FACTORLAB_WEB_IMAGE
+  rollback: auto
+  user: "101"
+  logs: /var/log/factorlab/web

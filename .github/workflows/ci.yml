@@ -82,10 +82,58 @@ jobs:
       - run: npm ci
       - run: npm run check
 
+  images-plan:
+    name: Component image matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.20"
+          python-version: "3.12"
+          enable-cache: true
+      - id: plan
+        run: |
+          uv sync --frozen --all-packages
+          uv run --frozen python tools/components.py check
+          echo "matrix=$(uv run --frozen python tools/components.py matrix)" >> "$GITHUB_OUTPUT"
+
+  images:
+    name: Image ${{ matrix.component }}
+    needs: images-plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.images-plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.20"
+          python-version: "3.12"
+          enable-cache: true
+      - uses: docker/setup-buildx-action@v3
+      - name: Build (not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          load: true
+          push: false
+          tags: factorlab-${{ matrix.component }}:ci
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+      - name: Verify contents against the manifest and uv.lock
+        run: |
+          uv sync --frozen --all-packages
+          uv run --frozen python tools/verify_image.py ${{ matrix.component }} factorlab-${{ matrix.component }}:ci
+
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [python, isolated-imports, web, workers]
+    needs: [python, isolated-imports, web, workers, images]
     runs-on: ubuntu-latest
     steps:
       - name: All required jobs passed

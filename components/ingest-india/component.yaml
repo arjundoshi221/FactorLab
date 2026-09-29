@@ -1,0 +1,23 @@
+# Deployable component manifest (validated by tools/components.py; see
+# docs/architecture/08-repository-layout.md).
+schema: 1
+name: ingest-india
+kind: python
+package: factorlab-component-ingest-india
+summary: NSE equities and stock futures from Upstox into ClickHouse v2.
+image: ghcr.io/arjundoshi221/factorlab-ingest-india
+dockerfile: components/ingest-india/Dockerfile
+entrypoint: factorlab-ingest-india
+providers: [upstox]
+secrets: [CLICKHOUSE_PASSWORD, UPSTOX_ACCESS_TOKEN]
+services:
+  - name: ingest-india
+    command: ["daemon", "--universe", "${UPSTOX_UNIVERSE:-full_nse_eq}", "--daemon"]
+    mode: daemon
+health: {kind: running}
+platform:
+  image_var: FACTORLAB_INGEST_INDIA_IMAGE
+  rollback: writer
+  data_contract: 1
+  user: "10001"
+  logs: /var/log/factorlab/ingest-india

@@ -1,0 +1,26 @@
+# Deployable component manifest (validated by tools/components.py; see
+# docs/architecture/08-repository-layout.md).
+schema: 1
+name: ingest-us
+kind: python
+package: factorlab-component-ingest-us
+summary: US universe resolution and daily/1-min bars into ClickHouse v2.
+image: ghcr.io/arjundoshi221/factorlab-ingest-us
+dockerfile: components/ingest-us/Dockerfile
+entrypoint: factorlab-ingest-us
+providers: [schwab, eodhd, github_csv, edgar]
+secrets: [CLICKHOUSE_PASSWORD, SCHWAB_ACCESS_TOKEN, EODHD_API_KEY]
+services:
+  - name: universe-us
+    command: ["universe", "--config", "/app/config/us-universe.yaml", "--daemon"]
+    mode: daemon
+  - name: ingest-us
+    command: ["daemon", "--universe", "us_listed_equities", "--daemon"]
+    mode: daemon
+health: {kind: running}
+platform:
+  image_var: FACTORLAB_INGEST_US_IMAGE
+  rollback: writer
+  data_contract: 1
+  user: "10001"
+  logs: /var/log/factorlab/ingest-us

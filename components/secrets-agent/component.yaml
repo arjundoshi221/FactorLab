@@ -1,0 +1,23 @@
+# Deployable component manifest (validated by tools/components.py; see
+# docs/architecture/08-repository-layout.md).
+schema: 1
+name: secrets-agent
+kind: python
+package: factorlab-component-secrets-agent
+summary: Renders Cloudflare-held runtime secrets into the per-consumer tmpfs volumes.
+image: ghcr.io/arjundoshi221/factorlab-secrets-agent
+dockerfile: components/secrets-agent/Dockerfile
+entrypoint: factorlab-secrets-agent
+providers: []
+secrets: [CLOUDFLARE_ACCESS_CLIENT_ID, CLOUDFLARE_ACCESS_CLIENT_SECRET]
+services:
+  - name: cloudflare-secrets-agent
+    command: []
+    mode: daemon
+health: {kind: compose}
+platform:
+  image_var: FACTORLAB_SECRETS_AGENT_IMAGE
+  rollback: auto
+  user: "0"
+  user_exception: reads the root-only /etc/factorlab/identity token files; runs with cap_drop ALL
+  logs: /var/log/factorlab/secrets-agent
