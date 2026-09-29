@@ -1,0 +1,21 @@
+# Every text file is stored and checked out with LF, on every platform. The VPS runs
+# shell scripts, Python host tools (shebangs) and SQL straight from these files, and
+# the migration journal checksums the SQL (factorlab.schema.migrate normalizes CRLF,
+# but nothing else does).
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary artifacts are never diffed or normalized.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.gz binary
+*.zip binary
+*.parquet binary
+*.woff binary
+*.woff2 binary
