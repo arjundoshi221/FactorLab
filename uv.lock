@@ -31,6 +31,7 @@ members = [
     "factorlab-runtime",
     "factorlab-schema",
     "factorlab-storage",
+    "factorlab-testkit",
     "factorlab-workspace",
 ]
 
@@ -1027,12 +1028,34 @@ requires-dist = [
 ]
 
 [[package]]
+name = "factorlab-testkit"
+version = "0.1.0"
+source = { editable = "libs/testkit" }
+dependencies = [
+    { name = "factorlab-core" },
+    { name = "factorlab-ingest" },
+    { name = "factorlab-schema" },
+    { name = "pytest" },
+    { name = "requests" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "factorlab-core", editable = "libs/core" },
+    { name = "factorlab-ingest", editable = "libs/ingest" },
+    { name = "factorlab-schema", editable = "libs/schema" },
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "requests", specifier = ">=2.32.3" },
+]
+
+[[package]]
 name = "factorlab-workspace"
 version = "0"
 source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
+    { name = "factorlab-testkit" },
     { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -1050,6 +1073,7 @@ research = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "factorlab-testkit", editable = "libs/testkit" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=4.1" },

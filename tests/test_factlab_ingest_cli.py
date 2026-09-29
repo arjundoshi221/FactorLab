@@ -9,7 +9,7 @@ import yaml
 
 from factorlab.ingest.provider import RawCapture
 from factorlab.orchestration import cli as engine_cli
-from tests.contracts import kit
+from factorlab.testkit import conformance as kit
 
 
 class _Cli:

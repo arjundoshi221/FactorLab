@@ -15,6 +15,7 @@ dependencies = []
 
 [dependency-groups]
 dev = [
+    "factorlab-testkit",
     "pytest>=8.0",
     "pytest-cov>=4.1",
     "ruff>=0.6",
@@ -45,6 +46,7 @@ factorlab-schema = { workspace = true }
 factorlab-ingest = { workspace = true }
 factorlab-storage = { workspace = true }
 factorlab-orchestration = { workspace = true }
+factorlab-testkit = { workspace = true }
 factorlab-provider-upstox = { workspace = true }
 factorlab-provider-schwab = { workspace = true }
 factorlab-provider-eodhd = { workspace = true }
@@ -61,7 +63,12 @@ factorlab-component-ingest-broker = { workspace = true }
 factorlab-component-secrets-agent = { workspace = true }
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# Tests live with the member they test (libs/*/tests, providers/*/tests,
+# components/*/tests); tests/ holds the cross-cutting ones. importlib mode lets
+# members share test file names without __init__.py packages.
+testpaths = ["libs", "providers", "components", "tests"]
+addopts = ["--import-mode=importlib"]
+norecursedirs = ["node_modules", "dist", ".venv", ".tmp", "src"]
 
 [tool.ruff]
 line-length = 100
