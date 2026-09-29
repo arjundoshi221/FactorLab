@@ -71,6 +71,19 @@
         "raw_id": "The raw.archive response this bar was parsed from."
       }
     },
+    "market.bars_best": {
+      "title": "Best price bars",
+      "summary": "One bar per listing, resolution, and time, taken from the highest-priority data vendor that has it. Reserved until the wave 10 migration is applied.",
+      "notes": [
+        "Vendor priority comes from ref.source_priorities; trial (shadow) and disabled vendors are never chosen.",
+        "Always filter by listing_id and a bar_time range: the view compares every vendor's rows as it reads."
+      ],
+      "columns": {
+        "chosen_source": "The vendor the bar was taken from.",
+        "chosen_priority": "That vendor's priority; lower numbers win.",
+        "source_count": "How many vendors had this bar."
+      }
+    },
     "market.futures_contract_bars": {
       "title": "Futures contract bars",
       "summary": "1-minute bars for individual India single-stock futures contracts, one series per contract and expiry, with open interest.",
@@ -168,6 +181,7 @@
     "ref.sectors": {"title": "Sectors", "summary": "Reserved for industry classifications such as GICS. Not populated yet."},
     "ref.securities": {"title": "Securities", "summary": "The instruments themselves (a company's common stock, an ETF, a future), independent of where they trade."},
     "ref.sessions": {"title": "Trading sessions", "summary": "Reserved for exchange trading hours by day of week. Not populated yet."},
+    "ref.source_priorities": {"title": "Vendor priorities", "summary": "Which data vendor is preferred for each dataset, country, and bar length, synced from the ingestion bindings. Reserved until the wave 10 migration is applied."},
     "ref.sources": {"title": "Data sources", "summary": "The vendors and feeds FactorLab collects from."},
     "ref.universe_membership": {"title": "Universe membership", "summary": "Reserved for which listings belonged to an index or universe on each date."},
     "ref.universes": {"title": "Universes", "summary": "Reserved for index and watchlist definitions such as the S&P 500 or NIFTY 50."},

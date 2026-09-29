@@ -616,6 +616,15 @@
         "starts_at": "'HH:MM' local"
       }
     },
+    "ref.source_priorities": {
+      "columns": {
+        "dataset": "'market.bars', 'market.futures_contract_bars'",
+        "priority": "lower wins",
+        "resolution": "'' for datasets without one",
+        "role": "'primary','secondary','shadow','disabled'",
+        "source": "provider as written to source"
+      }
+    },
     "ref.sources": {
       "columns": {
         "auth_type": "'oauth2','api_key','none','scraping'",
