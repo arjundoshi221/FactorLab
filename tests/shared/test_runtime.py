@@ -10,7 +10,6 @@ from datetime import datetime, timedelta, timezone
 from datetime import time as dt_time
 from zoneinfo import ZoneInfo
 
-import pandas as pd
 import pytest
 
 from factorlab.calendars.window import MarketWindow
@@ -24,14 +23,7 @@ from factorlab.runtime import (
     ExitCode,
     GracefulShutdown,
     Heartbeat,
-    RunState,
-    WatermarkTracker,
     acquire_lock,
-    load_run_state,
-    mark_fail,
-    mark_ok,
-    save_run_state,
-    should_run,
     supervised,
 )
 
@@ -83,48 +75,6 @@ def test_graceful_shutdown_context_manager():
     # Exiting the block restores the previous handler.
     after = signal.getsignal(signal.SIGINT)
     assert after is before
-
-
-# ── WatermarkTracker ────────────────────────────────────────────────────────
-
-
-def test_watermark_tracker_filters_and_marks():
-    wm = WatermarkTracker()
-    df = pd.DataFrame({"bar_time": pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"])})
-
-    # First seen: no watermark, everything passes
-    out = wm.filter(df, "AAPL")
-    assert len(out) == 3
-    wm.mark(out, "AAPL")
-    assert "AAPL" in wm
-
-    # Second sweep: watermark blocks already-seen rows
-    out2 = wm.filter(df, "AAPL")
-    assert len(out2) == 0
-
-    # New bar arrives
-    df2 = pd.DataFrame({"bar_time": pd.to_datetime(["2026-01-04"])})
-    out3 = wm.filter(df2, "AAPL")
-    assert len(out3) == 1
-    wm.mark(out3, "AAPL")
-
-
-def test_watermark_tracker_custom_time_col():
-    wm = WatermarkTracker()
-    df = pd.DataFrame({"timestamp": pd.to_datetime(["2026-01-01", "2026-01-02"])})
-    out = wm.filter(df, "X", time_col="timestamp")
-    assert len(out) == 2
-    wm.mark(out, "X", time_col="timestamp")
-    assert wm.get("X") == pd.Timestamp("2026-01-02")
-
-
-def test_watermark_tracker_clear():
-    wm = WatermarkTracker()
-    df = pd.DataFrame({"bar_time": pd.to_datetime(["2026-01-01"])})
-    wm.mark(df, "AAPL")
-    assert len(wm) == 1
-    wm.clear()
-    assert len(wm) == 0
 
 
 # ── MarketWindow ────────────────────────────────────────────────────────────
@@ -195,61 +145,6 @@ def test_acquire_lock_steals_stale(tmp_path):
         # Stole it: the file now contains OUR pid
         body = json.loads(lock.read_text(encoding="utf-8"))
         assert body["pid"] == os.getpid()
-
-
-# ── RunState + should_run + mark_ok / mark_fail ─────────────────────────────
-
-
-def test_run_state_round_trip(tmp_path):
-    state_file = tmp_path / "run_state.json"
-    state: dict[str, RunState] = {}
-    mark_ok("source_a", state)
-    mark_fail("source_b", state, retry_after_sec=3600, error="429 Too Many Requests")
-    save_run_state(state_file, state)
-
-    loaded = load_run_state(state_file)
-    assert loaded["source_a"].last_ok is not None
-    assert loaded["source_b"].last_fail is not None
-    assert loaded["source_b"].retry_after_at is not None
-    assert "429" in loaded["source_b"].last_error
-
-
-def test_should_run_first_time():
-    ok, reason = should_run("never_seen", {})
-    assert ok is True
-    assert "first run" in reason
-
-
-def test_should_run_in_deferred_cooldown():
-    state: dict[str, RunState] = {}
-    mark_fail("fec", state, retry_after_sec=3600)
-    ok, reason = should_run("fec", state)
-    assert ok is False
-    assert "deferred" in reason
-
-
-def test_should_run_success_cooldown_blocks():
-    state: dict[str, RunState] = {}
-    mark_ok("legislators", state)
-    ok, reason = should_run("legislators", state, success_cooldown_hours=6.0)
-    assert ok is False
-    assert "recently succeeded" in reason
-
-
-def test_should_run_zero_cooldown_always_runs():
-    state: dict[str, RunState] = {}
-    mark_ok("legislators", state)
-    ok, _reason = should_run("legislators", state, success_cooldown_hours=0.0)
-    assert ok is True
-
-
-def test_mark_ok_clears_deferred_cooldown():
-    state: dict[str, RunState] = {}
-    mark_fail("congress_gov", state, retry_after_sec=3600)
-    assert state["congress_gov"].retry_after_at is not None
-    mark_ok("congress_gov", state)
-    assert state["congress_gov"].retry_after_at is None
-    assert state["congress_gov"].consecutive_failures == 0
 
 
 # ── Heartbeat ───────────────────────────────────────────────────────────────
