@@ -21,6 +21,8 @@ dev = [
     "ruff>=0.6",
     "httpx>=0.27",          # FastAPI TestClient
     "python-dotenv>=1.0",   # scripts/read_clickhouse.py reads .env
+    "packaging>=24",        # tools/verify_image.py evaluates dependency markers
+    "pyyaml>=6.0",          # tools/components.py reads component.yaml
 ]
 research = [
     "duckdb>=1.0",
@@ -61,6 +63,7 @@ factorlab-component-ingest-us = { workspace = true }
 factorlab-component-ingest-political = { workspace = true }
 factorlab-component-ingest-broker = { workspace = true }
 factorlab-component-secrets-agent = { workspace = true }
+factorlab-component-schema-migrator = { workspace = true }
 
 [tool.pytest.ini_options]
 # Tests live with the member they test (libs/*/tests, providers/*/tests,

@@ -24,7 +24,7 @@ from factorlab.storage.v2_us import V2USStorage as ClickHouseStorage
 log = logging.getLogger(__name__)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     configure_logging(component="ingest-political", service="ingest-political")
     parser = argparse.ArgumentParser(
         description="Ingest public congressional references and House PTRs"
@@ -37,7 +37,7 @@ def main() -> None:
         help="Download and parse at most N newest PTR PDFs; 0 stores the index only",
     )
     parser.add_argument("--congress", type=int, default=119)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     base_storage = ClickHouseStorage.from_environment()
     storage = PoliticalClickHouseStorage(base_storage)

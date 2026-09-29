@@ -16,11 +16,11 @@ PROJECT_ROOT = paths.home()
 log = logging.getLogger(__name__)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     configure_logging(component="ingest-india", service="ingest-india-premarket")
     parser = argparse.ArgumentParser(description="Refresh Upstox reference data into ClickHouse")
     parser.add_argument("--exchange", action="append", default=["NSE"])
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     storage = ClickHouseStorage.from_environment()
     storage.seed_india_reference_data()

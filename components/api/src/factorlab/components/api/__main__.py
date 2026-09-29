@@ -7,6 +7,8 @@ log is off.
 
 from __future__ import annotations
 
+import argparse
+
 import uvicorn
 from pydantic_settings import SettingsConfigDict
 
@@ -23,10 +25,15 @@ class ApiServerSettings(FactorLabSettings):
     port: int = 8000
 
 
-def main() -> int:
-    configure_logging(component="api", service="api")
+def main(argv: list[str] | None = None) -> int:
     settings = ApiServerSettings()
-    uvicorn.run("factorlab.components.api.app:app", host=settings.host, port=settings.port,
+    parser = argparse.ArgumentParser(prog="factorlab-api", description="Serve the FactorLab API.")
+    parser.add_argument("--host", default=settings.host, help="bind address (FACTORLAB_API_HOST)")
+    parser.add_argument("--port", type=int, default=settings.port,
+                        help="bind port (FACTORLAB_API_PORT)")
+    args = parser.parse_args(argv)
+    configure_logging(component="api", service="api")
+    uvicorn.run("factorlab.components.api.app:app", host=args.host, port=args.port,
                 log_config=None, access_log=False, server_header=False)
     return 0
 

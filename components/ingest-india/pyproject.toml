@@ -18,6 +18,9 @@ dependencies = [
     "tzdata>=2024.1",   # zoneinfo keys on hosts without a system tz database
 ]
 
+[project.scripts]
+factorlab-ingest-india = "factorlab.components.ingest_india.cli:main"
+
 [tool.uv.sources]
 factorlab-core = { workspace = true }
 factorlab-runtime = { workspace = true }

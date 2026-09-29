@@ -45,13 +45,13 @@ def universe_ready(client, since: datetime) -> bool:
     return bool(status and active >= 450)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     configure_logging(component="schema-migrator", service="verify-writes")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--since", type=datetime.fromisoformat, required=True)
     parser.add_argument("--wait-seconds", type=int, default=0)
     parser.add_argument("--require-universe-ready", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.since.tzinfo is None:
         parser.error("--since must include a timezone")
     storage = ClickHouse.from_environment()

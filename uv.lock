@@ -16,6 +16,7 @@ members = [
     "factorlab-component-ingest-india",
     "factorlab-component-ingest-political",
     "factorlab-component-ingest-us",
+    "factorlab-component-schema-migrator",
     "factorlab-component-secrets-agent",
     "factorlab-core",
     "factorlab-ingest",
@@ -742,6 +743,23 @@ requires-dist = [
 ]
 
 [[package]]
+name = "factorlab-component-schema-migrator"
+version = "0.1.0"
+source = { editable = "components/schema-migrator" }
+dependencies = [
+    { name = "factorlab-core" },
+    { name = "factorlab-runtime" },
+    { name = "factorlab-schema" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "factorlab-core", editable = "libs/core" },
+    { name = "factorlab-runtime", editable = "libs/runtime" },
+    { name = "factorlab-schema", editable = "libs/schema" },
+]
+
+[[package]]
 name = "factorlab-component-secrets-agent"
 version = "0.1.0"
 source = { editable = "components/secrets-agent" }
@@ -1057,9 +1075,11 @@ source = { virtual = "." }
 dev = [
     { name = "factorlab-testkit" },
     { name = "httpx" },
+    { name = "packaging" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "ruff" },
 ]
 research = [
@@ -1075,9 +1095,11 @@ research = [
 dev = [
     { name = "factorlab-testkit", editable = "libs/testkit" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "packaging", specifier = ">=24" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=4.1" },
     { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", specifier = ">=0.6" },
 ]
 research = [

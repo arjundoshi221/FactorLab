@@ -1,18 +1,21 @@
 [project]
-name = "factorlab-component-secrets-agent"
+name = "factorlab-component-schema-migrator"
 version = "0.1.0"
-description = "Renders Cloudflare-held runtime secrets into tmpfs volumes."
+description = "One-shot ClickHouse v2 readiness gate, write verification and reviewed migrations."
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "factorlab-core",
-    "requests>=2.32.3",
+    "factorlab-runtime",
+    "factorlab-schema",
 ]
 
 [project.scripts]
-factorlab-secrets-agent = "factorlab.components.secrets_agent.agent:main"
+factorlab-db = "factorlab.components.schema_migrator.cli:main"
 
 [tool.uv.sources]
 factorlab-core = { workspace = true }
+factorlab-runtime = { workspace = true }
+factorlab-schema = { workspace = true }
 
 [build-system]
 requires = ["hatchling>=1.25"]

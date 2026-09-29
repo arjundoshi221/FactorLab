@@ -421,13 +421,13 @@ def run(args, storage, client):
     return 0
 
 
-def main():
+def main(argv: list[str] | None = None):
     import fcntl  # Production runs on Linux; import here keeps testable functions portable.
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--universe", default=FULL_UNIVERSE)
     parser.add_argument("--daemon", action="store_true")
     parser.add_argument("--backfill", action="store_true", help="Explicit one-shot history/recovery (default)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     configure_logging(component="ingest-us", service="ingest-us")
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())

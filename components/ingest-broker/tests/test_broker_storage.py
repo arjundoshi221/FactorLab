@@ -27,7 +27,6 @@ from factorlab.storage.v2_broker import (
     UNMAPPED_EXECUTION_METHOD,
     V2BrokerStorage,
 )
-
 from factorlab.testkit.ibkr import (
     make_account_value,
     make_contract,

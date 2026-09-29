@@ -15,6 +15,9 @@ dependencies = [
     "requests>=2.32.3",
 ]
 
+[project.scripts]
+factorlab-ingest-political = "factorlab.components.ingest_political.cli:main"
+
 [tool.uv.sources]
 factorlab-core = { workspace = true }
 factorlab-runtime = { workspace = true }

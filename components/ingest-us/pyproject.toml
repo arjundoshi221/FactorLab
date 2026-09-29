@@ -20,6 +20,9 @@ dependencies = [
     "requests>=2.32.3",
 ]
 
+[project.scripts]
+factorlab-ingest-us = "factorlab.components.ingest_us.cli:main"
+
 [tool.uv.sources]
 factorlab-core = { workspace = true }
 factorlab-runtime = { workspace = true }

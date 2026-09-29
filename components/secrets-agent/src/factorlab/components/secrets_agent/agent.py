@@ -226,10 +226,10 @@ def sync_once(url: str, client_id: str, client_secret: str) -> str:
     return _render_bundle(payload)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     configure_logging(component="secrets-agent", service="cloudflare-secrets-agent")
 
     url = os.environ.get("CLOUDFLARE_SECRETS_URL", "").strip()

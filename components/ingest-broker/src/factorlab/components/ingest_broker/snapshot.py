@@ -259,9 +259,9 @@ def _interruptible_sleep(stopped: Callable[[], bool]) -> Callable[[float], None]
     return sleep
 
 
-def cli() -> int:
+def cli(argv: list[str] | None = None) -> int:
     """Process entry point: run :func:`main` under crash supervision."""
-    return supervised(main, name=SERVICE)
+    return supervised(lambda: main(argv), name=SERVICE)
 
 
 if __name__ == "__main__":

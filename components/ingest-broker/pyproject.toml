@@ -13,6 +13,9 @@ dependencies = [
     "factorlab-provider-ibkr",
 ]
 
+[project.scripts]
+factorlab-ingest-broker = "factorlab.components.ingest_broker.cli:main"
+
 [tool.uv.sources]
 factorlab-core = { workspace = true }
 factorlab-runtime = { workspace = true }

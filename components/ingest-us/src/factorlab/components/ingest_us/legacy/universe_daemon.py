@@ -105,13 +105,13 @@ def run_daemon(config, storage, resolver=None) -> int:
     return 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True, help="Path to the non-secret universe YAML")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--once", action="store_true", help="Resolve and publish once, then exit")
     mode.add_argument("--daemon", action="store_true", help="Refresh continuously")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     configure_logging(component="ingest-us", service="universe-us")
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())

@@ -465,7 +465,7 @@ def recover_historical(
     return failed == 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     configure_logging(component="ingest-india", service="ingest-india")
     parser = argparse.ArgumentParser(description="Upstox ClickHouse 1-minute poller")
     parser.add_argument("--universe", default="demo")
@@ -482,7 +482,7 @@ def main() -> int:
         action="store_true",
         help="Skip automatic historical recovery for emergency operations",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.quote_batch_size < 1:
         parser.error("--quote-batch-size must be positive")
 
