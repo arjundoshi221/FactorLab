@@ -1,0 +1,13 @@
+{
+ "request_key": "file:memberships",
+ "transport": "http",
+ "fetched_at": "2026-09-24T02:15:00+00:00",
+ "source_url": "https://unitedstates.github.io/congress-legislators/memberships.json",
+ "content_type": "application/json",
+ "status_code": 200,
+ "headers": {},
+ "metadata": {
+  "file": "memberships"
+ },
+ "body_b64": "eyJIU0FHIjogW3sibmFtZSI6ICJBZGEgRXhhbXBsZSIsICJwYXJ0eSI6ICJtYWpvcml0eSIsICJyYW5rIjogMSwgInRpdGxlIjogIkNoYWlybWFuIiwgImJpb2d1aWRlIjogIkUwMDAwMDEifSwgeyJuYW1lIjogIkdob3N0IiwgInBhcnR5IjogIm1pbm9yaXR5IiwgInJhbmsiOiAyLCAiYmlvZ3VpZGUiOiAiRzAwMDAwOSJ9XSwgIkhTQUcyOSI6IFt7Im5hbWUiOiAiQWRhIEV4YW1wbGUiLCAicGFydHkiOiAibWFqb3JpdHkiLCAicmFuayI6IDEsICJ0aXRsZSI6ICJSYW5raW5nIE1lbWJlciIsICJiaW9ndWlkZSI6ICJFMDAwMDAxIn1dfQ=="
+}

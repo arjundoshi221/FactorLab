@@ -27,6 +27,13 @@ WAVES = {
 
 DEFERRED_TABLES = {"fundamentals.snapshots_pit_eom"}
 
+# Tables added after their namespace's wave was applied. Emitting them into the
+# namespace wave would change an applied file's checksum (meta.schema_migrations),
+# so each goes to its own forward wave file: wave_NN_schema_<suffix>.sql.
+FORWARD_TABLES: dict[str, tuple[int, str]] = {
+    "ref.source_priorities": (10, "source_priorities"),
+}
+
 NULLABLE_SORT_KEY_TABLES = {
     "ref.contracts",
     "raw.archive",
@@ -188,7 +195,7 @@ def collect_tables() -> dict[int, list[tuple[str, str]]]:
             if not match:
                 continue
             name = match.group(1).lower()
-            if name in DEFERRED_TABLES:
+            if name in DEFERRED_TABLES or name in FORWARD_TABLES:
                 continue
             namespace = name.split(".", 1)[0]
             for wave, namespaces in WAVES.items():
@@ -196,6 +203,23 @@ def collect_tables() -> dict[int, list[tuple[str, str]]]:
                     waves[wave].append((name, normalize(statement)))
                     break
     return waves
+
+
+def collect_forward_tables() -> dict[tuple[int, str], list[tuple[str, str]]]:
+    """Forward-wave tables, keyed by (wave, file suffix), in design-document order."""
+    forward: dict[tuple[int, str], list[tuple[str, str]]] = {}
+    text = DESIGN.read_text(encoding="utf-8")
+    for block in sql_blocks(text):
+        for statement in split_sql(block):
+            match = re.search(r"\bCREATE\s+TABLE\s+([a-z_]+\.[a-z_]+)", statement, re.IGNORECASE)
+            if match and match.group(1).lower() in FORWARD_TABLES:
+                name = match.group(1).lower()
+                forward.setdefault(FORWARD_TABLES[name], []).append((name, normalize(statement)))
+    return forward
+
+
+def forward_file(wave: int, suffix: str) -> Path:
+    return OUTPUT / f"wave_{wave:02d}_schema_{suffix}.sql"
 
 
 def render_wave(wave: int, statements: list[tuple[str, str]]) -> str:
@@ -212,6 +236,10 @@ def main() -> None:
     waves = collect_tables()
     for wave, statements in waves.items():
         target = OUTPUT / f"wave_{wave:02d}_schema.sql"
+        target.write_text(render_wave(wave, statements), encoding="utf-8", newline="\n")
+        print(f"{target.relative_to(ROOT)}: {len(statements)} tables")
+    for (wave, suffix), statements in collect_forward_tables().items():
+        target = forward_file(wave, suffix)
         target.write_text(render_wave(wave, statements), encoding="utf-8", newline="\n")
         print(f"{target.relative_to(ROOT)}: {len(statements)} tables")
 

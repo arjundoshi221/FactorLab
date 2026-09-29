@@ -1,0 +1,14 @@
+{
+ "request_key": "account_values:paper",
+ "transport": "tcp_socket",
+ "fetched_at": "2026-09-23T20:30:00+00:00",
+ "source_url": "ibkr-gateway://paper/account_values",
+ "content_type": "application/json",
+ "status_code": null,
+ "headers": {},
+ "metadata": {
+  "schema": "ibkr.account_values.v1",
+  "records": 4
+ },
+ "body_b64": "eyJkYXRhIjpbeyJhY2NvdW50IjoiRFVFMzc1OTYzIiwiY3VycmVuY3kiOiJVU0QiLCJtb2RlbENvZGUiOiIiLCJ0YWciOiJOZXRMaXF1aWRhdGlvbiIsInZhbHVlIjoiMTQ4MTUwMS42MyJ9LHsiYWNjb3VudCI6IkRVRTM3NTk2MyIsImN1cnJlbmN5IjoiVVNEIiwibW9kZWxDb2RlIjoiIiwidGFnIjoiQnV5aW5nUG93ZXIiLCJ2YWx1ZSI6IjU5MjYwMDYuNTIifSx7ImFjY291bnQiOiJEVUUzNzU5NjMiLCJjdXJyZW5jeSI6IlVTRCIsIm1vZGVsQ29kZSI6IiIsInRhZyI6Ik5ldExpcXVpZGF0aW9uLVMiLCJ2YWx1ZSI6IjE0ODE1MDEuNjMifSx7ImFjY291bnQiOiJEVUUzNzU5NjMiLCJjdXJyZW5jeSI6IiIsIm1vZGVsQ29kZSI6IiIsInRhZyI6IkFjY291bnRUeXBlIiwidmFsdWUiOiJJTkRJVklEVUFMIn1dLCJmZXRjaGVkX2F0IjoiMjAyNi0wOS0yM1QyMDozMDowMCswMDowMCIsImtpbmQiOiJhY2NvdW50X3ZhbHVlcyIsIm1vZGUiOiJwYXBlciIsInJlcXVlc3QiOnt9LCJzY2hlbWEiOiJpYmtyLmFjY291bnRfdmFsdWVzLnYxIn0="
+}

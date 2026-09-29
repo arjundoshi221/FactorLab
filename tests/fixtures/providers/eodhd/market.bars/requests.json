@@ -1,0 +1,65 @@
+[
+ {
+  "market": "USA",
+  "resolution": "daily",
+  "series": [
+   {
+    "instrument": {
+     "alias_kind": "eodhd_symbol",
+     "alias_value": "AAPL.US",
+     "exchange_code": "XNAS",
+     "trading_symbol": "AAPL",
+     "country_code": "US",
+     "isin": "US0378331005"
+    },
+    "start": "2026-09-20T12:00:00+00:00",
+    "end": "2026-09-24T01:00:00+00:00"
+   },
+   {
+    "instrument": {
+     "alias_kind": "eodhd_symbol",
+     "alias_value": "BRK-B.US",
+     "exchange_code": "XNYS",
+     "trading_symbol": "BRK-B",
+     "country_code": "US",
+     "isin": "US0846707026"
+    },
+    "start": "2026-09-20T12:00:00+00:00",
+    "end": "2026-09-24T01:00:00+00:00"
+   }
+  ]
+ },
+ {
+  "market": "USA",
+  "resolution": "daily",
+  "params": {
+   "mode": "bulk"
+  },
+  "series": [
+   {
+    "instrument": {
+     "alias_kind": "eodhd_symbol",
+     "alias_value": "AAPL.US",
+     "exchange_code": "XNAS",
+     "trading_symbol": "AAPL",
+     "country_code": "US",
+     "isin": "US0378331005"
+    },
+    "start": "2026-09-20T12:00:00+00:00",
+    "end": "2026-09-24T01:00:00+00:00"
+   },
+   {
+    "instrument": {
+     "alias_kind": "eodhd_symbol",
+     "alias_value": "BRK-B.US",
+     "exchange_code": "XNYS",
+     "trading_symbol": "BRK-B",
+     "country_code": "US",
+     "isin": "US0846707026"
+    },
+    "start": "2026-09-20T12:00:00+00:00",
+    "end": "2026-09-24T01:00:00+00:00"
+   }
+  ]
+ }
+]

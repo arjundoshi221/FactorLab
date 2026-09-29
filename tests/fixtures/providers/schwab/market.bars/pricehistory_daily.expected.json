@@ -1,0 +1,80 @@
+[
+ {
+  "_type": "BarRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "schwab_symbol",
+   "alias_value": "AAPL",
+   "exchange_code": "XNAS",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": "US0378331005",
+   "cusip": null,
+   "figi": null
+  },
+  "resolution": "daily",
+  "bar_time": "2026-09-21T05:00:00+00:00",
+  "open": "228.1",
+  "high": "230.4",
+  "low": "227.9",
+  "close": "229.8",
+  "volume": 51234567,
+  "turnover": null,
+  "trades_count": null,
+  "oi": null,
+  "settlement_price": null,
+  "session": null
+ },
+ {
+  "_type": "BarRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "schwab_symbol",
+   "alias_value": "AAPL",
+   "exchange_code": "XNAS",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": "US0378331005",
+   "cusip": null,
+   "figi": null
+  },
+  "resolution": "daily",
+  "bar_time": "2026-09-22T05:00:00+00:00",
+  "open": "229.9",
+  "high": "231.0",
+  "low": "228.5",
+  "close": "230.2",
+  "volume": 47001122,
+  "turnover": null,
+  "trades_count": null,
+  "oi": null,
+  "settlement_price": null,
+  "session": null
+ },
+ {
+  "_type": "BarRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "schwab_symbol",
+   "alias_value": "AAPL",
+   "exchange_code": "XNAS",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": "US0378331005",
+   "cusip": null,
+   "figi": null
+  },
+  "resolution": "daily",
+  "bar_time": "2026-09-23T05:00:00+00:00",
+  "open": "230.1",
+  "high": "231.9",
+  "low": "229.6",
+  "close": "231.4",
+  "volume": 49887766,
+  "turnover": null,
+  "trades_count": null,
+  "oi": null,
+  "settlement_price": null,
+  "session": null
+ }
+]

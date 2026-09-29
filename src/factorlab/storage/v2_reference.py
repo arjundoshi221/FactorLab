@@ -38,8 +38,14 @@ class V2ReferenceWriter:
         alias_value: str,
         source: str,
         observed_at: datetime | None = None,
+        ids: tuple[UUID, UUID, UUID] | None = None,
+        confidence: str = "exact",
     ) -> tuple[UUID, UUID, UUID]:
-        """Use the migration resolver's IDs after checking required dimensions."""
+        """Use the migration resolver's IDs after checking required dimensions.
+
+        ``ids`` (entity, security, listing) overrides the legacy key derivation;
+        dataset sinks pass the identity they resolved or minted (07 §8).
+        """
         now = observed_at or datetime.now(UTC)
         country = str(instrument["country_code"])
         exchange = str(instrument["exchange_code"])
@@ -59,7 +65,7 @@ class V2ReferenceWriter:
         if currency_row is None:
             raise UnresolvedReference(f"currency unresolved: {currency}")
 
-        entity_id, security_id, listing_id = canonical_ids(instrument)
+        entity_id, security_id, listing_id = ids or canonical_ids(instrument)
         version = _version(now)
         entity_prior = _one(self.client.query(
             "SELECT first_seen, last_seen, legal_name FROM ref.entities FINAL "
@@ -135,10 +141,44 @@ class V2ReferenceWriter:
             "source": source,
             "valid_from": alias_prior[0] if alias_prior and alias_prior[0] else first_seen,
             "valid_to": None,
-            "confidence": "exact", "notes": "", "version": version,
+            "confidence": confidence, "notes": "", "version": version,
             "ingested_at": now,
         })
         return entity_id, security_id, listing_id
+
+    def attach_alias(
+        self,
+        *,
+        target_kind: str,
+        target_id: UUID,
+        alias_kind: str,
+        alias_value: str,
+        scope_country: str,
+        scope_exchange: str | None,
+        source: str,
+        confidence: str,
+        observed_at: datetime | None = None,
+    ) -> None:
+        """Link a provider alias to an existing identity without touching its attributes.
+
+        Used by secondary (``alias_only``) reference bindings (07 §8.1).
+        """
+        now = observed_at or datetime.now(UTC)
+        prior = _one(self.client.query(
+            "SELECT minOrNull(valid_from) FROM ref.identifier_aliases FINAL "
+            "WHERE alias_kind = {kind:String} AND alias_value = {value:String} "
+            "AND target_kind = {target_kind:String} AND target_id = {id:UUID}",
+            parameters={"kind": alias_kind, "value": alias_value,
+                        "target_kind": target_kind, "id": target_id},
+        ))
+        self._insert("ref.identifier_aliases", {
+            "alias_kind": alias_kind, "alias_value": alias_value,
+            "scope_country": scope_country, "scope_exchange": scope_exchange,
+            "target_kind": target_kind, "target_id": target_id, "source": source,
+            "valid_from": prior[0] if prior and prior[0] else now.date(), "valid_to": None,
+            "confidence": confidence, "notes": "", "version": _version(now),
+            "ingested_at": now,
+        })
 
     def upsert_future(
         self,
@@ -147,8 +187,14 @@ class V2ReferenceWriter:
         underlying_listing_id: UUID,
         source: str,
         observed_at: datetime | None = None,
+        canonical_id: UUID | None = None,
+        alias_kind: str = "upstox_instrument_key",
     ) -> UUID:
-        """Store a future only when its underlying listing already exists."""
+        """Store a future only when its underlying listing already exists.
+
+        ``canonical_id`` and ``alias_kind`` let dataset sinks pass a resolved or
+        naturally-minted contract id and the provider's alias kind (07 §8).
+        """
         now = observed_at or datetime.now(UTC)
         listing = _one(self.client.query(
             "SELECT exchange_code, country_code FROM ref.listings FINAL "
@@ -165,7 +211,7 @@ class V2ReferenceWriter:
         if not isinstance(expiry, date):
             raise TypeError("expiry must be a date")
         key = str(contract["contract_key"])
-        canonical_id = contract_id(key)
+        canonical_id = canonical_id or contract_id(key)
         version = _version(now)
         self._insert("ref.contracts", {
             "contract_id": canonical_id, "underlying_listing_id": underlying_listing_id,
@@ -179,12 +225,12 @@ class V2ReferenceWriter:
         })
         alias_prior = _one(self.client.query(
             "SELECT minOrNull(valid_from) FROM ref.identifier_aliases FINAL "
-            "WHERE alias_kind = 'upstox_instrument_key' AND alias_value = {value:String} "
+            "WHERE alias_kind = {kind:String} AND alias_value = {value:String} "
             "AND target_kind = 'contract' AND target_id = {id:UUID}",
-            parameters={"value": key, "id": canonical_id},
+            parameters={"kind": alias_kind, "value": key, "id": canonical_id},
         ))
         self._insert("ref.identifier_aliases", {
-            "alias_kind": "upstox_instrument_key", "alias_value": key,
+            "alias_kind": alias_kind, "alias_value": key,
             "scope_country": country, "scope_exchange": exchange,
             "target_kind": "contract", "target_id": canonical_id,
             "source": source,

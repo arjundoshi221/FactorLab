@@ -44,6 +44,25 @@ def test_checked_in_generated_schema_matches_design():
             encoding="utf-8"
         )
         assert actual == expected
+    for (wave, suffix), statements in generator.collect_forward_tables().items():
+        expected = generator.render_wave(wave, statements)
+        assert generator.forward_file(wave, suffix).read_text(encoding="utf-8") == expected
+
+
+def test_forward_tables_stay_out_of_applied_waves():
+    applied = {name for statements in generator.collect_tables().values()
+               for name, _ in statements}
+    assert not applied & set(generator.FORWARD_TABLES)
+    for name, (wave, _) in generator.FORWARD_TABLES.items():
+        assert wave > max(generator.WAVES), f"{name} must land in a new forward wave"
+
+
+def test_wave_10_bars_best_selects_only_readable_roles_by_priority():
+    view = (migration.MIGRATION_DIR / "wave_10_views_source_priorities.sql").read_text(
+        encoding="utf-8")
+    assert "CREATE VIEW IF NOT EXISTS market.bars_best" in view
+    assert "role IN ('primary', 'secondary')" in view and "argMin(" in view
+    assert "arrayIndexOf" not in view  # priorities come from ref.source_priorities
 
 
 def test_every_namespace_and_required_view_is_declared():

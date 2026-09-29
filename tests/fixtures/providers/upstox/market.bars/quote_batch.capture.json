@@ -1,0 +1,34 @@
+{
+ "request_key": "quote:NSE_EQ|INE002A01018..NSE_EQ|INE467B01029",
+ "transport": "http",
+ "fetched_at": "2026-09-24T04:01:20+00:00",
+ "source_url": "https://api.upstox.com/v3/market-quote/ohlc?...",
+ "content_type": "application/json",
+ "status_code": 200,
+ "headers": {},
+ "metadata": {
+  "endpoint": "quote",
+  "resolution": "1min",
+  "instruments": [
+   {
+    "alias_value": "NSE_EQ|INE002A01018",
+    "exchange_code": "NSE",
+    "trading_symbol": "RELIANCE",
+    "isin": "INE002A01018"
+   },
+   {
+    "alias_value": "NSE_EQ|INE467B01029",
+    "exchange_code": "NSE",
+    "trading_symbol": "TCS",
+    "isin": "INE467B01029"
+   },
+   {
+    "alias_value": "NSE_EQ|INE000000001",
+    "exchange_code": "NSE",
+    "trading_symbol": "BAD",
+    "isin": "INE000000001"
+   }
+  ]
+ },
+ "body_b64": "eyJzdGF0dXMiOiAic3VjY2VzcyIsICJkYXRhIjogeyJOU0VfRVE6UkVMSUFOQ0UiOiB7Imluc3RydW1lbnRfdG9rZW4iOiAiTlNFX0VRfElORTAwMkEwMTAxOCIsICJwcmV2X29obGMiOiB7Im9wZW4iOiAxNDEwLjUsICJoaWdoIjogMTQxMS4wLCAibG93IjogMTQxMC4wLCAiY2xvc2UiOiAxNDEwLjgsICJ2b2x1bWUiOiA1MjAwLCAidHMiOiAxNzkwMjIyMzQwMDAwfSwgImxpdmVfb2hsYyI6IHsib3BlbiI6IDE0MTAuOCwgImhpZ2giOiAxNDEyLjAsICJsb3ciOiAxNDEwLjYsICJjbG9zZSI6IDE0MTEuOSwgInZvbHVtZSI6IDYxMDAsICJ0cyI6IDE3OTAyMjI0MDAwMDB9fSwgIk5TRV9FUTpUQ1MiOiB7Imluc3RydW1lbnRfdG9rZW4iOiAiTlNFX0VRfElORTQ2N0IwMTAyOSIsICJwcmV2X29obGMiOiB7Im9wZW4iOiAzMDUwLjAsICJoaWdoIjogMzA1MS4wLCAibG93IjogMzA0OS4wLCAiY2xvc2UiOiAzMDUwLjUsICJ2b2x1bWUiOiA5MDAsICJ0cyI6IDE3OTAyMjI0MDAwMDB9LCAibGl2ZV9vaGxjIjogeyJvcGVuIjogMzA1MC41LCAiaGlnaCI6IDMwNTIuMCwgImxvdyI6IDMwNTAuMCwgImNsb3NlIjogMzA1MS4wLCAidm9sdW1lIjogNDAwLCAidHMiOiAxNzkwMjIyNDYwMDAwfX0sICJOU0VfRVE6Tk9UT0tFTiI6IHsicHJldl9vaGxjIjogeyJvcGVuIjogMSwgImhpZ2giOiAxLCAibG93IjogMSwgImNsb3NlIjogMSwgInZvbHVtZSI6IDEsICJ0cyI6IDE3OTAyMjI0MDAwMDB9fSwgIk5TRV9FUTpCQUQiOiB7Imluc3RydW1lbnRfdG9rZW4iOiAiTlNFX0VRfElORTAwMDAwMDAwMSIsICJwcmV2X29obGMiOiB7Im9wZW4iOiA1LCAiaGlnaCI6IDQsICJsb3ciOiAzLCAiY2xvc2UiOiA0LCAidHMiOiAxNzkwMjIyNDAwMDAwfX19fQ=="
+}

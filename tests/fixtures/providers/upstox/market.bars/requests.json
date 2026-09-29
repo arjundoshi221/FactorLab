@@ -1,0 +1,65 @@
+[
+ {
+  "market": "IND",
+  "resolution": "1min",
+  "series": [
+   {
+    "instrument": {
+     "alias_kind": "upstox_instrument_key",
+     "alias_value": "NSE_EQ|INE002A01018",
+     "exchange_code": "NSE",
+     "trading_symbol": "RELIANCE",
+     "country_code": "IN",
+     "isin": "INE002A01018"
+    },
+    "start": "2026-08-01T00:00:00+00:00",
+    "end": "2026-09-24T04:00:00+00:00"
+   },
+   {
+    "instrument": {
+     "alias_kind": "upstox_instrument_key",
+     "alias_value": "NSE_EQ|INE467B01029",
+     "exchange_code": "NSE",
+     "trading_symbol": "TCS",
+     "country_code": "IN",
+     "isin": "INE467B01029"
+    },
+    "start": "2026-09-24T03:45:00+00:00",
+    "end": "2026-09-24T04:00:00+00:00"
+   }
+  ]
+ },
+ {
+  "market": "IND",
+  "resolution": "1min",
+  "params": {
+   "mode": "quote"
+  },
+  "series": [
+   {
+    "instrument": {
+     "alias_kind": "upstox_instrument_key",
+     "alias_value": "NSE_EQ|INE002A01018",
+     "exchange_code": "NSE",
+     "trading_symbol": "RELIANCE",
+     "country_code": "IN",
+     "isin": "INE002A01018"
+    },
+    "start": "2026-09-24T03:59:00+00:00",
+    "end": "2026-09-24T04:00:00+00:00"
+   },
+   {
+    "instrument": {
+     "alias_kind": "upstox_instrument_key",
+     "alias_value": "NSE_EQ|INE467B01029",
+     "exchange_code": "NSE",
+     "trading_symbol": "TCS",
+     "country_code": "IN",
+     "isin": "INE467B01029"
+    },
+    "start": "2026-09-24T03:59:00+00:00",
+    "end": "2026-09-24T04:00:00+00:00"
+   }
+  ]
+ }
+]

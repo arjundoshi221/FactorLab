@@ -1,0 +1,13 @@
+{
+ "request_key": "master:NSE",
+ "transport": "http",
+ "fetched_at": "2026-09-24T00:45:00+00:00",
+ "source_url": "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz",
+ "content_type": "application/octet-stream",
+ "status_code": 200,
+ "headers": {},
+ "metadata": {
+  "exchange": "NSE"
+ },
+ "body_b64": "H4sIAAAAAAAC/72XXXOiMBiF/0rG650OoHztHdpY2SJahJ26OzsMa9M2I6KFMFu67X/fBCwF+dC1td5J3py8OXk8wZ9/OxG6W6GAdL6CjjmDLrzqfAGdwFsh9sSChq6ZAwh089yZ2ZYOZ8Cwz1kJelzce8Ed2k5kj3CEA/ZVNyHHCRrHc7ySPg8iEsZsFZckm3RGtkxhYImStxaedxX8NXEj/MSm8vTrbYjQE3IfYi8gmLCJPMc+Z1yhMZeslyjtR1AUkakQvFjmMlkxCb0bHNy5UbL6vfaLW2YTovt1SNzcDORjL1ggNvJAEncV+wRvfIxCppfKRWgRh7SjfJ/mxBprRuflC9jjNDS/69aE+jy0NADNC+oAtKjZB1htGHNmVO94q4sK77RaFvhuxesGq6EOjZOYOdYsx9bBzPnhXOqMXV1j2J7tN1NUxD6zgjvazJLC+8zkOVVVq+A2kZvtusrt2AtjgsEsfoqX+CR+2yMI+vNLCEaT2VS3NUO354flRJdX+23w9uE+v0sK7/NbVrvcoeyy7Vattu8R6CdLBEbraIOJ57NVj3T8D0JLn/V86/kRSqtLRzCcHJ/U6HGDw9QPWREFqdtVVWpL/REMHZtN8aIIkYacjIMbFPpJc5DWH+Bw8izxgrJ7cmLaSc3Zic1Hl+uscIBX8cqlerlU1nr7DVPYQnthzSWS6b9FhEPx39GsDjbfPIA6DgQFfHMMIEgpZCTES+RuQrxgKtmqdUwdAc5YuwYjqBn2aKBZDJ8DuVE5mZPE/+eGrpct1whOqaKZHEWShV1yBLGWHIFvIedVZ4ecVKqJHEEe5RnfSk6x8HTk5I5l6KhgBqefgI6pD7OOTkNKLl9LST7aQkiPk3cIkeoB4WVRbORjq1LmQ6rFg4YvvH428S1JaPY001Gt2wtHOqWBjXysikZq0+diMbAm46kNLiyogcHEBNCAgw/KlCmsAyVbcGI2slIsaMRFVdTKnw2B3jm1wChSc6LkQmVitloNkSKoqnPQZVQqLFIjfmSivDoGhB4HprAVHlrSjs8OLTmtpRyhEQ2uYs8nSfYSVvfeWAUi16o/1u3vrE2/8N9F4npKy68oVXBozM6pwsuvfwMsQ5o8DwAA"
+}

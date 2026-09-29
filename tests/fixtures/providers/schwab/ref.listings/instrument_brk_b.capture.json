@@ -1,0 +1,17 @@
+{
+ "request_key": "instrument:BRK/B",
+ "transport": "http",
+ "fetched_at": "2026-09-24T01:00:00+00:00",
+ "source_url": "https://api.schwabapi.com/marketdata/v1/instruments?projection=symbol-search&symbol=BRK%2FB",
+ "content_type": "application/json",
+ "status_code": 200,
+ "headers": {},
+ "metadata": {
+  "symbol": "BRK/B",
+  "params": {
+   "symbol": "BRK/B",
+   "projection": "symbol-search"
+  }
+ },
+ "body_b64": "eyJpbnN0cnVtZW50cyI6IFt7ImN1c2lwIjogIjA4NDY3MDcwMiIsICJzeW1ib2wiOiAiQlJLL0IiLCAiZGVzY3JpcHRpb24iOiAiQkVSS1NISVJFIEhBVEhBV0FZIElOQyBDTCBCIiwgImV4Y2hhbmdlIjogIk5ZU0UiLCAiYXNzZXRUeXBlIjogIkVRVUlUWSJ9LCB7ImN1c2lwIjogIjA4NDY3MDEwOCIsICJzeW1ib2wiOiAiQlJLL0EiLCAiZGVzY3JpcHRpb24iOiAiQkVSS1NISVJFIEhBVEhBV0FZIElOQyBDTCBBIiwgImV4Y2hhbmdlIjogIk5ZU0UiLCAiYXNzZXRUeXBlIjogIkVRVUlUWSJ9XX0="
+}

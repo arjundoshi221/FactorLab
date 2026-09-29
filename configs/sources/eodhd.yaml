@@ -47,3 +47,11 @@ response:
   format: json                        # also supports csv via fmt=csv
   eod_columns: [date, open, high, low, close, adjusted_close, volume]
   rate_limit_header: X-RateLimit-Remaining
+
+# Index constituents for ref.universe_membership (docs/architecture/07 §4).
+# Mirrors deploy/us-universe.yaml's eodhd mapping.
+universes:
+  sp500:
+    name: S&P 500
+    symbol: GSPC.INDX
+    minimum_constituents: 450

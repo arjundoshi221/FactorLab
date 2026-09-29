@@ -1,0 +1,22 @@
+{
+ "request_key": "NSE_FO|61284:intraday",
+ "transport": "http",
+ "fetched_at": "2026-09-24T04:01:05+00:00",
+ "source_url": "https://api.upstox.com/v3/historical-candle/...",
+ "content_type": "application/json",
+ "status_code": 200,
+ "headers": {},
+ "metadata": {
+  "endpoint": "intraday",
+  "resolution": "1min",
+  "instruments": [
+   {
+    "alias_value": "NSE_FO|61284",
+    "exchange_code": "NSE",
+    "trading_symbol": "RELIANCE FUT 28 JUL 26",
+    "isin": null
+   }
+  ]
+ },
+ "body_b64": "eyJzdGF0dXMiOiAic3VjY2VzcyIsICJkYXRhIjogeyJjYW5kbGVzIjogW1siMjAyNi0wOS0yNFQwOToxNTowMCswNTozMCIsIDE0MTIuMCwgMTQxNS4wLCAxNDExLjAsIDE0MTQuMCwgMTUwMCwgODEyMDAwXV19fQ=="
+}

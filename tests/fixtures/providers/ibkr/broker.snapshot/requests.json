@@ -1,0 +1,13 @@
+[
+ {
+  "market": "USA"
+ },
+ {
+  "market": "USA",
+  "params": {
+   "modes": [
+    "paper"
+   ]
+  }
+ }
+]

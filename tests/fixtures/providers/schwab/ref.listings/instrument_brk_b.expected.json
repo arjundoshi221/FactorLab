@@ -1,0 +1,26 @@
+[
+ {
+  "_type": "InstrumentRecord",
+  "ref": {
+   "_type": "InstrumentRef",
+   "alias_kind": "schwab_symbol",
+   "alias_value": "BRK/B",
+   "exchange_code": "XNYS",
+   "trading_symbol": "BRK-B",
+   "country_code": "US",
+   "isin": "US0846707026",
+   "cusip": "084670702",
+   "figi": null
+  },
+  "name": "BERKSHIRE HATHAWAY INC CL B",
+  "product_type": "common",
+  "currency": "USD",
+  "lot_size": 1,
+  "tick_size": null,
+  "active": true,
+  "first_traded": null,
+  "last_traded": null,
+  "sector_raw": null,
+  "attributes": {}
+ }
+]

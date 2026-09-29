@@ -1,0 +1,38 @@
+[
+ {
+  "_type": "PoliticalFilingRecord",
+  "filing_id": "20000001",
+  "chamber": "house",
+  "filing_type": "P",
+  "filing_year": 2026,
+  "filing_date": "2026-03-20",
+  "filer_name_raw": "Hon. Ada M. Example",
+  "filing_url": "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2026/20000001.pdf",
+  "filer": {
+   "_type": "EntityRef",
+   "alias_kind": "legislator_name",
+   "alias_value": "ada|example",
+   "entity_type": "person_legislator",
+   "name": "Hon. Ada M. Example"
+  },
+  "country_code": "US"
+ },
+ {
+  "_type": "PoliticalFilingRecord",
+  "filing_id": "20000002",
+  "chamber": "house",
+  "filing_type": "P",
+  "filing_year": 2026,
+  "filing_date": "2026-03-21",
+  "filer_name_raw": "Pat Unknown",
+  "filing_url": "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2026/20000002.pdf",
+  "filer": {
+   "_type": "EntityRef",
+   "alias_kind": "legislator_name",
+   "alias_value": "pat|unknown",
+   "entity_type": "person_legislator",
+   "name": "Pat Unknown"
+  },
+  "country_code": "US"
+ }
+]

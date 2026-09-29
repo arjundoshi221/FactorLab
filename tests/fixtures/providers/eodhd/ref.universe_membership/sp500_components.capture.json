@@ -1,0 +1,20 @@
+{
+ "request_key": "universe:sp500",
+ "transport": "http",
+ "fetched_at": "2026-09-24T01:00:00+00:00",
+ "source_url": "https://eodhd.com/api/fundamentals/GSPC.INDX?filter=Components&fmt=json",
+ "content_type": "application/json",
+ "status_code": 200,
+ "headers": {},
+ "metadata": {
+  "universe": "sp500",
+  "symbol": "GSPC.INDX",
+  "minimum_constituents": 3,
+  "name": "S&P 500",
+  "params": {
+   "fmt": "json",
+   "filter": "Components"
+  }
+ },
+ "body_b64": "eyIwIjogeyJDb2RlIjogIkFBUEwiLCAiRXhjaGFuZ2UiOiAiVVMiLCAiTmFtZSI6ICJBcHBsZSBJbmMiLCAiU2VjdG9yIjogIlRlY2hub2xvZ3kifSwgIjEiOiB7IkNvZGUiOiAiQlJLLUIiLCAiRXhjaGFuZ2UiOiAiVVMiLCAiTmFtZSI6ICJCZXJrc2hpcmUgSGF0aGF3YXkgSW5jIn0sICIyIjogeyJDb2RlIjogIk1TRlQiLCAiRXhjaGFuZ2UiOiAiVVMiLCAiTmFtZSI6ICJNaWNyb3NvZnQgQ29ycG9yYXRpb24ifX0="
+}

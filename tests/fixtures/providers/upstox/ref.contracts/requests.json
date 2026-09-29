@@ -1,0 +1,14 @@
+[
+ {
+  "market": "IND"
+ },
+ {
+  "market": "IND",
+  "params": {
+   "exchanges": [
+    "NSE",
+    "BSE"
+   ]
+  }
+ }
+]

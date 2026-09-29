@@ -1,0 +1,11 @@
+[
+ {
+  "market": "USA",
+  "params": {
+   "symbols": [
+    "BRK-B",
+    "AAPL"
+   ]
+  }
+ }
+]

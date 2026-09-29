@@ -1,0 +1,68 @@
+# Which provider instance feeds which dataset (docs/architecture/07 §9.2).
+#
+#   role: primary | secondary | shadow | disabled
+#     primary    writes, is read by *_best, and is the only role that may mint identity
+#     secondary  writes, read by *_best where primary has no row
+#     shadow     writes its own rows but is never read; resolves identity, never mints
+#     disabled   kept for reference, not run
+#   priority: lower wins in *_best (synced to ref.source_priorities in P7)
+#
+# Switching provider = change roles here. Adding one = a new sources/<p>/ package
+# plus a binding (start it as shadow). See 07 §12 for the recipes.
+#
+# Upstox runs as `shadow` until the P3 parity check against the legacy daemon
+# (scripts/factlab_india_clickhouse_5min.py) passes; then it is promoted to
+# primary and the legacy path is retired.
+version: 1
+bindings:
+  - {dataset: ref.listings, market: IND, provider: upstox, role: shadow, priority: 10}
+  - {dataset: ref.contracts, market: IND, provider: upstox, role: shadow, priority: 10}
+  - dataset: market.bars
+    market: IND
+    resolution: 1min
+    provider: upstox
+    role: shadow
+    priority: 10
+    params: {universe: full_nse_eq, mode: quote}
+  - dataset: market.futures_contract_bars
+    market: IND
+    resolution: 1min
+    provider: upstox
+    role: shadow
+    priority: 10
+    params: {mode: candles}
+
+  # --- USA (P4) -------------------------------------------------------------
+  # Production today: EODHD owns the listing master, Schwab feeds daily + 1min
+  # bars, EODHD takes a daily bulk snapshot. Everything below is `shadow`
+  # (rows under "<provider>:shadow", no ref.* writes) until parity passes.
+  # Target roles after promotion are noted per line.
+  # Schwab shadow traffic shares the production token and its 120 req/min
+  # budget with scripts/factlab_us_clickhouse.py: run it off-hours or on a
+  # small --listing set.
+  - {dataset: ref.listings, market: USA, provider: eodhd, role: shadow, priority: 10}   # -> primary
+  - {dataset: ref.listings, market: USA, provider: schwab, role: shadow, priority: 20}  # -> secondary
+  - {dataset: market.bars, market: USA, resolution: daily, provider: schwab, role: shadow, priority: 10}  # -> primary
+  - dataset: market.bars      # -> secondary
+    market: USA
+    resolution: daily
+    provider: eodhd
+    role: shadow
+    priority: 20
+    params: {mode: bulk}
+  - {dataset: market.bars, market: USA, resolution: 1min, provider: schwab, role: shadow, priority: 10}   # -> primary
+  # Universe membership (ref.universe_membership). Production still resolves the
+  # universe with universe/factory.py + Schwab validation into meta.expected_series.
+  - {dataset: ref.universe_membership, market: USA, provider: github_csv, role: shadow, priority: 10}  # -> primary
+  - {dataset: ref.universe_membership, market: USA, provider: eodhd, role: shadow, priority: 20}       # -> secondary (cross-check)
+  # Broker mirror (P6). broker.* tables have no `source` in their keys, so this
+  # shadow fetches, archives and normalizes but writes nothing; the production
+  # job is scripts/us/ibkr/us_portfolio_ibkr_snapshot.py (IBKRBrokerProvider).
+  - {dataset: broker.snapshot, market: USA, provider: ibkr, role: shadow, params: {modes: [paper, live]}}  # -> primary
+  # Political (P5). Production: scripts/factlab_political_bootstrap.py (02:15 UTC cron).
+  # None of these tables has `source` in its key: shadows normalize and count only.
+  - {dataset: ref.legislators, market: USA, provider: congress_legislators, role: shadow}   # -> primary
+  - {dataset: alt.political_filings, market: USA, provider: house_clerk, role: shadow}     # -> primary
+  - {dataset: alt.political_trades, market: USA, provider: house_clerk, role: shadow}      # -> primary
+  # Fundamentals (P8). New dataset; no production writer exists yet.
+  - {dataset: fundamentals.filings, market: USA, provider: edgar, role: shadow}   # -> primary

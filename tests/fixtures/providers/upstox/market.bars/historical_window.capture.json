@@ -1,0 +1,24 @@
+{
+ "request_key": "NSE_EQ|INE002A01018:historical",
+ "transport": "http",
+ "fetched_at": "2026-09-24T01:00:00+00:00",
+ "source_url": "https://api.upstox.com/v3/historical-candle/...",
+ "content_type": "application/json",
+ "status_code": 200,
+ "headers": {},
+ "metadata": {
+  "endpoint": "historical",
+  "resolution": "1min",
+  "instruments": [
+   {
+    "alias_value": "NSE_EQ|INE002A01018",
+    "exchange_code": "NSE",
+    "trading_symbol": "RELIANCE",
+    "isin": "INE002A01018"
+   }
+  ],
+  "from": "2026-09-23",
+  "to": "2026-09-23"
+ },
+ "body_b64": "eyJzdGF0dXMiOiAic3VjY2VzcyIsICJkYXRhIjogeyJjYW5kbGVzIjogW1siMjAyNi0wOS0yM1QxNToyOTowMCswNTozMCIsIDEzOTguMSwgMTM5OS4wLCAxMzk3LjUsIDEzOTguOCwgNTEyMzQsIDBdLCBbIjIwMjYtMDktMjNUMDk6MTY6MDArMDU6MzAiLCAxNDAyLjAsIDE0MDQuNSwgMTQwMS4yLCAxNDAzLjksIDg4MTEwLCAwXSwgWyIyMDI2LTA5LTIzVDA5OjE1OjAwKzA1OjMwIiwgMTQwMC4wLCAxNDAzLjAsIDEzOTkuMSwgMTQwMi4wLCAxMjAwNDUsIDBdLCBbIjIwMjYtMDktMjNUMDk6MTc6MDArMDU6MzAiLCAxNDAzLjksIDE0MDMuMCwgMTQwNC4wLCAxNDAzLjUsIDEwMDAsIDBdXX19"
+}

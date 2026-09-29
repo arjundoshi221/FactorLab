@@ -1,0 +1,237 @@
+[
+ {
+  "_type": "FundamentalFilingRecord",
+  "issuer": {
+   "_type": "EntityRef",
+   "alias_kind": "cik",
+   "alias_value": "0000320193",
+   "entity_type": "issuer",
+   "name": "Apple Inc."
+  },
+  "accession_number": "0000320193-25-000079",
+  "form_type": "10-K",
+  "filing_date": "2025-10-31",
+  "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/",
+  "period_end": "2025-09-27",
+  "period_type": "annual",
+  "fiscal_year": 2025,
+  "fiscal_period": "FY",
+  "is_amendment": false,
+  "issuer_hint": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  }
+ },
+ {
+  "_type": "FundamentalFilingRecord",
+  "issuer": {
+   "_type": "EntityRef",
+   "alias_kind": "cik",
+   "alias_value": "0000320193",
+   "entity_type": "issuer",
+   "name": "Apple Inc."
+  },
+  "accession_number": "0000320193-26-000071",
+  "form_type": "10-Q",
+  "filing_date": "2026-08-01",
+  "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000071/",
+  "period_end": "2026-06-27",
+  "period_type": "quarterly",
+  "fiscal_year": 2026,
+  "fiscal_period": "Q3",
+  "is_amendment": false,
+  "issuer_hint": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  }
+ },
+ {
+  "_type": "FundamentalFilingRecord",
+  "issuer": {
+   "_type": "EntityRef",
+   "alias_kind": "cik",
+   "alias_value": "0000320193",
+   "entity_type": "issuer",
+   "name": "Apple Inc."
+  },
+  "accession_number": "0000320193-26-000080",
+  "form_type": "10-K/A",
+  "filing_date": "2026-02-02",
+  "filing_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000080/",
+  "period_end": "2025-09-27",
+  "period_type": "annual",
+  "fiscal_year": 2025,
+  "fiscal_period": "FY",
+  "is_amendment": true,
+  "issuer_hint": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  }
+ },
+ {
+  "_type": "LineItemRecord",
+  "issuer": {
+   "_type": "EntityRef",
+   "alias_kind": "cik",
+   "alias_value": "0000320193",
+   "entity_type": "issuer",
+   "name": "Apple Inc."
+  },
+  "accession_number": "0000320193-25-000079",
+  "taxonomy": "us-gaap",
+  "tag": "Revenues",
+  "period_end": "2025-09-27",
+  "value": "416161000000",
+  "unit": "USD",
+  "period_start": "2024-09-29",
+  "frame": "CY2025",
+  "issuer_hint": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  }
+ },
+ {
+  "_type": "LineItemRecord",
+  "issuer": {
+   "_type": "EntityRef",
+   "alias_kind": "cik",
+   "alias_value": "0000320193",
+   "entity_type": "issuer",
+   "name": "Apple Inc."
+  },
+  "accession_number": "0000320193-26-000071",
+  "taxonomy": "us-gaap",
+  "tag": "Assets",
+  "period_end": "2026-06-27",
+  "value": "331495000000",
+  "unit": "USD",
+  "period_start": null,
+  "frame": "CY2026Q2I",
+  "issuer_hint": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  }
+ },
+ {
+  "_type": "LineItemRecord",
+  "issuer": {
+   "_type": "EntityRef",
+   "alias_kind": "cik",
+   "alias_value": "0000320193",
+   "entity_type": "issuer",
+   "name": "Apple Inc."
+  },
+  "accession_number": "0000320193-26-000071",
+  "taxonomy": "us-gaap",
+  "tag": "EarningsPerShareDiluted",
+  "period_end": "2026-06-27",
+  "value": "1.57",
+  "unit": "USD/shares",
+  "period_start": "2026-03-29",
+  "frame": null,
+  "issuer_hint": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  }
+ },
+ {
+  "_type": "LineItemRecord",
+  "issuer": {
+   "_type": "EntityRef",
+   "alias_kind": "cik",
+   "alias_value": "0000320193",
+   "entity_type": "issuer",
+   "name": "Apple Inc."
+  },
+  "accession_number": "0000320193-26-000071",
+  "taxonomy": "us-gaap",
+  "tag": "Revenues",
+  "period_end": "2026-06-27",
+  "value": "94040000000",
+  "unit": "USD",
+  "period_start": "2026-03-29",
+  "frame": "CY2026Q2",
+  "issuer_hint": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  }
+ },
+ {
+  "_type": "LineItemRecord",
+  "issuer": {
+   "_type": "EntityRef",
+   "alias_kind": "cik",
+   "alias_value": "0000320193",
+   "entity_type": "issuer",
+   "name": "Apple Inc."
+  },
+  "accession_number": "0000320193-26-000080",
+  "taxonomy": "us-gaap",
+  "tag": "Revenues",
+  "period_end": "2025-09-27",
+  "value": "416200000000",
+  "unit": "USD",
+  "period_start": "2024-09-29",
+  "frame": null,
+  "issuer_hint": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  }
+ }
+]

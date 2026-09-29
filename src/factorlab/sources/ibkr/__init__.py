@@ -113,3 +113,11 @@ __all__ = [
     "snapshot_positions",
     "source_channel_of",
 ]
+
+# Dataset source for the provider-agnostic engine (07 §6, P6). IBKRBrokerProvider above
+# keeps serving scripts/us/ibkr/us_portfolio_ibkr_snapshot.py until the P6 cutover.
+from factorlab.shared.ingest.registry import register_source
+from factorlab.sources.ibkr.snapshot_source import IbkrBrokerSnapshot
+
+register_source(IbkrBrokerSnapshot)
+__all__ += ["IbkrBrokerSnapshot"]
