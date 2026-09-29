@@ -87,3 +87,33 @@ it("shows stale, empty, legacy, and fetch error states", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Refresh images" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Docker image inventory is unavailable");
 });
+
+it("lists per-component releases and flags a service on another version", async () => {
+  const digest = `ghcr.io/arjundoshi221/factorlab-api@sha256:${"a".repeat(64)}`;
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({
+    ...snapshot,
+    api_build: { release_id: null, commit, component: "api", version: "1.2.0" },
+    platform_version: "1.0.0",
+    components: [
+      { component: "api", version: "1.2.0", image: digest,
+        services: [{ service: "api", container: "factorlab-api-1", status: "running", version: "1.1.0" }] },
+      { component: "ingest-us", version: null, image: null,
+        services: [{ service: "universe-us", container: "factorlab-universe-us-1", status: "exited", version: null }] },
+    ],
+  }) }));
+  render(<DockerImages />);
+  const section = (await screen.findByRole("heading", { name: "Running components" })).closest("section")!;
+  expect(within(section).getByText("Platform v1.0.0")).toBeInTheDocument();
+  expect(within(section).getByText("v1.2.0")).toBeInTheDocument();
+  expect(within(section).getByText("A service runs a different version")).toBeInTheDocument();
+  expect(within(section).getByText("Seeded (monolith)")).toBeInTheDocument();
+  expect(within(section).getByText("api (running, v1.1.0)")).toBeInTheDocument();
+  expect(screen.getByText("api v1.2.0")).toBeInTheDocument();
+});
+
+it("hides the components table on a host without per-component releases", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
+  render(<DockerImages />);
+  await screen.findByRole("heading", { name: release.id });
+  expect(screen.queryByRole("heading", { name: "Running components" })).not.toBeInTheDocument();
+});

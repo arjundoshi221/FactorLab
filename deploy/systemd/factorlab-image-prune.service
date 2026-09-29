@@ -1,0 +1,9 @@
+[Unit]
+Description=Remove old FactorLab images (keeps pins, running, rollback targets and 3 newest)
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/libexec/factorlab-prune-images.py
+Nice=10
+IOSchedulingClass=idle

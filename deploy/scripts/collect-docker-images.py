@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
-"""Write a narrow, atomic Docker inventory for the private hub."""
+"""Write a narrow, atomic Docker inventory for the private hub.
+
+Two files, both atomic and world-readable (0644), published to the API read-only:
+
+    snapshot.json     images, containers and the monolith release (the original shape;
+                      API images released before per-component releases reject any
+                      extra field, so it never changes)
+    snapshot.v2.json  the same plus ``schema: 2``, each image's ``component`` label, the
+                      platform version and one row per deployed component (version from
+                      releases/<c>/current, pinned image, running services)
+"""
 
 import json
 import re
@@ -10,6 +20,7 @@ from pathlib import Path
 
 ROOT = Path("/opt/factorlab")
 OUTPUT = Path("/var/lib/factorlab/docker-images/snapshot.json")
+OUTPUT_V2 = OUTPUT.with_name("snapshot.v2.json")
 RELEASE_HISTORY = 12
 RELEASE_ID = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{7,12}$")
 # Only these non-secret release.env keys and image labels are ever published.
@@ -20,6 +31,10 @@ RELEASE_FIELDS = {
     "previous_image": re.compile(r"^[A-Za-z0-9./:_@-]{1,256}$"),
 }
 IMAGE_LABELS = ("revision", "version", "source", "created", "title")
+COMPONENT = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
+VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.[0-9]+)?$")
+PINNED_IMAGE = re.compile(r"^ghcr\.io/arjundoshi221/factorlab(-[a-z0-9-]+)?@sha256:[0-9a-f]{64}$")
+IMAGE_VAR = re.compile(r"^FACTORLAB_[A-Z0-9_]+_IMAGE$")
 
 
 def docker(*args: str) -> str:
@@ -81,7 +96,8 @@ def image_labels(image: dict) -> dict[str, str]:
     }
 
 
-def collect(root: Path = ROOT) -> dict:
+def _inventory(root: Path) -> tuple[dict, dict[str, str], list[dict]]:
+    """The v1 snapshot, each image's component label, and a flat list of containers."""
     image_ids = list(dict.fromkeys(docker("image", "ls", "-aq", "--no-trunc").splitlines()))
     container_ids = docker("ps", "-aq", "--no-trunc").splitlines()
     containers_by_image: dict[str, list[dict]] = {}
@@ -106,7 +122,19 @@ def collect(root: Path = ROOT) -> dict:
         current_image_id = None
 
     images = []
+    components: dict[str, str] = {}
+    flat: list[dict] = []
     for image in inspect("image", image_ids):
+        raw_labels = (image.get("Config") or {}).get("Labels") or {}
+        component = str(raw_labels.get("io.factorlab.component") or "")
+        if COMPONENT.match(component):
+            components[image["Id"]] = component
+        version = str(raw_labels.get("org.opencontainers.image.version") or "")
+        for container in containers_by_image.get(image["Id"], []):
+            flat.append({"service": container["service"], "container": container["name"],
+                         "status": container["status"], "started_at": container["started_at"],
+                         "image_id": image["Id"],
+                         "version": version if VERSION.match(version) else None})
         associated = sorted(containers_by_image.get(image["Id"], []), key=lambda item: item["name"])
         images.append({
             "id": image["Id"],
@@ -124,25 +152,98 @@ def collect(root: Path = ROOT) -> dict:
             "platform": "/".join(part for part in (image.get("Os"), image.get("Architecture")) if part) or None,
             "labels": image_labels(image),
         })
-    return {
+    snapshot = {
         "snapshot_at": datetime.now(UTC).isoformat(),
         "release_id": release_id,
         "images": images,
         "release": read_release(root / "releases" / release_id) if release_id else None,
         "releases": read_release_history(root),
     }
+    return snapshot, components, flat
 
 
-def main() -> None:
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    snapshot = collect()
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=OUTPUT.parent,
+def collect(root: Path = ROOT) -> dict:
+    return _inventory(root)[0]
+
+
+def read_version(path: Path) -> str | None:
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+    return value if VERSION.match(value) else None
+
+
+def read_pins(root: Path) -> dict[str, str]:
+    """FACTORLAB_<C>_IMAGE digest pins written by the host deployer (validated)."""
+    pins = {}
+    try:
+        lines = (root / "state" / "images.env").read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return pins
+    for line in lines:
+        key, _, value = line.partition("=")
+        if IMAGE_VAR.match(key.strip()) and PINNED_IMAGE.match(value.strip()):
+            pins[key.strip()] = value.strip()
+    return pins
+
+
+def deployed_components(root: Path, containers: list[dict]) -> list[dict]:
+    """One row per component the deployer manages, with its running services."""
+    pins = read_pins(root)
+    rows = []
+    for manifest_path in sorted((root / "components").glob("*/component.json")):
+        name = manifest_path.parent.name
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8")[:65536])
+            services = [str(s["name"]) for s in manifest.get("services", [])
+                        if isinstance(s, dict) and "name" in s]
+            image_var = str((manifest.get("platform") or {}).get("image_var", ""))
+        except (OSError, UnicodeDecodeError, ValueError, TypeError, KeyError):
+            continue
+        if not COMPONENT.match(name) or manifest.get("name") != name:
+            continue
+        rows.append({
+            "component": name,
+            "version": read_version(root / "releases" / name / "current"),
+            "image": pins.get(image_var) if IMAGE_VAR.match(image_var) else None,
+            "services": [
+                {key: container[key] for key in
+                 ("service", "container", "status", "started_at", "version", "image_id")}
+                for container in sorted(containers, key=lambda c: c["container"])
+                if container["service"] in services],
+        })
+    return rows
+
+
+def collect_v2(root: Path = ROOT) -> dict:
+    snapshot, components, containers = _inventory(root)
+    images = [{**image, "labels": {**image["labels"], **(
+        {"component": components[image["id"]]} if image["id"] in components else {})}}
+        for image in snapshot["images"]]
+    return {**snapshot, "schema": 2, "images": images,
+            "platform_version": read_version(root / "releases" / "platform" / "current"),
+            "components": deployed_components(root, containers)}
+
+
+def write_atomic(path: Path, snapshot: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
                                      prefix=".snapshot-", delete=False) as temporary:
         json.dump(snapshot, temporary, separators=(",", ":"))
         temporary.write("\n")
         temporary_path = Path(temporary.name)
     temporary_path.chmod(0o644)
-    temporary_path.replace(OUTPUT)
+    temporary_path.replace(path)
+
+
+def main() -> None:
+    snapshot = collect_v2(ROOT)
+    legacy = {key: snapshot[key] for key in ("snapshot_at", "release_id", "release", "releases")}
+    legacy["images"] = [{**image, "labels": {k: v for k, v in image["labels"].items()
+                                             if k in IMAGE_LABELS}} for image in snapshot["images"]]
+    write_atomic(OUTPUT, legacy)
+    write_atomic(OUTPUT_V2, snapshot)
 
 
 if __name__ == "__main__":

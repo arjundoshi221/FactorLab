@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import threading
 import time
 from collections.abc import Callable
@@ -17,6 +16,7 @@ from factorlab.clickhouse import ClickHouse
 from factorlab.components.api.india import QueryClient
 from factorlab.components.api.india_observability import _session_state
 from factorlab.components.api.schema_map import V2_DATABASES, V2_DOMAINS
+from factorlab.core.build import build_info
 
 IST = ZoneInfo("Asia/Kolkata")
 POLITICAL_FRESHNESS_SECONDS = 172_800
@@ -86,15 +86,16 @@ class HubPoliticalSummary(BaseModel):
 class HubBuild(BaseModel):
     release_id: str | None
     commit: str | None
+    component: str | None = None
+    version: str | None = None
 
 
 def current_build() -> HubBuild:
     """Describe the image this API runs from, as baked in by the release build."""
 
-    return HubBuild(
-        release_id=os.getenv("FACTORLAB_RELEASE_ID") or None,
-        commit=os.getenv("FACTORLAB_COMMIT") or None,
-    )
+    build = build_info()
+    return HubBuild(release_id=build.release_id, commit=build.commit,
+                    component=build.component, version=build.version)
 
 
 class HubOverview(BaseModel):

@@ -77,9 +77,14 @@ fi
 sudo install -D -m 0755 "$script_dir/collect-docker-images.py" /usr/local/libexec/factorlab-collect-docker-images.py
 sudo install -m 0644 "$script_dir/../systemd/factorlab-docker-images.service" /etc/systemd/system/factorlab-docker-images.service
 sudo install -m 0644 "$script_dir/../systemd/factorlab-docker-images.timer" /etc/systemd/system/factorlab-docker-images.timer
+# Daily removal of old FactorLab images (never forced; see prune-images.py for what is kept).
+sudo install -D -m 0755 "$script_dir/prune-images.py" /usr/local/libexec/factorlab-prune-images.py
+sudo install -m 0644 "$script_dir/../systemd/factorlab-image-prune.service" /etc/systemd/system/factorlab-image-prune.service
+sudo install -m 0644 "$script_dir/../systemd/factorlab-image-prune.timer" /etc/systemd/system/factorlab-image-prune.timer
 sudo systemctl daemon-reload
 sudo systemctl enable --now logrotate.timer
 sudo systemctl enable --now factorlab-docker-images.timer
+sudo systemctl enable --now factorlab-image-prune.timer
 sudo systemctl start factorlab-docker-images.service
 
 echo "FactorLab production directories are ready."

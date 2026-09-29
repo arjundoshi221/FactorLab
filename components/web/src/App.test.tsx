@@ -42,6 +42,14 @@ describe("FactorLab Hub", () => {
     expect(screen.getAllByText("Needs attention").length).toBeGreaterThan(0);
   });
 
+  it("shows the API version in the footer when the build carries one", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({
+      ...overview, build: { release_id: null, commit: "c".repeat(40), component: "api", version: "1.2.0" },
+    }) } as Response);
+    render(<App />);
+    expect(await screen.findByRole("link", { name: "v1.2.0" })).toHaveAttribute("href", "/docker-images");
+  });
+
   it("filters the table inventory", async () => {
     render(<App />);
     await screen.findByText("market_candles_1min");

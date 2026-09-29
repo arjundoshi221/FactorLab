@@ -11,6 +11,7 @@ import { StatusPill, type HubStatus } from "./components/ui";
 import { formatBytes, formatCompact, formatDate, formatTime } from "./shared/format";
 import { DataHome } from "./pages/catalog/DataHome";
 import { Pipelines } from "./pages/catalog/Pipelines";
+import { WEB_VERSION } from "./shared/build";
 
 const SchemaExplorer = lazy(async () => {
   const module = await import("./pages/schema/SchemaExplorer");
@@ -41,7 +42,7 @@ interface HubTable {
 
 interface HubOverview {
   generated_at: string;
-  build?: { release_id: string | null; commit: string | null } | null;
+  build?: { release_id: string | null; commit: string | null; component?: string | null; version?: string | null } | null;
   summary: {
     database: string;
     table_count: number;
@@ -393,7 +394,9 @@ function Dashboard() {
       </section>
       <footer>
         FactorLab · {data.summary.database}
-        {data.build?.release_id && <> · Release <a href="/docker-images">{data.build.release_id}</a></>}
+        {data.build?.version && <> · API <a href="/docker-images">v{data.build.version}</a></>}
+        {WEB_VERSION && <> · Web v{WEB_VERSION}</>}
+        {!data.build?.version && data.build?.release_id && <> · Release <a href="/docker-images">{data.build.release_id}</a></>}
         {data.build?.commit && <> · Commit {data.build.commit.slice(0, 12)}</>}
         {" "}· Asia/Kolkata · Stored counts may include replacing-table versions
       </footer>

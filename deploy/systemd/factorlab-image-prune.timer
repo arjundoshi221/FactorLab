@@ -1,0 +1,11 @@
+[Unit]
+Description=Prune old FactorLab images daily
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=factorlab-image-prune.service
+
+[Install]
+WantedBy=timers.target

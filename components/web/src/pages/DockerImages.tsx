@@ -14,10 +14,16 @@ interface Release {
   id: string; commit: string | null; image: string | null;
   previous_release: string | null; previous_image: string | null; activated_at: string | null;
 }
-interface Build { release_id: string | null; commit: string | null }
+interface Build { release_id: string | null; commit: string | null; component?: string | null; version?: string | null }
+interface RunningService {
+  service: string; container: string; status: string; started_at?: string | null; version?: string | null;
+}
+/** A component the host deployer manages; version is null while it still runs the seeded monolith image. */
+interface DeployedComponent { component: string; version: string | null; image: string | null; services: RunningService[] }
 interface Snapshot {
   snapshot_at: string; release_id: string | null; stale: boolean; images: Image[];
   release?: Release | null; releases?: Release[]; api_build?: Build;
+  platform_version?: string | null; components?: DeployedComponent[];
 }
 type Sort = "name" | "size" | "created" | "started" | "activated";
 type UseFilter = "all" | "in_use" | "unused";
@@ -86,10 +92,32 @@ function ReleaseCard({ snapshot }: { snapshot: Snapshot }) {
     <dl className="release-facts">
       <div><dt>Commit</dt><dd><Commit value={release?.commit ?? build?.commit} /></dd></div>
       <div><dt>Image</dt><dd title={release?.image ?? undefined}><code>{short(release?.image)}</code></dd></div>
-      <div><dt>API build</dt><dd>{build?.release_id ?? "Not baked into this image"}</dd></div>
+      <div><dt>API build</dt><dd>{build?.version ? `${build.component ?? "api"} v${build.version}` : build?.release_id ?? "Not baked into this image"}</dd></div>
       <div><dt>Previous release</dt><dd>{release?.previous_release && release.previous_release !== "unknown" ? release.previous_release : "—"}</dd></div>
     </dl>
     {mismatch && <p className="notice" role="status">The API container reports release {build?.release_id}, but the host records {releaseId}. Check the latest release workflow.</p>}
+  </section>;
+}
+
+function ComponentsSection({ snapshot }: { snapshot: Snapshot }) {
+  const components = snapshot.components ?? [];
+  if (components.length === 0) return null;
+  return <section className="inventory" aria-labelledby="components-title">
+    <div className="section-heading"><div><span className="eyebrow">Per-component releases</span><h2 id="components-title">Running components</h2></div>
+      <span>{snapshot.platform_version ? `Platform v${snapshot.platform_version}` : "Platform not released"}</span></div>
+    <div className="table-wrap"><table className="docker-components-table"><thead><tr>
+      <th>Component</th><th>Deployed</th><th>Services</th><th>Pinned image</th>
+    </tr></thead><tbody>{components.map((component) => {
+      const drift = component.version !== null && component.services.some((service) => service.version && service.version !== component.version);
+      return <tr key={component.component}>
+        <td data-label="Component"><strong>{component.component}</strong></td>
+        <td data-label="Deployed">{component.version ? `v${component.version}` : <span className="docker-badge">Seeded (monolith)</span>}
+          {drift && <small className="status-reason">A service runs a different version</small>}</td>
+        <td data-label="Services">{component.services.length === 0 ? "—" : component.services.map((service) =>
+          <small key={service.container}>{service.service} ({service.status}{service.version ? `, v${service.version}` : ""})</small>)}</td>
+        <td data-label="Pinned image" title={component.image ?? undefined}><code>{short(component.image)}</code></td>
+      </tr>;
+    })}</tbody></table></div>
   </section>;
 }
 
@@ -188,6 +216,7 @@ export function DockerImages() {
 
     {snapshot && <>
       <ReleaseCard snapshot={snapshot} />
+      <ComponentsSection snapshot={snapshot} />
 
       <section className="metric-grid" aria-label="Image totals">
         <article className="metric-card"><span>Images stored</span><strong>{all.length}</strong><small>{totals.untagged} untagged</small></article>

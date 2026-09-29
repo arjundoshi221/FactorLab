@@ -1,0 +1,53 @@
+name: Edge canary
+
+# Cloudflare Access is the hub's only authentication. Once a day (and on demand),
+# check from outside that every route on every hub hostname stops at Access for an
+# unauthenticated request. A 2xx or any other answer means the origin is reachable
+# around Access: the run fails, and GitHub notifies the repository owners.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  access:
+    runs-on: ubuntu-latest
+    env:
+      # Space-separated; override with the FACTORLAB_HUB_HOSTS repository variable.
+      HOSTS: ${{ vars.FACTORLAB_HUB_HOSTS || 'arjundoshi221.com www.arjundoshi221.com' }}
+      # The SPA (web on :8080), the hub and public APIs (api on :8000), health and docs.
+      PATHS: / /docker-images /hub/api/v1/overview /hub/api/v1/docker-images /api/v1/ /health /docs /openapi.json
+    steps:
+      - name: Every route redirects to Cloudflare Access
+        run: |
+          set -uo pipefail
+          failures=0
+          for host in $HOSTS; do
+            for path in $PATHS; do
+              url="https://${host}${path}"
+              result=$(curl -sS -o /dev/null --max-time 20 -w '%{http_code} %{redirect_url}' "$url") || result="000 curl-error"
+              code=${result%% *}
+              location=${result#* }
+              location_host=$(sed -E 's#^https?://([^/:]+).*#\1#' <<<"$location")
+              if [[ $code =~ ^30[1278]$ && $location_host == *.cloudflareaccess.com ]]; then
+                echo "ok    $url -> $location_host"
+              elif [[ $code == 401 || $code == 403 ]]; then
+                echo "ok    $url -> $code (Access denied the request)"
+              else
+                echo "FAIL  $url -> $code ${location:-no redirect}"
+                failures=$((failures + 1))
+              fi
+            done
+          done
+          {
+            echo "## Edge canary"
+            echo "- Hosts: \`${HOSTS}\`"
+            echo "- Failures: ${failures}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if (( failures > 0 )); then
+            echo "::error::${failures} route(s) answered without Cloudflare Access; check the tunnel ingress and the Access application"
+            exit 1
+          fi
