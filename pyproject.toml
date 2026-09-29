@@ -74,6 +74,21 @@ testpaths = ["libs", "providers", "components", "tests"]
 addopts = ["--import-mode=importlib"]
 norecursedirs = ["node_modules", "dist", ".venv", ".tmp", "src"]
 
+[tool.coverage.run]
+# Product code only (every factorlab.* distribution), with branch coverage.
+source_pkgs = ["factorlab"]
+branch = true
+
+[tool.coverage.report]
+skip_empty = true
+precision = 1
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+]
+
 [tool.basedpyright]
 # `uv run basedpyright` in CI. Libraries are strict; everything else is standard.
 # Errors that existed when this was introduced are recorded in

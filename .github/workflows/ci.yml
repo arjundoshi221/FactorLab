@@ -39,8 +39,13 @@ jobs:
         run: |
           uv run --frozen python tools/components.py check
           uv run --frozen python tools/components.py render-compose --check
-      - name: Tests
-        run: uv run --frozen pytest
+      - name: Tests (with branch coverage of every factorlab.* package)
+        run: uv run --frozen pytest --cov --cov-report=term:skip-covered
+      - name: Coverage floors (raise them when coverage improves)
+        run: |
+          # Total at the P7 baseline (77.7%); the ingestion contract stays above 90%.
+          uv run --frozen coverage report --fail-under=77 > /dev/null
+          uv run --frozen coverage report --include='libs/ingest/src/*' --fail-under=90
 
   isolated-imports:
     name: Each member installs and imports on its own
