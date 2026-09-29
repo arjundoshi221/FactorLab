@@ -21,7 +21,9 @@ against are:
 
 What we DON'T defend against (out of scope):
 
-- Multi-user authorization (single-user, all reads)
+- Multi-user authorization. Cloudflare Access admits a short allow-list of
+  named users to the hub; all of them get the same read access plus the hub's
+  UI-state writes. There are no per-user roles in the app.
 - DDoS / availability
 - Side-channels in the host OS / IDE
 - Third-party vendor breach (we accept their security posture by relying on them)
@@ -45,6 +47,12 @@ What we DON'T defend against (out of scope):
   `CONTRIBUTING.md` for setup.
 - **Dependency posture.** `requests>=2.32.3` (CVE-2024-35195 fixed),
   `defusedxml>=0.7.1`. Other deps audited 2026-05-01 with no open advisories.
+- **Hub edge authentication.** The web hub (`/`, SPA pages, `/hub/api/v1/*`,
+  `/docs`) has no in-app login. Cloudflare Access is the only gate, and it can
+  be trusted only because the origin is unreachable any other way: the API
+  binds to `127.0.0.1:8000` and is published solely through an outbound
+  Cloudflare Tunnel, with no inbound 80/443/8000. `/api/v1/*` additionally
+  requires the bearer key. Never add a public reverse proxy or port.
 - **`audit.raw_archive` retention.** Probe / smoke-test endpoints (`lda_probe`)
   are deactivated; their historical rows were purged in migration 017.
 

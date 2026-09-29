@@ -11,23 +11,27 @@ rejected. Daily bars expose raw OHLCV; adjusted close is unavailable until an
 adjusted-bars dataset is built.
 
 ```text
+Public base URL:     https://arjundoshi221.com   (Cloudflare Access login)
 SSH-tunnel base URL: http://127.0.0.1:8000
-Web dashboard:       http://127.0.0.1:8000/
-India Markets:       http://127.0.0.1:8000/india
-Schema map:          http://127.0.0.1:8000/schema
-Interactive docs:    http://127.0.0.1:8000/docs
-OpenAPI schema:      http://127.0.0.1:8000/openapi.json
+Web dashboard:       <base>/
+India Markets:       <base>/india
+Schema map:          <base>/schema
+Interactive docs:    <base>/docs
+OpenAPI schema:      <base>/openapi.json
 ```
 
-The production service binds only to VPS loopback. Open an SSH tunnel before
-using the website or API. A Cloudflare Access URL will replace the tunnel after
-a domain is connected.
+The production service binds only to VPS loopback. It is published through an
+outbound-only Cloudflare Tunnel, and Cloudflare Access requires every browser
+to sign in as one of the allowed users before any request reaches the origin.
+The SSH tunnel remains available as a fallback. See `deploy/README.md`
+("Edge access") for setup and user management.
 
 ## Authentication
 
-`GET /health` and the loopback-only web hub routes do not require a bearer
-token. All existing `/api/v1/...` data endpoints require the shared
-`FACTORLAB_API_KEY`:
+Every public request passes Cloudflare Access first. Beyond that, `GET /health`
+and the web hub routes (`/`, SPA pages, `/hub/api/v1/...`) have no in-app
+authentication. All existing `/api/v1/...` data endpoints additionally require
+the shared `FACTORLAB_API_KEY`:
 
 ```http
 Authorization: Bearer <FACTORLAB_API_KEY>
@@ -54,16 +58,16 @@ Then use `http://127.0.0.1:8000` as the base URL.
 
 | Method | Path | Authentication | Purpose |
 |---|---|---|---|
-| `GET` | `/` | SSH/edge boundary | FactorLab Data Hub dashboard |
-| `GET` | `/india` | SSH/edge boundary | India instrument and trading-session explorer |
-| `GET` | `/schema` | SSH/edge boundary | Schema explorer: v2 areas, tables, columns, and links in plain language |
-| `GET` | `/roadmap` | SSH/edge boundary | V1-V5 product roadmap |
-| `GET` | `/hub/api/v1/overview` | SSH/edge boundary | Cached table inventory and schedule-aware health |
-| `GET` | `/hub/api/v1/docker-images` | SSH/edge boundary | Host Docker image inventory snapshot |
-| `GET` | `/hub/api/v1/schema-map` | SSH/edge boundary | v2 areas, tables, columns with descriptions, keys, and categorized logical links |
-| `GET` | `/hub/api/v1/india/dashboard` | SSH/edge boundary | Selected-day India collection health |
-| `GET` | `/hub/api/v1/india/instruments` | SSH/edge boundary | Unique instruments with coverage and value checks |
-| `GET` | `/hub/api/v1/india/instruments/{id}/days` | SSH/edge boundary | Exchange-session checks for one instrument |
+| `GET` | `/` | Cloudflare Access / SSH tunnel | FactorLab Data Hub dashboard |
+| `GET` | `/india` | Cloudflare Access / SSH tunnel | India instrument and trading-session explorer |
+| `GET` | `/schema` | Cloudflare Access / SSH tunnel | Schema explorer: v2 areas, tables, columns, and links in plain language |
+| `GET` | `/roadmap` | Cloudflare Access / SSH tunnel | V1-V5 product roadmap |
+| `GET` | `/hub/api/v1/overview` | Cloudflare Access / SSH tunnel | Cached table inventory and schedule-aware health |
+| `GET` | `/hub/api/v1/docker-images` | Cloudflare Access / SSH tunnel | Host Docker image inventory snapshot |
+| `GET` | `/hub/api/v1/schema-map` | Cloudflare Access / SSH tunnel | v2 areas, tables, columns with descriptions, keys, and categorized logical links |
+| `GET` | `/hub/api/v1/india/dashboard` | Cloudflare Access / SSH tunnel | Selected-day India collection health |
+| `GET` | `/hub/api/v1/india/instruments` | Cloudflare Access / SSH tunnel | Unique instruments with coverage and value checks |
+| `GET` | `/hub/api/v1/india/instruments/{id}/days` | Cloudflare Access / SSH tunnel | Exchange-session checks for one instrument |
 | `GET` | `/health` | No | API liveness check |
 | `GET` | `/api/v1/india/candles/1min` | Bearer | Indian one-minute OHLCV/OI candles |
 | `GET` | `/api/v1/india/instruments` | Bearer | Search and page through Indian reference instruments |
@@ -140,7 +144,7 @@ the legacy map. No table rows are exposed here (see the data catalog endpoints).
 
 ### India Markets web endpoints
 
-The `/hub/api/v1/india/...` endpoints power the loopback-only India Markets
+The `/hub/api/v1/india/...` endpoints power the India Markets
 page without putting the bearer key in the browser. Instrument rows combine
 the complete synchronized reference universe with historical coverage and
 checks for a selected trading date. Use the `scope` query parameter to select

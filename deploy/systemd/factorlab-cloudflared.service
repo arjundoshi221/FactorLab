@@ -1,0 +1,29 @@
+[Unit]
+Description=FactorLab Cloudflare Tunnel (Hub edge access)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+# TUNNEL_TOKEN=... ; root-owned 0600, read by systemd before privileges are dropped.
+EnvironmentFile=/etc/factorlab/identity/cloudflared.env
+ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run
+Restart=always
+RestartSec=5s
+TimeoutStartSec=0
+
+DynamicUser=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

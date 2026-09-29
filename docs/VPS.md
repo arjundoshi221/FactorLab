@@ -46,9 +46,12 @@ cloudflare-secrets-agent
 curated + raw FactorLab tables
 ```
 
-The hub, API, ClickHouse, and administration services bind to `127.0.0.1` and
-require an SSH tunnel. No FactorLab service is intentionally exposed directly
-to the internet. ClickHouse must never be exposed publicly.
+The hub, API, ClickHouse, and administration services bind to `127.0.0.1`.
+The hub/API is published only through an outbound Cloudflare Tunnel
+(`factorlab-cloudflared.service`) behind Cloudflare Access at
+`https://arjundoshi221.com`; everything else requires an SSH tunnel. No inbound
+80/443/8000 is needed and none should be opened. ClickHouse must never be
+exposed publicly.
 
 ## Compose services
 
@@ -528,6 +531,7 @@ Docker's `unless-stopped` restart policy.
 - Rotate VPS login password after any exposure.
 - Prefer SSH keys; disable password login after key access works.
 - Never store runtime secrets in `production.env` or Compose.
-- Keep ClickHouse and the hub/API loopback-only. Add Cloudflare Tunnel and
-  Access when a domain is available; do not reopen public TCP port `8000`.
+- Keep ClickHouse and the hub/API loopback-only. Publish the hub only through
+  the Cloudflare Tunnel behind Access (`deploy/README.md`, "Edge access"); do
+  not reopen public TCP port `8000` or run a public reverse proxy.
 - Rotate Cloudflare VPS service token before expiry.

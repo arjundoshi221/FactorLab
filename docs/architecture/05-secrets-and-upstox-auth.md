@@ -153,7 +153,10 @@ not substitute the protected management URL
 ## Cloudflare Access and VPS delivery
 
 The management Worker is protected by the existing Cloudflare Access
-application. Its Worker code also validates the signed `Cf-Access-Jwt-Assertion`
+application. The same Zero Trust team has a second, separate Access application,
+`FactorLab Hub`, for `arjundoshi221.com` (see `deploy/README.md`, "Edge access").
+The `factorlab-vps-runtime` service token belongs only to the Worker
+application; do not add it to the Hub policy. Its Worker code also validates the signed `Cf-Access-Jwt-Assertion`
 signature, audience, and expiry before returning `/v1/runtime-secrets`.
 
 When resuming:

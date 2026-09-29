@@ -150,8 +150,9 @@ plus hand-written `catalog_curated.json`. A test fails when either falls behind
 the v2 schema.
 
 Row previews, CSV downloads (at most 10,000 rows), column profiles, and activity
-charts run against the application ClickHouse credential. They are not gated by
-a login, so every query is bounded in the API:
+charts run against the application ClickHouse credential. They are gated only by
+Cloudflare Access at the edge (no per-user authorization in the API), so every
+query is bounded in the API:
 - table and column names must exist in the live catalog;
 - filter values are bound parameters;
 - large tables are read one time window at a time;
@@ -192,6 +193,55 @@ agent reads these root-only bootstrap files:
 They are limited to the Worker Access application. Upstox, EODHD, and
 ClickHouse credentials remain in Cloudflare Secrets Store and reach containers
 only through tmpfs.
+
+## Edge access: Cloudflare Tunnel and Access
+
+`https://arjundoshi221.com` serves the hub through an outbound-only Cloudflare
+Tunnel (`factorlab-cloudflared.service`). Cloudflare Access is the only login:
+the API still binds to `127.0.0.1:8000`, and the host opens no inbound
+80/443/8000, so the origin cannot be reached around Access. The hub has no
+in-app authentication; do not publish it any other way (no public reverse
+proxy, no public port).
+
+One-time setup in the Cloudflare dashboard:
+
+1. The `arjundoshi221.com` zone uses Cloudflare nameservers.
+2. Zero Trust -> Networks -> Tunnels -> create tunnel `factorlab-hub`
+   (cloudflared). Copy its token.
+3. Public hostnames `arjundoshi221.com` and `www.arjundoshi221.com` ->
+   `http://127.0.0.1:8000`. Delete any A/AAAA records that point at the VPS.
+4. Access -> Applications -> Self-hosted `FactorLab Hub` covering both
+   hostnames, with one **Allow** policy whose include rule is the Access group
+   `FactorLab users` (an **Emails** list of the named users). Login method:
+   One-time PIN (optionally add an identity provider). Session duration: 24h.
+   Add or remove users by editing the group.
+5. Rules -> Transform Rules -> response headers: set
+   `Strict-Transport-Security: max-age=31536000`,
+   `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and
+   `Referrer-Policy: no-referrer`.
+
+On the VPS, store the token in a root-only file and install the unit:
+
+```bash
+sudo sh -c 'umask 077; printf "TUNNEL_TOKEN=%s\n" "$(cat)" > /etc/factorlab/identity/cloudflared.env'
+sudo /opt/factorlab/deploy/scripts/install-edge-tunnel.sh
+```
+
+Paste the token on stdin (Ctrl-D to finish) so it never enters shell history.
+The installer also disables any previously installed Caddy proxy.
+
+The Access application covers `/api/v1/*` too, so bearer-key clients either
+keep using the SSH tunnel or add a **Service Auth** policy with a dedicated
+service token and send `CF-Access-Client-Id` / `CF-Access-Client-Secret`
+alongside `Authorization: Bearer`.
+
+Verify:
+
+```bash
+systemctl is-active factorlab-cloudflared
+sudo ss -tlnp | grep -E ':(80|443|8000)\b'   # only 127.0.0.1:8000 expected
+curl -sI https://arjundoshi221.com/hub/api/v1/catalog   # 302 to *.cloudflareaccess.com
+```
 
 ## Legacy manual build and upload
 
@@ -281,7 +331,8 @@ ssh -L 8123:127.0.0.1:8123 ubuntu@SERVER_IP
 Connect DBeaver to `localhost:8123`, database `factorlab`, using a dedicated
 read-only ClickHouse account. Do not expose ClickHouse publicly.
 
-The hub and API are also loopback-only. Open them with:
+The hub is published only through Cloudflare Access (see Edge access). The
+API still binds to loopback; for direct access without Access, open:
 
 ```bash
 ssh -L 8000:127.0.0.1:8000 ubuntu@SERVER_IP
