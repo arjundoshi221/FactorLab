@@ -1,6 +1,10 @@
 import hashlib
 import importlib.util
+import os
+import stat
 from datetime import UTC, datetime, timedelta
+
+import pytest
 
 
 def _load_agent_module():
@@ -164,3 +168,12 @@ def test_render_bundle_writes_ibkr_gateway_and_client_secrets(tmp_path, monkeypa
     assert not (live / "TWS_PASSWORD").exists()
     assert (live / "VNC_SERVER_PASSWORD").read_text() == "vnc-password"
     assert (ibkr_client / "CLICKHOUSE_PASSWORD").read_text() == "database-password"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
+def test_consumer_secrets_are_readable_by_non_root_consumers(tmp_path):
+    agent = _load_agent_module()
+    target = tmp_path / "CLICKHOUSE_PASSWORD"
+    agent._atomic_write(target, "secret")
+    assert stat.S_IMODE(target.stat().st_mode) == 0o444
+    assert not list(tmp_path.glob(".CLICKHOUSE_PASSWORD.*")), "no temporary file is left behind"

@@ -9,7 +9,7 @@ fi
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 CRON_SOURCE="$SCRIPT_DIR/../cron/factorlab-political"
 CRON_TARGET=/etc/cron.d/factorlab-political
-LOG_DIR=/var/lib/factorlab/logs
+LOG_DIR=/var/log/factorlab/ingest-political
 LOCK_FILE=/run/lock/factorlab-political.lock
 HOST_TIMEZONE=$(timedatectl show --property=Timezone --value)
 
@@ -27,7 +27,8 @@ test -x /usr/bin/flock
 /usr/bin/docker compose version >/dev/null
 
 chmod 0755 "$SCRIPT_DIR/run-political-ingest.sh"
-install -d -m 0755 "$LOG_DIR"
+# prepare-host.sh owns the directory (factorlab:factorlab-logs, setgid); only create it here.
+test -d "$LOG_DIR" || install -d -m 2750 "$LOG_DIR"
 
 if [ -L "$LOCK_FILE" ]; then
   echo "Refusing to install: $LOCK_FILE must not be a symbolic link." >&2
@@ -47,4 +48,4 @@ systemctl reload-or-restart cron
 
 echo "Installed $CRON_TARGET"
 echo "Schedule: daily at 02:15 UTC"
-echo "Log: $LOG_DIR/political-cron.log"
+echo "Log: $LOG_DIR/cron.log"

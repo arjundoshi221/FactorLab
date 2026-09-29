@@ -32,12 +32,15 @@ SCHWAB_TOKEN_EXPIRY_FILE = US_DIR / "SCHWAB_ACCESS_TOKEN.expires_at"
 IBKR_PAPER_DIR = Path("/run/secrets/ibkr-paper")
 IBKR_LIVE_DIR = Path("/run/secrets/ibkr-live")
 IBKR_CLIENT_DIR = Path("/run/secrets/ibkr-client")
-# The IB Gateway image runs as a non-root user and this agent drops CAP_CHOWN,
-# so Gateway login files are world-readable inside their Gateway-only tmpfs.
-GATEWAY_SECRET_MODE = 0o444
+# Consumers run as non-root users (UID 10001 for FactorLab images, the IB Gateway
+# image's own user) and this agent drops CAP_CHOWN, so it cannot hand files to them.
+# Each tmpfs volume is mounted only into its own consumer, so world-readable files
+# there grant nothing to any other service.
+CONSUMER_SECRET_MODE = 0o444
+GATEWAY_SECRET_MODE = CONSUMER_SECRET_MODE
 
 
-def _atomic_write(path: Path, value: str, mode: int = 0o400) -> None:
+def _atomic_write(path: Path, value: str, mode: int = CONSUMER_SECRET_MODE) -> None:
     """Atomically replace a secret without exposing a partially written value."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
