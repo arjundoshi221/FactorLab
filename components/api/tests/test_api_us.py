@@ -18,7 +18,8 @@ def test_candle_reads_are_market_scoped_and_cursor_bound_to_filters():
         result_rows=[(ident, "AAPL", date(2026, 9, 4), datetime(2026, 9, 5, tzinfo=UTC)),
                      (ident, "AAPL", date(2026, 9, 3), datetime(2026, 9, 5, tzinfo=UTC))])
     repo = USRepository(client)
-    kwargs = dict(symbol="AAPL", date_from=date(2026, 9, 1), date_to=date(2026, 9, 4), limit=1)
+    kwargs = {"symbol": "AAPL", "date_from": date(2026, 9, 1), "date_to": date(2026, 9, 4),
+              "limit": 1}
     page = repo.candles("daily", cursor=None, **kwargs)
     assert page.next_cursor
     assert client.query.call_args.kwargs["parameters"]["source"] == "schwab"

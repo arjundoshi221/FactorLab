@@ -106,14 +106,14 @@ def validate_sql(sql: str) -> str:
     if visible.endswith(";") and sql.rstrip().endswith(";"):
         visible = visible[:-1].strip()
         sql = sql.rstrip()[:-1].rstrip()
-    if ";" in visible or not re.match(r"^(SELECT|WITH)\b", visible, re.I):
+    if ";" in visible or not re.match(r"^(SELECT|WITH)\b", visible, re.IGNORECASE):
         raise ReaderError("Only one SELECT or WITH query is allowed")
-    if re.match(r"^WITH\b", visible, re.I) and not re.search(r"\bSELECT\b", visible, re.I):
+    if re.match(r"^WITH\b", visible, re.IGNORECASE) and not re.search(r"\bSELECT\b", visible, re.IGNORECASE):
         raise ReaderError("WITH query must contain SELECT")
     forbidden = ("INSERT", "UPDATE", "DELETE", "ALTER", "DROP", "CREATE", "TRUNCATE",
                  "OPTIMIZE", "SYSTEM", "GRANT", "REVOKE", "ATTACH", "DETACH", "RENAME",
                  "SET", "SETTINGS", "FORMAT", "INTO", "OUTFILE", "KILL", "EXPLAIN")
-    if re.search(r"\b(?:" + "|".join(forbidden) + r")\b", visible, re.I):
+    if re.search(r"\b(?:" + "|".join(forbidden) + r")\b", visible, re.IGNORECASE):
         raise ReaderError("Query contains a disallowed SQL keyword")
     return sql
 
@@ -129,8 +129,8 @@ def ssh_tunnel(settings: dict[str, str]):
                "-p", settings["CLICKHOUSE_SSH_PORT"]]
     if settings["CLICKHOUSE_SSH_KEY_PATH"]:
         command += ["-i", settings["CLICKHOUSE_SSH_KEY_PATH"], "-o", "IdentitiesOnly=yes"]
-    command += ["-L", f"127.0.0.1:{local_port}:{settings['CLICKHOUSE_HOST']}:"
-                f"{settings['CLICKHOUSE_PORT']}",
+    command += ["-L", (f"127.0.0.1:{local_port}:{settings['CLICKHOUSE_HOST']}:"
+                       f"{settings['CLICKHOUSE_PORT']}"),
                 f"{settings['CLICKHOUSE_SSH_USER']}@{settings['CLICKHOUSE_SSH_HOST']}"]
     try:
         process = subprocess.Popen(command, stdin=subprocess.DEVNULL,

@@ -30,7 +30,7 @@ def test_ready_schema_passes():
 
 
 def test_missing_table_or_migration_fails():
-    with pytest.raises(RuntimeError, match="meta.session_coverage"):
+    with pytest.raises(RuntimeError, match=r"meta\.session_coverage"):
         check_v2_readiness(Client(REQUIRED_TABLES - {"meta.session_coverage"}, "succeeded"))
     with pytest.raises(RuntimeError, match="Wave 9"):
         check_v2_readiness(Client(REQUIRED_TABLES, "failed"))

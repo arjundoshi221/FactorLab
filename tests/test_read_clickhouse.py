@@ -62,14 +62,14 @@ def test_tunnel_cleanup_on_failure(monkeypatch):
         return process
 
     monkeypatch.setattr(reader.subprocess, "Popen", popen)
-    with patch.object(reader.socket, "create_connection"):
-        with pytest.raises(RuntimeError):
-            with reader.ssh_tunnel({
-                "CLICKHOUSE_SSH_PORT": "22", "CLICKHOUSE_SSH_KEY_PATH": "key",
-                "CLICKHOUSE_HOST": "127.0.0.1", "CLICKHOUSE_PORT": "8123",
-                "CLICKHOUSE_SSH_USER": "ubuntu", "CLICKHOUSE_SSH_HOST": "vps.example",
-            }):
-                raise RuntimeError("query failed")
+    settings = {
+        "CLICKHOUSE_SSH_PORT": "22", "CLICKHOUSE_SSH_KEY_PATH": "key",
+        "CLICKHOUSE_HOST": "127.0.0.1", "CLICKHOUSE_PORT": "8123",
+        "CLICKHOUSE_SSH_USER": "ubuntu", "CLICKHOUSE_SSH_HOST": "vps.example",
+    }
+    with (patch.object(reader.socket, "create_connection"), pytest.raises(RuntimeError),
+          reader.ssh_tunnel(settings)):
+        raise RuntimeError("query failed")
     assert process.stopped
     assert "StrictHostKeyChecking=yes" in commands[0]
     assert "BatchMode=yes" in commands[0]

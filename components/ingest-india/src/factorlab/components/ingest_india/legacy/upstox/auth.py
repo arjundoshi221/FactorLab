@@ -65,7 +65,7 @@ def _load_credentials() -> dict[str, str]:
             missing.append(f"  {key} — {desc}")
         creds[key] = val
     if missing:
-        raise EnvironmentError(
+        raise OSError(
             "Missing Upstox credentials:\n" + "\n".join(missing)
         )
     return creds

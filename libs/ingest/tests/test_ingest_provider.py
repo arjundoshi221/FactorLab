@@ -52,7 +52,7 @@ def test_raw_capture_requires_bytes_and_aware_time():
     with pytest.raises(TypeError):
         _capture(body="not-bytes")
     with pytest.raises(ValueError):
-        _capture(fetched_at=datetime(2026, 9, 24))  # noqa: DTZ001 - naive on purpose
+        _capture(fetched_at=datetime(2026, 9, 24))
 
 
 def test_storage_protocols_are_structural():

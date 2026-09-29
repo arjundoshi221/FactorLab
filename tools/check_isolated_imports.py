@@ -58,13 +58,13 @@ def main() -> int:
             continue
         env = {**os.environ, "UV_PROJECT_ENVIRONMENT": str(ENV)}
         sync = subprocess.run(["uv", "sync", "--frozen", "--no-dev", "--package", name, "-q"],
-                              env=env, capture_output=True, text=True)
+                              env=env, capture_output=True, text=True, check=False)
         if sync.returncode:
             print(f"FAIL {name}: uv sync: {sync.stderr.strip()[:300]}")
             bad += 1
             continue
         res = subprocess.run([str(PY), "-c", CHECK, str(root / "src" / "factorlab")],
-                             capture_output=True, text=True, env={**os.environ,
+                             capture_output=True, text=True, check=False, env={**os.environ,
                                                                   "FACTORLAB_HOME": str(REPO)})
         status = "ok  " if res.returncode == 0 else "FAIL"
         bad += res.returncode != 0

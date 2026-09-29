@@ -31,7 +31,7 @@ def test_unchanged_snapshot_is_a_no_op():
 
 
 def test_implausible_snapshots_are_refused():
-    current = {listing: DAY for listing in (A, B, C, D, E)}
+    current = dict.fromkeys((A, B, C, D, E), DAY)
     with pytest.raises(SnapshotRejected):
         diff_snapshot("sp500", current, {A, B}, as_of=DAY)  # drops 3 of 5
     with pytest.raises(SnapshotRejected):

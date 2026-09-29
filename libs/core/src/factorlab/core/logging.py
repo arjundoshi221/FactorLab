@@ -41,9 +41,11 @@ from collections.abc import Iterator, Mapping
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, TextIO
 
-_CONTEXT: ContextVar[Mapping[str, Any]] = ContextVar("factorlab_log_context", default={})
+_CONTEXT: ContextVar[Mapping[str, Any]] = ContextVar("factorlab_log_context",
+                                                     default=MappingProxyType({}))
 # Standard LogRecord attributes, plus uvicorn's ANSI-coloured duplicate of the message.
 _RESERVED = frozenset(vars(logging.makeLogRecord({}))) | {"message", "asctime", "taskName",
                                                           "color_message"}
@@ -125,7 +127,7 @@ class _WatchedFile(logging.handlers.WatchedFileHandler):
 
     def _open(self) -> TextIO:
         descriptor = os.open(self.baseFilename, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o640)
-        return open(descriptor, "a", encoding="utf-8", buffering=1)  # noqa: SIM115
+        return open(descriptor, "a", encoding="utf-8", buffering=1)
 
 
 def configure_logging(

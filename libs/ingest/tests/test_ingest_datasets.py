@@ -47,7 +47,7 @@ def test_instrument_ref_requires_alias_or_natural_key():
 def test_bar_record_enforces_utc_decimal_and_ohlc():
     assert _bar().close == Decimal("10.5")
     with pytest.raises(ValueError):
-        _bar(bar_time=datetime(2026, 9, 24, 4, 0))  # noqa: DTZ001 - naive on purpose
+        _bar(bar_time=datetime(2026, 9, 24, 4, 0))
     with pytest.raises(TypeError):
         _bar(open=10.0)
     with pytest.raises(ValueError):
@@ -88,7 +88,7 @@ def test_series_window_and_fetch_unit_are_utc():
     with pytest.raises(ValueError):
         SeriesWindow(REF, NOW, NOW)
     with pytest.raises(ValueError):
-        FetchUnit("u", "upstox:x", start=datetime(2026, 1, 1))  # noqa: DTZ001
+        FetchUnit("u", "upstox:x", start=datetime(2026, 1, 1))
     with pytest.raises(ValueError):
         Capabilities(markets=frozenset())
     with pytest.raises(ValueError):

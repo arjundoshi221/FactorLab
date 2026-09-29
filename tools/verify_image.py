@@ -20,9 +20,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from packaging.markers import Marker  # noqa: E402
+from packaging.markers import Marker
 
-from components import load_all  # noqa: E402
+from components import load_all
 
 REPO = Path(__file__).resolve().parents[1]
 ONLY_IN = {  # distribution -> the only components allowed to ship it
@@ -46,7 +46,7 @@ def norm(name: str) -> str:
 
 
 def run(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, capture_output=True, text=True, cwd=REPO)
+    return subprocess.run(args, capture_output=True, text=True, cwd=REPO, check=False)
 
 
 def expected_dists(package: str) -> set[str]:

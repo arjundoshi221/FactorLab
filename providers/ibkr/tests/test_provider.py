@@ -14,7 +14,6 @@ from factorlab.sources.ibkr.provider import (
     IBKRBrokerProvider,
     SnapshotConfig,
 )
-
 from factorlab.testkit.ibkr import make_account_value, make_fill, make_portfolio_item, make_trade
 
 

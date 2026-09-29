@@ -89,7 +89,7 @@ def ssh_command(config: dict[str, str], argv: list[str]) -> list[str]:
     if config["key"]:
         command += ["-i", config["key"], "-o", "IdentitiesOnly=yes"]
     # The remote side splits this with shlex and never passes it to a shell.
-    return command + [f"{config['user']}@{config['host']}", shlex.join(argv)]
+    return [*command, f"{config['user']}@{config['host']}", shlex.join(argv)]
 
 
 def fetch_remote(argv: list[str]) -> str:

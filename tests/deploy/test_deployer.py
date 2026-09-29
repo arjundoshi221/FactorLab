@@ -287,7 +287,7 @@ def test_refuses_fragments_that_break_platform_policy(world, tmp_path, change, m
 def test_refuses_component_deploys_before_the_platform_bootstrap(world, tmp_path):
     docker, deployer, root = world
     (root / "releases/platform/current").unlink()
-    with pytest.raises(fd.DeployError, match="deploy-platform.sh first"):
+    with pytest.raises(fd.DeployError, match=r"deploy-platform\.sh first"):
         deployer.deploy("api", "1.1.0", NEW, bundle(tmp_path, manifest("1.1.0")))
     assert pin(root) == OLD and docker.recreated == []
 

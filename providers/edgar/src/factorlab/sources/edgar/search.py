@@ -11,8 +11,9 @@ not enumeration — the full-index is authoritative for the latter.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date
-from typing import Any, Iterable
+from typing import Any
 
 from factorlab.sources.edgar.client import EdgarClient
 

@@ -75,4 +75,40 @@ norecursedirs = ["node_modules", "dist", ".venv", ".tmp", "src"]
 
 [tool.ruff]
 line-length = 100
+target-version = "py312"
 src = ["libs/*/src", "providers/*/src", "components/*/src"]
+extend-exclude = ["components/web", "cloudflare"]
+
+[tool.ruff.per-file-target-version]
+# Host tools run on the VPS's system python3, which may be older than the images'.
+"deploy/**/*.py" = "py310"
+
+[tool.ruff.lint]
+# Explicit, so a ruff upgrade never changes what CI enforces. Correctness first
+# (pyflakes, bugbear, pylint errors and warnings, timezone-aware datetimes, blind
+# excepts), then modernisation, simplification and import order, plus a curated
+# slice of flake8-bandit. Line length belongs to `ruff format` (E501 is ignored).
+select = [
+    "E", "W", "F", "I", "UP", "B", "SIM", "RUF", "C4", "PIE", "PERF", "FURB", "DTZ",
+    "LOG", "G", "YTT", "EXE", "ISC", "BLE", "ASYNC", "PGH", "FLY", "T10", "PLE", "PLW",
+    # bandit: exec/eval, shell=True, requests without a timeout or TLS verification,
+    # unsafe YAML/pickle, weak hashes, 0.0.0.0 binds, world-writable files, Jinja autoescape
+    "S102", "S103", "S104", "S113", "S301", "S307", "S324", "S501", "S506", "S602",
+    "S604", "S605", "S701",
+]
+ignore = [
+    "E501",     # the formatter owns line length
+    "UP042",    # (str, Enum) -> StrEnum changes str() of members; stored values rely on it
+    "SIM105",   # try/except/pass reads as clearly as contextlib.suppress
+    "PLW2901",  # rebinding a loop variable (line = line.strip()) is idiomatic here
+    "PERF401",  # an explicit loop is often clearer than a comprehension
+]
+allowed-confusables = ["–"]   # EN DASH in user-facing text
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["DTZ"]                         # tests build naive datetimes on purpose
+"**/legacy/**" = ["BLE001", "PLW0603", "DTZ"]   # frozen until its cutover deletes it
+"libs/runtime/src/factorlab/runtime/notify/*.py" = ["BLE001"]  # notifications are best-effort
+
+[tool.ruff.lint.isort]
+known-first-party = ["factorlab"]

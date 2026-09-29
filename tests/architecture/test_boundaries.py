@@ -24,7 +24,7 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))  # run as a script to regenerate the allowlist
-from _workspace import REPO, module_name, package_roots, python_files  # noqa: E402
+from _workspace import REPO, module_name, package_roots, python_files
 
 ALLOWLIST = Path(__file__).with_name("boundary_allowlist.txt")
 

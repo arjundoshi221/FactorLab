@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _workspace import REPO  # noqa: E402
+from _workspace import REPO
 
 
 def test_every_provider_runs_its_conformance_suite():

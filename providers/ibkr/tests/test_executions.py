@@ -12,7 +12,6 @@ from factorlab.sources.ibkr.executions import (
     _normalize_side,
     pull_executions,
 )
-
 from factorlab.testkit.ibkr import (
     make_commission_report,
     make_contract,
@@ -37,7 +36,7 @@ def test_pull_executions_maps_fill(mock_ib_paper, now_utc):
     r = rows[0]
     assert r.exec_id == "abc.001"
     assert r.side == "BUY"
-    assert r.quantity == Decimal("100")
+    assert r.quantity == Decimal(100)
     assert r.price == Decimal("175.32")
     assert r.commission == Decimal("1.05")
     assert r.commission_ccy == "USD"

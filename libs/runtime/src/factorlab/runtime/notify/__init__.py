@@ -33,7 +33,8 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from factorlab.runtime.notify._backend import (
     Backend,
@@ -123,7 +124,7 @@ def notify(
     domain: str | None = None,
     country: str | None = None,
     context: Mapping[str, Any] | None = None,
-    dedupe_key: str | None | bool = None,
+    dedupe_key: str | bool | None = None,
     backends: Iterable[Backend] | None = None,
 ) -> list[bool]:
     """Send a notification through every configured backend.
@@ -186,4 +187,4 @@ def notify(
     return results
 
 
-__all__ = ["notify", "Notification", "Severity"]
+__all__ = ["Notification", "Severity", "notify"]

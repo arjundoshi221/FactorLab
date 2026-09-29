@@ -63,7 +63,7 @@ class GracefulShutdown:
                 pass
         self._installed = False
 
-    def __enter__(self) -> "GracefulShutdown":
+    def __enter__(self) -> GracefulShutdown:
         self.install()
         return self
 

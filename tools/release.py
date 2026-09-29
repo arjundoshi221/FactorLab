@@ -161,7 +161,7 @@ def commits_since(unit, since: str) -> list[Commit]:
                *unit.paths, *(["uv.lock"] if unit.kind == "python" else []))
     commits = []
     for record in filter(None, (r.strip() for r in log.split("\x1e"))):
-        sha, subject, body = (record.split("\x1f") + ["", ""])[:3]
+        sha, subject, body = [*record.split("\x1f"), "", ""][:3]
         files = _git("diff-tree", "--no-commit-id", "--name-only", "-r", "--root", sha).split()
         shipped = [f for f in files if affected.ships(unit, f) or f == "uv.lock"]
         if shipped:

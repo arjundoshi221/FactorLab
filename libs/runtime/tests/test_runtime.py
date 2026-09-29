@@ -6,7 +6,7 @@ import json
 import os
 import signal
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from datetime import time as dt_time
 from zoneinfo import ZoneInfo
 
@@ -41,12 +41,12 @@ def test_exit_code_int_values():
 
 def test_exit_code_backcompat_aliases():
     # Module-level ints must match the enum (used by _political_runner re-export).
-    assert EXIT_OK == int(ExitCode.OK)
-    assert EXIT_WARN == int(ExitCode.WARN)
-    assert EXIT_FATAL == int(ExitCode.FATAL)
-    assert EXIT_NOT_TRADING_DAY == int(ExitCode.NOT_TRADING_DAY)
-    assert EXIT_LOCK_HELD == int(ExitCode.LOCK_HELD)
-    assert EXIT_CRASH == int(ExitCode.CRASH)
+    assert int(ExitCode.OK) == EXIT_OK
+    assert int(ExitCode.WARN) == EXIT_WARN
+    assert int(ExitCode.FATAL) == EXIT_FATAL
+    assert int(ExitCode.NOT_TRADING_DAY) == EXIT_NOT_TRADING_DAY
+    assert int(ExitCode.LOCK_HELD) == EXIT_LOCK_HELD
+    assert int(ExitCode.CRASH) == EXIT_CRASH
 
 
 # ── GracefulShutdown ────────────────────────────────────────────────────────
@@ -128,18 +128,17 @@ def test_acquire_lock_refuses_overlap(tmp_path):
     # Plant a fresh lock as if another process is running
     lock.write_text(json.dumps({
         "pid": 99999,
-        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": datetime.now(UTC).isoformat(),
     }))
-    with pytest.raises(SystemExit) as exc_info:
-        with acquire_lock(lock, stale_seconds=3600):
-            pass
+    with pytest.raises(SystemExit) as exc_info, acquire_lock(lock, stale_seconds=3600):
+        pass
     assert "another orchestrator" in str(exc_info.value)
 
 
 def test_acquire_lock_steals_stale(tmp_path):
     lock = tmp_path / "stale.lock"
     # Plant an obviously-stale lock (1 hour ago, threshold = 1s)
-    old = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    old = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     lock.write_text(json.dumps({"pid": 99999, "started_at": old}))
     with acquire_lock(lock, stale_seconds=1):
         # Stole it: the file now contains OUR pid
@@ -186,7 +185,7 @@ def test_supervised_calls_on_crash_callback():
     captured: list[BaseException] = []
     def boom(): raise ValueError("xyz")
     rc = supervised(boom, name="zz_test_crashcb",
-                    on_crash=lambda exc: captured.append(exc))
+                    on_crash=captured.append)
     assert rc == int(ExitCode.CRASH)
     assert len(captured) == 1
     assert isinstance(captured[0], ValueError)

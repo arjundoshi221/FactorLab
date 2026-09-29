@@ -20,7 +20,6 @@ from factorlab.sources.ibkr.capture import (
 )
 from factorlab.sources.ibkr.errors import IBKRCaptureError
 from factorlab.sources.ibkr.normalize import normalize_capture, normalize_positions, to_decimal
-
 from factorlab.testkit.ibkr import (
     make_account_value,
     make_contract,

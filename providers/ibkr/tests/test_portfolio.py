@@ -6,7 +6,6 @@ from datetime import datetime
 from decimal import Decimal
 
 from factorlab.sources.ibkr.portfolio import snapshot_account_state, snapshot_positions
-
 from factorlab.testkit.ibkr import (
     make_account_value,
     make_contract,
@@ -35,10 +34,10 @@ def test_snapshot_positions_maps_fields(mock_ib_paper, now_utc):
     assert a.vendor_id == "265598"
     assert a.product_type == "common"
     assert a.currency == "USD"
-    assert a.position == Decimal("100")
-    assert a.avg_cost == Decimal("150")
+    assert a.position == Decimal(100)
+    assert a.avg_cost == Decimal(150)
     assert a.market_price == Decimal("175.5")
-    assert a.unrealized_pnl == Decimal("2550")
+    assert a.unrealized_pnl == Decimal(2550)
     assert a.realized_pnl_ytd == Decimal("42.5")
     assert a.account_id == "DUE375963"
     assert a.account_mode == "paper"
@@ -48,7 +47,7 @@ def test_snapshot_positions_maps_fields(mock_ib_paper, now_utc):
     assert a.market_value_usd is None
 
     # negative position preserved (short)
-    assert s.position == Decimal("-1079")
+    assert s.position == Decimal(-1079)
 
 
 def test_snapshot_positions_drops_zero_lots(mock_ib_paper, now_utc):
@@ -57,7 +56,7 @@ def test_snapshot_positions_drops_zero_lots(mock_ib_paper, now_utc):
     mock_ib_paper.portfolio.return_value = [zero, live]
     rows = snapshot_positions(mock_ib_paper, snapshot_time=now_utc)
     assert len(rows) == 1
-    assert rows[0].position == Decimal("50")
+    assert rows[0].position == Decimal(50)
 
 
 def test_snapshot_positions_handles_none_prices(mock_ib_paper, now_utc):

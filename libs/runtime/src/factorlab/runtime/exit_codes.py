@@ -38,11 +38,11 @@ EXIT_CRASH: int = int(ExitCode.CRASH)
 
 
 __all__ = [
-    "ExitCode",
+    "EXIT_CRASH",
+    "EXIT_FATAL",
+    "EXIT_LOCK_HELD",
+    "EXIT_NOT_TRADING_DAY",
     "EXIT_OK",
     "EXIT_WARN",
-    "EXIT_FATAL",
-    "EXIT_NOT_TRADING_DAY",
-    "EXIT_LOCK_HELD",
-    "EXIT_CRASH",
+    "ExitCode",
 ]

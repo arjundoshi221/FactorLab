@@ -69,7 +69,7 @@ def redact(text: str) -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)  # noqa: UP017 - the host python3 may predate 3.11
+    return datetime.now(timezone.utc)
 
 
 def parse_time(value: str, now: datetime) -> datetime:
@@ -79,10 +79,10 @@ def parse_time(value: str, now: datetime) -> datetime:
         return now - timedelta(**{{"m": "minutes", "h": "hours", "d": "days"}[unit]: amount})
     try:
         # "Z" is only accepted by fromisoformat from Python 3.11.
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))  # noqa: FURB162
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         raise UsageError(f"not a time: {value!r} (use 30m, 2h, 7d or ISO 8601)") from None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)  # noqa: UP017
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def window(since: str, until: str | None, now: datetime) -> tuple[datetime, datetime]:
@@ -145,9 +145,9 @@ def read_lines(path: Path) -> Iterator[str]:
 
 def _mtime(path: Path) -> datetime:
     try:
-        return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)  # noqa: UP017
+        return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
     except OSError:
-        return datetime.min.replace(tzinfo=timezone.utc)  # noqa: UP017
+        return datetime.min.replace(tzinfo=timezone.utc)
 
 
 # ── records ──────────────────────────────────────────────────────────────────
@@ -170,10 +170,10 @@ def timestamp(record: dict) -> datetime | None:
         return None
     try:
         # "Z" is only accepted by fromisoformat from Python 3.11.
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))  # noqa: FURB162
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)  # noqa: UP017
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def clean(record: dict, with_exception: bool) -> dict:
@@ -220,7 +220,7 @@ def list_logs(root: Path, snapshots: tuple[Path, ...] = SNAPSHOTS) -> Iterator[d
         for name, path in log_files(directory):
             stat = path.stat()
             files.append({"service": name, "file": path.name, "bytes": stat.st_size,
-                          "modified": datetime.fromtimestamp(stat.st_mtime, timezone.utc)  # noqa: UP017
+                          "modified": datetime.fromtimestamp(stat.st_mtime, timezone.utc)
                           .isoformat(timespec="seconds")})
         yield {"component": directory.name, "files": files}
     for snapshot in snapshots:

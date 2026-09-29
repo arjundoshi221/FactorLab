@@ -92,9 +92,9 @@ def assert_under_root(p: Path, root: Path) -> Path:
 
 __all__ = [
     "SECRET_QS_KEYS",
-    "redact_url",
+    "assert_under_root",
     "redact_error",
+    "redact_url",
     "validate_id_segment",
     "validate_year_segment",
-    "assert_under_root",
 ]

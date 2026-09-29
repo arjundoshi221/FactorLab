@@ -95,9 +95,8 @@ def test_connected_context_disconnects(monkeypatch):
     ib_class = MagicMock(return_value=fake_ib)
     _patch_env(monkeypatch, {"IBKR_PORT_PAPER": "4002"})
 
-    with patch("ib_async.IB", ib_class):
-        with client.connected(mode="paper") as ib:
-            assert ib is fake_ib
+    with patch("ib_async.IB", ib_class), client.connected(mode="paper") as ib:
+        assert ib is fake_ib
     fake_ib.disconnect.assert_called_once()
 
 

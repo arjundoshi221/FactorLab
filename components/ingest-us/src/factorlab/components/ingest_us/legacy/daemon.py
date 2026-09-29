@@ -124,7 +124,7 @@ def safe_source_status(storage, source, status, detail):
     except TypeError:
         # Compatibility with older storage doubles and images.
         storage.source_status(status, detail)
-    except Exception as exc:  # noqa: BLE001 - source health must survive status-write failures
+    except Exception as exc:
         log.error("Source status write failed for %s: %s", source, type(exc).__name__)
 
 
@@ -286,7 +286,7 @@ def run_full(args, storage):
                     next_live = datetime.now(UTC) + timedelta(seconds=60)
                     failed += 1
                     break
-                except Exception as exc:  # noqa: BLE001 - continue other live symbols
+                except Exception as exc:
                     log.error("Live %s failed: %s", item[0], type(exc).__name__)
                     failed += 1
             log.info("Live sweep: %d/%d ok, %d failed in %.0fs", ok, len(minute_items), failed,
@@ -302,7 +302,7 @@ def run_full(args, storage):
                     else:
                         schedule_retry(minute_retry_at, minute_retry_attempts, retry_key, now)
                         minute_pending.append(item)
-                except Exception as exc:  # noqa: BLE001 - retry one failed recovery later
+                except Exception as exc:
                     log.error("Minute recovery %s failed: %s", item[0], type(exc).__name__)
                     schedule_retry(minute_retry_at, minute_retry_attempts, retry_key, now)
                     minute_pending.append(item)
@@ -317,7 +317,7 @@ def run_full(args, storage):
                     collect(storage, schwab, daily_item, "daily", now=now,
                             universe_name=item.get("universe", FULL_UNIVERSE))
                     retry_attempts.pop(item["instrument_id"], None)
-                except Exception as exc:  # noqa: BLE001 - retry one failed daily recovery later
+                except Exception as exc:
                     log.error("Daily recovery %s failed: %s", item["symbol"], type(exc).__name__)
                     schedule_retry(retry_at, retry_attempts, item["instrument_id"], now)
                     pending.append(item)
@@ -360,7 +360,7 @@ def run(args, storage, client):
                     record, raw_id = client.instrument(provider)
                     identifier = storage.reference(symbol, provider, record, raw_id, args.universe)
                     items.append((symbol, provider, identifier))
-                except Exception as exc:  # noqa: BLE001 - report unresolved provider rows
+                except Exception as exc:
                     log.error("Reference %s failed: %s", symbol, type(exc).__name__)
                     health = ("error", f"Reference lookup failed for {symbol}")
                     had_failure = True
@@ -378,7 +378,7 @@ def run(args, storage, client):
                     break
                 try:
                     collect(storage, client, item, "1min", now=datetime.now(UTC), live=True)
-                except Exception as exc:  # noqa: BLE001 - continue other live symbols
+                except Exception as exc:
                     log.error("Live %s failed: %s", item[0], type(exc).__name__)
             next_live = datetime.now(UTC) + timedelta(seconds=300)
         target = bounds(latest_completed(now))[1]
@@ -400,7 +400,7 @@ def run(args, storage, client):
                     retry_at[(item[0], resolution)] = now + timedelta(minutes=15)
                     had_failure = True
                 health = ("ready", "Schwab collection ready")
-            except Exception as exc:  # noqa: BLE001 - preserve the daemon and report failure
+            except Exception as exc:
                 had_failure = True
                 health = ("auth_required" if isinstance(exc, AuthRequired) else "error",
                           f"{item[0]} {resolution}: {type(exc).__name__}; retry scheduled")

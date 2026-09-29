@@ -29,8 +29,8 @@ jobs:
         run: uv lock --check
       - name: Install the workspace
         run: uv sync --frozen --all-packages
-      - name: Lint (errors and undefined names)
-        run: uv run --frozen ruff check --select E9,F libs providers components tests tools scripts
+      - name: Lint (ruff rule set in pyproject.toml)
+        run: uv run --frozen ruff check .
       - name: Component manifests and the generated compose file are current
         run: |
           uv run --frozen python tools/components.py check

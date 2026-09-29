@@ -92,7 +92,7 @@ class MarketWindow:
         (default = now). Walks forward at most 30 days.
         """
         after = after or self.now_local()
-        for offset in range(0, 30):
+        for offset in range(30):
             day = (after + timedelta(days=offset)).date()
             if self.is_trading_day(day):
                 open_dt = self.open_dt(day)

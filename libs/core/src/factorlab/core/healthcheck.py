@@ -48,7 +48,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         problem = _fresh(heartbeat_path(args.service), args.max_age)
     elif args.check == "http":
         try:
-            with urllib.request.urlopen(args.url, timeout=args.timeout) as response:  # noqa: S310
+            with urllib.request.urlopen(args.url, timeout=args.timeout) as response:
                 if not 200 <= response.status < 300:
                     problem = f"{args.url} answered {response.status}"
         except Exception as exc:  # noqa: BLE001 - any failure is unhealthy

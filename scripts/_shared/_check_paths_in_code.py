@@ -60,7 +60,7 @@ def _scan_file(path: Path) -> list[tuple[int, str]]:
     for line_no, line in enumerate(text.splitlines(), start=1):
         # Skip docstrings / comments that talk about the legacy layout
         stripped = line.lstrip()
-        if stripped.startswith("#") or stripped.startswith('"""') or stripped.startswith("'''"):
+        if stripped.startswith(("#", '"""', "'''")):
             continue
         for pat in BANNED_PATTERNS:
             if pat.search(line):

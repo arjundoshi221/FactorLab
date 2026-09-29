@@ -71,7 +71,7 @@ def test_every_namespace_and_required_view_is_declared():
     databases = set(re.findall(r"CREATE DATABASE IF NOT EXISTS (\w+)", sql))
     views = set(re.findall(r"CREATE VIEW IF NOT EXISTS ([\w.]+)", sql))
     assert databases == EXPECTED_DATABASES
-    assert EXPECTED_VIEWS <= views
+    assert views >= EXPECTED_VIEWS
 
 
 def test_deferred_objects_are_not_accidentally_runnable():
@@ -179,7 +179,7 @@ def test_applied_schema_contract(clickhouse_client):
             "SELECT database,name FROM system.tables WHERE engine='View'"
         ).result_rows
     }
-    assert EXPECTED_VIEWS <= views
+    assert views >= EXPECTED_VIEWS
 
 
 def test_roles_exist_and_are_unassigned(clickhouse_client):

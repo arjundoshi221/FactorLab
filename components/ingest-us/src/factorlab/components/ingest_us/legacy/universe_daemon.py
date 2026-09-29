@@ -25,7 +25,7 @@ RETRY_MINUTES = 15
 def safe_status(storage, status: str, detail: str) -> None:
     try:
         storage.source_status(status, detail, source="universe")
-    except Exception as exc:  # noqa: BLE001 - health reporting must not terminate the worker
+    except Exception as exc:
         log.error("Universe status write failed: %s", type(exc).__name__)
 
 
@@ -91,7 +91,7 @@ def run_daemon(config, storage, resolver=None) -> int:
                 last_result = (
                     "ready", f"{config.provider}: {len(series)} configured US stocks resolved")
                 next_refresh = now + timedelta(minutes=config.refresh_interval_minutes)
-            except Exception as exc:  # noqa: BLE001 - daemon retries all provider/storage failures
+            except Exception as exc:
                 log.error("Universe refresh failed: %s", type(exc).__name__)
                 last_result = (
                     "error", f"{config.provider}: universe refresh failed: {type(exc).__name__}")
@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         signal.signal(sig, lambda *_: stop.set())
     try:
         config = load_config(args.config)
-    except Exception as exc:  # noqa: BLE001 - argparse should report all config parse failures
+    except Exception as exc:
         log.error("Invalid universe config: %s", exc)
         return 2
     storage = USStorage.from_environment()
@@ -127,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         sync_once(config, storage, resolver)
         return 0
-    except Exception:  # noqa: BLE001 - sync_once already records sanitized failure health
+    except Exception:
         return 1
 
 

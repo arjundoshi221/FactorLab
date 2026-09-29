@@ -15,7 +15,6 @@ from factorlab.sources.ibkr.shapes import (
     PositionSnapshot,
     source_channel_for,
 )
-
 from factorlab.testkit.ibkr import wave7_columns
 
 NOW = datetime(2026, 9, 19, 20, 0, tzinfo=UTC)
@@ -59,14 +58,14 @@ def test_shape_plus_storage_columns_cover_ddl_exactly(dc, table):
 
 
 def _minimum_position(**overrides):
-    base = dict(
+    base = dict(  # noqa: C408 - keyword form mirrors the IBKR field names
         snapshot_time=NOW, broker_code="ibkr", account_id="DUE375963",
         account_mode="paper", country_code="US",
         product_type="common", vendor_id="265598", trading_symbol="AAPL",
-        currency="USD", position=Decimal("100"),
-        avg_cost=Decimal("150"), market_price=Decimal("175.5"),
-        market_value=Decimal("17550"), unrealized_pnl=Decimal("2550"),
-        realized_pnl_ytd=Decimal("0"), market_value_usd=None,
+        currency="USD", position=Decimal(100),
+        avg_cost=Decimal(150), market_price=Decimal("175.5"),
+        market_value=Decimal(17550), unrealized_pnl=Decimal(2550),
+        realized_pnl_ytd=Decimal(0), market_value_usd=None,
     )
     base.update(overrides)
     return PositionSnapshot(**base)

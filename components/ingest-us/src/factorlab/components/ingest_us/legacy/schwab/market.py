@@ -13,7 +13,7 @@ import requests
 from factorlab.calendars.us import (  # calendar helpers re-exported for callers
     NY,
     bounds,
-    calendar,  # noqa: F401
+    calendar,
     latest_completed,  # noqa: F401
 )
 from factorlab.components.ingest_us.legacy.schwab.client import get_session
@@ -33,7 +33,7 @@ def token_ready(now: datetime | None = None) -> bool:
     if not expiry:
         return False
     try:
-        return datetime.fromisoformat(expiry.replace("Z", "+00:00")) > (now or datetime.now(UTC))
+        return datetime.fromisoformat(expiry) > (now or datetime.now(UTC))
     except (ValueError, TypeError):
         return False
 

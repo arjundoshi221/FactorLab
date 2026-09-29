@@ -8,7 +8,6 @@ from decimal import Decimal
 import pytest
 
 from factorlab.sources.ibkr.open_orders import snapshot_open_orders
-
 from factorlab.testkit.ibkr import make_contract, make_order, make_order_status, make_trade
 
 
@@ -41,10 +40,10 @@ def test_snapshot_open_orders_maps_fields(mock_ib_paper, now_utc):
     assert r.side == "BUY"
     assert r.order_type == "LMT"
     assert r.time_in_force == "DAY"
-    assert r.quantity == Decimal("200")
-    assert r.filled_quantity == Decimal("50")
-    assert r.remaining_quantity == Decimal("150")
-    assert r.limit_price == Decimal("170")
+    assert r.quantity == Decimal(200)
+    assert r.filled_quantity == Decimal(50)
+    assert r.remaining_quantity == Decimal(150)
+    assert r.limit_price == Decimal(170)
     assert r.aux_price is None
     assert r.status == "Submitted"
     assert r.account_id == "DUE375963"
@@ -59,7 +58,7 @@ def test_snapshot_open_orders_computes_remaining_when_missing(mock_ib_paper, now
     )
     mock_ib_paper.openTrades.return_value = [trade]
     rows = snapshot_open_orders(mock_ib_paper, snapshot_time=now_utc)
-    assert rows[0].remaining_quantity == Decimal("70")
+    assert rows[0].remaining_quantity == Decimal(70)
 
 
 def test_snapshot_open_orders_naive_time_rejected(mock_ib_paper):

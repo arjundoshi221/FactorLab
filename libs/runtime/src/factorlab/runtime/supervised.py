@@ -15,7 +15,7 @@ Use it from every script's ``__main__`` block::
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from factorlab.runtime.exit_codes import ExitCode
 from factorlab.runtime.heartbeat import Heartbeat
@@ -41,7 +41,7 @@ def supervised(
     if enable_heartbeat:
         try:
             Heartbeat(name)
-        except Exception as e:  # pragma: no cover — best effort
+        except Exception as e:  # noqa: BLE001  # pragma: no cover — best effort
             log.warning("heartbeat init failed for %s: %s", name, e)
 
     try:
@@ -53,7 +53,7 @@ def supervised(
         if on_crash:
             try:
                 on_crash(exc)
-            except Exception as cb_err:  # pragma: no cover
+            except Exception as cb_err:  # noqa: BLE001  # pragma: no cover
                 log.error("on_crash callback failed: %s", cb_err)
         return int(ExitCode.CRASH)
 

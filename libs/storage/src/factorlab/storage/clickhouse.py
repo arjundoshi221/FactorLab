@@ -8,10 +8,11 @@ from this module.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any, Mapping
+from typing import Any
 
 import pandas as pd
 
@@ -38,7 +39,7 @@ class IngestionRunHandle:
 
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class ClickHouseStorage(ClickHouse):
@@ -127,7 +128,7 @@ def _integer(value: Any) -> int | None:
 def _epoch_ms_to_date(value: Any) -> date | None:
     if not value:
         return None
-    return datetime.fromtimestamp(int(value) / 1000, tz=timezone.utc).date()
+    return datetime.fromtimestamp(int(value) / 1000, tz=UTC).date()
 
 
 def _as_utc_datetime(value: Any) -> datetime:

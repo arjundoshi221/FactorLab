@@ -6,10 +6,11 @@ import html
 import os
 import socket
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
 
 
 class Severity(str, Enum):
@@ -64,7 +65,7 @@ class Notification:
     def __post_init__(self):
         # Frozen dataclass — bypass via object.__setattr__
         if self.occurred_at is None:
-            object.__setattr__(self, "occurred_at", datetime.now(timezone.utc))
+            object.__setattr__(self, "occurred_at", datetime.now(UTC))
         if self.host is None:
             object.__setattr__(
                 self, "host",
@@ -249,4 +250,4 @@ class DedupeRing:
         self._seen.clear()
 
 
-__all__ = ["Severity", "Notification", "Backend", "DedupeRing"]
+__all__ = ["Backend", "DedupeRing", "Notification", "Severity"]

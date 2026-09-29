@@ -14,9 +14,9 @@ from __future__ import annotations
 import io
 import logging
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Iterable
 
 from factorlab.sources.edgar.client import EdgarClient, accession_nodash
 
@@ -95,7 +95,7 @@ def get_daily_filings(
     Returns empty list on 404 (weekends / holidays — SEC does not publish).
     """
     if isinstance(day, str):
-        day = datetime.strptime(day, "%Y-%m-%d").date()
+        day = datetime.strptime(day, "%Y-%m-%d").date()  # noqa: DTZ007 - a calendar date
     yyyymmdd = day.strftime("%Y%m%d")
     path = (
         f"/Archives/edgar/daily-index/{day.year}/QTR{_quarter(day)}/form.{yyyymmdd}.idx"
@@ -166,7 +166,7 @@ def parse_idx(text: str, *, forms: Iterable[str] | None = None) -> list[FilingRe
             continue
         try:
             cik = int(cik_s)
-            filed_at = datetime.strptime(date_str, "%Y%m%d").date()
+            filed_at = datetime.strptime(date_str, "%Y%m%d").date()  # noqa: DTZ007 - a calendar date
         except ValueError:
             continue
         accession = _accession_from_filename(filename)
@@ -191,7 +191,7 @@ def _accession_from_filename(filename: str) -> str:
     edgar/data/320193/0000320193-24-000123.txt → 0000320193-24-000123
     """
     tail = filename.rsplit("/", 1)[-1]
-    stem = tail[:-4] if tail.endswith(".txt") else tail
+    stem = tail.removesuffix(".txt")
     # Sanity: accession looks like NNNNNNNNNN-NN-NNNNNN
     if stem.count("-") == 2:
         return stem

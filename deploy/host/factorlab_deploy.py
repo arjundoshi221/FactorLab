@@ -99,7 +99,8 @@ class Host:
     run: Runner = _run
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
-    chown: Callable[[Path, int, int], None] = lambda path, uid, gid: _chown_tree(path, uid, gid)
+    # A lambda, not _chown_tree itself: that function is defined below this class.
+    chown: Callable[[Path, int, int], None] = lambda path, uid, gid: _chown_tree(path, uid, gid)  # noqa: PLW0108
     lock: Callable[[Path], contextlib.AbstractContextManager[None]] = release_lock
     stabilize_seconds: float = float(os.getenv("FACTORLAB_STABILIZATION_SECONDS", "20"))
     health_timeout: float = 180.0
@@ -364,7 +365,7 @@ class Deployer:
                     is_log_dir = str(source).startswith("/var/log/factorlab/")
                     self.host.chown(source, uid, 10002 if is_log_dir else uid)
                     if is_log_dir:
-                        os.chmod(source, 0o2750)  # chown may clear setgid; files keep the group
+                        os.chmod(source, 0o2750)  # noqa: S103 - chown may clear setgid; others get nothing
 
     def roll(self, release: Release) -> None:
         for spec in self.enabled(release.services):
@@ -646,7 +647,7 @@ class Deployer:
 
 def _now() -> str:
     # timezone.utc, not datetime.UTC: the host python3 may predate 3.11.
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: UP017
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

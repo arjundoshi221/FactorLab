@@ -75,7 +75,7 @@ def plan(images: list[dict], used: set[str], protected: set[str], keep: int) -> 
         for repository in {r for r in map(_repository, names) if REPOSITORY.match(r)}:
             by_repository.setdefault(repository, []).append(image)
     removable = {}
-    for repository, members in by_repository.items():
+    for members in by_repository.values():
         newest = sorted(members, key=lambda item: item.get("Created", ""), reverse=True)
         for image in newest[keep:]:
             digests = set(image.get("RepoDigests") or [])

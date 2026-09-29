@@ -18,7 +18,7 @@ def _manifest_names() -> set[str]:
 
 def test_every_component_gets_a_log_directory():
     match = re.search(r'^FACTORLAB_COMPONENTS="([^"]+)"', PREPARE_HOST.read_text(encoding="utf-8"),
-                      re.M)
+                      re.MULTILINE)
     assert match, "prepare-host.sh must list FACTORLAB_COMPONENTS"
     assert set(match.group(1).split()) == _manifest_names()
 

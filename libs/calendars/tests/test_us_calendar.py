@@ -35,6 +35,6 @@ def test_exchange_holiday_is_skipped():
 
 def test_rejects_naive_and_empty_schedules():
     with pytest.raises(ValueError):
-        next_scheduled_run(datetime(2026, 9, 24, 12, 0), SLOTS)  # noqa: DTZ001 - naive on purpose
+        next_scheduled_run(datetime(2026, 9, 24, 12, 0), SLOTS)
     with pytest.raises(ValueError):
         next_scheduled_run(datetime(2026, 9, 24, 12, 0, tzinfo=UTC), ())

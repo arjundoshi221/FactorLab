@@ -106,7 +106,7 @@ def test_schema_map_reports_503_when_clickhouse_is_down():
         def get_schema_map(self):
             raise RuntimeError("down")
 
-    app.dependency_overrides[get_schema_map_service] = lambda: Broken()
+    app.dependency_overrides[get_schema_map_service] = Broken
     try:
         response = TestClient(app).get("/hub/api/v1/schema-map")
     finally:

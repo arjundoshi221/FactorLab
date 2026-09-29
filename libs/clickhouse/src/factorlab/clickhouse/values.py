@@ -17,7 +17,7 @@ def version(timestamp: datetime) -> int:
     Migration and resolver versions use nanoseconds, so a live replacement must be
     greater even when a caller supplies an older source timestamp.
     """
-    global _LAST_VERSION
+    global _LAST_VERSION  # noqa: PLW0603 - one process-wide counter, guarded by _VERSION_LOCK
     with _VERSION_LOCK:
         _LAST_VERSION = max(
             _LAST_VERSION + 1, time.time_ns(), int(timestamp.timestamp() * 1_000_000_000)

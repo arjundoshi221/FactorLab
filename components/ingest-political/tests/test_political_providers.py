@@ -85,7 +85,8 @@ def test_political_pipeline_into_clickhouse_sinks():
         "2026FD.ZIP": body("house_clerk", "alt.political_filings", "index_2026"),
         "20000001.pdf": body("house_clerk", "alt.political_trades", "ptr_20000001"),
     })
-    clock = lambda: NOW
+    def clock():
+        return NOW
 
     legislators = Binding(dataset="ref.legislators", market="USA",
                           provider="congress_legislators")

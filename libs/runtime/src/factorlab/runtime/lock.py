@@ -15,10 +15,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
 
 log = logging.getLogger(__name__)
 
@@ -42,8 +42,8 @@ def acquire_lock(
         try:
             content = json.loads(path.read_text(encoding="utf-8"))
             started_at = datetime.fromisoformat(content["started_at"])
-            age = (datetime.now(timezone.utc) - started_at).total_seconds()
-        except Exception:
+            age = (datetime.now(UTC) - started_at).total_seconds()
+        except Exception:  # noqa: BLE001 - any unreadable lock file is treated as stale
             age = stale_seconds + 1  # malformed → treat as stale
         if age < stale_seconds:
             raise SystemExit(
@@ -56,7 +56,7 @@ def acquire_lock(
         path.write_text(
             json.dumps({
                 "pid": os.getpid(),
-                "started_at": datetime.now(timezone.utc).isoformat(),
+                "started_at": datetime.now(UTC).isoformat(),
             }),
             encoding="utf-8",
         )
@@ -68,4 +68,4 @@ def acquire_lock(
             pass
 
 
-__all__ = ["acquire_lock", "LOCK_STALE_SECONDS_DEFAULT"]
+__all__ = ["LOCK_STALE_SECONDS_DEFAULT", "acquire_lock"]

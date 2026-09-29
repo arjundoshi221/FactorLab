@@ -21,7 +21,7 @@ Load pipeline (called from 5min / hourly):
 import csv
 import io
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
@@ -229,7 +229,7 @@ def _read_existing_yaml(path: Path) -> list[str]:
 def _write_universe_yaml(path: Path, symbols: list[str]) -> None:
     """Write universe YAML with metadata header."""
     data = {
-        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "generated": datetime.now(UTC).strftime("%Y-%m-%d"),
         "count": len(symbols),
         "symbols": symbols,
     }

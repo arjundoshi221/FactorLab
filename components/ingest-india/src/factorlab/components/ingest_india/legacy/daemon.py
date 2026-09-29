@@ -489,7 +489,7 @@ def main(argv: list[str] | None = None) -> int:
     storage = ClickHouseStorage.from_environment()
     storage.seed_india_reference_data()
 
-    series, full_equity_mode, expected_count = configure_collection_universe(
+    series, full_equity_mode, _expected_count = configure_collection_universe(
         storage,
         args.universe,
     )
@@ -523,7 +523,7 @@ def main(argv: list[str] | None = None) -> int:
         recovery_date = now.astimezone(IST).date()
         if recovery_date != configured_for:
             try:
-                series, full_equity_mode, expected_count = configure_collection_universe(
+                series, full_equity_mode, _expected_count = configure_collection_universe(
                     storage,
                     args.universe,
                 )

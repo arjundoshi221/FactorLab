@@ -111,34 +111,34 @@ class FakeClickHouse:
                            for a in self._aliases(p["kind"], p["target"])
                            if a["alias_value"] in values])
         if "WHERE s.isin = {isin:String}" in sql:
-            return Result([(l["listing_id"],) for l in self.rows("ref.listings")
-                           if self._scoped(l, p) and l["active"]
-                           and (self._security(l["security_id"]) or {}).get("isin") == p["isin"]])
+            return Result([(listing["listing_id"],) for listing in self.rows("ref.listings")
+                           if self._scoped(listing, p) and listing["active"]
+                           and (self._security(listing["security_id"]) or {}).get("isin") == p["isin"]])
         if "AND l.trading_symbol = {symbol:String}" in sql:
-            return Result([(l["listing_id"], (self._security(l["security_id"]) or {}).get("isin"))
-                           for l in self.rows("ref.listings")
-                           if self._scoped(l, p) and l["active"]
-                           and l["trading_symbol"] == p["symbol"]])
+            return Result([(listing["listing_id"], (self._security(listing["security_id"]) or {}).get("isin"))
+                           for listing in self.rows("ref.listings")
+                           if self._scoped(listing, p) and listing["active"]
+                           and listing["trading_symbol"] == p["symbol"]])
         if sql.startswith("SELECT l.listing_id, l.security_id, s.entity_id"):
             out = []
             for listing_id in p["ids"]:
-                l = self._listing(listing_id)
-                s = self._security(l["security_id"]) if l else None
-                if l and s:
-                    out.append((l["listing_id"], l["security_id"], s["entity_id"],
-                                s["security_type"], l["country_code"]))
+                listing = self._listing(listing_id)
+                s = self._security(listing["security_id"]) if listing else None
+                if listing and s:
+                    out.append((listing["listing_id"], listing["security_id"], s["entity_id"],
+                                s["security_type"], listing["country_code"]))
             return Result(out)
         if sql.startswith("SELECT listing_id FROM ref.listings FINAL WHERE exchange_code"):
-            return Result([(l["listing_id"],) for l in self.rows("ref.listings")
-                           if l["exchange_code"] == p["exchange"] and l["active"]])
+            return Result([(listing["listing_id"],) for listing in self.rows("ref.listings")
+                           if listing["exchange_code"] == p["exchange"] and listing["active"]])
         if sql.startswith("SELECT l.listing_id, l.exchange_code, l.trading_symbol"):
             out = []
             for listing_id in p["ids"]:
-                l = self._listing(listing_id)
-                s = self._security(l["security_id"]) if l else None
-                if l and s:
-                    out.append((l["listing_id"], l["exchange_code"], l["trading_symbol"],
-                                l["country_code"], s["isin"]))
+                listing = self._listing(listing_id)
+                s = self._security(listing["security_id"]) if listing else None
+                if listing and s:
+                    out.append((listing["listing_id"], listing["exchange_code"], listing["trading_symbol"],
+                                listing["country_code"], s["isin"]))
             return Result(out)
         if sql.startswith("SELECT contract_id, underlying_listing_id, country_code"):
             return Result([(c["contract_id"], c["underlying_listing_id"], c["country_code"])
@@ -153,11 +153,11 @@ class FakeClickHouse:
             for a in self._aliases(p["kind"], "listing"):
                 if a["target_id"] not in p["ids"]:
                     continue
-                l = self._listing(a["target_id"])
-                s = self._security(l["security_id"]) if l else None
-                if l and s:
+                listing = self._listing(a["target_id"])
+                s = self._security(listing["security_id"]) if listing else None
+                if listing and s:
                     out.append((a["target_id"], a["alias_value"], a["valid_from"],
-                                l["exchange_code"], l["trading_symbol"], l["country_code"],
+                                listing["exchange_code"], listing["trading_symbol"], listing["country_code"],
                                 s["isin"]))
             return Result(out)
         if "FROM ref.universe_membership FINAL WHERE universe_id = {universe:String}" in sql:
@@ -198,12 +198,12 @@ class FakeClickHouse:
                            for f in found[:p["limit"]]])
         if sql.startswith("SELECT DISTINCT l.listing_id, l.security_id, s.entity_id"):
             out = []
-            for l in self.rows("ref.listings"):
-                s_ = self._security(l["security_id"])
-                if (s_ and l["trading_symbol"] == p["ticker"] and l["country_code"] == p["country"]
-                        and (l["first_traded"] is None or l["first_traded"] <= p["day"])
-                        and (l["last_traded"] is None or l["last_traded"] >= p["day"])):
-                    out.append((l["listing_id"], l["security_id"], s_["entity_id"],
+            for listing in self.rows("ref.listings"):
+                s_ = self._security(listing["security_id"])
+                if (s_ and listing["trading_symbol"] == p["ticker"] and listing["country_code"] == p["country"]
+                        and (listing["first_traded"] is None or listing["first_traded"] <= p["day"])
+                        and (listing["last_traded"] is None or listing["last_traded"] >= p["day"])):
+                    out.append((listing["listing_id"], listing["security_id"], s_["entity_id"],
                                 s_["security_type"]))
             return Result(out)
         if "max(bar_time)" in sql:

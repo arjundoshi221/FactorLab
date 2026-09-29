@@ -79,7 +79,7 @@ def test_invalid_ohlcv_rejected(update):
 
 def test_missing_and_expired_credentials_pause(monkeypatch):
     values = {"SCHWAB_ACCESS_TOKEN": "example", "SCHWAB_ACCESS_TOKEN.expires_at": "2026-09-04T14:00:00Z"}
-    monkeypatch.setattr(market, "get_secret", lambda name, default: values.get(name, default))
+    monkeypatch.setattr(market, "get_secret", values.get)
     assert market.token_ready(datetime(2026, 9, 4, 13, tzinfo=UTC))
     assert not market.token_ready(datetime(2026, 9, 4, 15, tzinfo=UTC))
     del values["SCHWAB_ACCESS_TOKEN"]

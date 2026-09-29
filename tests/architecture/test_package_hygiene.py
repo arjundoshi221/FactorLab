@@ -26,7 +26,7 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))  # run as a script to regenerate the lists
-from _workspace import REPO, package_roots, python_files  # noqa: E402
+from _workspace import REPO, package_roots, python_files
 
 NAMESPACES = ("", "sources", "components")
 LEGACY_BUDGET = Path(__file__).with_name("legacy_budget.txt")
@@ -53,10 +53,8 @@ def hygiene_violations() -> list[str]:
     for path in _modules():
         tree = ast.parse(path.read_text(encoding="utf-8-sig"))
         for node in ast.walk(tree):
-            if isinstance(node, ast.Import) and any(a.name.split(".")[0] == "dotenv"
-                                                    for a in node.names):
-                found.append(f"{_rel(path)}:{node.lineno} imports dotenv")
-            elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "dotenv":
+            if (isinstance(node, ast.Import) and any(a.name.split(".")[0] == "dotenv"
+                                                    for a in node.names)) or (isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "dotenv"):
                 found.append(f"{_rel(path)}:{node.lineno} imports dotenv")
             elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
                   and ast.unparse(node.func) in {"sys.path.insert", "sys.path.append"}):
