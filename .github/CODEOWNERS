@@ -1,0 +1,15 @@
+# Reviewers GitHub requests automatically. Review is required only when branch
+# protection on main enables "Require review from Code Owners". Later rules win;
+# owners need write access to the repository.
+
+*                                           @arjundoshi221
+
+# Production-sensitive paths: releases and CI, the host deployer and scripts, runtime
+# secrets, the Cloudflare workers (Access and OAuth), and the forward-only schema.
+/.github/                                   @arjundoshi221
+/deploy/                                    @arjundoshi221
+/components/secrets-agent/                  @arjundoshi221
+/cloudflare/                                @arjundoshi221
+/contracts/                                 @arjundoshi221
+/libs/schema/src/factorlab/schema/sql/      @arjundoshi221
+/AGENTS.md                                  @arjundoshi221
