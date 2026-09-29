@@ -112,3 +112,7 @@ allowed-confusables = ["–"]   # EN DASH in user-facing text
 
 [tool.ruff.lint.isort]
 known-first-party = ["factorlab"]
+
+[tool.ruff.format]
+# Code samples in docs keep their hand alignment; only real code is formatted.
+exclude = ["**/*.md"]

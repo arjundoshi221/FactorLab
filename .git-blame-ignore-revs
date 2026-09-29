@@ -1,0 +1,6 @@
+# Commits that only reformat code; hidden from `git blame` with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# (GitHub's blame view reads this file automatically.)
+
+# style: ruff format sweep
+47c6af17466e6308dafa8f66d691488287b971bf
