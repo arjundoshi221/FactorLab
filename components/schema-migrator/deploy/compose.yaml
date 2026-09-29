@@ -1,0 +1,32 @@
+# Compose fragment for the schema-migrator component, merged with deploy/compose.base.yml.
+# `bootstrap` is the one-shot gate every writer waits on; it applies no DDL.
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "20m", max-file: "5", compress: "true"}
+
+services:
+  bootstrap:
+    image: ${FACTORLAB_SCHEMA_MIGRATOR_IMAGE:-${FACTORLAB_IMAGE:-factorlab:latest}}
+    entrypoint: ["factorlab-db"]
+    command: ["bootstrap"]
+    restart: "no"
+    networks: [backend]
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DATABASE: default
+      CLICKHOUSE_USERNAME: factorlab
+      FACTORLAB_PERSIST_SECRETS: "false"
+      FACTORLAB_SECRETS_DIR: /run/secrets/app
+      FACTORLAB_COMPONENT: schema-migrator
+      FACTORLAB_SERVICE: bootstrap
+      FACTORLAB_LOG_DIR: /var/log/factorlab/schema-migrator
+    volumes:
+      - political_runtime:/run/secrets/app:ro
+      - /var/log/factorlab/schema-migrator:/var/log/factorlab/schema-migrator
+    depends_on:
+      clickhouse:
+        condition: service_healthy

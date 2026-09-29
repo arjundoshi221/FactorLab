@@ -1,0 +1,42 @@
+# Compose fragment for the api component, merged with deploy/compose.base.yml.
+# The image pin falls back to the monolith variables until api ships its own image.
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "20m", max-file: "5", compress: "true"}
+
+services:
+  api:
+    image: ${FACTORLAB_API_IMAGE:-${FACTORLAB_IMAGE:-factorlab:latest}}
+    entrypoint: ["factorlab-api"]
+    restart: unless-stopped
+    networks: [backend]
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+    read_only: true
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DATABASE: default
+      CLICKHOUSE_USERNAME: factorlab
+      FACTORLAB_PERSIST_SECRETS: "false"
+      FACTORLAB_SECRETS_DIR: /run/secrets/app
+      FACTORLAB_COMPONENT: api
+      FACTORLAB_SERVICE: api
+      FACTORLAB_LOG_DIR: /var/log/factorlab/api
+      FACTORLAB_CATALOG_PREVIEW: ${FACTORLAB_CATALOG_PREVIEW:-on}
+      FACTORLAB_CATALOG_CSV: ${FACTORLAB_CATALOG_CSV:-on}
+      FACTORLAB_CATALOG_CSV_MAX_ROWS: ${FACTORLAB_CATALOG_CSV_MAX_ROWS:-10000}
+      FACTORLAB_CATALOG_PREVIEW_DENY: ${FACTORLAB_CATALOG_PREVIEW_DENY:-}
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - political_runtime:/run/secrets/app:ro
+      - /var/lib/factorlab/docker-images:/run/docker-images:ro
+      - /var/log/factorlab/api:/var/log/factorlab/api
+    ports:
+      - "127.0.0.1:8000:8000"
+    tmpfs:
+      - /tmp:size=8m,mode=0700
+    mem_limit: 512m

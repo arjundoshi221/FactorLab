@@ -1,0 +1,23 @@
+# Compose fragment for the web component, merged with deploy/compose.base.yml.
+# Enabled by the `web` profile once the web image is released; until then the API keeps
+# serving the UI. Cloudflare Tunnel sends API paths to 127.0.0.1:8000 and everything
+# else here; Cloudflare Access guards the whole hostname. Loopback-only, edge network only.
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "20m", max-file: "5", compress: "true"}
+
+services:
+  web:
+    image: ${FACTORLAB_WEB_IMAGE:-ghcr.io/arjundoshi221/factorlab-web:unreleased}
+    restart: unless-stopped
+    networks: [edge]
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    ports:
+      - "127.0.0.1:8080:8080"
+    mem_limit: 64m
+    profiles: [web]

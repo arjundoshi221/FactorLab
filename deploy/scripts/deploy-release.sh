@@ -319,7 +319,7 @@ fi
 verify_current
 if [[ $activation_incomplete == true ]]; then
     compose --profile jobs run --rm --no-deps bootstrap \
-        python scripts/verify_clickhouse_v2_writes.py \
+        verify-writes \
         --since "$activation_time" --wait-seconds "${FACTORLAB_V2_WRITE_WAIT_SECONDS:-900}" \
         --require-universe-ready
 fi

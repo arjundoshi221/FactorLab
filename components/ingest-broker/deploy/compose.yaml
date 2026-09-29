@@ -1,0 +1,43 @@
+# Compose fragment for the ingest-broker component, merged with deploy/compose.base.yml.
+# Enabled by the `ibkr` profile (FACTORLAB_IBKR_ENABLED in production.env).
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "20m", max-file: "5", compress: "true"}
+
+services:
+  ibkr-snapshot:
+    image: ${FACTORLAB_INGEST_BROKER_IMAGE:-${FACTORLAB_IMAGE:-factorlab:latest}}
+    entrypoint: ["factorlab-ingest-broker"]
+    command: ["snapshot", "--daemon", "--run-on-start", "--modes", "${IBKR_SNAPSHOT_MODES:-paper,live}"]
+    restart: unless-stopped
+    networks: [backend]
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DATABASE: default
+      CLICKHOUSE_USERNAME: factorlab
+      FACTORLAB_PERSIST_SECRETS: "false"
+      FACTORLAB_SECRETS_DIR: /run/secrets/app
+      FACTORLAB_COMPONENT: ingest-broker
+      FACTORLAB_SERVICE: ibkr-snapshot
+      FACTORLAB_LOG_DIR: /var/log/factorlab/ingest-broker
+      # Laptop Gateway over Tailscale: its Tailscale IP with ports 4002/4001.
+      # VPS Gateways (ibkr-gateway profile): the defaults below.
+      IBKR_HOST_PAPER: ${IBKR_HOST_PAPER:-ibkr-gateway-paper}
+      IBKR_PORT_PAPER: ${IBKR_PORT_PAPER:-4004}
+      IBKR_HOST_LIVE: ${IBKR_HOST_LIVE:-ibkr-gateway-live}
+      IBKR_PORT_LIVE: ${IBKR_PORT_LIVE:-4003}
+      IBKR_SNAPSHOT_TIMES: ${IBKR_SNAPSHOT_TIMES:-06:00,16:30}
+      IBKR_SNAPSHOT_LOCK: /tmp/ibkr-snapshot.lock
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - ibkr_client_runtime:/run/secrets/app:ro
+      - /var/log/factorlab/ingest-broker:/var/log/factorlab/ingest-broker
+    mem_limit: 384m
+    stop_grace_period: 60s
+    profiles: [ibkr]

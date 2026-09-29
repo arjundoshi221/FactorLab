@@ -1,0 +1,49 @@
+# Compose fragment for the secrets-agent component, merged with deploy/compose.base.yml.
+# Runs as root by design: it reads the root-only identity files (cap_drop ALL).
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "20m", max-file: "5", compress: "true"}
+
+services:
+  cloudflare-secrets-agent:
+    image: ${FACTORLAB_SECRETS_AGENT_IMAGE:-${FACTORLAB_IMAGE:-factorlab:latest}}
+    entrypoint: ["factorlab-secrets-agent"]
+    restart: unless-stopped
+    networks: [backend]
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+    user: "0:0"
+    environment:
+      CLOUDFLARE_SECRETS_URL: ${CLOUDFLARE_SECRETS_URL:?Set CLOUDFLARE_SECRETS_URL in production.env}
+      CLOUDFLARE_ACCESS_CLIENT_ID_FILE: /run/identity/cloudflare-access-client-id
+      CLOUDFLARE_ACCESS_CLIENT_SECRET_FILE: /run/identity/cloudflare-access-client-secret
+      CLOUDFLARE_SYNC_INTERVAL_SECONDS: ${CLOUDFLARE_SYNC_INTERVAL_SECONDS:-60}
+      FACTORLAB_COMPONENT: secrets-agent
+      FACTORLAB_SERVICE: cloudflare-secrets-agent
+      FACTORLAB_LOG_DIR: /var/log/factorlab/secrets-agent
+    volumes:
+      - ${FACTORLAB_IDENTITY_DIR:-/etc/factorlab/identity}:/run/identity:ro
+      - clickhouse_runtime:/run/secrets/clickhouse
+      - india_runtime:/run/secrets/india
+      - us_runtime:/run/secrets/us
+      - political_runtime:/run/secrets/political
+      - ibkr_paper_runtime:/run/secrets/ibkr-paper
+      - ibkr_live_runtime:/run/secrets/ibkr-live
+      - ibkr_client_runtime:/run/secrets/ibkr-client
+      - /var/log/factorlab/secrets-agent:/var/log/factorlab/secrets-agent
+    read_only: true
+    tmpfs:
+      - /tmp:size=2m,mode=0700
+    cap_drop: [ALL]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -s /run/secrets/clickhouse/.agent-ready &&
+          test -s /run/secrets/clickhouse/runtime-users.xml &&
+          test -s /run/secrets/india/CLICKHOUSE_PASSWORD &&
+          test -s /run/secrets/political/FACTORLAB_API_KEY
+      interval: 10s
+      timeout: 3s
+      retries: 12

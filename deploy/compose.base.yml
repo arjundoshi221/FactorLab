@@ -1,0 +1,144 @@
+# FactorLab production Compose: the platform-owned base.
+#
+# Merged with one fragment per deployable component (components/<name>/deploy/compose.yaml):
+#
+#   docker compose --project-directory /opt/factorlab/deploy \
+#     -f compose.base.yml -f components/api/compose.yaml -f ...
+#
+# This file owns what no single component does: the networks, the per-consumer
+# runtime-secret tmpfs volumes, ClickHouse, the optional IB Gateways and the ops tools.
+# deploy/compose.production.yml is generated from it and the fragments
+# (`uv run python tools/components.py render-compose`); never edit that file.
+name: factorlab
+
+# Optional VPS-hosted IB Gateways (IBC-managed) for the read-only IBKR mirror,
+# `ibkr-gateway` profile. The default deployment instead points ibkr-snapshot at a
+# Gateway on the operator's machine over Tailscale; see
+# docs/operations/ibkr-gateway-setup.md. Gateways keep a logged-in session, so
+# releases never force-recreate them.
+x-ibkr-gateway: &ibkr-gateway
+  image: ${IBKR_GATEWAY_IMAGE:-ghcr.io/gnzsnz/ib-gateway:stable}
+  restart: unless-stopped
+  networks: [backend]
+  security_opt:
+    - no-new-privileges:true
+  mem_limit: ${IBKR_GATEWAY_MEM_LIMIT:-1200m}
+  stop_grace_period: 30s
+  depends_on:
+    cloudflare-secrets-agent:
+      condition: service_healthy
+  profiles: [ibkr-gateway]
+
+x-ibkr-gateway-env: &ibkr-gateway-env
+  READ_ONLY_API: "yes"
+  TIME_ZONE: America/New_York
+  AUTO_RESTART_TIME: ${IBKR_AUTO_RESTART_TIME:-11:45 PM}
+  TWOFA_TIMEOUT_ACTION: restart
+  RELOGIN_AFTER_TWOFA_TIMEOUT: "yes"
+  EXISTING_SESSION_DETECTED_ACTION: primary
+  TWS_ACCEPT_INCOMING: reject
+  JAVA_HEAP_SIZE: ${IBKR_JAVA_HEAP_SIZE:-768}
+  TWS_PASSWORD_FILE: /run/secrets/ibkr/TWS_PASSWORD
+  VNC_SERVER_PASSWORD_FILE: /run/secrets/ibkr/VNC_SERVER_PASSWORD
+
+services:
+  clickhouse:
+    image: ${CLICKHOUSE_IMAGE:-clickhouse/clickhouse-server:25.3}
+    container_name: factorlab-clickhouse
+    depends_on:
+      cloudflare-secrets-agent:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - /var/lib/factorlab/clickhouse:/var/lib/clickhouse
+      - /mnt/factorlab-data/clickhouse-raw:/var/lib/clickhouse-raw
+      - ./clickhouse/config.d/storage.xml:/etc/clickhouse-server/config.d/storage.xml:ro
+      - ./clickhouse/config.d/log-retention.xml:/etc/clickhouse-server/config.d/log-retention.xml:ro
+      - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - clickhouse_runtime:/etc/clickhouse-server/users.d
+    restart: unless-stopped
+    networks: [backend]
+    mem_limit: 5g
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+
+  ibkr-gateway-paper:
+    <<: *ibkr-gateway
+    environment:
+      <<: *ibkr-gateway-env
+      TRADING_MODE: paper
+      TWS_USERID: ${IBKR_PAPER_USERNAME:-}
+    volumes:
+      - ibkr_paper_runtime:/run/secrets/ibkr:ro
+    ports:
+      - "127.0.0.1:${IBKR_PAPER_VNC_PORT:-5900}:5900"
+
+  ibkr-gateway-live:
+    <<: *ibkr-gateway
+    environment:
+      <<: *ibkr-gateway-env
+      TRADING_MODE: live
+      TWS_USERID: ${IBKR_LIVE_USERNAME:-}
+    volumes:
+      - ibkr_live_runtime:/run/secrets/ibkr:ro
+    ports:
+      - "127.0.0.1:${IBKR_LIVE_VNC_PORT:-5901}:5900"
+
+  uptime-kuma:
+    image: ${UPTIME_KUMA_IMAGE:-louislam/uptime-kuma:2}
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - /var/lib/factorlab/uptime-kuma:/app/data
+    restart: unless-stopped
+    networks: [backend]
+    profiles: [ops]
+
+  portainer:
+    image: ${PORTAINER_IMAGE:-portainer/portainer-ce:lts}
+    ports:
+      - "127.0.0.1:9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/factorlab/portainer:/data
+    restart: unless-stopped
+    networks: [backend]
+    profiles: [admin]
+
+networks:
+  backend:
+    name: factorlab-backend
+  # The static web UI joins only this network: it cannot reach ClickHouse or the writers.
+  edge:
+    name: factorlab-edge
+
+volumes:
+  clickhouse_runtime:
+    driver: local
+    driver_opts: &tmpfs-options
+      type: tmpfs
+      device: tmpfs
+      o: size=2m,mode=0755
+  india_runtime:
+    driver: local
+    driver_opts: *tmpfs-options
+  us_runtime:
+    driver: local
+    driver_opts: *tmpfs-options
+  political_runtime:
+    driver: local
+    driver_opts: *tmpfs-options
+  ibkr_paper_runtime:
+    driver: local
+    driver_opts: *tmpfs-options
+  ibkr_live_runtime:
+    driver: local
+    driver_opts: *tmpfs-options
+  ibkr_client_runtime:
+    driver: local
+    driver_opts: *tmpfs-options

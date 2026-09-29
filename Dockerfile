@@ -26,7 +26,7 @@ COPY libs ./libs
 COPY providers ./providers
 COPY components ./components
 # Non-editable: the venv holds real copies, nothing points back at /src. Installing the
-# six deployable components pulls in every library and provider they use, and nothing
+# seven Python components pulls in every library and provider they use, and nothing
 # dev-only (factorlab-testkit, pytest).
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable \
@@ -35,7 +35,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
       --package factorlab-component-ingest-india \
       --package factorlab-component-ingest-us \
       --package factorlab-component-ingest-political \
-      --package factorlab-component-ingest-broker
+      --package factorlab-component-ingest-broker \
+      --package factorlab-component-schema-migrator
 
 
 FROM python:3.12-slim
