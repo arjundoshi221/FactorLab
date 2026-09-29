@@ -1,0 +1,24 @@
+[project]
+name = "factorlab-provider-upstox"
+version = "0.1.0"
+description = "Upstox (NSE) listings, contracts and bars."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "factorlab-core",
+    "factorlab-ingest",
+    "pydantic>=2.5",
+    "requests>=2.32.3",
+    "tzdata>=2024.1",   # zoneinfo keys on hosts without a system tz database
+]
+
+[tool.uv.sources]
+factorlab-core = { workspace = true }
+factorlab-ingest = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# factorlab is a namespace: only this member's own package ships.
+packages = ["src/factorlab"]

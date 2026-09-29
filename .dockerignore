@@ -1,12 +1,20 @@
+# Build context for every FactorLab image (the repo root). Keep it to source.
 .git
+.github
+.claude
+.tmp
+.venv
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/node_modules
+**/dist
+**/.wrangler
 .env
 .env.*
-.venv
-.tmp-test-venv
-.pytest_cache
-.ruff_cache
-__pycache__
-*.pyc
+!.env.example
 data
 logs
 backups
@@ -16,5 +24,5 @@ credentials
 *.tar.gz
 *.pem
 *.key
-node_modules
-.wrangler
+docs
+tests

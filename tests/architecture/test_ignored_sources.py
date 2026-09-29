@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
-SOURCE_ROOTS = ("src", "tests", "scripts", "configs", "libs", "providers", "components",
+SOURCE_ROOTS = ("tests", "scripts", "configs", "libs", "providers", "components",
                 "tools", "deploy", "cloudflare")
 SOURCE_SUFFIXES = frozenset({
     ".py", ".sql", ".yaml", ".yml", ".json", ".toml", ".md", ".ts", ".tsx", ".css", ".html",

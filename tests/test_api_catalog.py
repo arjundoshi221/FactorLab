@@ -439,8 +439,10 @@ def test_pipeline_runs_page_validates_inputs(client_and_service):
 
 def test_registry_matches_code_and_schema():
     root = Path(__file__).resolve().parents[1]
-    code = "\n".join(path.read_text(encoding="utf-8") for folder in ("scripts", "src/factorlab")
-                     for path in (root / folder).rglob("*.py"))
+    code = "\n".join(path.read_text(encoding="utf-8")
+                     for folder in ("scripts", "libs", "providers", "components")
+                     for path in (root / folder).rglob("*.py")
+                     if "node_modules" not in path.parts)
     sql = "\n".join(path.read_text(encoding="utf-8") for path in v2_sql_dir().glob("wave_*.sql"))
     defined = set(re.findall(r"CREATE (?:TABLE|VIEW) IF NOT EXISTS ([a-z_]+\.[a-z0-9_]+)", sql))
     for pipeline in PIPELINES:

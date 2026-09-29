@@ -1,5 +1,5 @@
 # Political-data ingestion sources.
-# Endpoints + rate limits + key-env names. Read by src/factorlab/sources/political/.
+# Endpoints + rate limits + key-env names. Documents the legacy political sources (see docs/features).
 
 sources:
 

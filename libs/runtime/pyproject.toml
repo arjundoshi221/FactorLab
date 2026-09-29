@@ -1,0 +1,23 @@
+[project]
+name = "factorlab-runtime"
+version = "0.1.0"
+description = "Daemon primitives (exit codes, heartbeat, lock, signals, supervised) and notifications."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "factorlab-core",
+    "requests>=2.32.3",
+]
+
+[project.optional-dependencies]
+outlook = ["pywin32>=308; platform_system == 'Windows'"]
+
+[tool.uv.sources]
+factorlab-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# factorlab is a namespace: only this member's own package ships.
+packages = ["src/factorlab"]

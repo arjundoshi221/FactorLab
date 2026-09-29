@@ -25,8 +25,9 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
-PACKAGE = REPO / "src" / "factorlab"
+sys.path.insert(0, str(Path(__file__).parent))  # run as a script to regenerate the lists
+from _workspace import REPO, package_roots, python_files  # noqa: E402
+
 NAMESPACES = ("", "sources", "components")
 LEGACY_BUDGET = Path(__file__).with_name("legacy_budget.txt")
 ENV_ALLOWLIST = Path(__file__).with_name("env_access_allowlist.txt")
@@ -34,7 +35,7 @@ ENV_OWNERS = ("core/",)
 
 
 def _modules() -> list[Path]:
-    return sorted(p for p in PACKAGE.rglob("*.py") if "__pycache__" not in p.parts)
+    return [path for path, _ in python_files()]
 
 
 def _rel(path: Path) -> str:
@@ -66,13 +67,12 @@ def hygiene_violations() -> list[str]:
 
 
 def legacy_files() -> list[str]:
-    return sorted(_rel(p) for p in _modules() if "legacy" in p.relative_to(PACKAGE).parts)
+    return sorted(_rel(p) for p, rel in python_files() if "legacy" in rel.split("/"))
 
 
 def env_reads() -> Counter[str]:
     counts: Counter[str] = Counter()
-    for path in _modules():
-        rel = path.relative_to(PACKAGE).as_posix()
+    for path, rel in python_files():
         if rel.startswith(ENV_OWNERS):
             continue
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8-sig"))):
@@ -87,8 +87,8 @@ def _read_list(path: Path) -> list[str]:
 
 
 def test_namespace_packages_have_no_init():
-    shadowing = [f"src/factorlab/{ns}/__init__.py".replace("//", "/") for ns in NAMESPACES
-                 if (PACKAGE / ns / "__init__.py").exists()]
+    shadowing = [_rel(root / ns / "__init__.py") for root in package_roots() for ns in NAMESPACES
+                 if (root / ns / "__init__.py").exists()]
     assert not shadowing, f"remove these to keep the namespaces open (N1): {shadowing}"
 
 

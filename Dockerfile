@@ -1,29 +1,47 @@
+# syntax=docker/dockerfile:1.7
+# Interim monolith image: every workspace member in one image, still deployed by the
+# legacy release.yml + deploy-release.sh path until each component ships its own
+# image (components/<name>/Dockerfile). Compose supplies each service's command.
+
 FROM node:22-bookworm-slim AS web-builder
-
 WORKDIR /web
-
-COPY src/factorlab/webui/package.json src/factorlab/webui/package-lock.json ./
+COPY components/web/package.json components/web/package-lock.json ./
 RUN npm ci
-
-COPY src/factorlab/webui/ ./
+COPY components/web/ ./
 RUN npm run build
 
 
+FROM ghcr.io/astral-sh/uv:0.12.20 AS uv
+
+
+FROM python:3.12-slim AS build
+COPY --from=uv /uv /usr/local/bin/uv
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/opt/venv
+WORKDIR /src
+COPY pyproject.toml uv.lock ./
+COPY libs ./libs
+COPY providers ./providers
+COPY components ./components
+# Non-editable: the venv holds real copies of every member, nothing points back at /src.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-editable --all-packages
+
+
 FROM python:3.12-slim
-
 WORKDIR /app
-
-COPY pyproject.toml ./
-COPY src ./src
+COPY --from=build /opt/venv /opt/venv
 COPY scripts ./scripts
 COPY configs ./configs
 COPY --from=web-builder /web/dist /app/web-dist
 
-RUN pip install --no-cache-dir .
-
-# FACTORLAB_HOME anchors data/, logs/ and configs/ at /app; the package itself runs
-# from site-packages (the ClickHouse SQL ships inside it as package data).
-ENV FACTORLAB_HOME=/app \
+# FACTORLAB_HOME anchors data/, logs/ and configs/ at /app; the packages run from the
+# venv (the ClickHouse SQL ships inside factorlab-schema as package data).
+ENV PATH=/opt/venv/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    FACTORLAB_HOME=/app \
     FACTORLAB_WEB_DIST=/app/web-dist
 
 # Release metadata last, so it never invalidates the dependency layers above.

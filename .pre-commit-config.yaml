@@ -44,7 +44,7 @@ repos:
         types: [text]
 
       - id: no-hardcoded-raw-paths
-        name: Block hardcoded data/<source>/raw literals in src/ scripts/
+        name: Block hardcoded data/<source>/raw literals in product code and scripts/
         entry: python scripts/_shared/_check_paths_in_code.py
         language: system
         pass_filenames: true

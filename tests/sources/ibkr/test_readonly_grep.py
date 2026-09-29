@@ -12,11 +12,12 @@ not here.
 from __future__ import annotations
 
 import re
+import importlib.util
 from pathlib import Path
 
 import pytest
 
-MODULE_ROOT = Path(__file__).resolve().parents[3] / "src" / "factorlab" / "sources" / "ibkr"
+MODULE_ROOT = Path(importlib.util.find_spec("factorlab.sources.ibkr").submodule_search_locations[0])
 
 # Substring patterns (case-sensitive) — any hit fails the test.
 FORBIDDEN_SUBSTRINGS = [

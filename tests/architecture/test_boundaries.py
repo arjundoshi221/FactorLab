@@ -23,8 +23,9 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
-SRC = REPO / "src" / "factorlab"
+sys.path.insert(0, str(Path(__file__).parent))  # run as a script to regenerate the allowlist
+from _workspace import REPO, module_name, package_roots, python_files  # noqa: E402
+
 ALLOWLIST = Path(__file__).with_name("boundary_allowlist.txt")
 
 # Provider names as they appear in `source` columns, and vendor-only codes.
@@ -40,20 +41,13 @@ EXEMPT_ASSIGNMENTS = frozenset({"KNOWN_ALIAS_KINDS"})
 ENGINE_SCRIPTS = ("scripts/factlab_ingest.py",)
 
 
-def _module_name(path: Path) -> str:
-    rel = path.relative_to(REPO / "src").with_suffix("")
-    parts = list(rel.parts)
-    if parts[-1] == "__init__":
-        parts.pop()
-    return ".".join(parts)
-
-
 def _imports(path: Path, tree: ast.AST) -> list[set[str]]:
     """Candidate module names per import statement (``from a import b`` -> {a, a.b})."""
-    in_src = path.is_relative_to(REPO / "src")
+    in_src = any(path.is_relative_to(root) for root in package_roots())
     package = ""
     if in_src:
-        package = _module_name(path) if path.name == "__init__.py" else             _module_name(path).rsplit(".", 1)[0]
+        name = module_name(path)
+        package = name if path.name == "__init__.py" else name.rsplit(".", 1)[0]
     statements: list[set[str]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -110,8 +104,7 @@ def violations() -> Counter[tuple[str, str, str]]:
     def record(rule: str, path: Path, token: str) -> None:
         found[(rule, path.relative_to(REPO).as_posix(), token)] += 1
 
-    for path in sorted(SRC.rglob("*.py")):
-        rel = path.relative_to(SRC).as_posix()
+    for path, rel in python_files():
         tree = _parse(path)
         for statement in _imports(path, tree):
             tokens: set[tuple[str, str]] = set()
@@ -191,8 +184,8 @@ def test_new_ingestion_layers_are_clean():
     """The engine layer and the new sink package start, and must stay, violation-free."""
     current = violations()
     dirty = [key for key in current
-             if key[1].startswith(("src/factorlab/ingest/", "src/factorlab/orchestration/",
-                                   "src/factorlab/storage/sinks/"))]
+             if key[1].startswith(("libs/ingest/", "libs/orchestration/",
+                                   "libs/storage/src/factorlab/storage/sinks/"))]
     assert not dirty, dirty
 
 

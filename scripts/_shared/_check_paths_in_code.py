@@ -19,7 +19,7 @@ import re
 import sys
 from pathlib import Path
 
-# Patterns we refuse to see in src/ and scripts/.
+# Patterns we refuse to see in product code (libs/, providers/, components/) and scripts/.
 # Each regex matches a hardcoded "data/<something>" literal that should
 # instead be ``raw_dir("...")`` / ``state_dir("...")`` / ``token_path("...")``.
 BANNED_PATTERNS = [
@@ -38,12 +38,12 @@ BANNED_PATTERNS = [
 # Files allowed to mention these literals (the helper module itself, this
 # lint script, the migration script, and tests that exercise the mapping).
 ALLOWED_FILES = {
-    "src/factorlab/shared/paths.py",
-    "scripts/_check_paths_in_code.py",
-    "scripts/_check_no_data_paths.py",
-    "scripts/_shared/migrate_raw_to_nas.py",
+    "libs/core/src/factorlab/core/paths.py",
+    "scripts/_shared/_check_paths_in_code.py",
+    "scripts/_shared/_check_no_data_paths.py",
     "tests/shared/test_paths.py",
 }
+POLICED_PREFIXES = ("libs/", "providers/", "components/", "scripts/")
 
 
 def _norm(path: str) -> str:
@@ -79,8 +79,7 @@ def main() -> int:
         norm = _norm(s)
         if norm in ALLOWED_FILES:
             continue
-        # Only police src/ and scripts/
-        if not (norm.startswith("src/") or norm.startswith("scripts/")):
+        if not norm.startswith(POLICED_PREFIXES):
             continue
         # Resolve relative to cwd (pre-commit runs at repo root)
         p = Path(s)

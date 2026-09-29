@@ -1306,7 +1306,7 @@ def list_political_trades(
 
 
 # The image sets FACTORLAB_WEB_DIST; a checkout serves the locally built UI.
-_default_web_dist = paths.home() / "src" / "factorlab" / "webui" / "dist"
+_default_web_dist = paths.home() / "components" / "web" / "dist"
 _web_dist = FileSystemPath(os.getenv("FACTORLAB_WEB_DIST", str(_default_web_dist)))
 if (_web_dist / "assets").is_dir():
     app.mount("/assets", StaticFiles(directory=_web_dist / "assets"), name="hub-assets")

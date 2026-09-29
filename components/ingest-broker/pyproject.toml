@@ -1,0 +1,31 @@
+[project]
+name = "factorlab-component-ingest-broker"
+version = "0.1.0"
+description = "Read-only IBKR account mirror into broker.*."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "factorlab-core",
+    "factorlab-runtime",
+    "factorlab-calendars",
+    "factorlab-ingest",
+    "factorlab-storage",
+    "factorlab-orchestration",
+    "factorlab-provider-ibkr",
+]
+
+[tool.uv.sources]
+factorlab-core = { workspace = true }
+factorlab-runtime = { workspace = true }
+factorlab-calendars = { workspace = true }
+factorlab-ingest = { workspace = true }
+factorlab-storage = { workspace = true }
+factorlab-orchestration = { workspace = true }
+factorlab-provider-ibkr = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# factorlab is a namespace: only this member's own package ships.
+packages = ["src/factorlab"]

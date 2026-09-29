@@ -1,0 +1,34 @@
+[project]
+name = "factorlab-component-ingest-political"
+version = "0.1.0"
+description = "Congressional references, House filings and trades."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "factorlab-core",
+    "factorlab-runtime",
+    "factorlab-calendars",
+    "factorlab-ingest",
+    "factorlab-storage",
+    "factorlab-orchestration",
+    "factorlab-provider-house-clerk",
+    "factorlab-provider-congress-legislators",
+    "requests>=2.32.3",
+]
+
+[tool.uv.sources]
+factorlab-core = { workspace = true }
+factorlab-runtime = { workspace = true }
+factorlab-calendars = { workspace = true }
+factorlab-ingest = { workspace = true }
+factorlab-storage = { workspace = true }
+factorlab-orchestration = { workspace = true }
+factorlab-provider-house-clerk = { workspace = true }
+factorlab-provider-congress-legislators = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# factorlab is a namespace: only this member's own package ships.
+packages = ["src/factorlab"]

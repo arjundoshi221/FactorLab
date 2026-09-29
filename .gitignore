@@ -177,7 +177,6 @@ wandb/
 !docs/**/*.jpg
 !docs/**/*.pdf
 # Web UI static assets and test fixtures
-!src/factorlab/webui/public/**
 !components/web/public/**
 !**/tests/fixtures/**/*.pdf
 
