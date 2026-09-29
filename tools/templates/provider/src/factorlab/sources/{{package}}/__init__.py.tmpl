@@ -1,0 +1,12 @@
+"""{{title}}: {{summary}}
+
+Serves ``{{dataset}}`` ({{market}}). Registered with the ingestion engine on import;
+bound in configs/ingestion/bindings.yaml (it starts as ``shadow``).
+"""
+
+from factorlab.ingest.registry import register_source
+from factorlab.sources.{{package}}.sources import {{Class}}Source
+
+register_source({{Class}}Source)
+
+__all__ = ["{{Class}}Source"]

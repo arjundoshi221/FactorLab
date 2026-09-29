@@ -1,0 +1,22 @@
+# Deployable component manifest (validated by tools/components.py; see
+# docs/architecture/08-repository-layout.md).
+schema: 1
+name: {{name}}
+kind: python
+package: {{dist}}
+summary: {{summary}}
+image: ghcr.io/arjundoshi221/factorlab-{{name}}
+dockerfile: components/{{name}}/Dockerfile
+entrypoint: factorlab-{{name}}
+providers: []
+secrets: [CLICKHOUSE_PASSWORD]
+services:
+  - name: {{name}}
+    command: ["engine", "daemon"]
+    mode: daemon
+health: {kind: running}
+platform:
+  image_var: FACTORLAB_{{NAME}}_IMAGE
+  rollback: {{rollback}}{{data_contract}}
+  user: "10001"
+  logs: /var/log/factorlab/{{name}}

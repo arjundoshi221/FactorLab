@@ -1,0 +1,9 @@
+"""Source conformance for the {{package}} provider (factorlab.testkit.source_conformance).
+
+These fail until real captures are recorded under tests/fixtures/{{dataset}}/
+(docs/architecture/07 §13.1): a provider does not ship without them.
+"""
+
+from factorlab.testkit.source_conformance import conformance_tests
+
+globals().update(conformance_tests("{{package}}"))

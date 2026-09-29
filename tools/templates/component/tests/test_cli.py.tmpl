@@ -1,0 +1,17 @@
+"""The {{name}} console entry point parses its commands."""
+
+from factorlab.components.{{package}}.cli import COMMANDS, main
+from factorlab.components.{{package}}.providers import PROVIDERS
+
+
+def test_commands_are_listed():
+    assert "engine" in COMMANDS
+
+
+def test_help_lists_the_commands(capsys):
+    assert main(["--help"]) == 0
+    assert "engine" in capsys.readouterr().out
+
+
+def test_providers_is_a_tuple_of_names():
+    assert isinstance(PROVIDERS, tuple)

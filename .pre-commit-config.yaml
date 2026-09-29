@@ -76,6 +76,20 @@ repos:
         files: ^libs/schema/src/factorlab/schema/sql/
         pass_filenames: false
 
+      - id: docs
+        name: docs, generated indexes and CONTEXT.md files are current
+        entry: uv run --frozen python tools/check_docs.py
+        language: system
+        files: (\.md$|^docs/|^tools/check_docs\.py$|^components/web/src/roadmap\.generated\.json$)
+        pass_filenames: false
+
+      - id: env-example
+        name: .env.example matches the settings the code reads
+        entry: uv run --frozen python tools/env_example.py --check
+        language: system
+        files: (\.py$|component\.yaml$|^\.env\.example$)
+        pass_filenames: false
+
       - id: architecture
         name: architecture rules (boundaries, namespaces, ratchets)
         entry: uv run --frozen pytest -q -p no:cacheprovider tests/architecture

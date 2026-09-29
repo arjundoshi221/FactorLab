@@ -1,0 +1,60 @@
+"""{{title}} source for ``{{dataset}}``: ``plan -> fetch -> normalize`` (docs/architecture/07 §6).
+
+Scaffolded by ``tools/scaffold.py new-provider``. Fill in the three steps:
+
+* ``plan`` turns a request into independent fetch units (one HTTP call each);
+* ``fetch`` performs one call and returns the raw capture (archived before normalizing);
+* ``normalize`` turns a capture into the dataset's records, offline and deterministically.
+
+Then record real captures under ``tests/fixtures/{{dataset}}/`` (07 §13.1); the
+conformance tests fail until they exist.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
+from typing import Any, ClassVar
+
+import requests
+
+from factorlab.ingest.bindings import ProviderSettings
+from factorlab.ingest.datasets import Capabilities, FetchUnit
+from factorlab.ingest.provider import RawCapture
+
+
+class {{Class}}Settings(ProviderSettings):
+    """Non-secret settings from configs/sources/{{package}}.yaml; secrets resolve by name."""
+
+    timeout: float = 30.0
+
+
+class {{Class}}Source:
+    provider: ClassVar[str] = "{{package}}"
+    dataset: ClassVar[str] = "{{dataset}}"
+    capabilities: ClassVar[Capabilities] = Capabilities(
+        markets=frozenset({"{{market}}"}){{resolutions}}
+    )
+    settings_model: ClassVar[type[{{Class}}Settings]] = {{Class}}Settings
+
+    def __init__(
+        self,
+        settings: {{Class}}Settings,
+        *,
+        instance: str = "{{package}}",
+        session: requests.Session | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
+        self.settings = settings
+        self.instance = instance
+        self.session = session or requests.Session()
+        self._clock = clock
+
+    def plan(self, request: Any) -> Sequence[FetchUnit]:
+        raise NotImplementedError("{{package}}: plan the fetch units for a request")
+
+    def fetch(self, unit: FetchUnit) -> RawCapture:
+        raise NotImplementedError("{{package}}: fetch one unit and return its RawCapture")
+
+    def normalize(self, capture: RawCapture) -> Sequence[Any]:
+        raise NotImplementedError("{{package}}: turn a capture into {{dataset}} records")

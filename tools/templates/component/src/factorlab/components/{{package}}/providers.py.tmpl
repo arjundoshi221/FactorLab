@@ -1,0 +1,8 @@
+"""Provider packages this component ships.
+
+The engine loads only these (``factorlab.ingest.registry.load_providers``). Add a
+provider with ``tools/scaffold.py new-provider <name> --component {{name}}``, which
+also adds its dependency and the manifest's ``providers`` list.
+"""
+
+PROVIDERS: tuple[str, ...] = ()

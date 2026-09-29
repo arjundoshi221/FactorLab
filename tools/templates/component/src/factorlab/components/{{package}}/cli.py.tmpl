@@ -1,0 +1,30 @@
+"""``factorlab-{{name}}``: {{summary}}
+
+Each command forwards its remaining arguments to that command's own parser, e.g.
+``factorlab-{{name}} engine --help``. ``engine`` runs the provider-agnostic engine
+(``factorlab.orchestration.cli``) with the providers this component ships.
+"""
+
+from __future__ import annotations
+
+from factorlab.runtime.cli import Command, dispatch
+
+
+def _engine(argv: list[str]) -> int:
+    from factorlab.components.{{package}}.providers import PROVIDERS
+    from factorlab.orchestration import cli as engine_cli
+
+    return engine_cli.main(argv, providers=PROVIDERS, prog="factorlab-{{name}} engine")
+
+
+COMMANDS = {
+    "engine": Command("provider-agnostic engine: validate, run, daemon, replay", _engine),
+}
+
+
+def main(argv: list[str] | None = None) -> int:
+    return dispatch("factorlab-{{name}}", COMMANDS, argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

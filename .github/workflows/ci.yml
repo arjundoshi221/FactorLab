@@ -39,6 +39,11 @@ jobs:
         run: |
           uv run --frozen python tools/components.py check
           uv run --frozen python tools/components.py render-compose --check
+      - name: Docs, generated indexes and .env.example are current
+        run: |
+          uv run --frozen python tools/check_docs.py
+          uv run --frozen python tools/env_example.py --check
+          uv run --frozen python tools/schema_checksums.py check
       - name: Tests (with branch coverage of every factorlab.* package)
         run: uv run --frozen pytest --cov --cov-report=term:skip-covered
       - name: Coverage floors (raise them when coverage improves)
