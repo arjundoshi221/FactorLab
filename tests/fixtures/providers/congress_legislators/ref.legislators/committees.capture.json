@@ -1,0 +1,13 @@
+{
+ "request_key": "file:committees",
+ "transport": "http",
+ "fetched_at": "2026-09-24T02:15:00+00:00",
+ "source_url": "https://unitedstates.github.io/congress-legislators/committees.json",
+ "content_type": "application/json",
+ "status_code": 200,
+ "headers": {},
+ "metadata": {
+  "file": "committees"
+ },
+ "body_b64": "W3sidHlwZSI6ICJob3VzZSIsICJuYW1lIjogIkhvdXNlIENvbW1pdHRlZSBvbiBBZ3JpY3VsdHVyZSIsICJ0aG9tYXNfaWQiOiAiSFNBRyIsICJqdXJpc2RpY3Rpb24iOiAiQWdyaWN1bHR1cmUiLCAidXJsIjogImh0dHBzOi8vYWdyaWN1bHR1cmUuaG91c2UuZ292LyIsICJzdWJjb21taXR0ZWVzIjogW3sibmFtZSI6ICJMaXZlc3RvY2siLCAidGhvbWFzX2lkIjogIjI5In1dfV0="
+}

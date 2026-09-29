@@ -2862,33 +2862,62 @@ DROP PARTITION` from a cron job driven by policy config, not by ClickHouse TTL
 ### 13.1 Multi-vendor conflict resolution
 
 Same (`listing_id`, `resolution`, `bar_time`) can arrive from Schwab, EODHD,
-IBKR. Sort key includes `source` → no PK collision. To get "the best" bar:
+IBKR, Upstox. The sort key includes `source`, so vendors never collide; every
+bound provider keeps its own rows (07 §10). "The best" bar is chosen at read
+time by priority. Rev 12 (2026-09-24) replaced the rev-1 materialized-view
+sketch (hard-coded `arrayIndexOf([...], source)`) with a priority table plus a
+plain view, built in **Wave 10**:
+
+- **Q1 resolved: read-time, not an MV.** An MV bakes the priority into stored
+  rows and must be rebuilt whenever priorities change; a view over
+  `ref.source_priorities` switches providers instantly. Cost is query CPU, so
+  readers must filter by `listing_id` and a `bar_time` range.
+- `ref.source_priorities` is written only by the ingestion engine from
+  `configs/ingestion/bindings.yaml` (`factlab_ingest.py sync-priorities`), so
+  config is the single source of truth. Lower `priority` wins. `shadow` and
+  `disabled` rows are stored for audit but never selected.
 
 ```sql
-CREATE MATERIALIZED VIEW market.bars_best TO market.bars_best_storage AS
-SELECT
-    country_code, listing_id, resolution, session, bar_time,
-    argMax(open,   priority_score) AS open,
-    argMax(high,   priority_score) AS high,
-    argMax(low,    priority_score) AS low,
-    argMax(close,  priority_score) AS close,
-    argMax(volume, priority_score) AS volume,
-    argMax(source, priority_score) AS chosen_source
-FROM (
-    SELECT b.*,
-        arrayIndexOf(['ibkr','eodhd','schwab','upstox'], source) AS priority_score
-    FROM market.bars b
-)
-GROUP BY country_code, listing_id, resolution, session, bar_time;
+CREATE TABLE ref.source_priorities (
+    dataset        LowCardinality(String),        -- 'market.bars', 'market.futures_contract_bars'
+    country_code   FixedString(2),
+    resolution     LowCardinality(String),        -- '' for datasets without one
+    source         LowCardinality(String),        -- provider as written to `source`
+    priority       UInt16,                        -- lower wins
+    role           LowCardinality(String),        -- 'primary','secondary','shadow','disabled'
+    active         Bool,
+    synced_at      DateTime64(3, 'UTC'),
+    version        UInt64,
+    ingested_at    DateTime64(3, 'UTC')
+) ENGINE = ReplacingMergeTree(version)
+ORDER BY (dataset, country_code, resolution, source);
 ```
 
-Priority list is a table (`ref.source_priorities`) so it's editable without
-code deploys.
+```sql
+CREATE VIEW market.bars_best AS
+SELECT
+    b.country_code AS country_code, b.listing_id AS listing_id,
+    b.resolution AS resolution, b.bar_time AS bar_time,
+    argMin(b.session, p.priority) AS session,
+    argMin(b.open, p.priority) AS open, argMin(b.high, p.priority) AS high,
+    argMin(b.low, p.priority) AS low, argMin(b.close, p.priority) AS close,
+    argMin(b.volume, p.priority) AS volume,
+    argMin(b.source, p.priority) AS chosen_source,
+    count() AS source_count
+FROM market.bars AS b FINAL
+INNER JOIN ref.source_priorities AS p FINAL
+    ON p.country_code = b.country_code AND p.resolution = b.resolution AND p.source = b.source
+WHERE p.dataset = 'market.bars' AND p.active AND p.role IN ('primary', 'secondary')
+GROUP BY b.country_code, b.listing_id, b.resolution, b.bar_time;
+```
+
+The checked-in view (`sql/clickhouse/v2/wave_10_views_source_priorities.sql`)
+carries every `market.bars` column; the block above is the shape.
 
 ### 13.2 Time zones
 
 - **Storage:** everything in `market.*`, `fundamentals.*`, `alt.*`, `meta.*` is UTC.
-- **Bar time:** UTC always. Daily bars use `00:00:00 UTC of trade_date`.
+- **Bar time:** UTC always. Intraday bars use their open time. Daily/weekly/monthly bars use **exchange-local midnight of `trade_date`, converted to UTC** (e.g. `04:00Z`/`05:00Z` for New York). Rev 12 correction: production US daily rows were always keyed that way (`V2USStorage.write_daily`); the earlier `00:00:00 UTC` text never matched the data, and the ingestion sinks canonicalise to the local-midnight key (07 §15.1).
 - **Trade date:** session-local calendar date (e.g., 2026-09-18 for a NYSE session even if UTC crosses).
 - **Session windows:** stored in `ref.sessions` as local-time strings; resolved to UTC at query time using `ref.holidays` for adjustments.
 
@@ -3559,6 +3588,14 @@ Exit criteria:
 
 ---
 
+**Wave 10 — Multi-source priority (07 P7, rev 12)**
+1. `ref.source_priorities` (generated from §13.1 into `wave_10_schema_source_priorities.sql`
+   via the generator's forward-wave map, so waves 1-8 stay byte-identical)
+2. `market.bars_best` view (`wave_10_views_source_priorities.sql`)
+3. Sync priorities from bindings: `python scripts/factlab_ingest.py sync-priorities`
+4. Promote a second vendor to `secondary` and read through `market.bars_best`
+5. Research/API reads switch from `market.bars` + `source = ...` to `market.bars_best`
+
 ## 16. What this doc explicitly does NOT cover
 
 - Compute layer (Python/Polars/DuckDB research environment)
@@ -3671,6 +3708,16 @@ A fourth gap remains: no formal `ref.funds` dim. Currently single-fund — using
 ---
 
 ## 18. Revision changelog
+
+### Revision 12 — 2026-09-24
+
+Ingestion provider abstraction (07) follow-ups. No change to waves 1-9.
+
+- §13.1: `market.bars_best` becomes a read-time view over the new
+  `ref.source_priorities` (Q1 in 07 §16); the hard-coded MV sketch is retired.
+  Both objects leave `deferred.json` and ship in Wave 10.
+- §13.2: daily-bar key corrected to exchange-local midnight, matching production.
+- §15: Wave 10 added.
 
 ### Revision 11 — 2026-09-20
 

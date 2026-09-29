@@ -1,0 +1,32 @@
+{
+ "request_key": "bulk:US:2026-09-23",
+ "transport": "http",
+ "fetched_at": "2026-09-24T01:00:00+00:00",
+ "source_url": "https://eodhd.com/api/eod-bulk-last-day/US?date=2026-09-23&fmt=json",
+ "content_type": "application/json",
+ "status_code": 200,
+ "headers": {},
+ "metadata": {
+  "endpoint": "bulk",
+  "resolution": "daily",
+  "instruments": [
+   {
+    "alias_value": "AAPL.US",
+    "exchange_code": "XNAS",
+    "trading_symbol": "AAPL",
+    "isin": "US0378331005"
+   },
+   {
+    "alias_value": "BRK-B.US",
+    "exchange_code": "XNYS",
+    "trading_symbol": "BRK-B",
+    "isin": "US0846707026"
+   }
+  ],
+  "params": {
+   "fmt": "json",
+   "date": "2026-09-23"
+  }
+ },
+ "body_b64": "W3siY29kZSI6ICJBQVBMIiwgImV4Y2hhbmdlX3Nob3J0X25hbWUiOiAiVVMiLCAiZGF0ZSI6ICIyMDI2LTA5LTIzIiwgIm9wZW4iOiAyMzAuMSwgImhpZ2giOiAyMzEuOSwgImxvdyI6IDIyOS42LCAiY2xvc2UiOiAyMzEuNCwgImFkanVzdGVkX2Nsb3NlIjogMjMxLjQsICJ2b2x1bWUiOiA0OTg4Nzc2Nn0sIHsiY29kZSI6ICJCUkstQiIsICJleGNoYW5nZV9zaG9ydF9uYW1lIjogIlVTIiwgImRhdGUiOiAiMjAyNi0wOS0yMyIsICJvcGVuIjogNDcxLjAsICJoaWdoIjogNDc0LjIsICJsb3ciOiA0NzAuMSwgImNsb3NlIjogNDczLjMsICJhZGp1c3RlZF9jbG9zZSI6IDQ3My4zLCAidm9sdW1lIjogMzMyMjExMH0sIHsiY29kZSI6ICJNU0ZUIiwgImV4Y2hhbmdlX3Nob3J0X25hbWUiOiAiVVMiLCAiZGF0ZSI6ICIyMDI2LTA5LTIzIiwgIm9wZW4iOiA0NDAuMCwgImhpZ2giOiA0NDEuMCwgImxvdyI6IDQzOS4wLCAiY2xvc2UiOiA0NDAuNSwgImFkanVzdGVkX2Nsb3NlIjogNDQwLjUsICJ2b2x1bWUiOiAxfV0="
+}

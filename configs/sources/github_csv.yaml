@@ -1,0 +1,12 @@
+# GitHub-hosted CSV index constituents (docs/architecture/07 §9.3).
+# Serves ref.universe_membership. Mirrors deploy/us-universe.yaml's github_csv
+# mapping; that file keeps driving the production universe job until cutover.
+name: github_csv
+timeout: 30
+indexes:
+  sp500:
+    name: S&P 500
+    url: https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv
+    symbol_column: Symbol
+    minimum_constituents: 450
+    country: US

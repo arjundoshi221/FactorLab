@@ -1,0 +1,28 @@
+[
+ {
+  "_type": "ContractBarRecord",
+  "contract": {
+   "_type": "InstrumentRef",
+   "alias_kind": "upstox_instrument_key",
+   "alias_value": "NSE_FO|61284",
+   "exchange_code": "NSE",
+   "trading_symbol": "RELIANCE FUT 28 JUL 26",
+   "country_code": "IN",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "resolution": "1min",
+  "bar_time": "2026-09-24T03:45:00+00:00",
+  "open": "1412.0",
+  "high": "1415.0",
+  "low": "1411.0",
+  "close": "1414.0",
+  "volume": 1500,
+  "turnover": null,
+  "trades_count": null,
+  "oi": 812000,
+  "settlement_price": null,
+  "session": null
+ }
+]

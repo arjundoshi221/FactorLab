@@ -6,6 +6,28 @@
 
 Living index of every script/module that fetches, parses, or upserts data.
 
+## Provider adapters (07 model, 2026-09-24)
+
+Every source below runs through `scripts/factlab_ingest.py` (engine -> DB-service sinks) and is
+bound in `configs/ingestion/bindings.yaml`. All are `shadow` until their cutover
+([07 §15.2](07-ingestion-provider-abstraction.md)); the legacy scripts further down still
+serve production until then.
+
+| Provider (`sources/…`) | Datasets | Legacy path it replaces |
+|---|---|---|
+| `upstox` | `ref.listings`, `ref.contracts`, `market.bars` 1min, `market.futures_contract_bars` 1min | `factlab_india_clickhouse_5min.py` / `countries/in_/equities/upstox` |
+| `eodhd` | `ref.listings`, `ref.universe_membership`, `market.bars` daily | `countries/us/equities/eodhd/*`, `factlab_us_universe.py` master |
+| `schwab` | `ref.listings` (aliases), `market.bars` daily + 1min | `factlab_us_clickhouse.py` / `sources/schwab/market.py` |
+| `github_csv` | `ref.universe_membership` | `universe/github_csv.py` + Schwab validation |
+| `ibkr` | `broker.snapshot` | `us_portfolio_ibkr_snapshot.py` (`IBKRBrokerProvider`) |
+| `congress_legislators` | `ref.legislators` | `sources/political/references.py` + `V2PoliticalClickHouseStorage` |
+| `house_clerk` | `alt.political_filings`, `alt.political_trades` | `factlab_political_bootstrap.py` |
+| `edgar` | `fundamentals.filings` (+ line items) | none (new) |
+
+Legacy-only sources with no adapter yet (deprecated in place, 07 §16): FEC, LDA, Senate eFD,
+Senate Stock Watcher, Congress.gov, USAspending, Finnhub contracts. Retirement list:
+[07 §15.3](07-ingestion-provider-abstraction.md).
+
 ## Country × domain matrix
 
 | Country | Domain                                                         | Vendors / sources                                                              |

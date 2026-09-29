@@ -1,0 +1,54 @@
+[
+ {
+  "_type": "AccountStateRow",
+  "snapshot_time": "2026-09-23T20:30:00+00:00",
+  "broker_code": "ibkr",
+  "account_id": "DUE375963",
+  "account_mode": "paper",
+  "country_code": "US",
+  "metric": "NetLiquidation",
+  "segment": "",
+  "currency": "USD",
+  "value_num": "1481501.63",
+  "value_str": null
+ },
+ {
+  "_type": "AccountStateRow",
+  "snapshot_time": "2026-09-23T20:30:00+00:00",
+  "broker_code": "ibkr",
+  "account_id": "DUE375963",
+  "account_mode": "paper",
+  "country_code": "US",
+  "metric": "BuyingPower",
+  "segment": "",
+  "currency": "USD",
+  "value_num": "5926006.52",
+  "value_str": null
+ },
+ {
+  "_type": "AccountStateRow",
+  "snapshot_time": "2026-09-23T20:30:00+00:00",
+  "broker_code": "ibkr",
+  "account_id": "DUE375963",
+  "account_mode": "paper",
+  "country_code": "US",
+  "metric": "NetLiquidation",
+  "segment": "S",
+  "currency": "USD",
+  "value_num": "1481501.63",
+  "value_str": null
+ },
+ {
+  "_type": "AccountStateRow",
+  "snapshot_time": "2026-09-23T20:30:00+00:00",
+  "broker_code": "ibkr",
+  "account_id": "DUE375963",
+  "account_mode": "paper",
+  "country_code": "US",
+  "metric": "AccountType",
+  "segment": "",
+  "currency": "NONE",
+  "value_num": null,
+  "value_str": "INDIVIDUAL"
+ }
+]

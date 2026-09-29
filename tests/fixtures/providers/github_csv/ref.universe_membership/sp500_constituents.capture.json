@@ -1,0 +1,18 @@
+{
+ "request_key": "universe:sp500",
+ "transport": "http",
+ "fetched_at": "2026-09-24T01:00:00+00:00",
+ "source_url": "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv",
+ "content_type": "text/plain; charset=utf-8",
+ "status_code": 200,
+ "headers": {},
+ "metadata": {
+  "universe": "sp500",
+  "url": "https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv",
+  "symbol_column": "Symbol",
+  "minimum_constituents": 3,
+  "name": "S&P 500",
+  "country": "US"
+ },
+ "body_b64": "77u/U3ltYm9sLFNlY3VyaXR5LEdJQ1MgU2VjdG9yLEdJQ1MgU3ViLUluZHVzdHJ5LEhlYWRxdWFydGVycyBMb2NhdGlvbixEYXRlIGFkZGVkLENJSyxGb3VuZGVkCkFBUEwsQXBwbGUgSW5jLixJbmZvcm1hdGlvbiBUZWNobm9sb2d5LFRlY2hub2xvZ3kgSGFyZHdhcmUsIkN1cGVydGlubywgQ2FsaWZvcm5pYSIsMTk4Mi0xMS0zMCwwMDAwMzIwMTkzLDE5NzcKQlJLLkIsQmVya3NoaXJlIEhhdGhhd2F5LEZpbmFuY2lhbHMsTXVsdGktU2VjdG9yIEhvbGRpbmdzLCJPbWFoYSwgTmVicmFza2EiLDIwMTAtMDItMTYsMDAwMTA2Nzk4MywxODM5Ck1TRlQsTWljcm9zb2Z0LEluZm9ybWF0aW9uIFRlY2hub2xvZ3ksU3lzdGVtcyBTb2Z0d2FyZSwiUmVkbW9uZCwgV2FzaGluZ3RvbiIsMTk5NC0wNi0wMSwwMDAwNzg5MDE5LDE5NzUKQUFQTCxBcHBsZSBJbmMuLEluZm9ybWF0aW9uIFRlY2hub2xvZ3ksVGVjaG5vbG9neSBIYXJkd2FyZSwiQ3VwZXJ0aW5vLCBDYWxpZm9ybmlhIiwxOTgyLTExLTMwLDAwMDAzMjAxOTMsMTk3Nwo="
+}

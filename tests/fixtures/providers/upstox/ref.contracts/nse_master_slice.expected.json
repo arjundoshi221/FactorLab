@@ -1,0 +1,78 @@
+[
+ {
+  "_type": "ContractRecord",
+  "ref": {
+   "_type": "InstrumentRef",
+   "alias_kind": "upstox_instrument_key",
+   "alias_value": "NSE_FO|61284",
+   "exchange_code": "NSE",
+   "trading_symbol": "RELIANCE FUT 28 JUL 26",
+   "country_code": "IN",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "underlying": {
+   "_type": "InstrumentRef",
+   "alias_kind": "upstox_instrument_key",
+   "alias_value": "NSE_EQ|INE002A01018",
+   "exchange_code": "NSE",
+   "trading_symbol": "RELIANCE",
+   "country_code": "IN",
+   "isin": "INE002A01018",
+   "cusip": null,
+   "figi": null
+  },
+  "product_type": "single_stock_future",
+  "expiry": "2026-07-28",
+  "right": null,
+  "strike": null,
+  "lot_size": 500,
+  "tick_size": "10.0",
+  "multiplier": 1,
+  "weekly": false,
+  "active": true,
+  "attributes": {
+   "exchange_token": "61284",
+   "asset_symbol": "RELIANCE"
+  }
+ },
+ {
+  "_type": "ContractRecord",
+  "ref": {
+   "_type": "InstrumentRef",
+   "alias_kind": "upstox_instrument_key",
+   "alias_value": "NSE_FO|68672",
+   "exchange_code": "NSE",
+   "trading_symbol": "MAXHEALTH FUT 29 SEP 26",
+   "country_code": "IN",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "underlying": {
+   "_type": "InstrumentRef",
+   "alias_kind": "upstox_instrument_key",
+   "alias_value": "NSE_EQ|INE027H01010",
+   "exchange_code": "NSE",
+   "trading_symbol": "MAXHEALTH",
+   "country_code": "IN",
+   "isin": "INE027H01010",
+   "cusip": null,
+   "figi": null
+  },
+  "product_type": "single_stock_future",
+  "expiry": "2026-09-29",
+  "right": null,
+  "strike": null,
+  "lot_size": 525,
+  "tick_size": "10.0",
+  "multiplier": 1,
+  "weekly": false,
+  "active": true,
+  "attributes": {
+   "exchange_token": "68672",
+   "asset_symbol": "MAXHEALTH"
+  }
+ }
+]

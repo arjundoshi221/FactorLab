@@ -1,0 +1,21 @@
+{
+ "request_key": "AAPL:1min",
+ "transport": "http",
+ "fetched_at": "2026-09-23T13:32:30+00:00",
+ "source_url": "https://api.schwabapi.com/marketdata/v1/pricehistory?symbol=AAPL",
+ "content_type": "application/json",
+ "status_code": 200,
+ "headers": {},
+ "metadata": {
+  "resolution": "1min",
+  "instruments": [
+   {
+    "alias_value": "AAPL",
+    "exchange_code": "XNAS",
+    "trading_symbol": "AAPL",
+    "isin": "US0378331005"
+   }
+  ]
+ },
+ "body_b64": "eyJzeW1ib2wiOiAiQUFQTCIsICJlbXB0eSI6IGZhbHNlLCAiY2FuZGxlcyI6IFt7Im9wZW4iOiAyMjkuMCwgImhpZ2giOiAyMjkuMiwgImxvdyI6IDIyOC45LCAiY2xvc2UiOiAyMjkuMSwgInZvbHVtZSI6IDEwMDAsICJkYXRldGltZSI6IDE3OTAxNzAxNDAwMDB9LCB7Im9wZW4iOiAyMzAuMSwgImhpZ2giOiAyMzAuNiwgImxvdyI6IDIzMC4wLCAiY2xvc2UiOiAyMzAuNCwgInZvbHVtZSI6IDgxMDAwMCwgImRhdGV0aW1lIjogMTc5MDE3MDIwMDAwMH0sIHsib3BlbiI6IDIzMC40LCAiaGlnaCI6IDIzMC45LCAibG93IjogMjMwLjIsICJjbG9zZSI6IDIzMC44LCAidm9sdW1lIjogNDAyMDAwLCAiZGF0ZXRpbWUiOiAxNzkwMTcwMjYwMDAwfSwgeyJvcGVuIjogMjMwLjEsICJoaWdoIjogMjMwLjcsICJsb3ciOiAyMzAuMCwgImNsb3NlIjogMjMwLjUsICJ2b2x1bWUiOiA4MTI1MDAsICJkYXRldGltZSI6IDE3OTAxNzAyMDAwMDB9LCB7Im9wZW4iOiAyMzAuOCwgImhpZ2giOiAyMzEuMCwgImxvdyI6IDIzMC43LCAiY2xvc2UiOiAyMzAuOSwgInZvbHVtZSI6IDEuNSwgImRhdGV0aW1lIjogMTc5MDE3MDI2MDAwMH0sIHsib3BlbiI6IDIzMC45LCAiaGlnaCI6IDIzMS4xLCAibG93IjogMjMwLjgsICJjbG9zZSI6IDIzMS4wLCAidm9sdW1lIjogOTAwMDAsICJkYXRldGltZSI6IDE3OTAxNzAzMjAwMDB9XX0="
+}

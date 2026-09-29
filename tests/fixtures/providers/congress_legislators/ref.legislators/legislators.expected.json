@@ -1,0 +1,60 @@
+[
+ {
+  "_type": "LegislatorRecord",
+  "entity": {
+   "_type": "EntityRef",
+   "alias_kind": "bioguide",
+   "alias_value": "E000001",
+   "entity_type": "person_legislator",
+   "name": "Ada Example"
+  },
+  "first_name": "Ada",
+  "last_name": "Example",
+  "terms": [
+   {
+    "_type": "LegislatorTerm",
+    "chamber": "house",
+    "state": "CA",
+    "start": "2023-01-03",
+    "end": "2025-01-03",
+    "party": "Democrat",
+    "district": 12,
+    "seat_class": null
+   },
+   {
+    "_type": "LegislatorTerm",
+    "chamber": "house",
+    "state": "CA",
+    "start": "2025-01-03",
+    "end": "2027-01-03",
+    "party": "Democrat",
+    "district": 12,
+    "seat_class": null
+   }
+  ]
+ },
+ {
+  "_type": "LegislatorRecord",
+  "entity": {
+   "_type": "EntityRef",
+   "alias_kind": "bioguide",
+   "alias_value": "S000002",
+   "entity_type": "person_legislator",
+   "name": "Sam Q. Senator"
+  },
+  "first_name": "Sam",
+  "last_name": "Senator",
+  "terms": [
+   {
+    "_type": "LegislatorTerm",
+    "chamber": "senate",
+    "state": "TX",
+    "start": "2021-01-03",
+    "end": "2027-01-03",
+    "party": "Republican",
+    "district": null,
+    "seat_class": 2
+   }
+  ]
+ }
+]

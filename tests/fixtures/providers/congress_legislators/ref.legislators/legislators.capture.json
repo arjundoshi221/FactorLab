@@ -1,0 +1,13 @@
+{
+ "request_key": "file:legislators",
+ "transport": "http",
+ "fetched_at": "2026-09-24T02:15:00+00:00",
+ "source_url": "https://unitedstates.github.io/congress-legislators/legislators.json",
+ "content_type": "application/json",
+ "status_code": 200,
+ "headers": {},
+ "metadata": {
+  "file": "legislators"
+ },
+ "body_b64": "W3siaWQiOiB7ImJpb2d1aWRlIjogIkUwMDAwMDEiLCAiZ292dHJhY2siOiAxfSwgIm5hbWUiOiB7ImZpcnN0IjogIkFkYSIsICJsYXN0IjogIkV4YW1wbGUiLCAib2ZmaWNpYWxfZnVsbCI6ICJBZGEgRXhhbXBsZSJ9LCAidGVybXMiOiBbeyJ0eXBlIjogInJlcCIsICJzdGFydCI6ICIyMDIzLTAxLTAzIiwgImVuZCI6ICIyMDI1LTAxLTAzIiwgInN0YXRlIjogIkNBIiwgImRpc3RyaWN0IjogMTIsICJwYXJ0eSI6ICJEZW1vY3JhdCJ9LCB7InR5cGUiOiAicmVwIiwgInN0YXJ0IjogIjIwMjUtMDEtMDMiLCAiZW5kIjogIjIwMjctMDEtMDMiLCAic3RhdGUiOiAiQ0EiLCAiZGlzdHJpY3QiOiAxMiwgInBhcnR5IjogIkRlbW9jcmF0In1dfSwgeyJpZCI6IHsiYmlvZ3VpZGUiOiAiUzAwMDAwMiJ9LCAibmFtZSI6IHsiZmlyc3QiOiAiU2FtIiwgIm1pZGRsZSI6ICJRLiIsICJsYXN0IjogIlNlbmF0b3IifSwgInRlcm1zIjogW3sidHlwZSI6ICJzZW4iLCAic3RhcnQiOiAiMjAyMS0wMS0wMyIsICJlbmQiOiAiMjAyNy0wMS0wMyIsICJzdGF0ZSI6ICJUWCIsICJjbGFzcyI6IDIsICJwYXJ0eSI6ICJSZXB1YmxpY2FuIn1dfSwgeyJpZCI6IHsiYmlvZ3VpZGUiOiAiWDAwMDAwMyJ9LCAibmFtZSI6IHsiZmlyc3QiOiAiTm8iLCAibGFzdCI6ICJUZXJtcyJ9LCAidGVybXMiOiBbeyJ0eXBlIjogImRlbGVnYXRlIiwgInN0YXJ0IjogIjIwMjUtMDEtMDMiLCAiZW5kIjogIjIwMjctMDEtMDMifV19XQ=="
+}

@@ -42,3 +42,11 @@ __all__ = [
     "resolve_cik",
     "search",
 ]
+
+
+# Dataset source for the provider-agnostic engine (07 §6, P8).
+from factorlab.shared.ingest.registry import register_source
+from factorlab.sources.edgar.fundamentals_source import EdgarCompanyFacts
+
+register_source(EdgarCompanyFacts)
+__all__ += ["EdgarCompanyFacts"]

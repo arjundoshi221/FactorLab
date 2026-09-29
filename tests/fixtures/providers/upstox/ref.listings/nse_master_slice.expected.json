@@ -1,0 +1,86 @@
+[
+ {
+  "_type": "InstrumentRecord",
+  "ref": {
+   "_type": "InstrumentRef",
+   "alias_kind": "upstox_instrument_key",
+   "alias_value": "NSE_EQ|INE002A01018",
+   "exchange_code": "NSE",
+   "trading_symbol": "RELIANCE",
+   "country_code": "IN",
+   "isin": "INE002A01018",
+   "cusip": null,
+   "figi": null
+  },
+  "name": "RELIANCE INDUSTRIES LTD",
+  "product_type": "common",
+  "currency": "INR",
+  "lot_size": 1,
+  "tick_size": "10.0",
+  "active": true,
+  "first_traded": null,
+  "last_traded": null,
+  "sector_raw": null,
+  "attributes": {
+   "exchange_token": "2885",
+   "security_type": "NORMAL",
+   "instrument_type": "EQ"
+  }
+ },
+ {
+  "_type": "InstrumentRecord",
+  "ref": {
+   "_type": "InstrumentRef",
+   "alias_kind": "upstox_instrument_key",
+   "alias_value": "NSE_EQ|INE0LLY01014",
+   "exchange_code": "NSE",
+   "trading_symbol": "EIEL",
+   "country_code": "IN",
+   "isin": "INE0LLY01014",
+   "cusip": null,
+   "figi": null
+  },
+  "name": "ENVIRO INFRA ENGINEERS L",
+  "product_type": "common",
+  "currency": "INR",
+  "lot_size": 1,
+  "tick_size": "1.0",
+  "active": true,
+  "first_traded": null,
+  "last_traded": null,
+  "sector_raw": null,
+  "attributes": {
+   "exchange_token": "27213",
+   "security_type": "NORMAL",
+   "instrument_type": "EQ"
+  }
+ },
+ {
+  "_type": "InstrumentRecord",
+  "ref": {
+   "_type": "InstrumentRef",
+   "alias_kind": "upstox_instrument_key",
+   "alias_value": "NSE_EQ|INE585B01010",
+   "exchange_code": "NSE",
+   "trading_symbol": "MARUTI",
+   "country_code": "IN",
+   "isin": "INE585B01010",
+   "cusip": null,
+   "figi": null
+  },
+  "name": "MARUTI SUZUKI INDIA LTD.",
+  "product_type": "common",
+  "currency": "INR",
+  "lot_size": 1,
+  "tick_size": "100.0",
+  "active": true,
+  "first_traded": null,
+  "last_traded": null,
+  "sector_raw": null,
+  "attributes": {
+   "exchange_token": "10999",
+   "security_type": "NORMAL",
+   "instrument_type": "EQ"
+  }
+ }
+]

@@ -43,3 +43,4 @@ When a development plan ships, the relevant pieces migrate into the folders abov
 | [008](008-script-naming-india-historical.md) | Script naming convention (`{country}_{domain}_{vendor}_{action}.py`) + India historical build-out | `[accepted]` |
 | [009](009-us-script-rename.md) | Apply 008 convention to US scripts (equities + political) | `[accepted]` |
 | [010](010-hyperliquid-tokenized-equities.md) | Hyperliquid tokenized-equity perps as 24/7 after-hours signal source (`alt_crypto_perp`) | `[proposed]` |
+| [011](011-provider-abstraction.md) | Strict provider abstraction for ingestion — dataset sinks, provider adapters, config bindings | `[in-progress]` |

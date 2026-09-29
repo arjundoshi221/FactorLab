@@ -15,7 +15,11 @@ docs/
 │
 ├── architecture/                      <- HOW the system is built
 │   ├── 01-overview.md                 <- system layers, lifecycle, principles
+│   ├── 02-database-clickhouse.md      <- why ClickHouse single-store
 │   ├── 03-roadmap.md                  <- phased build plan
+│   ├── 05-secrets-and-upstox-auth.md  <- Cloudflare secrets authority + broker OAuth
+│   ├── 06-schema-rehau.md             <- ClickHouse v2 schema (authoritative DDL source)
+│   ├── 07-ingestion-provider-abstraction.md <- provider adapters -> engine -> DB-service sinks
 │   ├── database.md                    <- canonical schema + storage + hosting (single source of truth)
 │   └── ingestion-inventory.md         <- index of every script/module that fetches data
 │
@@ -53,6 +57,7 @@ docs/
 ## Where things live (decision tree)
 
 - **"How is table X laid out?"** → [`architecture/database.md`](architecture/database.md)
+- **"How do I add / switch / duplicate a data provider?"** → [`architecture/07-ingestion-provider-abstraction.md`](architecture/07-ingestion-provider-abstraction.md) §12
 - **"Where does this script run, and when?"** → [`operations/orchestrators.md`](operations/orchestrators.md) → [`operations/windows-task-scheduler.md`](operations/windows-task-scheduler.md)
 - **"What does vendor V give us?"** → `data-sources/<country-or-domain>/<vendor>.md`
 - **"What env var does X read?"** → [`operations/env-reference.md`](operations/env-reference.md)

@@ -1,0 +1,15 @@
+[
+ {
+  "market": "USA",
+  "companies": [
+   {
+    "cik": "320193",
+    "ticker": "AAPL"
+   },
+   {
+    "cik": "0000789019",
+    "ticker": "MSFT"
+   }
+  ]
+ }
+]

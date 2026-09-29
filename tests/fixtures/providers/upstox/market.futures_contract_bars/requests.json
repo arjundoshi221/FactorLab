@@ -1,0 +1,20 @@
+[
+ {
+  "market": "IND",
+  "resolution": "1min",
+  "series": [
+   {
+    "instrument": {
+     "alias_kind": "upstox_instrument_key",
+     "alias_value": "NSE_FO|61284",
+     "exchange_code": "NSE",
+     "trading_symbol": "RELIANCE FUT 28 JUL 26",
+     "country_code": "IN",
+     "isin": null
+    },
+    "start": "2026-09-22T00:00:00+00:00",
+    "end": "2026-09-24T04:00:00+00:00"
+   }
+  ]
+ }
+]

@@ -1,0 +1,53 @@
+[
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "sp500",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "eodhd_symbol",
+   "alias_value": "AAPL.US",
+   "exchange_code": "",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "S&P 500",
+  "weight": null
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "sp500",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "eodhd_symbol",
+   "alias_value": "BRK-B.US",
+   "exchange_code": "",
+   "trading_symbol": "BRK-B",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "S&P 500",
+  "weight": null
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "sp500",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "eodhd_symbol",
+   "alias_value": "MSFT.US",
+   "exchange_code": "",
+   "trading_symbol": "MSFT",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "S&P 500",
+  "weight": null
+ }
+]

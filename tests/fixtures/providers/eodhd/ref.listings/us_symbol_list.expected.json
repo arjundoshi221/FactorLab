@@ -1,0 +1,74 @@
+[
+ {
+  "_type": "InstrumentRecord",
+  "ref": {
+   "_type": "InstrumentRef",
+   "alias_kind": "eodhd_symbol",
+   "alias_value": "AAPL.US",
+   "exchange_code": "XNAS",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": "US0378331005",
+   "cusip": null,
+   "figi": null
+  },
+  "name": "Apple Inc",
+  "product_type": "common",
+  "currency": "USD",
+  "lot_size": 1,
+  "tick_size": null,
+  "active": true,
+  "first_traded": null,
+  "last_traded": null,
+  "sector_raw": null,
+  "attributes": {}
+ },
+ {
+  "_type": "InstrumentRecord",
+  "ref": {
+   "_type": "InstrumentRef",
+   "alias_kind": "eodhd_symbol",
+   "alias_value": "BRK-B.US",
+   "exchange_code": "XNYS",
+   "trading_symbol": "BRK-B",
+   "country_code": "US",
+   "isin": "US0846707026",
+   "cusip": null,
+   "figi": null
+  },
+  "name": "Berkshire Hathaway Inc",
+  "product_type": "common",
+  "currency": "USD",
+  "lot_size": 1,
+  "tick_size": null,
+  "active": true,
+  "first_traded": null,
+  "last_traded": null,
+  "sector_raw": null,
+  "attributes": {}
+ },
+ {
+  "_type": "InstrumentRecord",
+  "ref": {
+   "_type": "InstrumentRef",
+   "alias_kind": "eodhd_symbol",
+   "alias_value": "NOISIN.US",
+   "exchange_code": "XASE",
+   "trading_symbol": "NOISIN",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "name": "No Isin Corp",
+  "product_type": "common",
+  "currency": "USD",
+  "lot_size": 1,
+  "tick_size": null,
+  "active": true,
+  "first_traded": null,
+  "last_traded": null,
+  "sector_raw": null,
+  "attributes": {}
+ }
+]

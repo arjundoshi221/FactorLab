@@ -1,4 +1,8 @@
-"""Current US legislator, committee, and membership reference data."""
+"""Current US legislator, committee, and membership reference data (legacy path).
+
+The dataset source is :mod:`factorlab.sources.congress_legislators`; ``storage``
+is any object with ``archive_http_response`` (07 rule R1).
+"""
 
 from __future__ import annotations
 
@@ -7,8 +11,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import requests
-
-from factorlab.storage.clickhouse import ClickHouseStorage
 
 _BASE_URL = "https://unitedstates.github.io/congress-legislators"
 _URLS = {
@@ -27,7 +29,7 @@ class PoliticalReferenceSnapshot:
 
 
 def fetch_reference_snapshot(
-    storage: ClickHouseStorage,
+    storage: Any,
     *,
     session: requests.Session | None = None,
 ) -> PoliticalReferenceSnapshot:

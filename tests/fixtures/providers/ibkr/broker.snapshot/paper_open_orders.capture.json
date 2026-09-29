@@ -1,0 +1,14 @@
+{
+ "request_key": "open_orders:paper",
+ "transport": "tcp_socket",
+ "fetched_at": "2026-09-23T20:30:00+00:00",
+ "source_url": "ibkr-gateway://paper/open_orders",
+ "content_type": "application/json",
+ "status_code": null,
+ "headers": {},
+ "metadata": {
+  "schema": "ibkr.open_orders.v1",
+  "records": 1
+ },
+ "body_b64": "eyJkYXRhIjpbeyJjb250cmFjdCI6eyJjb25JZCI6MjY1NTk4LCJjdXJyZW5jeSI6IlVTRCIsImV4Y2hhbmdlIjoiU01BUlQiLCJsb2NhbFN5bWJvbCI6IkFBUEwiLCJwcmltYXJ5RXhjaGFuZ2UiOiJOQVNEQVEiLCJzZWNUeXBlIjoiU1RLIiwic3ltYm9sIjoiQUFQTCIsInRyYWRpbmdDbGFzcyI6Ik5NUyJ9LCJvcmRlciI6eyJhY2NvdW50IjoiRFVFMzc1OTYzIiwiYWN0aW9uIjoiQlVZIiwiYXV4UHJpY2UiOm51bGwsImNsaWVudElkIjoxMCwibG10UHJpY2UiOjE3MC4wLCJvcmRlcklkIjoyMiwib3JkZXJUeXBlIjoiTE1UIiwicGVybUlkIjoxMTEyMjIzMzMsInRpZiI6IkRBWSIsInRvdGFsUXVhbnRpdHkiOjIwMC4wfSwib3JkZXJTdGF0dXMiOnsiZmlsbGVkIjowLjAsInJlbWFpbmluZyI6bnVsbCwic3RhdHVzIjoiU3VibWl0dGVkIn19XSwiZmV0Y2hlZF9hdCI6IjIwMjYtMDktMjNUMjA6MzA6MDArMDA6MDAiLCJraW5kIjoib3Blbl9vcmRlcnMiLCJtb2RlIjoicGFwZXIiLCJyZXF1ZXN0Ijp7fSwic2NoZW1hIjoiaWJrci5vcGVuX29yZGVycy52MSJ9"
+}

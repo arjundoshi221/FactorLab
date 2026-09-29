@@ -1,0 +1,54 @@
+[
+ {
+  "_type": "BarRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "eodhd_symbol",
+   "alias_value": "AAPL.US",
+   "exchange_code": "XNAS",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": "US0378331005",
+   "cusip": null,
+   "figi": null
+  },
+  "resolution": "daily",
+  "bar_time": "2026-09-23T00:00:00-04:00",
+  "open": "230.1",
+  "high": "231.9",
+  "low": "229.6",
+  "close": "231.4",
+  "volume": 49887766,
+  "turnover": null,
+  "trades_count": null,
+  "oi": null,
+  "settlement_price": null,
+  "session": null
+ },
+ {
+  "_type": "BarRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "eodhd_symbol",
+   "alias_value": "BRK-B.US",
+   "exchange_code": "XNYS",
+   "trading_symbol": "BRK-B",
+   "country_code": "US",
+   "isin": "US0846707026",
+   "cusip": null,
+   "figi": null
+  },
+  "resolution": "daily",
+  "bar_time": "2026-09-23T00:00:00-04:00",
+  "open": "471.0",
+  "high": "474.2",
+  "low": "470.1",
+  "close": "473.3",
+  "volume": 3322110,
+  "turnover": null,
+  "trades_count": null,
+  "oi": null,
+  "settlement_price": null,
+  "session": null
+ }
+]

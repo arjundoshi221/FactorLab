@@ -100,10 +100,21 @@ it is not a safe storage target for raw contract bars.
 
 ## Production schema status (2026-09-24)
 
-The checksum-tracked schema phase has been applied through Wave 8. Waves 5–8
+The checksum-tracked schema phase has been applied through Wave 9. Waves 5–8
 added 18 concrete tables across `fundamentals`, `derived`, `broker`, `book`, and
 `risk`, plus the `research.owned_listings` view. The migration journal reports
-all schema files through Wave 8 succeeded; validation through Wave 8 passed.
+all schema files through Wave 9 succeeded; validation through Wave 9 passed
+after reviewing and approving current-hash candidates. A Wave 1–4 catch-up
+was run while legacy writers remained active. At that audit watermark, legacy
+India minute rows equaled v2 equity plus contract-futures rows (5,900,572),
+US minute and daily rows matched (49,920 and 21,968), and political trades
+matched (496). Legacy political membership snapshots (124,600) are compressed
+into 3,925 v2 SCD periods by the Wave 4 backfill, so raw row counts differ by
+design. Three raw archives and three ingestion runs arrived after catch-up;
+the paused-writer final backfill must include them. Wave 9 replacement tables
+are still empty and have not been exchanged; application containers still use
+legacy tables. Free ClickHouse disk was about 74 GB at preflight.
+
 The Wave 8 RBAC phase remains pending by choice, and no application containers
 were changed.
 

@@ -1,0 +1,47 @@
+[
+ {
+  "_type": "MembershipRecord",
+  "committee_code": "HSAG",
+  "legislator": {
+   "_type": "EntityRef",
+   "alias_kind": "bioguide",
+   "alias_value": "E000001",
+   "entity_type": "person_legislator",
+   "name": null
+  },
+  "role": "chair",
+  "congress": 119,
+  "party_side": "majority",
+  "rank": 1
+ },
+ {
+  "_type": "MembershipRecord",
+  "committee_code": "HSAG",
+  "legislator": {
+   "_type": "EntityRef",
+   "alias_kind": "bioguide",
+   "alias_value": "G000009",
+   "entity_type": "person_legislator",
+   "name": null
+  },
+  "role": "member",
+  "congress": 119,
+  "party_side": "minority",
+  "rank": 2
+ },
+ {
+  "_type": "MembershipRecord",
+  "committee_code": "HSAG29",
+  "legislator": {
+   "_type": "EntityRef",
+   "alias_kind": "bioguide",
+   "alias_value": "E000001",
+   "entity_type": "person_legislator",
+   "name": null
+  },
+  "role": "ranking_member",
+  "congress": 119,
+  "party_side": "majority",
+  "rank": 1
+ }
+]

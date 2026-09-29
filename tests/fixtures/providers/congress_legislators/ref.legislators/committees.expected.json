@@ -1,0 +1,22 @@
+[
+ {
+  "_type": "CommitteeRecord",
+  "committee_code": "HSAG",
+  "name": "House Committee on Agriculture",
+  "chamber": "house",
+  "congress": 119,
+  "parent_code": null,
+  "jurisdiction": "Agriculture",
+  "url": "https://agriculture.house.gov/"
+ },
+ {
+  "_type": "CommitteeRecord",
+  "committee_code": "HSAG29",
+  "name": "Livestock",
+  "chamber": "house",
+  "congress": 119,
+  "parent_code": "HSAG",
+  "jurisdiction": "",
+  "url": ""
+ }
+]

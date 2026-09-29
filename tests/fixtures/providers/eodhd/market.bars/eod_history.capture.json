@@ -1,0 +1,27 @@
+{
+ "request_key": "AAPL.US:2026-09-20..2026-09-24",
+ "transport": "http",
+ "fetched_at": "2026-09-24T01:00:00+00:00",
+ "source_url": "https://eodhd.com/api/eod/AAPL.US?fmt=json&from=2026-09-20&to=2026-09-24",
+ "content_type": "application/json",
+ "status_code": 200,
+ "headers": {},
+ "metadata": {
+  "endpoint": "eod",
+  "resolution": "daily",
+  "instruments": [
+   {
+    "alias_value": "AAPL.US",
+    "exchange_code": "XNAS",
+    "trading_symbol": "AAPL",
+    "isin": "US0378331005"
+   }
+  ],
+  "params": {
+   "fmt": "json",
+   "from": "2026-09-20",
+   "to": "2026-09-24"
+  }
+ },
+ "body_b64": "W3siZGF0ZSI6ICIyMDI2LTA5LTIwIiwgIm9wZW4iOiAxLCAiaGlnaCI6IDEsICJsb3ciOiAxLCAiY2xvc2UiOiAxLCAiYWRqdXN0ZWRfY2xvc2UiOiAxLCAidm9sdW1lIjogMX0sIHsiZGF0ZSI6ICIyMDI2LTA5LTIxIiwgIm9wZW4iOiAyMjguMSwgImhpZ2giOiAyMzAuNCwgImxvdyI6IDIyNy45LCAiY2xvc2UiOiAyMjkuOCwgImFkanVzdGVkX2Nsb3NlIjogMjI5LjgsICJ2b2x1bWUiOiA1MTIzNDU2N30sIHsiZGF0ZSI6ICIyMDI2LTA5LTIyIiwgIm9wZW4iOiAyMjkuOSwgImhpZ2giOiAyMzEuMCwgImxvdyI6IDIyOC41LCAiY2xvc2UiOiAyMzAuMiwgImFkanVzdGVkX2Nsb3NlIjogMjMwLjIsICJ2b2x1bWUiOiA0NzAwMTEyMn0sIHsiZGF0ZSI6ICIyMDI2LTA5LTIzIiwgIm9wZW4iOiAyMzAuMCwgImhpZ2giOiAyMjkuMCwgImxvdyI6IDIzMS4wLCAiY2xvc2UiOiAyMzAuNSwgImFkanVzdGVkX2Nsb3NlIjogMjMwLjUsICJ2b2x1bWUiOiAxfSwgeyJkYXRlIjogIjIwMjYtMDktMjQiLCAib3BlbiI6IDIzMS4wLCAiaGlnaCI6IDIzMi4wLCAibG93IjogMjMwLjAsICJjbG9zZSI6IDIzMS41LCAiYWRqdXN0ZWRfY2xvc2UiOiAyMzEuNSwgInZvbHVtZSI6IDEyfV0="
+}

@@ -1,0 +1,80 @@
+[
+ {
+  "_type": "BarRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "upstox_instrument_key",
+   "alias_value": "NSE_EQ|INE002A01018",
+   "exchange_code": "NSE",
+   "trading_symbol": "RELIANCE",
+   "country_code": "IN",
+   "isin": "INE002A01018",
+   "cusip": null,
+   "figi": null
+  },
+  "resolution": "1min",
+  "bar_time": "2026-09-23T03:45:00+00:00",
+  "open": "1400.0",
+  "high": "1403.0",
+  "low": "1399.1",
+  "close": "1402.0",
+  "volume": 120045,
+  "turnover": null,
+  "trades_count": null,
+  "oi": 0,
+  "settlement_price": null,
+  "session": null
+ },
+ {
+  "_type": "BarRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "upstox_instrument_key",
+   "alias_value": "NSE_EQ|INE002A01018",
+   "exchange_code": "NSE",
+   "trading_symbol": "RELIANCE",
+   "country_code": "IN",
+   "isin": "INE002A01018",
+   "cusip": null,
+   "figi": null
+  },
+  "resolution": "1min",
+  "bar_time": "2026-09-23T03:46:00+00:00",
+  "open": "1402.0",
+  "high": "1404.5",
+  "low": "1401.2",
+  "close": "1403.9",
+  "volume": 88110,
+  "turnover": null,
+  "trades_count": null,
+  "oi": 0,
+  "settlement_price": null,
+  "session": null
+ },
+ {
+  "_type": "BarRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "upstox_instrument_key",
+   "alias_value": "NSE_EQ|INE002A01018",
+   "exchange_code": "NSE",
+   "trading_symbol": "RELIANCE",
+   "country_code": "IN",
+   "isin": "INE002A01018",
+   "cusip": null,
+   "figi": null
+  },
+  "resolution": "1min",
+  "bar_time": "2026-09-23T09:59:00+00:00",
+  "open": "1398.1",
+  "high": "1399.0",
+  "low": "1397.5",
+  "close": "1398.8",
+  "volume": 51234,
+  "turnover": null,
+  "trades_count": null,
+  "oi": 0,
+  "settlement_price": null,
+  "session": null
+ }
+]
