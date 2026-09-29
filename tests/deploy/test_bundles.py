@@ -60,7 +60,8 @@ def test_platform_bundle_is_reproducible_executable_lf_and_complete(tmp_path, ma
         members = {m.name: m for m in archive.getmembers()}
         for required in ("deploy/compose.base.yml", "deploy/host/factorlab_deploy.py",
                          "deploy/scripts/prepare-host.sh", "deploy/scripts/deploy-component.sh",
-                         "deploy/scripts/deploy-platform.sh", "deploy/scripts/factorlab-compose"):
+                         "deploy/scripts/deploy-platform.sh", "deploy/scripts/factorlab-compose",
+                         "deploy/host/factorlab_log_reader.py", "deploy/ssh/60-factorlab-logs.conf"):
             assert required in members, required
         for name in ("deploy/scripts/deploy-component.sh", "deploy/host/factorlab_deploy.py"):
             assert members[name].mode == 0o755

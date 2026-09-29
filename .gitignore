@@ -205,6 +205,8 @@ temp/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/team/
+# Project skills (factorlab-logs, factorlab-clickhouse, ...) are shared too.
+!.claude/skills/factorlab-*/
 .claude-flow/
 
 # ---- Playground (local scratch/test, never commit) --------------------------

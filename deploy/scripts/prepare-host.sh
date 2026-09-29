@@ -54,6 +54,26 @@ if [ ! -f /etc/factorlab/us-universe.yaml ]; then
 fi
 # Operator entry point to the live compose model (base + fragments + pins + profiles).
 sudo install -m 0755 "$script_dir/factorlab-compose" /usr/local/bin/factorlab-compose
+
+# Restricted log-reader account (tools/read_logs.py): sshd runs only factorlab-log-reader
+# for it, and its only group is factorlab-logs. The operator adds its public key to
+# /etc/factorlab/log-reader/authorized_keys (root-owned), prefixed with
+# restrict,command="/usr/local/bin/factorlab-log-reader".
+getent passwd factorlab-logs >/dev/null || sudo useradd --system --uid 10002 --gid factorlab-logs --no-create-home --home-dir /var/log/factorlab --shell /bin/sh factorlab-logs
+sudo install -m 0755 "$script_dir/../host/factorlab_log_reader.py" /usr/local/bin/factorlab-log-reader
+sudo install -d -m 0755 -o root -g root /etc/factorlab/log-reader
+[ -f /etc/factorlab/log-reader/authorized_keys ] || sudo install -m 0644 -o root -g root /dev/null /etc/factorlab/log-reader/authorized_keys
+if [ -d /etc/ssh/sshd_config.d ]; then
+    sshd_dropin=/etc/ssh/sshd_config.d/60-factorlab-logs.conf
+    sudo install -m 0644 "$script_dir/../ssh/60-factorlab-logs.conf" "$sshd_dropin"
+    # Never leave sshd with a configuration it rejects: that could lock out the operator.
+    if ! sudo sshd -t; then
+        sudo rm -f "$sshd_dropin"
+        echo "sshd rejected $sshd_dropin; removed it (SSH is unchanged)" >&2
+        exit 1
+    fi
+    sudo systemctl reload ssh 2>/dev/null || sudo systemctl reload sshd
+fi
 sudo install -D -m 0755 "$script_dir/collect-docker-images.py" /usr/local/libexec/factorlab-collect-docker-images.py
 sudo install -m 0644 "$script_dir/../systemd/factorlab-docker-images.service" /etc/systemd/system/factorlab-docker-images.service
 sudo install -m 0644 "$script_dir/../systemd/factorlab-docker-images.timer" /etc/systemd/system/factorlab-docker-images.timer

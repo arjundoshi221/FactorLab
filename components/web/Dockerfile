@@ -16,6 +16,10 @@ RUN npm run build \
       > dist/version.json
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine
+# The log directory exists even when nothing is mounted there (smoke tests).
+USER root
+RUN install -d -m 2750 -o 101 -g 101 /var/log/factorlab/web
+USER 101
 COPY components/web/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY --from=build /web/dist /usr/share/nginx/html
 EXPOSE 8080

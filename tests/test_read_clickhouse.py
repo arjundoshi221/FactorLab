@@ -110,3 +110,11 @@ def test_output_limits():
     assert len(output.encode()) <= reader.MAX_OUTPUT_BYTES
     assert output.count("\n") < 30
     assert "output limit reached" in output
+
+
+QUERIES = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "factorlab-clickhouse" / "queries"
+
+
+@pytest.mark.parametrize("path", sorted(QUERIES.glob("*.sql")), ids=lambda p: p.name)
+def test_the_skills_canned_queries_are_accepted(path):
+    assert reader.validate_sql(path.read_text(encoding="utf-8"))
