@@ -25,9 +25,17 @@ COPY pyproject.toml uv.lock ./
 COPY libs ./libs
 COPY providers ./providers
 COPY components ./components
-# Non-editable: the venv holds real copies of every member, nothing points back at /src.
+# Non-editable: the venv holds real copies, nothing points back at /src. Installing the
+# six deployable components pulls in every library and provider they use, and nothing
+# dev-only (factorlab-testkit, pytest).
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable --all-packages
+    uv sync --frozen --no-dev --no-editable \
+      --package factorlab-component-api \
+      --package factorlab-component-secrets-agent \
+      --package factorlab-component-ingest-india \
+      --package factorlab-component-ingest-us \
+      --package factorlab-component-ingest-political \
+      --package factorlab-component-ingest-broker
 
 
 FROM python:3.12-slim

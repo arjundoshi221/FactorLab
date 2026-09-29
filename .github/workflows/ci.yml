@@ -1,0 +1,95 @@
+name: CI
+
+# Every pull request and every push to main. Releases (release.yml today, per-component
+# workflows later) additionally require this to be green on the released commit.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python (lint, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.20"
+          python-version: "3.12"
+          enable-cache: true
+      - name: Lock file is current
+        run: uv lock --check
+      - name: Install the workspace
+        run: uv sync --frozen --all-packages
+      - name: Lint (errors and undefined names)
+        run: uv run --frozen ruff check --select E9,F libs providers components tests tools scripts
+      - name: Tests
+        run: uv run --frozen pytest
+
+  isolated-imports:
+    name: Each member installs and imports on its own
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.20"
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv run --frozen --no-project python tools/check_isolated_imports.py
+
+  web:
+    name: Web UI (tests, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: components/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: components/web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  workers:
+    name: Cloudflare Workers (type check)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        worker: [upstox-auth-worker, upstox-oauth-callback-worker]
+    defaults:
+      run:
+        working-directory: cloudflare/${{ matrix.worker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cloudflare/${{ matrix.worker }}/package-lock.json
+      - run: npm ci
+      - run: npm run check
+
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [python, isolated-imports, web, workers]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required jobs passed
+        run: |
+          results='${{ toJSON(needs.*.result) }}'
+          echo "$results"
+          if echo "$results" | grep -Eq '"(failure|cancelled|skipped)"'; then exit 1; fi
