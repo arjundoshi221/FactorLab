@@ -6,8 +6,8 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from factorlab.api.app import app, get_india_candles_repository
-from factorlab.api.india import (
+from factorlab.components.api.app import app, get_india_candles_repository
+from factorlab.components.api.india import (
     IndiaCandlesRepository,
     decode_cursor,
     decode_instrument_cursor,

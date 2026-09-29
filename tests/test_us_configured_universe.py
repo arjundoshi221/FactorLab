@@ -1,5 +1,3 @@
-import importlib.util
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 from uuid import uuid4
@@ -7,17 +5,13 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from factorlab.countries.us.equities.eodhd.configured_universe import (
+from factorlab.components.ingest_us.legacy import universe_daemon as runner
+from factorlab.components.ingest_us.legacy.eodhd.configured_universe import (
     UniverseConfig,
     component_symbols,
     resolve_universe,
 )
 from factorlab.storage.v2_us import V2USStorage
-
-spec = importlib.util.spec_from_file_location(
-    "us_universe_runner", Path(__file__).parents[1] / "scripts/factlab_us_universe.py")
-runner = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(runner)
 
 
 def config(**changes):

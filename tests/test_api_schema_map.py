@@ -2,8 +2,8 @@ from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
-from factorlab.api.app import app, get_schema_map_service
-from factorlab.api.schema_map import V2_DATABASES, SchemaMapRepository, SchemaMapService
+from factorlab.components.api.app import app, get_schema_map_service
+from factorlab.components.api.schema_map import V2_DATABASES, SchemaMapRepository, SchemaMapService
 
 TABLE_COLUMNS = [
     "database", "name", "engine", "stored_rows", "bytes_on_disk", "primary_key", "sorting_key", "partition_key",

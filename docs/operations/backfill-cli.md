@@ -37,7 +37,7 @@ As of 2026-05-15:
 
 | Source code | Backfiller class                                                       | Driver script (legacy, still functional) |
 |-------------|------------------------------------------------------------------------|------------------------------------------|
-| `eodhd`     | `factorlab.countries.us.equities.eodhd.backfill.EODHDBackfiller`       | `scripts/us/equities/eodhd/us_equities_eodhd_daily.py` for live operation; dispatcher wraps the same client for backfill |
+| `eodhd`     | `factorlab.components.ingest_us.legacy.eodhd.backfill.EODHDBackfiller`       | `scripts/us/equities/eodhd/us_equities_eodhd_daily.py` for live operation; dispatcher wraps the same client for backfill |
 
 Sources that have working drivers but **not yet wrapped** under the `Backfiller` protocol (these continue to function as standalone CLIs — wrap them when their per-source quirks settle):
 
@@ -48,7 +48,7 @@ Sources that have working drivers but **not yet wrapped** under the `Backfiller`
 
 ## Adding a new Backfiller
 
-1. Create `src/factorlab/countries/<country>/<domain>/<vendor>/backfill.py` defining a class with `plan()` and `run()` (see `Backfiller` protocol in `factorlab.shared.ingest.backfill`).
+1. Create `src/factorlab/countries/<country>/<domain>/<vendor>/backfill.py` defining a class with `plan()` and `run()` (see `Backfiller` protocol in `factorlab.ingest.backfill`).
 2. At module bottom, call `register_backfiller(source, instance)`.
 3. Add `import factorlab.countries.<...>.backfill` to the registrations block in `scripts/_shared/factlab_backfill.py`.
 
@@ -62,7 +62,7 @@ The protocol enforces nothing source-specific — your Backfiller can use whatev
 
 ## Resume semantics
 
-The protocol does not mandate resumability — each Backfiller chooses. Recommended pattern (see `factorlab.shared.ingest.state.State`):
+The protocol does not mandate resumability — each Backfiller chooses. Recommended pattern (see `factorlab.ingest.state.State`):
 
 ```python
 state = State(source="eodhd")

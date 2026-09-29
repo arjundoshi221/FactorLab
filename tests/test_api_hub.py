@@ -2,8 +2,8 @@ from datetime import UTC, date, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
-from factorlab.api.app import app, get_hub_overview_service
-from factorlab.api.hub import HubOverviewService, HubRepository
+from factorlab.components.api.app import app, get_hub_overview_service
+from factorlab.components.api.hub import HubOverviewService, HubRepository
 
 
 class QueryResult:

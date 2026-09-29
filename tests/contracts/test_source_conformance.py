@@ -12,11 +12,11 @@ import socket
 import pytest
 import requests as http
 
-from factorlab.shared.ingest.datasets import DATASETS
-from factorlab.shared.ingest.registry import load_providers, registered, source_for
+from factorlab.ingest.datasets import DATASETS
+from factorlab.ingest.registry import load_providers, registered, source_for
 from tests.contracts import kit
 
-load_providers()
+load_providers(kit.all_providers())
 SOURCES = sorted(registered().items())
 IDS = [f"{provider}/{dataset}" for (provider, dataset), _ in SOURCES]
 

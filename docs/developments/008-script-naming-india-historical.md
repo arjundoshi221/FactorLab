@@ -2,7 +2,7 @@
 
 > Status: `[accepted]` — drafted 2026-05-16; reviewed by turing / ritchie / heimdall / factorlab-pm 2026-05-16; revised in same session. India-first; US rename is a follow-up. Builds on [007](007-getting-live-again.md). Sequencing: 008 lands BEFORE 007 Phase 2 (Task Scheduler re-enable) — otherwise Phase 2 would register tasks against the soon-renamed paths.
 >
-> **2026-05-16 correction**: an earlier draft of this doc proposed *flat* layout under `scripts/`. After two rounds of user feedback, production layout is `scripts/{country}/{domain}/{vendor}/<file>.py` mirroring the Python source layer (`factorlab.countries.in_.equities.upstox.*` ↔ `scripts/in/equities/upstox/*`). Filename also carries the full `{country}_{domain}_{vendor}_{action}` tag for self-describing Task Scheduler entries / grep output. Filename + folder tree are intentionally redundant — folder for browsing, filename for grep + scheduler entries.
+> **2026-05-16 correction**: an earlier draft of this doc proposed *flat* layout under `scripts/`. After two rounds of user feedback, production layout is `scripts/{country}/{domain}/{vendor}/<file>.py` mirroring the Python source layer (`factorlab.components.ingest_india.legacy.upstox.*` ↔ `scripts/in/equities/upstox/*`). Filename also carries the full `{country}_{domain}_{vendor}_{action}` tag for self-describing Task Scheduler entries / grep output. Filename + folder tree are intentionally redundant — folder for browsing, filename for grep + scheduler entries.
 
 ## Decision
 
@@ -48,7 +48,7 @@ scripts/
 └── _shared/                                         [utilities only — unchanged]
 ```
 
-Mirrors the Python source layer: `factorlab.countries.in_.equities.upstox.*` ↔ `scripts/in/equities/upstox/*`. Source uses `in_` (Python keyword), scripts use `in` (filesystem only). Filename + folder tree are intentionally redundant: folder for browsing, filename for grep / scheduler / log lines.
+Mirrors the Python source layer: `factorlab.components.ingest_india.legacy.upstox.*` ↔ `scripts/in/equities/upstox/*`. Source uses `in_` (Python keyword), scripts use `in` (filesystem only). Filename + folder tree are intentionally redundant: folder for browsing, filename for grep / scheduler / log lines.
 
 ## India rename map
 
@@ -102,7 +102,7 @@ Cadence:    equities every 5 min · nearest-expiry futures every 10 min (stagger
 Rate use:   ~1,800/2,000 Upstox calls per 30 min at fo_eligible (~200 symbols)
 Output:     Postgres market_in.fact_equity_intraday (canonical) + Arrow IPC cache
 Health:     Hourly "session nominal" email; --health-interval seconds (0 disables)
-Failure:    factorlab.shared.notify.notify(severity='fatal') on uncaught crash
+Failure:    factorlab.runtime.notify.notify(severity='fatal') on uncaught crash
 
 Usage:
     python scripts/in/equities/upstox/india_equities_upstox_live.py --universe nifty500 --daemon

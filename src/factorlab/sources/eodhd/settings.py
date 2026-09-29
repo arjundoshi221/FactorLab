@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from factorlab.shared.ingest.bindings import ProviderSettings
+from factorlab.ingest.bindings import ProviderSettings
 
 ALIAS_KIND = "eodhd_symbol"
 

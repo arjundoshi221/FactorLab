@@ -250,7 +250,7 @@ services:
   api:
     <<: *factorlab-service
     image: ${FACTORLAB_API_IMAGE:-factorlab:latest}
-    command: ["uvicorn", "factorlab.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uvicorn", "factorlab.components.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
     read_only: true
     environment:
       <<: *clickhouse-client-env

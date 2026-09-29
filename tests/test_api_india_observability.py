@@ -3,8 +3,8 @@ from uuid import UUID
 
 from fastapi.testclient import TestClient
 
-from factorlab.api.app import app, get_india_observability_repository
-from factorlab.api.india_observability import IndiaObservabilityRepository
+from factorlab.components.api.app import app, get_india_observability_repository
+from factorlab.components.api.india_observability import IndiaObservabilityRepository
 
 INSTRUMENT_ID = UUID("11111111-1111-1111-1111-111111111111")
 CONTRACT_ID = UUID(int=0)

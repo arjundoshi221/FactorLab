@@ -2,7 +2,7 @@ from datetime import date
 
 import pandas as pd
 
-from factorlab.countries.in_.equities.upstox.candles import (
+from factorlab.components.ingest_india.legacy.upstox.candles import (
     UpstoxRateLimiter,
     _normalize_market_quote_ohlc,
     fetch_historical_candles,

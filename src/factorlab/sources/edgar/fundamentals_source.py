@@ -19,18 +19,18 @@ import requests
 from pydantic import Field
 
 from factorlab.core.secrets import get_secret
-from factorlab.shared.ingest.bindings import ProviderSettings
-from factorlab.shared.ingest.datasets import Capabilities, EntityRef, FetchUnit, InstrumentRef
-from factorlab.shared.ingest.datasets.fundamentals import (
+from factorlab.ingest.bindings import ProviderSettings
+from factorlab.ingest.datasets import Capabilities, EntityRef, FetchUnit, InstrumentRef
+from factorlab.ingest.datasets.fundamentals import (
     CompanyRequest,
     FundamentalFilingRecord,
     FundamentalsRow,
     LineItemRecord,
 )
-from factorlab.shared.ingest.errors import AuthRequired, NormalizationError, TransientError
-from factorlab.shared.ingest.provider import RawCapture
-from factorlab.shared.ingest.ratelimit import SlidingWindowLimiter
-from factorlab.shared.ingest.transport import raise_for_status
+from factorlab.ingest.errors import AuthRequired, NormalizationError, TransientError
+from factorlab.ingest.provider import RawCapture
+from factorlab.ingest.ratelimit import SlidingWindowLimiter
+from factorlab.ingest.transport import raise_for_status
 
 _PERIOD = {"FY": "annual", "Q1": "quarterly", "Q2": "quarterly", "Q3": "quarterly",
            "Q4": "quarterly"}

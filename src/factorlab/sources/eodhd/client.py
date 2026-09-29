@@ -15,10 +15,10 @@ from urllib.parse import urlencode
 import requests
 
 from factorlab.core.secrets import get_secret
-from factorlab.shared.ingest.errors import AuthRequired, TransientError
-from factorlab.shared.ingest.provider import RawCapture
-from factorlab.shared.ingest.ratelimit import SlidingWindowLimiter
-from factorlab.shared.ingest.transport import raise_for_status
+from factorlab.ingest.errors import AuthRequired, TransientError
+from factorlab.ingest.provider import RawCapture
+from factorlab.ingest.ratelimit import SlidingWindowLimiter
+from factorlab.ingest.transport import raise_for_status
 from factorlab.sources.eodhd.settings import EodhdSettings
 
 _QUOTA = frozenset({402})

@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import Any, ClassVar
 from uuid import UUID
 
-from factorlab.shared.ingest.datasets import (
+from factorlab.ingest.datasets import (
     BarRecord,
     ConstituentRecord,
     ContractBarRecord,
@@ -26,10 +26,10 @@ from factorlab.shared.ingest.datasets import (
     InstrumentRef,
     WriteResult,
 )
-from factorlab.shared.ingest.datasets.ports import ArchivedCapture
-from factorlab.shared.ingest.datasets.reference import REFERENCE_MODES, ReferenceMode
-from factorlab.shared.ingest.provider import Provenance, RawCapture
-from factorlab.shared.ingest.universe_snapshot import diff_snapshot
+from factorlab.ingest.datasets.ports import ArchivedCapture
+from factorlab.ingest.datasets.reference import REFERENCE_MODES, ReferenceMode
+from factorlab.ingest.provider import Provenance, RawCapture
+from factorlab.ingest.universe_snapshot import diff_snapshot
 from factorlab.storage.canonical_ids import natural_contract_id, natural_listing_ids
 from factorlab.storage.clickhouse import _decimal, _decoded_text, _version
 from factorlab.storage.sinks.calendar import canonical_bar_time, session_for, trade_date_for

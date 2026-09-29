@@ -1,5 +1,4 @@
 # rule path token count - see test_boundaries.py; shrink-only.
-R2 src/factorlab/storage/v2_us.py factorlab.sources.schwab 1
 R3 src/factorlab/storage/v2_broker.py ibkr 2
 R3 src/factorlab/storage/v2_india.py NSE_EQ 1
 R3 src/factorlab/storage/v2_india.py NSE_FO 1

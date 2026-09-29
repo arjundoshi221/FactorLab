@@ -1,21 +1,19 @@
-"""Tests for factorlab.shared.notify — Phase 4."""
+"""Tests for factorlab.runtime.notify — Phase 4."""
 
 from __future__ import annotations
 
 import json
 import time
 
-
-from factorlab.shared.notify import notify
-from factorlab.shared.notify._backend import (
+from factorlab.runtime.notify import notify
+from factorlab.runtime.notify._backend import (
     Backend,
     DedupeRing,
     Notification,
     Severity,
 )
-from factorlab.shared.notify.jsonl import JSONLBackend
-from factorlab.shared.notify.null import NullBackend
-
+from factorlab.runtime.notify.jsonl import JSONLBackend
+from factorlab.runtime.notify.null import NullBackend
 
 # ── Notification dataclass ──────────────────────────────────────────────────
 
@@ -141,11 +139,11 @@ def test_notify_env_selection_includes_jsonl_always(monkeypatch, tmp_path):
     # Force fresh import path resolution for log_dir()
     import importlib
 
-    import factorlab.shared.paths as _paths
+    import factorlab.core.paths as _paths
     importlib.reload(_paths)
-    import factorlab.shared.notify.jsonl as _jsonl
+    import factorlab.runtime.notify.jsonl as _jsonl
     importlib.reload(_jsonl)
-    import factorlab.shared.notify as _notify
+    import factorlab.runtime.notify as _notify
     importlib.reload(_notify)
 
     # Send through env-driven backends

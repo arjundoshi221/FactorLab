@@ -8,7 +8,7 @@ from decimal import Decimal
 
 import pytest
 
-from factorlab.shared.ingest.provider import Provenance
+from factorlab.ingest.provider import Provenance
 from factorlab.sources.ibkr.capture import (
     capture_account_values,
     capture_executions,

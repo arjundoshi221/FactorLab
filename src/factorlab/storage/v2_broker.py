@@ -1,7 +1,7 @@
 """Canonical v2 writer for the ``broker.*`` mirror tables (schema-rehaul §9, Wave 7).
 
 Adapters hand over normalized broker facts (:mod:`factorlab.sources.ibkr.shapes`)
-plus a :class:`~factorlab.shared.ingest.provider.Provenance`. This layer owns
+plus a :class:`~factorlab.ingest.provider.Provenance`. This layer owns
 every other column:
 
 * identity — vendor conid -> ``listing_id``/``security_id``/``entity_id`` or
@@ -21,7 +21,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
-from factorlab.shared.ingest.provider import Provenance
+from factorlab.ingest.provider import Provenance
 from factorlab.storage.clickhouse import _decimal, _version
 from factorlab.storage.v2_us import V2USStorage
 

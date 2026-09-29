@@ -1,20 +1,27 @@
-"""scripts/factlab_ingest.py: bindings validation and a provider-agnostic dry run."""
+"""factorlab.orchestration.cli: bindings validation and a provider-agnostic dry run."""
 
 from __future__ import annotations
 
-import importlib.util
+import functools
 import json
-from pathlib import Path
 
 import yaml
 
-from factorlab.shared.ingest.provider import RawCapture
+from factorlab.ingest.provider import RawCapture
+from factorlab.orchestration import cli as engine_cli
 from tests.contracts import kit
 
-ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("factlab_ingest", ROOT / "scripts" / "factlab_ingest.py")
-cli = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(cli)
+
+class _Cli:
+    """The engine CLI with every installed provider, as scripts/factlab_ingest.py runs it."""
+
+    main = staticmethod(functools.partial(engine_cli.main, providers=kit.all_providers()))
+
+    def __getattr__(self, name):
+        return getattr(engine_cli, name)
+
+
+cli = _Cli()
 
 
 def test_repository_bindings_validate(capsys):
@@ -57,7 +64,7 @@ def test_session_gate_uses_the_exchange_calendar():
 
 
 def test_daemon_runs_cycles_until_shutdown(monkeypatch):
-    from factorlab.shared import runtime
+    from factorlab import runtime
 
     cycles = []
 
@@ -91,7 +98,7 @@ def test_daemon_runs_cycles_until_shutdown(monkeypatch):
 
     monkeypatch.setattr(runtime, "GracefulShutdown", fake_shutdown)
     monkeypatch.setattr(runtime, "Heartbeat", Beat)
-    monkeypatch.setattr(cli, "cmd_run", fake_run)
+    monkeypatch.setattr(engine_cli, "cmd_run", fake_run)
     assert cli.main(["daemon", "--dataset", "ref.listings", "--market", "IND",
                      "--interval-seconds", "1"]) == 0
     assert cycles == ["ref.listings", "tick"]

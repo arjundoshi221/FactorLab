@@ -4,8 +4,9 @@ import os
 import re
 
 import pytest
-from scripts import generate_clickhouse_v2_schema as generator
-from scripts import migrate_clickhouse_v2 as migration
+
+from factorlab.schema import codegen as generator
+from factorlab.schema import migrate as migration
 
 EXPECTED_DATABASES = {
     "ref",

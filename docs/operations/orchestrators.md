@@ -320,7 +320,7 @@ For political triage, see the full triage table in
 
 ## Live-daemon runtime conventions
 
-Long-running live daemons (`scripts/in/equities/upstox/india_equities_upstox_live.py`, the political hourly mode) import from `factorlab.shared.runtime`. The US Schwab pipeline uses a cron pattern (`us_equities_schwab_live.py` + `us_equities_schwab_eod.py`) instead, so it does NOT use these helpers — Task Scheduler provides the supervision externally. The conventions below apply to true daemons only.
+Long-running live daemons (`scripts/in/equities/upstox/india_equities_upstox_live.py`, the political hourly mode) import from `factorlab.runtime`. The US Schwab pipeline uses a cron pattern (`us_equities_schwab_live.py` + `us_equities_schwab_eod.py`) instead, so it does NOT use these helpers — Task Scheduler provides the supervision externally. The conventions below apply to true daemons only.
 
 The daemons use:
 

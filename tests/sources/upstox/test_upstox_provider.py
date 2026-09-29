@@ -7,15 +7,15 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from factorlab.shared.ingest.bindings import Binding
-from factorlab.shared.ingest.datasets import (
+from factorlab.ingest.bindings import Binding
+from factorlab.ingest.datasets import (
     BarRequest,
     InstrumentRef,
     SeriesWindow,
 )
-from factorlab.shared.ingest.engine import bar_request, reference_request, run_binding
-from factorlab.shared.ingest.errors import AuthRequired, PermanentError, RateLimited, TransientError
-from factorlab.shared.ingest.ratelimit import SlidingWindowLimiter
+from factorlab.ingest.engine import bar_request, reference_request, run_binding
+from factorlab.ingest.errors import AuthRequired, PermanentError, RateLimited, TransientError
+from factorlab.ingest.ratelimit import SlidingWindowLimiter
 from factorlab.sources.upstox.client import UpstoxClient
 from factorlab.sources.upstox.settings import ALIAS_KIND, UpstoxSettings
 from factorlab.sources.upstox.sources import (

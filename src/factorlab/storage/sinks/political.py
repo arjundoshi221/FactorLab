@@ -18,8 +18,8 @@ from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID
 
-from factorlab.shared.ingest.datasets import EntityRef, InstrumentRef, WriteResult
-from factorlab.shared.ingest.datasets.political import (
+from factorlab.ingest.datasets import EntityRef, InstrumentRef, WriteResult
+from factorlab.ingest.datasets.political import (
     CommitteeRecord,
     FilingRef,
     LegislatorRecord,
@@ -28,9 +28,9 @@ from factorlab.shared.ingest.datasets.political import (
     PoliticalTradeRecord,
     congress_number,
 )
-from factorlab.shared.ingest.datasets.reference import ReferenceMode
-from factorlab.shared.ingest.identifiers import legislator_name_key
-from factorlab.shared.ingest.provider import Provenance
+from factorlab.ingest.datasets.reference import ReferenceMode
+from factorlab.ingest.identifiers import legislator_name_key
+from factorlab.ingest.provider import Provenance
 from factorlab.storage.canonical_ids import committee_id, legislator_id, political_trade_id
 from factorlab.storage.clickhouse import _decoded_text, _version
 

@@ -4,7 +4,7 @@
 
 ## What it does
 
-Small Flask service that owns the Outlook COM handle on this Windows host. Any process — script, future container — that wants to send a notification calls `factorlab.shared.notify.notify(...)` which either:
+Small Flask service that owns the Outlook COM handle on this Windows host. Any process — script, future container — that wants to send a notification calls `factorlab.runtime.notify.notify(...)` which either:
 1. Hits Outlook directly (host script, default backend `outlook`), or
 2. POSTs to this daemon at `http://127.0.0.1:8765/alert` (container client, default backend `webhook`).
 
@@ -49,7 +49,7 @@ Expect `{"status":"ok","outlook_available":true,"last_send":null}` on a fresh st
 ```powershell
 $env:FACTORLAB_NOTIFY_BACKEND="outlook"
 "C:\Users\arjd2\.conda\envs\factorlab\python.exe" -c @"
-from factorlab.shared.notify import notify
+from factorlab.runtime.notify import notify
 notify('smoke test', 'body line\\nsecond line', severity='warn', source='manual', dedupe_key=False)
 "@
 ```

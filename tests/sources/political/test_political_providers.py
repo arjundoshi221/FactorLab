@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
-from factorlab.shared.ingest.bindings import Binding
-from factorlab.shared.ingest.datasets import InstrumentRecord, InstrumentRef, ReferenceRequest
-from factorlab.shared.ingest.datasets.political import FilingsRequest
-from factorlab.shared.ingest.engine import reference_request, run_binding
-from factorlab.shared.ingest.identifiers import legislator_name_key
-from factorlab.shared.ingest.memory import InMemorySink
-from factorlab.shared.ingest.provider import ingestion_run
+from factorlab.ingest.bindings import Binding
+from factorlab.ingest.datasets import InstrumentRecord, InstrumentRef, ReferenceRequest
+from factorlab.ingest.datasets.political import FilingsRequest
+from factorlab.ingest.engine import reference_request, run_binding
+from factorlab.ingest.identifiers import legislator_name_key
+from factorlab.ingest.memory import InMemorySink
+from factorlab.ingest.provider import ingestion_run
 from factorlab.sources.congress_legislators.sources import (
     CongressLegislators,
     CongressLegislatorsSettings,

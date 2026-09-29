@@ -1,23 +1,17 @@
-import importlib.util
 from datetime import date
-from pathlib import Path
 from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
 
-from factorlab.countries.us.equities.eodhd.us_universe import (
+from factorlab.components.ingest_us.legacy import daemon as runner
+from factorlab.components.ingest_us.legacy.eodhd.us_universe import (
     canonical_symbol,
     normalize_bulk,
     normalize_daily,
     normalize_master,
     schwab_symbol,
 )
-
-spec = importlib.util.spec_from_file_location(
-    "us_full_runner", Path(__file__).parents[1] / "scripts/factlab_us_clickhouse.py")
-runner = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(runner)
 
 
 def master_item(code, *, exchange="NASDAQ", kind="Common Stock", currency="USD"):

@@ -6,7 +6,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "read_clickhouse.py"
 spec = importlib.util.spec_from_file_location("read_clickhouse", SCRIPT)
 reader = importlib.util.module_from_spec(spec)

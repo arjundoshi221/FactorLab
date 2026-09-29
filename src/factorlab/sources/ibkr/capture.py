@@ -26,7 +26,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Literal
 
-from factorlab.shared.ingest.provider import RawCapture
+from factorlab.ingest.provider import RawCapture
 from factorlab.sources.ibkr.client import mode_of
 from factorlab.sources.ibkr.errors import IBKRCaptureError
 from factorlab.sources.ibkr.shapes import Mode

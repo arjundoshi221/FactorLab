@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from factorlab.shared.ingest import (
+from factorlab.ingest import (
     assert_under_root,
     redact_error,
     redact_url,

@@ -295,8 +295,8 @@ python scripts/us/political/us_political_backfill.py --phase 3
 
 # OPTION B — split FEC and Congress.gov for parallel terminals
 # Different API keys, different state files, different rate-limit budgets.
-python -m factorlab.sources.political.fec.ingest --committees --mode-a --mode-b &
-python -m factorlab.sources.political.congress_gov.ingest --congress 117 --congress 118 --congress 119 &
+python -m factorlab.components.ingest_political.legacy.fec.ingest --committees --mode-a --mode-b &
+python -m factorlab.components.ingest_political.legacy.congress_gov.ingest --congress 117 --congress 118 --congress 119 &
 ```
 
 #### Mid-run monitoring
@@ -317,7 +317,7 @@ Reports: row counts per table, audit activity per endpoint (last 24h), state-che
 | `connection aborted` mid-pull | Transient FEC/Congress.gov outage | Retry/backoff in `PoliticalHTTPClient` handles 3 attempts. If exhausted, the loop's `try/except continue` skips that PAC-cycle and moves on. State is NOT marked done; next run retries. |
 | Process crash mid-run | Power, OOM, manual kill | Re-run the same command. State checkpoints flush every 25 PACs / batch-size rows; cached responses on disk. Resume picks up where it left off. |
 | `bill_actions` duplicates after schema change | Migration changed `action_id` semantics | Re-run with deterministic `uuid5(NAMESPACE_BILL_ACTIONS, ...)` (already in place). Old random-UUID rows can be cleaned via `DELETE WHERE substring(action_id::text, 15, 1) = '4'`. |
-| Resolver re-run after alias-file edits | New aliases added | `python -m factorlab.sources.political.fec.ingest --re-resolve` updates `sponsor_company_ticker` in-place. Zero API calls. |
+| Resolver re-run after alias-file edits | New aliases added | `python -m factorlab.components.ingest_political.legacy.fec.ingest --re-resolve` updates `sponsor_company_ticker` in-place. Zero API calls. |
 
 #### Daily / weekly cadence (post-backfill)
 
@@ -1083,7 +1083,7 @@ The resolver normalizes `committee.name` → SEC ticker via a **conservative cas
 
 **Priority-ticker coverage**: 71/77 alpha-relevant tickers represented. The 6 not represented (AAPL, NVDA, SLB, TSLA, BABA, PGR) are **genuinely absent** — those companies don't run federal corporate PACs (or use non-`Q+C` classifications). Verified via raw name-search across the unmatched 2,730 rows.
 
-**Re-resolution mode**: `python -m factorlab.sources.political.fec.ingest --re-resolve` re-runs the resolver over `fec_committees` in-place without API calls. Use after tuning the alias file or normalizer to update `sponsor_company_ticker` without re-fetching.
+**Re-resolution mode**: `python -m factorlab.components.ingest_political.legacy.fec.ingest --re-resolve` re-runs the resolver over `fec_committees` in-place without API calls. Use after tuning the alias file or normalizer to update `sponsor_company_ticker` without re-fetching.
 
 ---
 

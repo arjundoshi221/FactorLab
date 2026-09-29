@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from scripts import migrate_clickhouse_v2 as migration
 
-from factorlab.shared.ingest.bindings import BindingError, BindingsFile, load_bindings
-from factorlab.shared.ingest.engine import source_priority_rows
+from factorlab.ingest.bindings import BindingError, BindingsFile, load_bindings
+from factorlab.ingest.engine import source_priority_rows
+from factorlab.schema import migrate as migration
 from factorlab.storage.sinks import ClickHouseSinks
 from factorlab.storage.v2_us import V2USStorage
 from tests.contracts.fake_clickhouse import FakeClickHouse

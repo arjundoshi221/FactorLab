@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from factorlab.shared.ingest.provider import (
+from factorlab.ingest.provider import (
     NullProviderStorage,
     ProviderStorage,
     RawCapture,

@@ -19,7 +19,7 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
-from factorlab.shared.ingest.datasets import InstrumentRef
+from factorlab.ingest.datasets import InstrumentRef
 from factorlab.storage.clickhouse import _decoded_text
 
 

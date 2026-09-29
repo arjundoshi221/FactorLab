@@ -43,11 +43,11 @@ Suggested re-enable order when bringing things back up:
 ## Built-in observability (when jobs are running)
 
 Each script handles its own runtime instrumentation via
-`factorlab.shared.runtime.supervised(...)` (heartbeat updates,
+`factorlab.runtime.supervised(...)` (heartbeat updates,
 exception-to-`notify(fatal)` routing) and `setup_logging(...)` (dated log
 files + stdout). No `.bat` wrappers needed.
 
-- **Heartbeat:** `data/_heartbeat/<service>` mtime, updated every loop tick by `factorlab.shared.runtime.Heartbeat`.
+- **Heartbeat:** `data/_heartbeat/<service>` mtime, updated every loop tick by `factorlab.runtime.Heartbeat`.
 - **Per-script log:** `logs/<script-name>_YYYYMMDD.log`, written by `setup_logging(...)`.
 - **Notify JSONL:** `logs/notify.jsonl` — every alert ever fired.
 - **Per-mode bundle (political):** `logs/political_<mode>_YYYYMMDD/orchestrator.log`.

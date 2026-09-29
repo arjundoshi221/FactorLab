@@ -515,7 +515,7 @@ The trade engine is a separate repo/service. Its contract with FactorLab:
 
 ## 10. Src/ module layout (proposed)
 
-> **Implemented layout** (built on `factorlab.shared.ingest.provider`):
+> **Implemented layout** (built on `factorlab.ingest.provider`):
 > `client.py` (read-only connect, per-mode endpoint, bounded retry),
 > `capture.py` (Gateway responses -> archivable JSON `RawCapture`),
 > `normalize.py` (pure payload -> `shapes.py` rows), `provider.py`

@@ -24,10 +24,10 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field
 
-from factorlab.shared.ingest.bindings import ProviderSettings
-from factorlab.shared.ingest.datasets import Capabilities, FetchUnit, SnapshotRequest
-from factorlab.shared.ingest.errors import PermanentError
-from factorlab.shared.ingest.provider import RawCapture
+from factorlab.ingest.bindings import ProviderSettings
+from factorlab.ingest.datasets import Capabilities, FetchUnit, SnapshotRequest
+from factorlab.ingest.errors import PermanentError
+from factorlab.ingest.provider import RawCapture
 from factorlab.sources.ibkr.capture import (
     capture_account_values,
     capture_executions,

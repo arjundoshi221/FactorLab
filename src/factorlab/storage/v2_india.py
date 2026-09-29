@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from factorlab.shared.ingest.provider import RawCapture
+from factorlab.ingest.provider import RawCapture
 from factorlab.storage.clickhouse import (
     _NO_CONTRACT_ID,
     ClickHouseStorage,

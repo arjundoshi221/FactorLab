@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 
-from factorlab.shared.ingest.datasets import (
+from factorlab.ingest.datasets import (
     DATASETS,
     BarRecord,
     Capabilities,

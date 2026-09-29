@@ -2,7 +2,8 @@ import uuid
 from datetime import UTC, date, datetime
 
 import pandas as pd
-import scripts.factlab_india_clickhouse_5min as ingest
+
+import factorlab.components.ingest_india.legacy.daemon as ingest
 
 
 class FakeCalendar:

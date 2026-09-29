@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from factorlab.api.app import app
+from factorlab.components.api.app import app
 
 
 def collector_module():

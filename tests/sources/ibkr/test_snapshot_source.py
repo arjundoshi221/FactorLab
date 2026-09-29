@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from factorlab.shared.ingest.bindings import Binding
-from factorlab.shared.ingest.datasets import SnapshotRequest
-from factorlab.shared.ingest.engine import run_binding
-from factorlab.shared.ingest.memory import InMemorySink
-from factorlab.shared.ingest.provider import NullProviderStorage, run_provider
+from factorlab.ingest.bindings import Binding
+from factorlab.ingest.datasets import SnapshotRequest
+from factorlab.ingest.engine import run_binding
+from factorlab.ingest.memory import InMemorySink
+from factorlab.ingest.provider import NullProviderStorage, run_provider
 from factorlab.sources.ibkr.errors import IBKRConnectError
 from factorlab.sources.ibkr.provider import IBKRBrokerProvider, SnapshotConfig
 from factorlab.sources.ibkr.snapshot_source import IbkrBrokerSnapshot, IbkrSettings
@@ -107,7 +107,7 @@ def test_shadow_broker_snapshot_normalizes_but_never_writes(mock_ib_paper):
 def test_clickhouse_sink_routes_each_shape_to_its_broker_writer(mock_ib_paper):
     import uuid
 
-    from factorlab.shared.ingest.provider import Provenance
+    from factorlab.ingest.provider import Provenance
     from factorlab.storage.sinks import ClickHouseSinks
 
     class Storage(RecordingBrokerStorage):

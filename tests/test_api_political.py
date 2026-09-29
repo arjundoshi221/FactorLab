@@ -4,8 +4,8 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
-from factorlab.api.app import app, get_political_trades_repository
-from factorlab.api.political import PoliticalTradesRepository, decode_cursor
+from factorlab.components.api.app import app, get_political_trades_repository
+from factorlab.components.api.political import PoliticalTradesRepository, decode_cursor
 
 COLUMNS = [
     "trade_key",

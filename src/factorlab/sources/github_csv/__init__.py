@@ -6,7 +6,7 @@ DB service resolves them within the country (07 §8.1). Replaces
 becomes resolution against listings the reference providers already own.
 """
 
-from factorlab.shared.ingest.registry import register_source
+from factorlab.ingest.registry import register_source
 from factorlab.sources.github_csv.sources import GithubCsvUniverse
 
 register_source(GithubCsvUniverse)

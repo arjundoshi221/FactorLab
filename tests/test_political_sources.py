@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 from defusedxml import EntitiesForbidden
 
-from factorlab.sources.political.house_clerk import (
+from factorlab.components.ingest_political.legacy.house_clerk import (
     parse_house_filing_index,
     parse_house_ptr_text,
 )

@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
-from factorlab.shared.ingest.provider import (
+from factorlab.ingest.provider import (
     NullProviderStorage,
     Provenance,
     ProviderStorage,

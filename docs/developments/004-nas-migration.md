@@ -10,7 +10,7 @@ Changed from the earlier "migrate-and-flip" model after explicit user direction:
 
 ## What this means in practice
 
-- `factorlab.shared.paths.raw_dir(source)` continues to default to `<repo>/data/...`. **`FACTORLAB_RAW_ROOT` is not flipped.**
+- `factorlab.core.paths.raw_dir(source)` continues to default to `<repo>/data/...`. **`FACTORLAB_RAW_ROOT` is not flipped.**
 - The application keeps working if NAS is unavailable / disconnected / corrupted — code never reads from NAS.
 - A scheduled sync (manual or Task Scheduler) pushes new files from repo → NAS. Deletes are NOT mirrored by default (a backup that propagates deletes is a footgun).
 - A new env var `FACTORLAB_NAS_BACKUP_ROOT` configures the backup destination (default behaviour: must be passed via `--dest`). Distinct from `FACTORLAB_RAW_ROOT` so an operator can't accidentally relocate the working data set.

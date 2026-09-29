@@ -8,8 +8,8 @@ from decimal import Decimal
 
 import pytest
 
-from factorlab.shared.ingest.bindings import Binding, ProviderSettings
-from factorlab.shared.ingest.datasets import (
+from factorlab.ingest.bindings import Binding, ProviderSettings
+from factorlab.ingest.datasets import (
     BarRecord,
     BarRequest,
     Capabilities,
@@ -19,16 +19,16 @@ from factorlab.shared.ingest.datasets import (
     ReferenceRequest,
     SeriesWindow,
 )
-from factorlab.shared.ingest.engine import bar_request, replay, run_binding
-from factorlab.shared.ingest.errors import (
+from factorlab.ingest.engine import bar_request, replay, run_binding
+from factorlab.ingest.errors import (
     AuthRequired,
     NormalizationError,
     PermanentError,
     RateLimited,
     TransientError,
 )
-from factorlab.shared.ingest.memory import InMemorySink
-from factorlab.shared.ingest.provider import RawCapture
+from factorlab.ingest.memory import InMemorySink
+from factorlab.ingest.provider import RawCapture
 
 NOW = datetime(2026, 9, 24, 6, 0, tzinfo=UTC)
 ISIN = "INE002A01018"
@@ -276,7 +276,7 @@ def test_write_without_run_is_refused():
     capture = source.fetch(source.plan(ReferenceRequest("IND"))[0])
     import uuid
 
-    from factorlab.shared.ingest.provider import Provenance
+    from factorlab.ingest.provider import Provenance
     provenance = Provenance("up", "up:master", None, uuid.uuid4(), NOW, NOW)
     with pytest.raises(RuntimeError):
         sink.upsert_instruments(source.normalize(capture), provenance=provenance)

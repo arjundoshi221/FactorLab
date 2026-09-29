@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime, time
 
 import pytest
 
-from factorlab.shared.runtime.us_calendar import is_session, next_scheduled_run
+from factorlab.calendars.us import is_session, next_scheduled_run
 
 SLOTS = (time(6, 0), time(16, 30))
 

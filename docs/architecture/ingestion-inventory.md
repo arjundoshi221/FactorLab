@@ -71,7 +71,7 @@ Senate Stock Watcher, Congress.gov, USAspending, Finnhub contracts. Retirement l
 | Module                                                                | Subpackages                                                                                          |
 |-----------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
 | `factorlab.countries.us.equities.schwab`                              | `auth`, `candles`, `client`, `intraday`, `quotes`, `symbols`                                         |
-| `factorlab.countries.us.equities.eodhd`                               | `client`, `candles`, `instruments`, `backfill`                                                       |
+| `factorlab.components.ingest_us.legacy.eodhd`                               | `client`, `candles`, `instruments`, `backfill`                                                       |
 | `factorlab.countries.us.political`                                    | `_client`, `_state`, `_security`, `_db`, `_resolver`, `_bioguide`, `_asset_classifier`, `_metrics`, `orchestrator` |
 | `factorlab.countries.us.political.house_clerk`                        | `client`, `index`, `parser`, `ingest`                                                                |
 | `factorlab.countries.us.political.senate_efd`                         | `scraper`, `parser`, `ingest`                                                                        |
@@ -82,14 +82,14 @@ Senate Stock Watcher, Congress.gov, USAspending, Finnhub contracts. Retirement l
 | `factorlab.countries.us.political.usaspending`                        | `client`, `ingest`                                                                                    |
 | `factorlab.countries.us.political.finnhub_contracts`                  | `ingest`                                                                                              |
 | `factorlab.countries.us.political.legislators`                        | `yaml_fetcher`, `ingest`                                                                              |
-| `factorlab.countries.in_.equities.upstox`                             | `auth`, `client`, `instruments`, `universes`                                                         |
+| `factorlab.components.ingest_india.legacy.upstox`                             | `auth`, `client`, `instruments`, `universes`                                                         |
 
 ## Shared plumbing every source uses
 
-- `factorlab.shared.paths` — RAW_ROOT / STATE_ROOT / TOKEN_ROOT / LOG_ROOT helpers
-- `factorlab.shared.runtime` — logging / signals / dedup / market / lock / state / heartbeat / supervised
-- `factorlab.shared.notify` — Outlook + SMTP + Telegram + webhook + JSONL (one `notify()` entry)
-- `factorlab.shared.ingest` — HTTPClient + State + Backfiller protocol + redact helpers
+- `factorlab.core.paths` — RAW_ROOT / STATE_ROOT / TOKEN_ROOT / LOG_ROOT helpers
+- `factorlab.runtime` — logging / signals / dedup / market / lock / state / heartbeat / supervised
+- `factorlab.runtime.notify` — Outlook + SMTP + Telegram + webhook + JSONL (one `notify()` entry)
+- `factorlab.ingest` — HTTPClient + State + Backfiller protocol + redact helpers
 
 ## Where data ends up
 

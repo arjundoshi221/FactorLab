@@ -423,7 +423,7 @@ all fuzzy stages). No code change needed; takes effect on next ingest run.
 Verify the override resolves:
 
 ```python
-from factorlab.sources.political._bioguide import StrictBioguideMatcher
+from factorlab.components.ingest_political.legacy._bioguide import StrictBioguideMatcher
 from factorlab.storage.db import get_engine
 m = StrictBioguideMatcher(get_engine())
 print(m.resolve(full_name="Some Filed Name", chamber="rep", trade_date=None))

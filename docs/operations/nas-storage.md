@@ -26,7 +26,7 @@ Tokens / state / heartbeats / logs are intentionally out of scope for the sync �
 ## How code reads paths
 
 ```python
-from factorlab.shared.paths import raw_dir
+from factorlab.core.paths import raw_dir
 
 CACHE_DIR = raw_dir("political")           # → <repo>/data/political/raw
 EODHD_DIR = raw_dir("eodhd")               # → <repo>/data/eodhd

@@ -19,7 +19,7 @@ from typing import Any, ClassVar
 from urllib.parse import quote, urlencode
 from zoneinfo import ZoneInfo
 
-from factorlab.shared.ingest.datasets import (
+from factorlab.ingest.datasets import (
     BarRecord,
     BarRequest,
     Capabilities,
@@ -29,7 +29,7 @@ from factorlab.shared.ingest.datasets import (
     InstrumentRecord,
     ReferenceRequest,
 )
-from factorlab.shared.ingest.provider import RawCapture
+from factorlab.ingest.provider import RawCapture
 from factorlab.sources.upstox.client import UpstoxClient
 from factorlab.sources.upstox.normalize import (
     normalize_bars,

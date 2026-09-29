@@ -4,7 +4,7 @@ Importing this package registers its sources. ``parse`` holds the pure parsers
 shared with the legacy bootstrap fetchers in ``sources.political.house_clerk``.
 """
 
-from factorlab.shared.ingest.registry import register_source
+from factorlab.ingest.registry import register_source
 from factorlab.sources.house_clerk.sources import HouseClerkFilings, HouseClerkTrades
 
 for _source in (HouseClerkFilings, HouseClerkTrades):

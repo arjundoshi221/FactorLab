@@ -6,8 +6,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from factorlab.storage.v2_us import V2USStorage
-from factorlab.universe import (
+from factorlab.components.ingest_us.legacy.universe import (
     EodhdUniverseResolver,
     GithubCsvUniverseResolver,
     IndexRequest,
@@ -20,6 +19,7 @@ from factorlab.universe import (
     create_resolver,
     normalize_symbol,
 )
+from factorlab.storage.v2_us import V2USStorage
 
 
 def payload(**changes):
@@ -162,14 +162,10 @@ def test_schwab_validator_batches_and_rejects_non_equity_foreign_or_unresolved()
 
 
 def test_worker_publication_is_schwab_only_and_deactivates_legacy(monkeypatch):
-    import importlib.util
-    from pathlib import Path
+    import importlib
 
-    spec = importlib.util.spec_from_file_location(
-        "neutral_us_universe_runner",
-        Path(__file__).parents[1] / "scripts/factlab_us_universe.py")
-    runner = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(runner)
+    runner = importlib.reload(
+        importlib.import_module("factorlab.components.ingest_us.legacy.universe_daemon"))
 
     config = UniverseConfig.model_validate(payload())
     resolver = Mock()

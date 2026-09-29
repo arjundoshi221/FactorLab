@@ -1,10 +1,12 @@
 """Layer boundaries for ingestion (docs/architecture/07 §3.1, §14).
 
 R1  factorlab.sources.* never imports factorlab.storage.*
-R2  factorlab.storage.* never imports factorlab.sources.* or factorlab.countries.*
+R2  factorlab.storage.* never imports factorlab.sources.* or factorlab.components.*
 R3  factorlab/storage/ holds no provider-name string literals
-R4  the engine layer (shared/ingest) and engine-driven scripts never import a
-    concrete provider
+R4  the engine layer (factorlab.ingest, factorlab.orchestration) and engine-driven
+    scripts never import a concrete provider or a component
+R5  libraries (everything outside factorlab.components) never import a component
+R6  components never import each other (each ships as its own image)
 
 Today's violations live in ``boundary_allowlist.txt`` as ``rule path token count``.
 The list is a ratchet: a violation that is not listed fails, and so does a
@@ -118,11 +120,17 @@ def violations() -> Counter[tuple[str, str, str]]:
                 if rel.startswith("sources/") and module.startswith("factorlab.storage"):
                     tokens.add(("R1", top))
                 if rel.startswith("storage/") and module.startswith(
-                        ("factorlab.sources.", "factorlab.countries.")):
+                        ("factorlab.sources.", "factorlab.components.")):
                     tokens.add(("R2", top))
-                if rel.startswith("shared/ingest/") and module.startswith(
-                        ("factorlab.sources.", "factorlab.countries.")):
+                if rel.startswith(("ingest/", "orchestration/")) and module.startswith(
+                        ("factorlab.sources.", "factorlab.components.")):
                     tokens.add(("R4", top))
+                if not rel.startswith("components/") and module.startswith(
+                        "factorlab.components."):
+                    tokens.add(("R5", top))
+                if (rel.startswith("components/") and module.startswith("factorlab.components.")
+                        and module.split(".")[2] != rel.split("/")[1]):
+                    tokens.add(("R6", top))
             for rule, token in tokens:
                 record(rule, path, token)
         if rel.startswith("storage/"):
@@ -139,7 +147,7 @@ def violations() -> Counter[tuple[str, str, str]]:
             continue
         for statement in _imports(path, _parse(path)):
             tokens = {".".join(module.split(".")[:3]) for module in statement
-                      if module.startswith(("factorlab.sources.", "factorlab.countries."))}
+                      if module.startswith("factorlab.sources.")}
             for token in tokens:
                 record("R4", path, token)
     return found
@@ -183,7 +191,8 @@ def test_new_ingestion_layers_are_clean():
     """The engine layer and the new sink package start, and must stay, violation-free."""
     current = violations()
     dirty = [key for key in current
-             if key[1].startswith(("src/factorlab/shared/ingest/", "src/factorlab/storage/sinks/"))]
+             if key[1].startswith(("src/factorlab/ingest/", "src/factorlab/orchestration/",
+                                   "src/factorlab/storage/sinks/"))]
     assert not dirty, dirty
 
 

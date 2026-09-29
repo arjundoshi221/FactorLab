@@ -16,10 +16,10 @@ from typing import Any
 import requests
 
 from factorlab.core.secrets import get_secret
-from factorlab.shared.ingest.errors import AuthRequired, TransientError
-from factorlab.shared.ingest.provider import RawCapture
-from factorlab.shared.ingest.ratelimit import SlidingWindowLimiter
-from factorlab.shared.ingest.transport import raise_for_status, retry_after_seconds
+from factorlab.ingest.errors import AuthRequired, TransientError
+from factorlab.ingest.provider import RawCapture
+from factorlab.ingest.ratelimit import SlidingWindowLimiter
+from factorlab.ingest.transport import raise_for_status, retry_after_seconds
 from factorlab.sources.upstox.settings import UpstoxSettings
 
 

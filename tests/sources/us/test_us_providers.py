@@ -6,11 +6,11 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from factorlab.shared.ingest.bindings import Binding
-from factorlab.shared.ingest.datasets import BarRequest, InstrumentRef, SeriesWindow
-from factorlab.shared.ingest.engine import bar_request, reference_request, run_binding
-from factorlab.shared.ingest.errors import AuthRequired, QuotaExhausted
-from factorlab.shared.ingest.ratelimit import SlidingWindowLimiter
+from factorlab.ingest.bindings import Binding
+from factorlab.ingest.datasets import BarRequest, InstrumentRef, SeriesWindow
+from factorlab.ingest.engine import bar_request, reference_request, run_binding
+from factorlab.ingest.errors import AuthRequired, QuotaExhausted
+from factorlab.ingest.ratelimit import SlidingWindowLimiter
 from factorlab.sources.eodhd.client import EodhdClient
 from factorlab.sources.eodhd.settings import EodhdSettings
 from factorlab.sources.eodhd.sources import EodhdDailyBars, EodhdListings

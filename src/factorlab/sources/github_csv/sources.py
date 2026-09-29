@@ -13,17 +13,17 @@ from urllib.parse import urlparse
 import requests
 from pydantic import BaseModel, ConfigDict, Field
 
-from factorlab.shared.ingest.bindings import ProviderSettings
-from factorlab.shared.ingest.datasets import (
+from factorlab.ingest.bindings import ProviderSettings
+from factorlab.ingest.datasets import (
     Capabilities,
     ConstituentRecord,
     FetchUnit,
     InstrumentRef,
     ReferenceRequest,
 )
-from factorlab.shared.ingest.errors import NormalizationError, PermanentError, TransientError
-from factorlab.shared.ingest.provider import RawCapture
-from factorlab.shared.ingest.transport import raise_for_status
+from factorlab.ingest.errors import NormalizationError, PermanentError, TransientError
+from factorlab.ingest.provider import RawCapture
+from factorlab.ingest.transport import raise_for_status
 
 ALLOWED_HOSTS = frozenset({"github.com", "raw.githubusercontent.com"})
 _SYMBOL = re.compile(r"^[A-Z0-9][A-Z0-9-]{0,13}$")

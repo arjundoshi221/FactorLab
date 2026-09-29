@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from typing import Any, ClassVar
 
-from factorlab.shared.ingest.datasets import (
+from factorlab.ingest.datasets import (
     BarRecord,
     BarRequest,
     Capabilities,
@@ -22,7 +22,7 @@ from factorlab.shared.ingest.datasets import (
     InstrumentRecord,
     ReferenceRequest,
 )
-from factorlab.shared.ingest.provider import RawCapture
+from factorlab.ingest.provider import RawCapture
 from factorlab.sources.schwab.normalize import (
     normalize_instrument,
     normalize_pricehistory,

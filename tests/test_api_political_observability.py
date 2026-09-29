@@ -3,8 +3,8 @@ from uuid import UUID
 
 from fastapi.testclient import TestClient
 
-from factorlab.api.app import app, get_political_observability_repository
-from factorlab.api.political_observability import PoliticalObservabilityRepository
+from factorlab.components.api.app import app, get_political_observability_repository
+from factorlab.components.api.political_observability import PoliticalObservabilityRepository
 
 TODAY = date(2026, 8, 12)
 NOW = datetime(2026, 8, 12, 10, tzinfo=UTC)

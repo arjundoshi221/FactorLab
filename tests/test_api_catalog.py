@@ -5,11 +5,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from factorlab.api.app import app, get_catalog_service
-from factorlab.api.catalog import CatalogService, pipeline_status
-from factorlab.api.catalog_pipelines import PIPELINES, PIPELINES_BY_ID
-from factorlab.api.catalog_query import QuerySlots, scrub_text
-from factorlab.api.hub import HubTable
+from factorlab.components.api.app import app, get_catalog_service
+from factorlab.components.api.catalog import CatalogService, pipeline_status
+from factorlab.components.api.catalog_pipelines import PIPELINES, PIPELINES_BY_ID
+from factorlab.components.api.catalog_query import QuerySlots, scrub_text
+from factorlab.components.api.hub import HubTable
+from factorlab.schema.resources import v2_sql_dir
 
 NOW = datetime(2026, 9, 25, 5, 0, tzinfo=UTC)  # 10:30 IST on a Friday: NSE open, NYSE closed
 LAST_BAR = datetime(2026, 9, 25, 4, 55, tzinfo=UTC)
@@ -440,7 +441,7 @@ def test_registry_matches_code_and_schema():
     root = Path(__file__).resolve().parents[1]
     code = "\n".join(path.read_text(encoding="utf-8") for folder in ("scripts", "src/factorlab")
                      for path in (root / folder).rglob("*.py"))
-    sql = "\n".join(path.read_text(encoding="utf-8") for path in (root / "sql/clickhouse/v2").glob("wave_*.sql"))
+    sql = "\n".join(path.read_text(encoding="utf-8") for path in v2_sql_dir().glob("wave_*.sql"))
     defined = set(re.findall(r"CREATE (?:TABLE|VIEW) IF NOT EXISTS ([a-z_]+\.[a-z0-9_]+)", sql))
     for pipeline in PIPELINES:
         prefix = pipeline.id.rsplit("_", 1)[0]

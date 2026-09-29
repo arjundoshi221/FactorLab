@@ -6,12 +6,12 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from factorlab.shared.ingest.bindings import Binding
-from factorlab.shared.ingest.datasets import InstrumentRecord, InstrumentRef
-from factorlab.shared.ingest.datasets.fundamentals import CompanyRef, CompanyRequest
-from factorlab.shared.ingest.engine import run_binding
-from factorlab.shared.ingest.errors import AuthRequired
-from factorlab.shared.ingest.provider import ingestion_run
+from factorlab.ingest.bindings import Binding
+from factorlab.ingest.datasets import InstrumentRecord, InstrumentRef
+from factorlab.ingest.datasets.fundamentals import CompanyRef, CompanyRequest
+from factorlab.ingest.engine import run_binding
+from factorlab.ingest.errors import AuthRequired
+from factorlab.ingest.provider import ingestion_run
 from factorlab.sources.edgar.fundamentals_source import EdgarCompanyFacts, EdgarSettings
 from factorlab.storage.canonical_ids import filing_id
 from factorlab.storage.sinks import ClickHouseSinks

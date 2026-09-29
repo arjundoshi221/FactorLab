@@ -1,16 +1,10 @@
 import hashlib
 import importlib.util
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 
 def _load_agent_module():
-    path = Path(__file__).resolve().parent.parent / "scripts" / "cloudflare_secrets_agent.py"
-    spec = importlib.util.spec_from_file_location("cloudflare_secrets_agent", path)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return importlib.reload(importlib.import_module("factorlab.components.secrets_agent.agent"))
 
 
 def _configure_paths(agent, tmp_path, monkeypatch):

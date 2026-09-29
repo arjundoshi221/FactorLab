@@ -17,15 +17,15 @@ from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from factorlab.shared.ingest.datasets import (
+from factorlab.ingest.datasets import (
     BarRecord,
     ConstituentRecord,
     InstrumentRecord,
     InstrumentRef,
 )
-from factorlab.shared.ingest.errors import NormalizationError
-from factorlab.shared.ingest.provider import RawCapture
-from factorlab.shared.runtime.us_calendar import NY, bounds
+from factorlab.ingest.errors import NormalizationError
+from factorlab.ingest.provider import RawCapture
+from factorlab.calendars.us import NY, bounds
 from factorlab.sources.eodhd.settings import ALIAS_KIND
 
 log = logging.getLogger(__name__)

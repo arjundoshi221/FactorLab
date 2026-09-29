@@ -15,13 +15,13 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from factorlab.shared.ingest.datasets import EntityRef, WriteResult
-from factorlab.shared.ingest.datasets.fundamentals import (
+from factorlab.ingest.datasets import EntityRef, WriteResult
+from factorlab.ingest.datasets.fundamentals import (
     FundamentalFilingRecord,
     FundamentalsRow,
     LineItemRecord,
 )
-from factorlab.shared.ingest.provider import Provenance
+from factorlab.ingest.provider import Provenance
 from factorlab.storage.canonical_ids import filing_id
 from factorlab.storage.clickhouse import _decimal, _version
 from factorlab.storage.sinks.identity import IdentityResolver

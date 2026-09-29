@@ -1,7 +1,8 @@
 """Bootstrap refuses an incomplete v2 application schema."""
 
 import pytest
-from scripts.bootstrap_clickhouse import REQUIRED_TABLES, check_v2_readiness
+
+from factorlab.schema.readiness import REQUIRED_TABLES, check_v2_readiness
 
 
 class Result:

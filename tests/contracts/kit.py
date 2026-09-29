@@ -23,8 +23,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from factorlab.shared.ingest.bindings import Binding
-from factorlab.shared.ingest.datasets import (
+from factorlab.ingest.bindings import Binding
+from factorlab.ingest.datasets import (
     DATASETS,
     BarRequest,
     InstrumentRef,
@@ -32,12 +32,12 @@ from factorlab.shared.ingest.datasets import (
     SeriesWindow,
     SnapshotRequest,
 )
-from factorlab.shared.ingest.datasets.fundamentals import CompanyRef, CompanyRequest
-from factorlab.shared.ingest.datasets.political import (
+from factorlab.ingest.datasets.fundamentals import CompanyRef, CompanyRequest
+from factorlab.ingest.datasets.political import (
     FilingRef,
     FilingsRequest,
 )
-from factorlab.shared.ingest.provider import RawCapture
+from factorlab.ingest.provider import RawCapture
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "providers"
 
@@ -131,10 +131,24 @@ def binding_for(provider: str, dataset_id: str, cls: type) -> Binding:
     return Binding(dataset=dataset_id, market=market, provider=provider, resolution=resolution)
 
 
-def regen(provider: str) -> None:
-    from factorlab.shared.ingest.registry import load_providers, registered, source_for
+def all_providers() -> tuple[str, ...]:
+    """Every provider package installed under the ``factorlab.sources`` namespace.
 
-    load_providers()
+    Tests may discover providers by scanning; production never does (each component
+    passes its own ``providers.PROVIDERS``).
+    """
+    import pkgutil
+
+    import factorlab.sources
+
+    return tuple(sorted(m.name for m in pkgutil.iter_modules(factorlab.sources.__path__)
+                        if m.ispkg))
+
+
+def regen(provider: str) -> None:
+    from factorlab.ingest.registry import load_providers, registered, source_for
+
+    load_providers(all_providers())
     for (name, dataset_id), cls in sorted(registered().items()):
         if name != provider:
             continue

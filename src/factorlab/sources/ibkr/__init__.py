@@ -3,7 +3,7 @@
 Mirrors broker-side truth (positions, account state, executions, open
 orders) across paper and live IBKR accounts into the ``broker.*`` mirror
 tables through the shared provider contract
-(:mod:`factorlab.shared.ingest.provider`):
+(:mod:`factorlab.ingest.provider`):
 
 * :mod:`.capture` — IB Gateway responses -> archivable ``RawCapture`` payloads;
 * :mod:`.normalize` — pure payload -> ``broker.*`` shapes (replayable from raw);
@@ -116,7 +116,7 @@ __all__ = [
 
 # Dataset source for the provider-agnostic engine (07 §6, P6). IBKRBrokerProvider above
 # keeps serving scripts/us/ibkr/us_portfolio_ibkr_snapshot.py until the P6 cutover.
-from factorlab.shared.ingest.registry import register_source
+from factorlab.ingest.registry import register_source
 from factorlab.sources.ibkr.snapshot_source import IbkrBrokerSnapshot
 
 register_source(IbkrBrokerSnapshot)

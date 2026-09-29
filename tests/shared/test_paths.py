@@ -1,4 +1,4 @@
-"""Tests for factorlab.shared.paths — Phase 1 layout contract.
+"""Tests for factorlab.core.paths — Phase 1 layout contract.
 
 These tests pin the *legacy* shape: Phase 1 must not change any on-disk
 location. Phase 2 (NAS migration) will introduce new tests for the unified
@@ -7,12 +7,9 @@ location. Phase 2 (NAS migration) will introduce new tests for the unified
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 import pytest
 
-from factorlab.shared import paths
+from factorlab.core import paths
 
 
 def test_repo_root_resolves_to_repository():
@@ -104,7 +101,7 @@ def test_env_override_for_raw_root(monkeypatch, tmp_path):
     # Reimport with the env var set to pick up the new default
     import importlib
 
-    import factorlab.shared.paths as _paths
+    import factorlab.core.paths as _paths
     importlib.reload(_paths)
     try:
         got = _paths.raw_dir("eodhd")

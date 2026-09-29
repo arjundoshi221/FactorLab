@@ -6,7 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from scripts import migrate_clickhouse_v2 as migration
+
+from factorlab.schema import migrate as migration
 
 
 class Result:

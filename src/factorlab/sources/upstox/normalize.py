@@ -18,15 +18,15 @@ from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from factorlab.shared.ingest.datasets import (
+from factorlab.ingest.datasets import (
     BarRecord,
     ContractBarRecord,
     ContractRecord,
     InstrumentRecord,
     InstrumentRef,
 )
-from factorlab.shared.ingest.errors import NormalizationError
-from factorlab.shared.ingest.provider import RawCapture
+from factorlab.ingest.errors import NormalizationError
+from factorlab.ingest.provider import RawCapture
 from factorlab.sources.upstox.settings import ALIAS_KIND
 
 log = logging.getLogger(__name__)

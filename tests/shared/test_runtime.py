@@ -1,4 +1,4 @@
-"""Tests for factorlab.shared.runtime — Phase 3 lift contracts."""
+"""Tests for factorlab.runtime — Phase 3 lift contracts."""
 
 from __future__ import annotations
 
@@ -7,14 +7,15 @@ import logging
 import os
 import signal
 import time
-from datetime import datetime, time as dt_time, timedelta, timezone
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
+from datetime import time as dt_time
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 import pytest
 
-from factorlab.shared.runtime import (
+from factorlab.calendars.window import MarketWindow
+from factorlab.runtime import (
     EXIT_CRASH,
     EXIT_FATAL,
     EXIT_LOCK_HELD,
@@ -24,7 +25,6 @@ from factorlab.shared.runtime import (
     ExitCode,
     GracefulShutdown,
     Heartbeat,
-    MarketWindow,
     RunState,
     WatermarkTracker,
     acquire_lock,
@@ -37,7 +37,6 @@ from factorlab.shared.runtime import (
     should_run,
     supervised,
 )
-
 
 # ── ExitCode ────────────────────────────────────────────────────────────────
 

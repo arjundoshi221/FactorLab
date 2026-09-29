@@ -5,11 +5,12 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+
+from factorlab.schema.resources import v2_sql_dir
 
 
 @pytest.fixture
@@ -159,7 +160,7 @@ def mock_ib_live() -> MagicMock:
     return ib
 
 
-WAVE_07_DDL = Path(__file__).resolve().parents[3] / "sql" / "clickhouse" / "v2" / "wave_07_schema.sql"
+WAVE_07_DDL = v2_sql_dir() / "wave_07_schema.sql"
 _COLUMN_RE = re.compile(r"^\s*([a-z_][a-z0-9_]*)\s+[A-Z]")
 
 

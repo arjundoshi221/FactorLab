@@ -15,7 +15,7 @@ from decimal import Decimal
 
 import pytest
 
-from factorlab.shared.ingest.datasets import (
+from factorlab.ingest.datasets import (
     BarRecord,
     ConstituentRecord,
     ContractBarRecord,
@@ -23,8 +23,8 @@ from factorlab.shared.ingest.datasets import (
     InstrumentRecord,
     InstrumentRef,
 )
-from factorlab.shared.ingest.memory import InMemorySink
-from factorlab.shared.ingest.provider import RawCapture, ingestion_run
+from factorlab.ingest.memory import InMemorySink
+from factorlab.ingest.provider import RawCapture, ingestion_run
 from factorlab.storage.sinks import ClickHouseSinks
 from factorlab.storage.v2_india import V2IndiaStorage
 from tests.contracts.fake_clickhouse import FakeClickHouse

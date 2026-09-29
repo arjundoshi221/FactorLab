@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 import requests
 
-from factorlab.sources.schwab import market
+from factorlab.components.ingest_us.legacy.schwab import market
 
 
 def bar(stamp, **kwargs):

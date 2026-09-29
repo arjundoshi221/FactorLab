@@ -11,7 +11,7 @@ Treat `.pre-commit-config.yaml` as a **required** developer-environment setup st
 The config exists but doesn't enforce anything until each developer runs `pre-commit install` in their clone. Today that's nobody — which means:
 
 1. **Secrets can ship.** Gitleaks + the local `no-plaintext-secrets` hook catch `?api_key=…` / `?token=…` patterns. If neither is wired into `.git/hooks/pre-commit`, a careless `git add` of a cached FEC response leaks the key.
-2. **Path discipline drifts.** Phase 1 established `factorlab.shared.paths.raw_dir(...)`. The Phase 7 lint `no-hardcoded-raw-paths` rejects new `Path("data/<source>/raw/...")` literals — but only if it runs. Without enforcement, drift creeps in over months.
+2. **Path discipline drifts.** Phase 1 established `factorlab.core.paths.raw_dir(...)`. The Phase 7 lint `no-hardcoded-raw-paths` rejects new `Path("data/<source>/raw/...")` literals — but only if it runs. Without enforcement, drift creeps in over months.
 3. **Large files ship by accident.** `check-added-large-files --maxkb=500` would block a stray PDF or parquet. Without it, our 37 GB NAS-bound dataset risks getting `git add -A`'d into history.
 
 Manual discipline doesn't scale across multiple machines / future contributors / future-me.
@@ -56,7 +56,7 @@ pre-commit run --all-files
 
 ## Open questions
 
-- **Heimdall sign-off on the secret rules.** The `_check_no_plaintext_secrets.py` regex matches `(api_key|token|access_token|key|auth)=...` — same shape as `factorlab.shared.ingest.security.SECRET_QS_KEYS`. If we add a new credentialled vendor with a different parameter name (e.g. `subscription-key`), both lists need updating in lockstep. Owner: heimdall.
+- **Heimdall sign-off on the secret rules.** The `_check_no_plaintext_secrets.py` regex matches `(api_key|token|access_token|key|auth)=...` — same shape as `factorlab.ingest.security.SECRET_QS_KEYS`. If we add a new credentialled vendor with a different parameter name (e.g. `subscription-key`), both lists need updating in lockstep. Owner: heimdall.
 - **CI host.** No CI today. When we add one, `pre-commit run --all-files` is the single command that gates a PR.
 - **Large-file threshold.** 500 KB is conservative. A legitimate ~600 KB Excel master list (universe configs?) would trip it. Adjust per-need; the existing data/logs ban handles the bulk-data case anyway.
 

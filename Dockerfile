@@ -17,12 +17,14 @@ COPY pyproject.toml ./
 COPY src ./src
 COPY scripts ./scripts
 COPY configs ./configs
-COPY sql ./sql
 COPY --from=web-builder /web/dist /app/web-dist
 
 RUN pip install --no-cache-dir .
 
-ENV FACTORLAB_WEB_DIST=/app/web-dist
+# FACTORLAB_HOME anchors data/, logs/ and configs/ at /app; the package itself runs
+# from site-packages (the ClickHouse SQL ships inside it as package data).
+ENV FACTORLAB_HOME=/app \
+    FACTORLAB_WEB_DIST=/app/web-dist
 
 # Release metadata last, so it never invalidates the dependency layers above.
 ARG FACTORLAB_RELEASE_ID=""
@@ -34,4 +36,5 @@ LABEL org.opencontainers.image.title="FactorLab" \
       org.opencontainers.image.version=$FACTORLAB_RELEASE_ID \
       org.opencontainers.image.revision=$FACTORLAB_COMMIT
 
-CMD ["python", "scripts/factlab_india_5min.py", "--universe", "demo", "--daemon"]
+# Every Compose service supplies its own command; the default serves the API.
+CMD ["uvicorn", "factorlab.components.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

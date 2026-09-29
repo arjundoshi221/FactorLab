@@ -5,7 +5,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 
-from factorlab.shared.ingest.provider import RawCapture
+from factorlab.ingest.provider import RawCapture
 from factorlab.storage.v2_us import V2USStorage
 
 

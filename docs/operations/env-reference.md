@@ -19,7 +19,7 @@ FACTORLAB_HEARTBEAT_ROOT=                    # default: <repo>/data/_heartbeat
 FACTORLAB_NAS_BACKUP_ROOT=E:/NAS/factorlab/raw  # destination for scripts/_shared/sync_raw_to_nas.py only
 ```
 
-Everything in code is resolved through `factorlab.shared.paths`. Hardcoded `data/...raw` literals in source / scripts are blocked by `scripts/_check_paths_in_code.py`.
+Everything in code is resolved through `factorlab.core.paths`. Hardcoded `data/...raw` literals in source / scripts are blocked by `scripts/_check_paths_in_code.py`.
 
 `FACTORLAB_NAS_BACKUP_ROOT` is deliberately distinct from `FACTORLAB_RAW_ROOT` so an operator cannot accidentally relocate the working data set.
 

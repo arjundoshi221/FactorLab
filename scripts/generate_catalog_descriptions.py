@@ -2,8 +2,8 @@
 
 Table descriptions come from the ``### `db.table``` sections of
 docs/architecture/06-schema-rehau.md; column descriptions come from the inline
-``--`` comments in sql/clickhouse/v2/wave_*_schema*.sql. The result is written to
-src/factorlab/api/catalog_descriptions.json, which ships in the image (docs/
+``--`` comments in src/factorlab/schema/sql/clickhouse/v2/wave_*_schema*.sql. The result is
+written to src/factorlab/components/api/catalog_descriptions.json, which ships in the image (docs/
 does not). Hand-written text belongs in catalog_curated.json, which overrides this.
 
     python scripts/generate_catalog_descriptions.py          # rewrite the JSON
@@ -20,8 +20,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DESIGN_DOC = ROOT / "docs" / "architecture" / "06-schema-rehau.md"
-SQL_DIRECTORY = ROOT / "sql" / "clickhouse" / "v2"
-OUTPUT = ROOT / "src" / "factorlab" / "api" / "catalog_descriptions.json"
+SQL_DIRECTORY = ROOT / "src" / "factorlab" / "schema" / "sql" / "clickhouse" / "v2"
+OUTPUT = ROOT / "src" / "factorlab" / "components" / "api" / "catalog_descriptions.json"
 MAX_DESCRIPTION = 600
 
 TABLE_REFERENCE = re.compile(r"`([a-z_]+\.[a-z0-9_]+)`")

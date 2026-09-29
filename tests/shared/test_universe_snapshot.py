@@ -7,7 +7,7 @@ from datetime import date
 
 import pytest
 
-from factorlab.shared.ingest.universe_snapshot import SnapshotRejected, diff_snapshot
+from factorlab.ingest.universe_snapshot import SnapshotRejected, diff_snapshot
 
 A, B, C, D, E, F = (uuid.uuid4() for _ in range(6))
 DAY = date(2026, 9, 24)

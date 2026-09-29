@@ -10,7 +10,7 @@ The current state is: every pipeline has been refactored into the new `countries
 
 ## Why "notifications first"
 
-Every other pipeline calls `factorlab.shared.notify.notify(...)` or runs under `supervised(...)` which fires `notify(severity='fatal')` on any uncaught crash. If we re-enable India / political / US before notifications are proven, silent failures will go undetected. Notifications are the spine of unattended operation.
+Every other pipeline calls `factorlab.runtime.notify.notify(...)` or runs under `supervised(...)` which fires `notify(severity='fatal')` on any uncaught crash. If we re-enable India / political / US before notifications are proven, silent failures will go undetected. Notifications are the spine of unattended operation.
 
 We are **not** building the daemon / PIN / Flask path right now. That's the future container-client design from [`notifier-daemon.md`](../operations/notifier-daemon.md). For today, host-side Outlook COM is enough: every scheduled script and every supervised pipeline already runs on this Windows host, so `notify(backend='outlook')` calling COM directly is sufficient. The daemon stays as code on disk for later.
 
@@ -20,11 +20,11 @@ Each phase has a "done when" — observable, not aspirational. Move on only when
 
 ### Phase 1 — Outlook notification, minimal path
 
-**Goal**: prove the existing `factorlab.shared.notify` module can put an email in the user's Outlook drafts/sent on this host, with `notify.jsonl` getting a row, in under 5 lines of caller code.
+**Goal**: prove the existing `factorlab.runtime.notify` module can put an email in the user's Outlook drafts/sent on this host, with `notify.jsonl` getting a row, in under 5 lines of caller code.
 
 **Steps**:
 1. Probe in `playground/explore/notify/` first (explore-first rule). One script: opens Outlook via `win32com.client`, sends a hardcoded test mail. No daemon, no PIN, no Flask. Confirms the COM bridge works on this user's session.
-2. Once the probe sends successfully, call `factorlab.shared.notify.notify("smoke", "...", severity="warn", source="manual")` from a one-liner. Confirm:
+2. Once the probe sends successfully, call `factorlab.runtime.notify.notify("smoke", "...", severity="warn", source="manual")` from a one-liner. Confirm:
    - Outlook draft/sent appears
    - `logs/notify.jsonl` has exactly one new line
    - `FACTORLAB_NOTIFY_TO` is read from `.env` and never echoed in stdout or the JSONL

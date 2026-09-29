@@ -18,23 +18,23 @@ from urllib.parse import urlparse
 
 import requests
 
-from factorlab.shared.ingest.bindings import ProviderSettings
-from factorlab.shared.ingest.datasets import (
+from factorlab.ingest.bindings import ProviderSettings
+from factorlab.ingest.datasets import (
     Capabilities,
     EntityRef,
     FetchUnit,
     InstrumentRef,
     ReferenceRequest,
 )
-from factorlab.shared.ingest.datasets.political import (
+from factorlab.ingest.datasets.political import (
     FilingsRequest,
     PoliticalFilingRecord,
     PoliticalTradeRecord,
 )
-from factorlab.shared.ingest.errors import NormalizationError, PermanentError, TransientError
-from factorlab.shared.ingest.identifiers import legislator_name_key
-from factorlab.shared.ingest.provider import RawCapture
-from factorlab.shared.ingest.transport import raise_for_status
+from factorlab.ingest.errors import NormalizationError, PermanentError, TransientError
+from factorlab.ingest.identifiers import legislator_name_key
+from factorlab.ingest.provider import RawCapture
+from factorlab.ingest.transport import raise_for_status
 from factorlab.sources.house_clerk.parse import (
     PARSER_VERSION,
     parse_house_filing_index,

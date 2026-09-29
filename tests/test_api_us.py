@@ -7,8 +7,8 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from factorlab.api.app import app
-from factorlab.api.us import USRepository, repository
+from factorlab.components.api.app import app
+from factorlab.components.api.us import USRepository, repository
 
 
 def test_candle_reads_are_market_scoped_and_cursor_bound_to_filters():
@@ -50,7 +50,7 @@ def test_us_repository_dependency_is_request_local(monkeypatch):
         created.append(client)
         return SimpleNamespace(client=client)
 
-    monkeypatch.setattr("factorlab.api.us.ClickHouseStorage.from_environment", create_storage)
+    monkeypatch.setattr("factorlab.components.api.us.ClickHouseStorage.from_environment", create_storage)
 
     assert repository() is not repository()
     assert len(created) == 2

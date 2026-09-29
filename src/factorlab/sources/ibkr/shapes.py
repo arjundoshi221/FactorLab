@@ -1,7 +1,7 @@
 """IBKR vocabulary for the broker mirror; the record shapes live in the dataset contract.
 
 ``PositionSnapshot`` / ``AccountStateRow`` / ``ExecutionRecord`` /
-``OpenOrderSnapshot`` moved to :mod:`factorlab.shared.ingest.datasets.broker`
+``OpenOrderSnapshot`` moved to :mod:`factorlab.ingest.datasets.broker`
 (07 §5.5) and are re-exported here so existing imports keep working. What
 stays is IBKR-only: the broker code, Gateway source channels and the
 ``secType`` -> ``product_type`` map.
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from factorlab.shared.ingest.datasets.broker import (
+from factorlab.ingest.datasets.broker import (
     AccountStateRow,
     ExecutionRecord,
     Mode,

@@ -1,17 +1,12 @@
-import importlib.util
 import uuid
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from unittest.mock import Mock
 
 import pandas as pd
 import pytest
 
-from factorlab.sources.schwab.market import normalize
-
-spec = importlib.util.spec_from_file_location("us_runner", Path(__file__).parents[1] / "scripts/factlab_us_clickhouse.py")
-runner = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(runner)
+from factorlab.components.ingest_us.legacy import daemon as runner
+from factorlab.components.ingest_us.legacy.schwab.market import normalize
 
 
 def test_pilot_aliases():

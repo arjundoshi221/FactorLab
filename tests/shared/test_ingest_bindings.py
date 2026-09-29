@@ -8,7 +8,7 @@ import pytest
 import yaml
 from pydantic import Field
 
-from factorlab.shared.ingest.bindings import (
+from factorlab.ingest.bindings import (
     Binding,
     BindingError,
     BindingsFile,
@@ -17,8 +17,8 @@ from factorlab.shared.ingest.bindings import (
     load_provider_settings,
     validate_bindings,
 )
-from factorlab.shared.ingest.datasets import Capabilities
-from factorlab.shared.ingest.registry import Registry, RegistryError
+from factorlab.ingest.datasets import Capabilities
+from factorlab.ingest.registry import Registry, RegistryError
 
 
 class FakeSettings(ProviderSettings):

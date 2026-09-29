@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from factorlab.shared.ingest.provider import run_provider
+from factorlab.ingest.provider import run_provider
 from factorlab.sources.ibkr.errors import IBKRConnectError
 from factorlab.sources.ibkr.provider import (
     DryRunBrokerStorage,

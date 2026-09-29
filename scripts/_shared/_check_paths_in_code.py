@@ -3,9 +3,9 @@
 Complements ``_check_no_data_paths.py`` (which blocks staging files under
 ``data/`` / ``logs/``). This one scans the **content** of staged Python files
 and refuses any new hardcoded ``data/.../raw`` or ``data/<vendor>/`` literal
-that should instead go through ``factorlab.shared.paths``.
+that should instead go through ``factorlab.core.paths``.
 
-The single source of truth for on-disk locations is :mod:`factorlab.shared.paths`.
+The single source of truth for on-disk locations is :mod:`factorlab.core.paths`.
 If you need a new raw / state / token / log location, add it to the layout
 maps in ``paths.py``, not to a literal in your script.
 
@@ -94,14 +94,14 @@ def main() -> int:
 
     print(
         "ERROR: pre-commit blocked hardcoded raw-data path literals.\n"
-        "Use factorlab.shared.paths instead (raw_dir / state_dir / token_path).\n",
+        "Use factorlab.core.paths instead (raw_dir / state_dir / token_path).\n",
         file=sys.stderr,
     )
     for path, line_no, snippet in failures:
         print(f"  {path}:{line_no}: {snippet}", file=sys.stderr)
     print(
         "\nFix: import the helper and route through it, e.g."
-        "\n  from factorlab.shared.paths import raw_dir"
+        "\n  from factorlab.core.paths import raw_dir"
         "\n  CACHE_DIR = raw_dir(\"eodhd\")",
         file=sys.stderr,
     )

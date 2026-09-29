@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
-from factorlab.sources.schwab.market import NY, bounds, calendar
+from factorlab.calendars.us import NY, bounds, calendar
 from factorlab.storage.clickhouse import _decimal, _integer, _version, rows
 from factorlab.storage.v2_india import V2IndiaStorage
 from factorlab.storage.v2_reference import UnresolvedReference

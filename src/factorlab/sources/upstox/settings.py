@@ -6,7 +6,7 @@ from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from factorlab.shared.ingest.bindings import ProviderSettings
+from factorlab.ingest.bindings import ProviderSettings
 
 ALIAS_KIND = "upstox_instrument_key"
 

@@ -3,24 +3,18 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
+import importlib
 import uuid
 from datetime import UTC, datetime, time, timedelta
-from pathlib import Path
 
 import pytest
 
-from factorlab.shared.ingest.provider import RunSummary, UnitOutcome
-
-SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "us" / "ibkr" / "us_portfolio_ibkr_snapshot.py"
+from factorlab.ingest.provider import RunSummary, UnitOutcome
 
 
 @pytest.fixture(scope="module")
 def script():
-    spec = importlib.util.spec_from_file_location("us_portfolio_ibkr_snapshot", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return importlib.reload(importlib.import_module("factorlab.components.ingest_broker.snapshot"))
 
 
 class StatusStorage:
