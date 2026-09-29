@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from factorlab.storage.clickhouse import ClickHouseStorage
+from factorlab.clickhouse import ClickHouse
 
 REQUIRED_TABLES = {
     "raw.archive",
@@ -56,7 +56,7 @@ def check_v2_readiness(client: object) -> None:
 
 
 def main() -> None:
-    storage = ClickHouseStorage.from_environment()
+    storage = ClickHouse.from_environment()
     check_v2_readiness(storage.client)
     print("ClickHouse v2 schema is ready.")
 

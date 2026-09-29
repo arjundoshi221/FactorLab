@@ -11,9 +11,9 @@ import pandas as pd
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
+from factorlab.clickhouse import ClickHouse
 from factorlab.components.api.india import INDIA_BAR_VERSIONS_SQL, INDIA_BARS_SQL, QueryClient
 from factorlab.components.api.india_observability import _session_state
-from factorlab.storage.clickhouse import ClickHouseStorage
 
 IndiaHubStatus = Literal["healthy", "attention", "missing", "not_expected"]
 IndiaCollectionScope = Literal["all", "collecting", "historical", "not_configured"]
@@ -174,7 +174,7 @@ class IndiaHubRepository:
 
     @classmethod
     def from_environment(cls) -> IndiaHubRepository:
-        return cls(ClickHouseStorage.from_environment().client)
+        return cls(ClickHouse.from_environment().client)
 
     def list_instruments(
         self,

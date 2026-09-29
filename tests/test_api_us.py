@@ -50,7 +50,7 @@ def test_us_repository_dependency_is_request_local(monkeypatch):
         created.append(client)
         return SimpleNamespace(client=client)
 
-    monkeypatch.setattr("factorlab.components.api.us.ClickHouseStorage.from_environment", create_storage)
+    monkeypatch.setattr("factorlab.components.api.us.ClickHouse.from_environment", create_storage)
 
     assert repository() is not repository()
     assert len(created) == 2

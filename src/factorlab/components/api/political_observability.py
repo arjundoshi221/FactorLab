@@ -10,9 +10,9 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
+from factorlab.clickhouse import ClickHouse
 from factorlab.components.api.india_observability import IndiaIngestionRun, IndiaIngestionRunsPage
 from factorlab.components.api.political import QueryClient
-from factorlab.storage.clickhouse import ClickHouseStorage
 
 _TRADES = """(
     SELECT political_trade_id, toString(political_trade_id) AS trade_key,
@@ -264,7 +264,7 @@ class PoliticalObservabilityRepository:
 
     @classmethod
     def from_environment(cls) -> PoliticalObservabilityRepository:
-        return cls(ClickHouseStorage.from_environment().client)
+        return cls(ClickHouse.from_environment().client)
 
     def get_dashboard(self, *, as_of_date: date) -> PoliticalDashboard:
         result = self._query(

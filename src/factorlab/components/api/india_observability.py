@@ -13,13 +13,13 @@ import pandas as pd
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
+from factorlab.clickhouse import ClickHouse
 from factorlab.components.api.india import (
     INDIA_BAR_VERSIONS_SQL,
     INDIA_BARS_SQL,
     IndiaInstrument,
     QueryClient,
 )
-from factorlab.storage.clickhouse import ClickHouseStorage
 
 IST = ZoneInfo("Asia/Kolkata")
 SESSION_OPEN = time(9, 15)
@@ -261,7 +261,7 @@ class IndiaObservabilityRepository:
 
     @classmethod
     def from_environment(cls) -> IndiaObservabilityRepository:
-        return cls(ClickHouseStorage.from_environment().client)
+        return cls(ClickHouse.from_environment().client)
 
     def get_dashboard(self, *, trading_date: date, now: datetime | None = None) -> IndiaDashboard:
         checked_at = now or datetime.now(UTC)

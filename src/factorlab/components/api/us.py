@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from factorlab.calendars.us import NY, bounds, latest_completed
-from factorlab.storage.clickhouse import ClickHouseStorage, rows
+from factorlab.clickhouse import ClickHouse, rows
 
 
 class USPage(BaseModel):
@@ -227,7 +227,7 @@ class USRepository:
 
 def repository():
     """Create a request-local client because clickhouse-connect sessions are not thread-safe."""
-    return USRepository(ClickHouseStorage.from_environment().client)
+    return USRepository(ClickHouse.from_environment().client)
 
 
 Repo = Annotated[USRepository, Depends(repository)]

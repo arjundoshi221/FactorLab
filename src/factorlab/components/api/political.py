@@ -11,7 +11,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ConfigDict
 
-from factorlab.storage.clickhouse import ClickHouseStorage
+from factorlab.clickhouse import ClickHouse
 
 
 class PoliticalTrade(BaseModel):
@@ -74,7 +74,7 @@ class PoliticalTradesRepository:
 
     @classmethod
     def from_environment(cls) -> PoliticalTradesRepository:
-        return cls(ClickHouseStorage.from_environment().client)
+        return cls(ClickHouse.from_environment().client)
 
     def list_trades(
         self,

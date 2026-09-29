@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
-from factorlab.storage.clickhouse import ClickHouseStorage
+from factorlab.clickhouse import ClickHouse
 
 
 class IndiaCandle1Min(BaseModel):
@@ -144,7 +144,7 @@ class IndiaCandlesRepository:
 
     @classmethod
     def from_environment(cls) -> IndiaCandlesRepository:
-        return cls(ClickHouseStorage.from_environment().client)
+        return cls(ClickHouse.from_environment().client)
 
     def list_candles(
         self,

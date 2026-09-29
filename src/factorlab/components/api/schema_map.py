@@ -15,9 +15,9 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
 
+from factorlab.clickhouse import ClickHouse
 from factorlab.components.api.catalog_text import namespace_text, table_text
 from factorlab.schema.resources import v2_sql_dir
-from factorlab.storage.clickhouse import ClickHouseStorage
 
 
 class SchemaMapResult(Protocol):
@@ -363,7 +363,7 @@ class SchemaMapRepository:
 
     @classmethod
     def from_environment(cls) -> SchemaMapRepository:
-        return cls(ClickHouseStorage.from_environment().client)
+        return cls(ClickHouse.from_environment().client)
 
     def get_schema_map(self, *, now: datetime | None = None) -> SchemaMapResponse:
         tables = self._tables()

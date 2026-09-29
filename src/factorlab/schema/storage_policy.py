@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from factorlab.storage.clickhouse import ClickHouseStorage
+from factorlab.clickhouse import ClickHouse
 
 
 def main() -> None:
-    storage = ClickHouseStorage.from_environment()
+    storage = ClickHouse.from_environment()
     result = storage.client.query(
         "SELECT storage_policy FROM system.tables "
         "WHERE database = 'raw' AND name = 'archive'"

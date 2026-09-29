@@ -14,6 +14,7 @@ from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from factorlab.clickhouse import ClickHouse
 from factorlab.components.api.auth import require_api_key
 from factorlab.components.api.catalog import (
     CatalogIndex,
@@ -83,7 +84,6 @@ from factorlab.components.api.schema_map import (
 )
 from factorlab.components.api.us import router as us_router
 from factorlab.core import paths
-from factorlab.storage.clickhouse import ClickHouseStorage
 
 app = FastAPI(
     title="FactorLab API",
@@ -174,7 +174,7 @@ def get_catalog_service() -> CatalogService:
     """Create the data catalog on a session-free client that is safe to share across threads."""
 
     return CatalogService(
-        ClickHouseStorage.from_environment(autogenerate_session_id=False).client,
+        ClickHouse.from_environment(autogenerate_session_id=False).client,
         get_hub_overview_service(),
     )
 

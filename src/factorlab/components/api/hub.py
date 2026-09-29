@@ -13,10 +13,10 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel
 
+from factorlab.clickhouse import ClickHouse
 from factorlab.components.api.india import QueryClient
 from factorlab.components.api.india_observability import _session_state
 from factorlab.components.api.schema_map import V2_DATABASES, V2_DOMAINS
-from factorlab.storage.clickhouse import ClickHouseStorage
 
 IST = ZoneInfo("Asia/Kolkata")
 POLITICAL_FRESHNESS_SECONDS = 172_800
@@ -240,7 +240,7 @@ class HubRepository:
 
     @classmethod
     def from_environment(cls) -> HubRepository:
-        storage = ClickHouseStorage.from_environment()
+        storage = ClickHouse.from_environment()
         return cls(storage.client)
 
     def get_overview(self, *, now: datetime | None = None) -> HubOverview:

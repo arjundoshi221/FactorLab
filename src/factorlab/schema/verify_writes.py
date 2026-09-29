@@ -6,7 +6,7 @@ import argparse
 import time
 from datetime import datetime
 
-from factorlab.storage.clickhouse import ClickHouseStorage
+from factorlab.clickhouse import ClickHouse
 
 
 def _count(client, table: str, since: datetime) -> int:
@@ -49,7 +49,7 @@ def main() -> None:
     args = parser.parse_args()
     if args.since.tzinfo is None:
         parser.error("--since must include a timezone")
-    storage = ClickHouseStorage.from_environment()
+    storage = ClickHouse.from_environment()
     try:
         deadline = time.monotonic() + args.wait_seconds
         last_report = 0.0
