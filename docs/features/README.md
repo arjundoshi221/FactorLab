@@ -40,6 +40,7 @@ when anything here is stale or invalid. The `feature` skill
 | [F-028](F-028-dependency-updates.md) | Automated dependency updates (Renovate) | backlog | P2 | — | platform |
 | [F-029](F-029-ghcr-retention.md) | GHCR image retention | backlog | P2 | — | platform |
 | [F-031](F-031-deploy-windows.md) | Deploy windows in component manifests | backlog | P2 | — | platform |
+| [F-034](F-034-configuration-and-secret-gaps.md) | Close configuration and secret inventory gaps found while documenting members | backlog | P2 | — | ingest-broker, ingest-us, ingest-india, ingest-political, secrets-agent, ingest |
 | [F-004](F-004-live-markets.md) | Live markets | backlog | P3 | — | api, web, ingest-us |
 | [F-005](F-005-backtesting.md) | Backtesting | backlog | P3 | — | api, web |
 | [F-030](F-030-release-candidates.md) | Release candidate tags (-rc.N) | backlog | P3 | — | platform |

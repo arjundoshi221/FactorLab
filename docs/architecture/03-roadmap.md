@@ -1,6 +1,8 @@
 # Roadmap
 
-> Status: `[design]`
+> Status: `[superseded]` — this phase plan is historical. Planned work now lives in
+> [docs/features/](../features/README.md) (scheduled in [docs/sprints/](../sprints/README.md)); the hub's
+> /roadmap page is generated from the features with a `roadmap:` block.
 
 Roadmap is capability-ordered, not date-ordered. Each phase should harden the previous one before the next layer is treated as real.
 
