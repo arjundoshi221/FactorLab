@@ -11,7 +11,7 @@ fi
 env_file=/etc/factorlab/identity/cloudflared.env
 apt_key_url=https://pkg.cloudflare.com/cloudflare-public-v2.gpg
 apt_keyring=/usr/share/keyrings/cloudflare-public-v2.gpg
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 
 if [[ ! -f "$env_file" ]] || ! grep -q '^TUNNEL_TOKEN=.\+' "$env_file"; then
   echo "$env_file must contain TUNNEL_TOKEN=<token from Zero Trust > Networks > Tunnels>." >&2

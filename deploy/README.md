@@ -100,8 +100,35 @@ Uptime Kuma, Portainer, or persistent volumes.
 
 ## Per-component releases
 
-Each component (`components/<name>/component.yaml`) and the platform
-(`deploy/component.yaml`) ships on its own `<name>/vX.Y.Z` tag. The host side is
+Each component (`components/<name>/component.yaml`), the platform
+(`deploy/component.yaml`) and each Cloudflare Worker ships on its own `<name>/vX.Y.Z`
+tag, from a clean `main` that matches `origin/main` and has a green `ci.yml`:
+
+```powershell
+.\deploy\release.ps1 -Component api -Bump minor -DryRun   # show the version and changelog
+.\deploy\release.ps1 -Component api -Bump minor           # commit, tag api/v0.2.0, push
+```
+
+`tools/release.py prepare` refuses a version that is already tagged. It also refuses
+a release when nothing the unit ships has changed since its last tag. The unit's
+closure is its directory, the libraries and providers it depends on, and its locked
+third-party packages (`uv run python tools/affected.py closure <name>`). It then
+writes the version and prepends a `CHANGELOG.md` section. The tag starts
+`.github/workflows/component-release.yml`, which runs these jobs in order:
+
+1. It checks that the tag is on `main` at the unit's declared version.
+2. It runs the tests.
+3. It builds, publishes, attests and verifies the image. An existing version tag
+   is never overwritten.
+4. It runs the host deployer below.
+
+To re-run a tag whose transfer failed, dispatch the workflow manually; this reuses
+the published image. `component-rollback.yml` (manual) returns a component to its
+previous release or to any version the host has recorded. Worker tags are validated
+and bundled; the deploy stays manual (`npm run deploy` with the local
+`wrangler.toml`).
+
+The host side is
 `deploy/host/factorlab_deploy.py` (stdlib Python, run as root) behind two stable
 sudoers entry points:
 

@@ -1,0 +1,26 @@
+name: VPS SSH identity
+description: >
+  Install the deployment key and the pinned host key for the production VPS.
+  Host-key checking stays on: the known_hosts line comes from a verified secret.
+inputs:
+  private-key:
+    description: The deployment account's private key (VPS_SSH_PRIVATE_KEY).
+    required: true
+  host-key:
+    description: The complete, pinned known_hosts line for the VPS (VPS_SSH_HOST_KEY).
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Configure pinned SSH identity
+      shell: bash
+      env:
+        SSH_PRIVATE_KEY: ${{ inputs.private-key }}
+        SSH_HOST_KEY: ${{ inputs.host-key }}
+      run: |
+        set -euo pipefail
+        install -d -m 0700 ~/.ssh
+        printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/factorlab_deploy
+        chmod 0600 ~/.ssh/factorlab_deploy
+        printf '%s\n' "$SSH_HOST_KEY" > ~/.ssh/known_hosts
+        chmod 0644 ~/.ssh/known_hosts

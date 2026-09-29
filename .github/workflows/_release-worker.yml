@@ -1,0 +1,52 @@
+name: Release worker
+
+# Validate and build a Cloudflare Worker release. Deploying stays manual
+# (`npm run deploy` with the operator's local, untracked wrangler.toml): the real
+# configuration carries account identifiers and the Access audience, and CI holds
+# no Cloudflare credential that could redeploy the auth worker.
+on:
+  workflow_call:
+    inputs:
+      unit: {type: string, required: true}
+      version: {type: string, required: true}
+      commit: {type: string, required: true}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloudflare/${{ inputs.unit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cloudflare/${{ inputs.unit }}/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - name: Bundle without deploying
+        run: npx wrangler deploy --dry-run --config wrangler.example.toml --outdir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.unit }}-${{ inputs.version }}
+          path: cloudflare/${{ inputs.unit }}/dist
+          retention-days: 30
+      - name: Record the release
+        env:
+          UNIT: ${{ inputs.unit }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          {
+            echo "## ${UNIT} ${VERSION} (validated; deploy manually)"
+            echo '```'
+            echo "git checkout ${UNIT}/v${VERSION}"
+            echo "cd cloudflare/${UNIT} && npm ci && npm run check && npx wrangler deploy"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

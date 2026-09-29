@@ -414,6 +414,10 @@ class Deployer:
 
     def deploy(self, component: str, version: str, image: str, bundle: Path) -> Outcome:
         validate_arguments(component, version, image)
+        # Before the platform bootstrap, the running stack is the legacy monolith model;
+        # a component deploy would model only itself. The platform release seeds all.
+        if not (self.host.releases("platform") / "current").exists():
+            raise DeployError("no platform release is installed; run deploy-platform.sh first")
         outcome = Outcome(component, version)
         with self.host.lock(self.host.lock_path), tempfile.TemporaryDirectory() as work:
             staged = Path(work)

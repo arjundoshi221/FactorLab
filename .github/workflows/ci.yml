@@ -85,6 +85,30 @@ jobs:
           cache-dependency-path: cloudflare/${{ matrix.worker }}/package-lock.json
       - run: npm ci
       - run: npm run check
+      - name: Bundle without deploying
+        run: npx wrangler deploy --dry-run --config wrangler.example.toml --outdir dist
+
+  platform:
+    name: Platform (workflows, host scripts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.20"
+          python-version: "3.12"
+          enable-cache: true
+      - name: Workflows (actionlint, with shellcheck on every run block)
+        run: uvx --from actionlint-py==1.7.12.25 --with shellcheck-py actionlint
+      - name: Host scripts (shellcheck)
+        run: uvx --from shellcheck-py shellcheck -S warning deploy/scripts/*.sh deploy/scripts/factorlab-compose
+      - name: Deploy bundles build
+        run: |
+          uv sync --frozen --all-packages
+          uv run --frozen python tools/components.py bundle platform "$RUNNER_TEMP/platform.tgz"
+          for unit in $(uv run --frozen python tools/components.py list | awk '{print $1}'); do
+            uv run --frozen python tools/components.py bundle "$unit" "$RUNNER_TEMP/$unit.tgz"
+          done
 
   images-plan:
     name: Component image matrix
@@ -137,7 +161,7 @@ jobs:
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [python, isolated-imports, web, workers, images]
+    needs: [python, isolated-imports, web, workers, platform, images]
     runs-on: ubuntu-latest
     steps:
       - name: All required jobs passed

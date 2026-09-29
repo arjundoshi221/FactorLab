@@ -1,0 +1,104 @@
+name: Deploy to the VPS
+
+# Ship one unit's deploy bundle to the VPS and run the host deployer through its
+# stable sudoers entry point. Components: deploy-component.sh (recreates only that
+# component; recovers by its rollback class). Platform: deploy-platform.sh
+# (installs deploy/, recreates nothing).
+on:
+  workflow_call:
+    inputs:
+      unit: {type: string, required: true}
+      version: {type: string, required: true}
+      kind: {type: string, required: true}
+      commit: {type: string, required: true}
+      image:
+        description: image@sha256 digest (components only)
+        type: string
+        default: ""
+    secrets:
+      VPS_HOST: {required: true}
+      VPS_USER: {required: true}
+      VPS_SSH_PRIVATE_KEY: {required: true}
+      VPS_SSH_HOST_KEY: {required: true}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    # The host deployer also takes the global release lock; this keeps one run per unit.
+    concurrency:
+      group: factorlab-deploy-${{ inputs.unit }}
+      cancel-in-progress: false
+    env:
+      UNIT: ${{ inputs.unit }}
+      VERSION: ${{ inputs.version }}
+      KIND: ${{ inputs.kind }}
+      IMAGE: ${{ inputs.image }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      RUN_DIR: /tmp/factorlab-${{ inputs.unit }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.20"
+          python-version: "3.12"
+          enable-cache: true
+      - name: Build the deploy bundle
+        run: |
+          uv sync --frozen --all-packages
+          uv run --frozen python tools/components.py bundle "$UNIT" bundle.tgz --version "$VERSION"
+      - uses: ./.github/actions/vps-ssh
+        with:
+          private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          host-key: ${{ secrets.VPS_SSH_HOST_KEY }}
+      - name: Upload the bundle
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" "install -d -m 0700 '$RUN_DIR'"
+          scp -i ~/.ssh/factorlab_deploy -o BatchMode=yes bundle.tgz "$VPS_USER@$VPS_HOST:$RUN_DIR/bundle.tgz"
+      - name: Deploy
+        id: deployment
+        run: |
+          set -euo pipefail
+          if [[ $KIND == platform ]]; then
+            command="sudo /opt/factorlab/deploy/scripts/deploy-platform.sh '$VERSION' '$RUN_DIR/bundle.tgz'"
+          else
+            [[ $IMAGE =~ ^ghcr\.io/arjundoshi221/factorlab-${UNIT}@sha256:[0-9a-f]{64}$ ]] || {
+              echo "refusing image '$IMAGE'" >&2; exit 1; }
+            command="sudo /opt/factorlab/deploy/scripts/deploy-component.sh '$UNIT' '$VERSION' '$IMAGE' '$RUN_DIR/bundle.tgz'"
+          fi
+          set +e
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=30 "$VPS_USER@$VPS_HOST" "$command" | tee deployment.log
+          status=${PIPESTATUS[0]}
+          set -e
+          for key in PREVIOUS_VERSION VERIFICATION ROLLBACK; do
+            value=$(sed -n "s/^FACTORLAB_RESULT_${key}=//p" deployment.log | tail -1)
+            echo "$(tr '[:upper:]' '[:lower:]' <<<"$key")=${value:-not-reported}" >> "$GITHUB_OUTPUT"
+          done
+          exit "$status"
+      - name: Record the release result
+        if: always()
+        env:
+          PREVIOUS: ${{ steps.deployment.outputs.previous_version }}
+          VERIFICATION: ${{ steps.deployment.outputs.verification }}
+          ROLLBACK: ${{ steps.deployment.outputs.rollback }}
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          {
+            echo "## ${UNIT} ${VERSION}"
+            echo "- Commit: \`${COMMIT}\`"
+            if [[ -n $IMAGE ]]; then echo "- Image: \`${IMAGE}\`"; fi
+            echo "- Previous version: \`${PREVIOUS:-unknown}\`"
+            echo "- Verification: \`${VERIFICATION:-not-run}\`"
+            echo "- Rollback: \`${ROLLBACK:-not-reported}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove the remote transfer directory
+        if: always()
+        run: ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" "rm -rf -- '$RUN_DIR'" || true

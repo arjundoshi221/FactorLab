@@ -1,0 +1,74 @@
+name: Component rollback
+
+# Put a component back on its previous release, or on any version the host has
+# recorded (which is also how a recorded version is redeployed). The host deployer
+# refuses writers whose data contract changed and forward-only components; those
+# fix forward with a new release.
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: Component name (components/<name>)
+        required: true
+        type: string
+      to:
+        description: "Recorded version to return to (default: the previous release)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: factorlab-deploy-${{ inputs.component }}
+      cancel-in-progress: false
+    env:
+      COMPONENT: ${{ inputs.component }}
+      TO: ${{ inputs.to }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+    steps:
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          [[ $COMPONENT =~ ^[a-z][a-z0-9-]{1,40}$ && $COMPONENT != platform ]] || {
+            echo "invalid component '$COMPONENT'" >&2; exit 1; }
+          [[ -z $TO || $TO =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
+            echo "invalid version '$TO'" >&2; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/vps-ssh
+        with:
+          private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          host-key: ${{ secrets.VPS_SSH_HOST_KEY }}
+      - name: Roll back
+        id: rollback
+        run: |
+          set -euo pipefail
+          command="sudo /opt/factorlab/deploy/scripts/deploy-component.sh rollback '$COMPONENT'"
+          if [[ -n $TO ]]; then command+=" '$TO'"; fi
+          set +e
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=30 "$VPS_USER@$VPS_HOST" "$command" | tee rollback.log
+          status=${PIPESTATUS[0]}
+          set -e
+          for key in VERSION VERIFICATION ROLLBACK; do
+            value=$(sed -n "s/^FACTORLAB_RESULT_${key}=//p" rollback.log | tail -1)
+            echo "$(tr '[:upper:]' '[:lower:]' <<<"$key")=${value:-not-reported}" >> "$GITHUB_OUTPUT"
+          done
+          exit "$status"
+      - name: Record the result
+        if: always()
+        env:
+          VERSION: ${{ steps.rollback.outputs.version }}
+          VERIFICATION: ${{ steps.rollback.outputs.verification }}
+        run: |
+          {
+            echo "## Rollback ${COMPONENT}"
+            echo "- Now running: \`${VERSION:-unknown}\`"
+            echo "- Verification: \`${VERIFICATION:-not-run}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

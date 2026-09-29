@@ -1,0 +1,163 @@
+name: Component release
+
+# One pipeline per release unit: a component (components/*/component.yaml), the
+# platform (deploy/component.yaml) or a Cloudflare Worker, released on its own
+# `<unit>/vX.Y.Z` tag, which deploy/release.ps1 -Component creates. The legacy
+# monolith keeps its `release/*` tags and release.yml until it is retired.
+on:
+  push:
+    tags:
+      - "*/v[0-9]*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: >
+          Existing <unit>/vX.Y.Z tag to run again (for example after a transfer failure).
+          The published image is reused, never rebuilt.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: component-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      commit: ${{ steps.tag.outputs.commit }}
+      unit: ${{ steps.unit.outputs.unit }}
+      version: ${{ steps.unit.outputs.version }}
+      kind: ${{ steps.unit.outputs.kind }}
+      image: ${{ steps.unit.outputs.image }}
+      dockerfile: ${{ steps.unit.outputs.dockerfile }}
+    steps:
+      - name: Validate the tag name
+        id: name
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! $TAG =~ ^[a-z][a-z0-9-]{1,40}/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Invalid release tag: $TAG" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ steps.name.outputs.tag }}
+          fetch-depth: 0
+      - name: The tagged commit is on main
+        id: tag
+        env:
+          TAG: ${{ steps.name.outputs.tag }}
+        run: |
+          set -euo pipefail
+          commit=$(git rev-list -n 1 "refs/tags/$TAG")
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$commit" FETCH_HEAD; then
+            echo "$TAG points at $commit, which is not on main" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.20"
+          python-version: "3.12"
+          enable-cache: true
+      - name: The tag names a release unit at its declared version
+        id: unit
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          uv sync --frozen --all-packages
+          uv run --frozen python tools/release.py check-tag "$TAG" | tee -a "$GITHUB_OUTPUT"
+
+  test:
+    needs: authorize
+    if: needs.authorize.outputs.kind != 'worker'   # workers are checked by _release-worker.yml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.authorize.outputs.commit }}
+      - uses: astral-sh/setup-uv@v6
+        if: needs.authorize.outputs.kind == 'python' || needs.authorize.outputs.kind == 'platform'
+        with:
+          version: "0.12.20"
+          python-version: "3.12"
+          enable-cache: true
+      - name: Python tests (the whole workspace; libraries are shared)
+        if: needs.authorize.outputs.kind == 'python' || needs.authorize.outputs.kind == 'platform'
+        run: |
+          uv sync --frozen --all-packages
+          uv run --frozen python tools/components.py check
+          uv run --frozen python tools/components.py render-compose --check
+          uv run --frozen pytest
+      - uses: actions/setup-node@v4
+        if: needs.authorize.outputs.kind == 'static'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: components/web/package-lock.json
+      - name: Web tests and build
+        if: needs.authorize.outputs.kind == 'static'
+        working-directory: components/web
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+  image:
+    needs: [authorize, test]
+    if: needs.authorize.outputs.kind == 'python' || needs.authorize.outputs.kind == 'static'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/_release-image.yml
+    with:
+      unit: ${{ needs.authorize.outputs.unit }}
+      version: ${{ needs.authorize.outputs.version }}
+      image: ${{ needs.authorize.outputs.image }}
+      dockerfile: ${{ needs.authorize.outputs.dockerfile }}
+      commit: ${{ needs.authorize.outputs.commit }}
+      reuse: ${{ github.event_name == 'workflow_dispatch' }}
+
+  deploy:
+    needs: [authorize, image]
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      unit: ${{ needs.authorize.outputs.unit }}
+      version: ${{ needs.authorize.outputs.version }}
+      kind: ${{ needs.authorize.outputs.kind }}
+      commit: ${{ needs.authorize.outputs.commit }}
+      image: ${{ needs.authorize.outputs.image }}@${{ needs.image.outputs.digest }}
+    secrets: inherit
+
+  platform:
+    needs: [authorize, test]
+    if: needs.authorize.outputs.kind == 'platform'
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      unit: platform
+      version: ${{ needs.authorize.outputs.version }}
+      kind: platform
+      commit: ${{ needs.authorize.outputs.commit }}
+    secrets: inherit
+
+  worker:
+    needs: authorize
+    if: needs.authorize.outputs.kind == 'worker'
+    uses: ./.github/workflows/_release-worker.yml
+    with:
+      unit: ${{ needs.authorize.outputs.unit }}
+      version: ${{ needs.authorize.outputs.version }}
+      commit: ${{ needs.authorize.outputs.commit }}

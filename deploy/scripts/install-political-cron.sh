@@ -6,7 +6,7 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 CRON_SOURCE="$SCRIPT_DIR/../cron/factorlab-political"
 CRON_TARGET=/etc/cron.d/factorlab-political
 LOG_DIR=/var/log/factorlab/ingest-political

@@ -1,0 +1,127 @@
+name: Release image
+
+# Build, publish, attest and verify one component image as <image>:<version>.
+# A published version tag is immutable: a tag push refuses to overwrite it, and a
+# manual re-run (reuse: true) deploys the digest that is already published.
+on:
+  workflow_call:
+    inputs:
+      unit: {type: string, required: true}
+      version: {type: string, required: true}
+      image: {type: string, required: true}
+      dockerfile: {type: string, required: true}
+      commit: {type: string, required: true}
+      reuse: {type: boolean, default: false}
+    outputs:
+      digest:
+        description: The published image digest (sha256:...).
+        value: ${{ jobs.image.outputs.digest }}
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.result.outputs.digest }}
+    env:
+      IMAGE: ${{ inputs.image }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.20"
+          python-version: "3.12"
+          enable-cache: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Existing image for this version
+        id: existing
+        env:
+          REUSE: ${{ inputs.reuse }}
+        run: |
+          set -euo pipefail
+          digest=""
+          if manifest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}' 2>/dev/null); then
+            digest=$(jq -r '.digest' <<<"$manifest")
+          fi
+          if [[ -n $digest && $REUSE != true ]]; then
+            echo "$IMAGE:$VERSION already exists and will not be overwritten" >&2
+            exit 1
+          fi
+          if [[ -z $digest && $REUSE == true ]]; then
+            echo "$IMAGE:$VERSION was never published; push the tag to build it" >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - name: Build and publish Linux AMD64 image
+        id: build
+        if: steps.existing.outputs.digest == ''
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ inputs.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ inputs.image }}:${{ inputs.version }}
+          build-args: |
+            VERSION=${{ inputs.version }}
+            COMMIT=${{ inputs.commit }}
+            CREATED=${{ steps.existing.outputs.created }}
+          cache-from: type=gha,scope=${{ inputs.unit }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.unit }}
+          provenance: true
+          sbom: true
+      - name: Attest build provenance
+        if: steps.build.outcome == 'success'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ inputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Resolve the digest
+        id: result
+        env:
+          BUILT: ${{ steps.build.outputs.digest }}
+          EXISTING: ${{ steps.existing.outputs.digest }}
+        run: |
+          set -euo pipefail
+          digest=${BUILT:-$EXISTING}
+          [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "unexpected digest '$digest'" >&2; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Verify the published image against the manifest and uv.lock
+        env:
+          UNIT: ${{ inputs.unit }}
+          DIGEST: ${{ steps.result.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE@$DIGEST"
+          labels=$(docker image inspect "$IMAGE@$DIGEST" --format '{{json .Config.Labels}}')
+          [[ $(jq -r '."io.factorlab.component"' <<<"$labels") == "$UNIT" ]]
+          [[ $(jq -r '."org.opencontainers.image.version"' <<<"$labels") == "$VERSION" ]]
+          uv sync --frozen --all-packages
+          uv run --frozen python tools/verify_image.py "$UNIT" "$IMAGE@$DIGEST"
+      - name: Record the image
+        env:
+          DIGEST: ${{ steps.result.outputs.digest }}
+          REUSED: ${{ steps.existing.outputs.digest != '' }}
+        run: |
+          {
+            echo "## Image ${IMAGE##*/} ${VERSION}"
+            echo "- Digest: \`${DIGEST}\`"
+            echo "- Reused published image: \`${REUSED}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

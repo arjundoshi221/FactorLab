@@ -170,6 +170,8 @@ def world(tmp_path):
     (root / "state" / "images.env").write_text(f"FACTORLAB_API_IMAGE={OLD}\n")
     (root / "releases" / "api" / "1.0.0").mkdir(parents=True)
     (root / "releases" / "api" / "current").write_text("1.0.0\n")
+    (root / "releases" / "platform").mkdir()
+    (root / "releases" / "platform" / "current").write_text("0.9.0\n")
     docker = FakeDocker()
     docker.add_image(OLD, "1.0.0")
     docker.add_image(NEW, "1.1.0")
@@ -282,6 +284,14 @@ def test_refuses_fragments_that_break_platform_policy(world, tmp_path, change, m
     assert pin(root) == OLD and docker.recreated == []
 
 
+def test_refuses_component_deploys_before_the_platform_bootstrap(world, tmp_path):
+    docker, deployer, root = world
+    (root / "releases/platform/current").unlink()
+    with pytest.raises(fd.DeployError, match="deploy-platform.sh first"):
+        deployer.deploy("api", "1.1.0", NEW, bundle(tmp_path, manifest("1.1.0")))
+    assert pin(root) == OLD and docker.recreated == []
+
+
 def test_refuses_bundles_that_escape_the_staging_directory(world, tmp_path):
     _, deployer, _ = world
     evil = bundle(tmp_path, manifest("1.1.0"), extra=[("../../escape.txt", "x")])
@@ -371,4 +381,4 @@ def test_platform_release_restores_the_previous_bundle_when_prepare_host_fails(w
     outcome = deployer.platform("1.0.1", platform_bundle(tmp_path, "1.0.1"))
     assert (outcome.verification, outcome.rollback) == ("failed", "rolled-back")
     assert (root / "deploy/marker").read_text() == "previous platform"
-    assert not (root / "releases/platform/current").exists()
+    assert (root / "releases/platform/current").read_text().strip() == "0.9.0"
