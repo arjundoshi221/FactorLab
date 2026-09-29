@@ -18,14 +18,19 @@ sys.modules[spec.name] = secrets_hook
 spec.loader.exec_module(secrets_hook)
 
 
+# Fake credentials are assembled at runtime so this file never contains one literally
+# (the hook it tests would rightly block it).
+FAKE = "0123456789" + "AbCdEfGhIj"
+
+
 @pytest.mark.parametrize(
     "line",
     [
-        'url = "https://eodhd.com/api/eod/AAPL.US?api_token=0123456789abcdef0123&fmt=json"',
-        "GET /v2/quotes?symbol=AAPL&token=AbCdEf0123456789xyz HTTP/1.1",
-        'API_KEY = "sk_live_0123456789abcdefghij"',
-        "{'access_token': 'eyJhbGciOiJIUzI1NiJ9abcdef'}",
-        'token: "ghp_0123456789abcdefghijklmn"',
+        f'url = "https://eodhd.com/api/eod/AAPL.US?api_token={FAKE}&fmt=json"',
+        f"GET /v2/quotes?symbol=AAPL&token={FAKE} HTTP/1.1",
+        f'API_KEY = "sk_live_{FAKE}"',
+        f"{{'access_token': 'eyJ{FAKE}'}}",
+        f'token: "ghp_{FAKE}"',
     ],
 )
 def test_real_secrets_are_blocked(tmp_path, line):
