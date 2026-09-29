@@ -3,7 +3,6 @@
 import logging
 
 import requests
-from dotenv import find_dotenv, load_dotenv
 
 from factorlab.core.secrets import get_secret
 
@@ -46,7 +45,6 @@ def get_session(token: str | None = None) -> UpstoxSession:
     If *token* is not provided, reads UPSTOX_ACCESS_TOKEN from environment.
     """
     if token is None:
-        load_dotenv(find_dotenv(usecwd=True))
         token = (get_secret("UPSTOX_ACCESS_TOKEN", "") or "").strip()
         if not token:
             raise OSError("UPSTOX_ACCESS_TOKEN is missing or empty in .env")

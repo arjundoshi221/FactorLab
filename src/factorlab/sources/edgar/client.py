@@ -18,7 +18,6 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 
 import requests
-from dotenv import find_dotenv, load_dotenv
 
 from factorlab.core.secrets import get_secret
 
@@ -48,7 +47,6 @@ class EdgarClient:
         storage=None,
         sleep=time.sleep,
     ):
-        load_dotenv(find_dotenv(usecwd=True))
         ua = (user_agent or get_secret("EDGAR_USER_AGENT", "") or "").strip()
         if not ua:
             raise OSError(

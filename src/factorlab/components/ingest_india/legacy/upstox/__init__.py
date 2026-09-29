@@ -3,7 +3,6 @@
 from factorlab.components.ingest_india.legacy.upstox.auth import (
     ensure_token,
     exchange_code,
-    fetch_remote_token,
     get_auth_url,
     login_interactive,
     open_auth_in_browser,
@@ -45,7 +44,6 @@ __all__ = [
     "exchange_code",
     "fetch_historical_candles",
     "fetch_intraday_candles",
-    "fetch_remote_token",
     "find_equities",
     "find_nearest_future",
     "get_auth_url",

@@ -12,7 +12,6 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 
 import requests
-from dotenv import find_dotenv, load_dotenv
 
 from factorlab.core.secrets import get_secret
 
@@ -28,7 +27,6 @@ class EODHDClient:
     """Thin, rate-limited wrapper around the EODHD REST API."""
 
     def __init__(self, api_key: str | None = None, *, storage=None, sleep=time.sleep):
-        load_dotenv(find_dotenv(usecwd=True))
         self.api_key = api_key or get_secret("EODHD_API_KEY", "demo")
         self.session = requests.Session()
         self._last_request_at: float = 0.0

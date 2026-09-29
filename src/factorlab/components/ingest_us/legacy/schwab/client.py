@@ -3,7 +3,6 @@
 import logging
 
 import requests
-from dotenv import find_dotenv, load_dotenv
 
 from factorlab.core.secrets import get_secret
 
@@ -44,7 +43,6 @@ def get_session(token: str | None = None) -> SchwabSession:
     """Return a Schwab session using the explicit or runtime access token."""
 
     if token is None:
-        load_dotenv(find_dotenv(usecwd=True))
         token = (get_secret("SCHWAB_ACCESS_TOKEN", "") or "").strip()
         if not token:
             raise OSError("SCHWAB_ACCESS_TOKEN is missing or empty")

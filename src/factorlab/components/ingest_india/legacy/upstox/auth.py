@@ -9,9 +9,10 @@ Standard OAuth2 flow:
 Token expires daily ~3:30-4:30 AM IST.  No refresh tokens.
 Run ``ensure_token()`` before any API work to guarantee a live token.
 
-Token storage (checked in order):
-  1. Token file at ``data/upstox/.token`` (used by Railway auth server)
-  2. ``UPSTOX_ACCESS_TOKEN`` env var / ``.env`` file
+Token sources (checked in order):
+  1. Token file at ``data/upstox/.token``, when ``FACTORLAB_PERSIST_SECRETS`` allows it
+  2. ``UPSTOX_ACCESS_TOKEN`` via ``get_secret`` (production: the runtime secret volume
+     the secrets agent fills from the Cloudflare auth Worker's daily login)
   3. Interactive login prompt (local only)
 """
 
@@ -22,7 +23,6 @@ import webbrowser
 from urllib.parse import urlencode
 
 import requests
-from dotenv import find_dotenv, load_dotenv, set_key
 
 from factorlab.core.paths import token_path
 from factorlab.core.secrets import get_secret
@@ -33,7 +33,7 @@ _PROFILE_URL = "https://api.upstox.com/v2/user/profile"
 _AUTH_DIALOG_URL = "https://api.upstox.com/v2/login/authorization/dialog"
 _TOKEN_URL = "https://api.upstox.com/v2/login/authorization/token"
 
-# Token files — shared between auth server and scripts on Railway.
+# Token files for local development (production disables persistence).
 # Resolved via factorlab.core.paths so the location is one knob away
 # (FACTORLAB_TOKEN_ROOT). Default preserves legacy data/upstox/.token shape.
 _TOKEN_FILE = token_path("upstox")
@@ -56,8 +56,7 @@ def _persistence_enabled() -> bool:
 
 
 def _load_credentials() -> dict[str, str]:
-    """Load and validate all required Upstox credentials from environment."""
-    load_dotenv(find_dotenv(usecwd=True))
+    """Load and validate all required Upstox credentials (secret volume or environment)."""
     creds: dict[str, str] = {}
     missing: list[str] = []
     for key, desc in _REQUIRED_KEYS.items():
@@ -67,7 +66,7 @@ def _load_credentials() -> dict[str, str]:
         creds[key] = val
     if missing:
         raise EnvironmentError(
-            "Missing Upstox credentials in .env:\n" + "\n".join(missing)
+            "Missing Upstox credentials:\n" + "\n".join(missing)
         )
     return creds
 
@@ -209,20 +208,13 @@ def validate_token(token: str) -> dict:
 
 
 def save_token(token: str, *, auth_code: str | None = None) -> None:
-    """Persist token (and optionally auth code) to files and .env."""
+    """Persist token (and optionally auth code) to the token files, then this process."""
     if _persistence_enabled():
-        # Local development and the legacy Railway auth flow may opt into
-        # persistence. Production Vault deployments explicitly disable it.
+        # Local development opts into persistence; production disables it
+        # (FACTORLAB_PERSIST_SECRETS=false) and reads the runtime secret volume.
         write_token_file(token)
         if auth_code:
             write_auth_code_file(auth_code)
-
-        env_path = find_dotenv(usecwd=True)
-        if env_path:
-            set_key(env_path, "UPSTOX_ACCESS_TOKEN", token)
-            if auth_code:
-                set_key(env_path, "UPSTOX_AUTH_CODE", auth_code)
-            log.info("Updated UPSTOX_ACCESS_TOKEN in %s", env_path)
 
     # In-process env
     os.environ["UPSTOX_ACCESS_TOKEN"] = token
@@ -230,63 +222,14 @@ def save_token(token: str, *, auth_code: str | None = None) -> None:
         os.environ["UPSTOX_AUTH_CODE"] = auth_code
 
 
-def fetch_remote_token() -> str | None:
-    """Fetch a valid token from the Railway auth server.
-
-    Requires ``AUTH_SERVER_URL`` and ``AUTH_SERVER_PIN`` in .env.
-    Returns the token string if the server has one, None otherwise.
-    """
-    load_dotenv(find_dotenv(usecwd=True))
-    server_url = (get_secret("AUTH_SERVER_URL", "") or "").strip().rstrip("/")
-    pin = (get_secret("AUTH_SERVER_PIN", "") or "").strip()
-
-    if not server_url:
-        return None
-
-    url = f"{server_url}/token"
-    headers = {}
-    if pin:
-        headers["X-Auth-Pin"] = pin
-
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code != 200:
-            log.info("Remote token fetch: HTTP %d — %s", resp.status_code, resp.text[:100])
-            return None
-        data = resp.json()
-        token = data.get("access_token")
-        if token:
-            auth_code = data.get("auth_code", "")
-            log.info("Fetched valid token from %s (user=%s)", server_url, data.get("user", "?"))
-            # Save token + auth code locally (file, .env, env var)
-            save_token(token, auth_code=auth_code if auth_code else None)
-            return token
-    except Exception as exc:
-        log.info("Remote token fetch failed: %s", exc)
-    return None
-
-
 def _load_existing_token() -> str | None:
-    """Try to load a token from token file, env var, or remote server."""
-    # 1. Token file (written by Railway auth server)
+    """Try the token file (when persistence is on), then the runtime secret."""
     if _persistence_enabled():
         token = read_token_file()
         if token:
             return token
-
-    # 2. Env var / .env
-    load_dotenv(find_dotenv(usecwd=True))
     token = (get_secret("UPSTOX_ACCESS_TOKEN", "") or "").strip()
-    if token:
-        return token
-
-    # 3. Remote auth server (Railway)
-    token = fetch_remote_token()
-    if token:
-        save_token(token)  # cache locally
-        return token
-
-    return None
+    return token or None
 
 
 def login_interactive() -> str:
@@ -311,15 +254,13 @@ def ensure_token(interactive: bool = True) -> str:
     """Return a valid access token.
 
     Resolution order:
-      1. Local token file / env var → validate
-      2. Railway auth server (``fetch_remote_token``) → validate + save locally
-      3. Interactive browser login (if *interactive* is True)
+      1. Token file (when persistence is on) / runtime secret -> validate
+      2. Interactive browser login (if *interactive* is True)
 
     Args:
         interactive: If True, prompt for manual login when all else fails.
-                     If False, raise RuntimeError (for cron jobs / Railway workers).
+                     If False, raise RuntimeError (daemons and scheduled jobs).
     """
-    # 1. Try local sources (token file, env var)
     existing = _load_existing_token()
     if existing:
         try:
@@ -327,23 +268,13 @@ def ensure_token(interactive: bool = True) -> str:
             log.info("Existing token is valid")
             return existing
         except RuntimeError as exc:
-            log.info("Local token invalid (%s) — trying Railway", exc)
+            log.info("Existing token invalid (%s)", exc)
 
-    # 2. Try Railway auth server (fresh token from daily browser login)
-    remote = fetch_remote_token()
-    if remote:
-        try:
-            validate_token(remote)
-            log.info("Railway token is valid")
-            return remote
-        except RuntimeError as exc:
-            log.info("Railway token also invalid (%s)", exc)
-
-    # 3. Interactive login as last resort
     if interactive:
         return login_interactive()
 
     raise RuntimeError(
-        "No valid token found. Login via the auth server first: "
-        "visit /login on your Railway app."
+        "No valid Upstox token. Complete the daily login in the Upstox auth Worker so the "
+        "secrets agent delivers UPSTOX_ACCESS_TOKEN "
+        "(docs/architecture/05-secrets-and-upstox-auth.md)."
     )
