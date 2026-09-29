@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# `docker compose` over the live model: compose.base.yml plus every component fragment,
+# production.env, the deployer's image pins and the enabled profiles. Installed to
+# /usr/local/bin by prepare-host.sh. Example: sudo factorlab-compose ps
+set -Eeuo pipefail
+exec /usr/bin/python3 /opt/factorlab/deploy/host/factorlab_deploy.py compose -- "$@"

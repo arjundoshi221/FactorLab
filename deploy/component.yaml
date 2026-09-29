@@ -1,0 +1,7 @@
+# The platform component: the compose base, host tools (deploy/host), host scripts,
+# logrotate, systemd and journald configuration. Released as platform/vX.Y.Z; installed
+# by deploy-platform.sh, which recreates no services (see deploy/host/factorlab_deploy.py).
+schema: 1
+name: platform
+version: 0.1.0
+summary: Compose base, host deployer and scripts, and host log rotation and retention.

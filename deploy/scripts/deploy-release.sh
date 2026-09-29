@@ -20,6 +20,12 @@ root=/opt/factorlab
 live=$root/deploy
 record=$root/releases/$release_id
 lock=/var/lock/factorlab-release.lock
+# After the platform bootstrap the deployer owns per-component image pins; a monolith
+# release would recreate every service from compose.production.yml and ignore them.
+if [[ -e $root/state/images.env ]]; then
+    echo "per-component releases are active ($root/state/images.env); use deploy-component.sh" >&2
+    exit 1
+fi
 stage=$(mktemp -d "$root/.release-stage.XXXXXX")
 managed=(cloudflare-secrets-agent api ingest-india ingest-us)
 # Optional IBKR broker mirror (FACTORLAB_IBKR_ENABLED=true in production.env) and

@@ -52,6 +52,8 @@ fi
 if [ ! -f /etc/factorlab/us-universe.yaml ]; then
     sudo install -D -m 0644 "$script_dir/../us-universe.yaml" /etc/factorlab/us-universe.yaml
 fi
+# Operator entry point to the live compose model (base + fragments + pins + profiles).
+sudo install -m 0755 "$script_dir/factorlab-compose" /usr/local/bin/factorlab-compose
 sudo install -D -m 0755 "$script_dir/collect-docker-images.py" /usr/local/libexec/factorlab-collect-docker-images.py
 sudo install -m 0644 "$script_dir/../systemd/factorlab-docker-images.service" /etc/systemd/system/factorlab-docker-images.service
 sudo install -m 0644 "$script_dir/../systemd/factorlab-docker-images.timer" /etc/systemd/system/factorlab-docker-images.timer

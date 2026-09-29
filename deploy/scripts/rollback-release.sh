@@ -12,6 +12,13 @@ live=$root/deploy
 record=$root/releases/$release_id
 lock=/var/lock/factorlab-release.lock
 
+# After the platform bootstrap the deployer owns per-component image pins; a monolith
+# release would recreate every service from compose.production.yml and ignore them.
+if [[ -e $root/state/images.env ]]; then
+    echo "per-component releases are active ($root/state/images.env); use deploy-component.sh" >&2
+    exit 1
+fi
+
 [[ -f $record/previous-deploy/compose.production.yml ]] || {
     echo "no rollback bundle found for $release_id" >&2
     exit 1

@@ -98,6 +98,47 @@ by that release, restores the prior bundle, recreates only the prior FactorLab
 services, and verifies both API endpoints. It does not recreate ClickHouse,
 Uptime Kuma, Portainer, or persistent volumes.
 
+## Per-component releases
+
+Each component (`components/<name>/component.yaml`) and the platform
+(`deploy/component.yaml`) ships on its own `<name>/vX.Y.Z` tag. The host side is
+`deploy/host/factorlab_deploy.py` (stdlib Python, run as root) behind two stable
+sudoers entry points:
+
+```text
+deploy ALL=(root) NOPASSWD: /opt/factorlab/deploy/scripts/deploy-component.sh, \
+                            /opt/factorlab/deploy/scripts/deploy-platform.sh
+```
+
+```bash
+sudo /opt/factorlab/deploy/scripts/deploy-component.sh api 1.2.0 ghcr.io/arjundoshi221/factorlab-api@sha256:... api.tgz
+sudo /opt/factorlab/deploy/scripts/deploy-component.sh rollback api [1.1.0]
+sudo /opt/factorlab/deploy/scripts/deploy-platform.sh 1.0.0 platform.tgz
+sudo factorlab-compose ps          # docker compose over the live model
+sudo python3 /opt/factorlab/deploy/host/factorlab_deploy.py status
+```
+
+Bundles come from `uv run python tools/components.py bundle <name|platform> <out.tgz>`.
+A component deploy validates the image digest, bundle, fragment policy (loopback-only
+ports, allowed bind mounts, a logging block) and image labels before touching
+production. It then swaps that component's fragment and its pin in
+`/opt/factorlab/state/images.env`, recreates only its services, and verifies them.
+On failure it follows the manifest's rollback class. `auto` restores the previous
+release. `writer` does the same if the `data_contract` is unchanged, and otherwise
+stops the component and reports `fix-forward-required`. `forward-only` reports the
+failure and changes nothing else. A platform release installs `deploy/`, keeps
+`production.env`, runs `prepare-host.sh`, and recreates nothing. Services whose
+running configuration differs from the model are listed in
+`releases/platform/<v>/drift`, for the next component release or a maintenance
+window. Once `state/images.env` exists, `deploy-release.sh` and
+`rollback-release.sh` refuse to run.
+
+```text
+/opt/factorlab/components/<name>/      the live fragment and component.json
+/opt/factorlab/state/images.env        FACTORLAB_<NAME>_IMAGE digest pins (deployer-owned)
+/opt/factorlab/releases/<name>/<v>/    bundle, previous pin, result; history.log per component
+```
+
 ## Server layout
 
 ```text
