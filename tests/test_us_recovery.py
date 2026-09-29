@@ -1,4 +1,5 @@
 import importlib.util
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
@@ -7,7 +8,6 @@ import pandas as pd
 import pytest
 
 from factorlab.sources.schwab.market import normalize
-from factorlab.storage.clickhouse import instrument_id_for
 
 spec = importlib.util.spec_from_file_location("us_runner", Path(__file__).parents[1] / "scripts/factlab_us_clickhouse.py")
 runner = importlib.util.module_from_spec(spec)
@@ -21,7 +21,7 @@ def test_pilot_aliases():
 
 def test_resume_uses_checkpoint_overlap_and_does_not_advance_on_failure():
     now = datetime(2026, 9, 8, 21, tzinfo=UTC)
-    ident = instrument_id_for("schwab:USA:AAPL")
+    ident = uuid.uuid5(uuid.NAMESPACE_URL, "schwab:USA:AAPL")
     state = {"instrument_id": ident, "history_complete": True,
              "available_from": datetime(1985, 1, 2, 5, tzinfo=UTC), "last_bar": now - timedelta(days=4),
              "checked_through": now - timedelta(days=4), "full_refreshed_at": now - timedelta(days=1), "error": None}
@@ -41,7 +41,7 @@ def test_resume_uses_checkpoint_overlap_and_does_not_advance_on_failure():
 
 def test_checkpoint_is_written_only_after_candles_and_coverage():
     now = datetime(2026, 9, 6, 21, tzinfo=UTC)
-    ident = instrument_id_for("schwab:USA:AAPL")
+    ident = uuid.uuid5(uuid.NAMESPACE_URL, "schwab:USA:AAPL")
     storage = Mock()
     storage.coverage.return_value = 0
     storage.state.return_value = {"instrument_id": ident, "history_complete": False, "available_from": None,
@@ -63,7 +63,7 @@ def test_checkpoint_is_written_only_after_candles_and_coverage():
 
 def test_skipped_provider_candles_remain_visible_without_blocking_next_daily_update():
     now = datetime(2026, 9, 8, 21, tzinfo=UTC)
-    ident = instrument_id_for("schwab:USA:ACGL")
+    ident = uuid.uuid5(uuid.NAMESPACE_URL, "schwab:USA:ACGL")
     storage = Mock()
     storage.state.return_value = {"instrument_id": ident, "history_complete": False,
         "available_from": None, "last_bar": None, "checked_through": None,

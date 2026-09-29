@@ -12,7 +12,7 @@ from factorlab.countries.us.equities.eodhd.configured_universe import (
     component_symbols,
     resolve_universe,
 )
-from factorlab.storage.us_clickhouse import USStorage
+from factorlab.storage.v2_us import V2USStorage
 
 spec = importlib.util.spec_from_file_location(
     "us_universe_runner", Path(__file__).parents[1] / "scripts/factlab_us_universe.py")
@@ -130,13 +130,13 @@ def test_expected_series_activates_additions_and_deactivates_removals():
     removed, retained, added = uuid4(), uuid4(), uuid4()
     client = Mock()
     client.query.return_value = SimpleNamespace(
-        column_names=["instrument_id", "symbol", "provider_symbol", "universe"],
+        column_names=["listing_id", "symbol", "provider_symbol", "universe"],
         result_rows=[
             (removed, "OLD", "OLD.US", "previous"),
             (retained, "AAPL", "AAPL.US", "previous"),
         ],
     )
-    storage = USStorage(client)
+    storage = V2USStorage(client)
     storage.sync_expected_series([
         {"instrument_id": retained, "symbol": "AAPL", "provider_symbol": "AAPL.US"},
         {"instrument_id": added, "symbol": "MSFT", "provider_symbol": "MSFT.US"},

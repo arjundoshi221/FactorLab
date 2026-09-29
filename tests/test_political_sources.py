@@ -6,7 +6,7 @@ from factorlab.sources.political.house_clerk import (
     parse_house_filing_index,
     parse_house_ptr_text,
 )
-from factorlab.storage.political_clickhouse import (
+from factorlab.storage.political_names import (
     build_name_resolver,
     resolve_filing_bioguide,
 )

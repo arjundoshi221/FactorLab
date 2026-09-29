@@ -9,18 +9,17 @@ from typing import Any
 
 from factorlab.storage.canonical_ids import committee_id, legislator_id, political_trade_id
 from factorlab.storage.clickhouse import _version
-from factorlab.storage.political_clickhouse import (
-    PoliticalClickHouseStorage,
-    _name_key,
-    _normalize_role,
-)
+from factorlab.storage.political_names import _name_key, _normalize_role
 from factorlab.storage.v2_india import V2IndiaStorage
 from factorlab.storage.v2_reference import UnresolvedReference
 
 
-class V2PoliticalClickHouseStorage(PoliticalClickHouseStorage):
+class V2PoliticalClickHouseStorage:
+    """Write congressional references, filings, and trades into the v2 tables."""
+
     def __init__(self, storage: V2IndiaStorage) -> None:
-        super().__init__(storage)
+        self.storage = storage
+        self.client = storage.client
 
     def _insert(self, table: str, rows: list[dict[str, Any]]) -> None:
         self.storage._insert_dicts(table, rows)

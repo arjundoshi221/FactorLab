@@ -43,7 +43,7 @@ class CongressLegislatorsSettings(ProviderSettings):
 
 
 def normalize_role(title: Any) -> str:
-    """Committee title -> canonical role (same rule as ``political_clickhouse._normalize_role``)."""
+    """Committee title -> canonical role (same rule as ``political_names._normalize_role``)."""
     text = str(title or "").lower().replace("-", " ").strip()
     if "ranking" in text:
         return "ranking_member"

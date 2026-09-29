@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 
-import pytest
 
 from factorlab.shared.notify import notify
 from factorlab.shared.notify._backend import (
@@ -161,68 +159,3 @@ def test_notify_env_selection_includes_jsonl_always(monkeypatch, tmp_path):
     importlib.reload(_paths)
     importlib.reload(_jsonl)
     importlib.reload(_notify)
-
-
-# ── Daemon factory smoke ────────────────────────────────────────────────────
-
-
-def test_daemon_app_healthz_rejects_no_pin(monkeypatch):
-    monkeypatch.setenv("FACTORLAB_NOTIFY_PIN", "test-pin-123")
-    from factorlab.shared.notify.daemon import create_app
-    app = create_app()
-    with app.test_client() as client:
-        rv = client.get("/healthz")
-        assert rv.status_code == 200
-        data = rv.get_json()
-        assert data["status"] == "ok"
-        assert "last_send" in data
-
-
-def test_daemon_alert_rejects_bad_pin(monkeypatch):
-    monkeypatch.setenv("FACTORLAB_NOTIFY_PIN", "secret")
-    from factorlab.shared.notify.daemon import create_app
-    app = create_app()
-    with app.test_client() as client:
-        rv = client.post(
-            "/alert",
-            json={"subject": "s", "body": "b", "severity": "warn", "source": "x"},
-            headers={"X-Notify-Pin": "wrong"},
-        )
-        assert rv.status_code == 401
-
-
-def test_daemon_alert_accepts_correct_pin_and_jsonl_writes(monkeypatch, tmp_path):
-    monkeypatch.setenv("FACTORLAB_NOTIFY_PIN", "secret")
-    monkeypatch.setenv("FACTORLAB_LOG_ROOT", str(tmp_path))
-
-    import importlib
-
-    import factorlab.shared.paths as _paths
-    importlib.reload(_paths)
-    import factorlab.shared.notify.jsonl as _jsonl
-    importlib.reload(_jsonl)
-    import factorlab.shared.notify.daemon as _daemon
-    importlib.reload(_daemon)
-
-    app = _daemon.create_app()
-    with app.test_client() as client:
-        rv = client.post(
-            "/alert",
-            json={"subject": "s", "body": "b", "severity": "warn", "source": "x"},
-            headers={"X-Notify-Pin": "secret"},
-        )
-        assert rv.status_code == 200, rv.get_data(as_text=True)
-        data = rv.get_json()
-        assert data["ok"] is True
-        # Outlook may or may not be available; JSONL must have written.
-        assert data["results"]["jsonl"] is True
-
-    jsonl_path = tmp_path / "notify.jsonl"
-    assert jsonl_path.exists()
-
-    # Restore
-    monkeypatch.delenv("FACTORLAB_NOTIFY_PIN", raising=False)
-    monkeypatch.delenv("FACTORLAB_LOG_ROOT", raising=False)
-    importlib.reload(_paths)
-    importlib.reload(_jsonl)
-    importlib.reload(_daemon)

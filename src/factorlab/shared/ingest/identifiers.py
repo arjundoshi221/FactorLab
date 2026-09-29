@@ -41,7 +41,7 @@ def isin_from_cusip(cusip: str | None, country: str = "US") -> str | None:
 def legislator_name_key(first_name: str, last_name: str) -> str | None:
     """``first|last`` match key for a legislator (07 §5.5).
 
-    Same rule the legacy House name resolver used (``political_clickhouse._name_key``):
+    Same rule the legacy House name resolver used (``political_names._name_key``):
     first word of the first name and the whole last name, lower-case letters only.
     """
     first_words = str(first_name or "").lower().split()

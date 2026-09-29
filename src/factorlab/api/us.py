@@ -11,8 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from factorlab.sources.schwab.market import NY, bounds, latest_completed
-from factorlab.storage.clickhouse import ClickHouseStorage
-from factorlab.storage.us_clickhouse import rows
+from factorlab.storage.clickhouse import ClickHouseStorage, rows
 
 
 class USPage(BaseModel):

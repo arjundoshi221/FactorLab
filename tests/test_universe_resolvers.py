@@ -1,11 +1,12 @@
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import Mock
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from factorlab.storage.us_clickhouse import USStorage
+from factorlab.storage.v2_us import V2USStorage
 from factorlab.universe import (
     EodhdUniverseResolver,
     GithubCsvUniverseResolver,
@@ -186,14 +187,13 @@ def test_worker_publication_is_schwab_only_and_deactivates_legacy(monkeypatch):
 
 
 def test_resolved_reference_upsert_does_not_deactivate_unrelated_instruments():
-    client = Mock()
-    client.query.return_value = SimpleNamespace(
-        column_names=["instrument_key", "first_seen"], result_rows=[])
-    storage = USStorage(client)
+    storage = V2USStorage(Mock())
+    storage._ensure_us_exchange = Mock()
+    storage._identity_status = Mock()
+    storage.references.upsert_listing = Mock(return_value=(uuid4(), uuid4(), uuid4()))
+    storage._insert_dicts = Mock()
     storage.upsert_resolved_constituents([constituent("AAPL")])
-    reference_call = next(
-        call for call in client.insert.call_args_list if call.args[0] == "ref_instruments")
-    columns = reference_call.kwargs["column_names"]
-    records = [dict(zip(columns, row, strict=True)) for row in reference_call.args[1]]
-    assert [(item["trading_symbol"], item["status"]) for item in records] == [
-        ("AAPL", "active")]
+    upserted = [call.args[0] for call in storage.references.upsert_listing.call_args_list]
+    assert [(item["trading_symbol"], item["exchange_code"]) for item in upserted] == [
+        ("AAPL", "NASDAQ")]
+    assert not storage._insert_dicts.called

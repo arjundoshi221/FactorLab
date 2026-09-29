@@ -15,7 +15,7 @@ from factorlab.sources.political.house_clerk import (
     fetch_house_filing_index,
 )
 from factorlab.sources.political.references import fetch_reference_snapshot
-from factorlab.storage.political_clickhouse import (
+from factorlab.storage.political_names import (
     build_name_resolver,
     resolve_filing_bioguide,
 )

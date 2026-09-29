@@ -59,9 +59,8 @@ class NormalizationError(ProviderError):
 def classify(error: BaseException) -> ErrorKind:
     """Map an exception to the engine's retry policy.
 
-    Duck-types ``retry_after_sec`` so the legacy
-    :class:`factorlab.shared.ingest.http.RateLimitDeferred` is honoured without
-    changing its base class.
+    Duck-types ``retry_after_sec`` so throttle exceptions that carry it are
+    honoured without subclassing :class:`RateLimited`.
     """
     if isinstance(error, AuthRequired):
         return "auth"
