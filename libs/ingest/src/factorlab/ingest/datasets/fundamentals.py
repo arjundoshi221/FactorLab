@@ -88,8 +88,9 @@ FundamentalsRow = FundamentalFilingRecord | LineItemRecord
 
 @runtime_checkable
 class FundamentalsSink(ProviderStorage, Protocol):
-    def write_fundamentals(self, rows: Sequence[FundamentalsRow], *,
-                           provenance: Provenance) -> WriteResult: ...
+    def write_fundamentals(
+        self, rows: Sequence[FundamentalsRow], *, provenance: Provenance
+    ) -> WriteResult: ...
 
 
 __all__ = [

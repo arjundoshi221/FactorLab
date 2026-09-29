@@ -72,19 +72,34 @@ def _count(value: Any) -> int | None:
 
 
 def ref_to_metadata(ref: InstrumentRef) -> dict[str, Any]:
-    return {"alias_value": ref.alias_value, "exchange_code": ref.exchange_code,
-            "trading_symbol": ref.trading_symbol, "isin": ref.isin}
+    return {
+        "alias_value": ref.alias_value,
+        "exchange_code": ref.exchange_code,
+        "trading_symbol": ref.trading_symbol,
+        "isin": ref.isin,
+    }
 
 
 def ref_from_metadata(item: Mapping[str, Any]) -> InstrumentRef:
-    return InstrumentRef(ALIAS_KIND, str(item["alias_value"]), str(item["exchange_code"]),
-                         str(item["trading_symbol"]), COUNTRY, isin=item.get("isin"))
+    return InstrumentRef(
+        ALIAS_KIND,
+        str(item["alias_value"]),
+        str(item["exchange_code"]),
+        str(item["trading_symbol"]),
+        COUNTRY,
+        isin=item.get("isin"),
+    )
 
 
 def _instrument_ref(item: Mapping[str, Any], exchange: str) -> InstrumentRef:
-    return InstrumentRef(ALIAS_KIND, str(item["instrument_key"]),
-                         str(item.get("exchange") or exchange), str(item["trading_symbol"]),
-                         COUNTRY, isin=_isin(item.get("isin")))
+    return InstrumentRef(
+        ALIAS_KIND,
+        str(item["instrument_key"]),
+        str(item.get("exchange") or exchange),
+        str(item["trading_symbol"]),
+        COUNTRY,
+        isin=_isin(item.get("isin")),
+    )
 
 
 def _master(capture: RawCapture) -> tuple[str, list[Mapping[str, Any]]]:
@@ -92,12 +107,14 @@ def _master(capture: RawCapture) -> tuple[str, list[Mapping[str, Any]]]:
     if not isinstance(data, list):
         raise NormalizationError("instrument master is not a JSON array")
     return str(capture.metadata.get("exchange") or "NSE"), [
-        item for item in data if isinstance(item, Mapping)]
+        item for item in data if isinstance(item, Mapping)
+    ]
 
 
 # -- reference -------------------------------------------------------------------
-def normalize_listings(capture: RawCapture, *,
-                       instrument_types: Iterable[str] = ("EQ",)) -> list[InstrumentRecord]:
+def normalize_listings(
+    capture: RawCapture, *, instrument_types: Iterable[str] = ("EQ",)
+) -> list[InstrumentRecord]:
     exchange, items = _master(capture)
     types = frozenset(instrument_types)
     records: list[InstrumentRecord] = []
@@ -106,13 +123,21 @@ def normalize_listings(capture: RawCapture, *,
             continue
         try:
             ref = _instrument_ref(item, exchange)
-            records.append(InstrumentRecord(
-                ref=ref, name=str(item.get("name") or ref.trading_symbol),
-                product_type="common", currency=CURRENCY,
-                lot_size=int(item.get("lot_size") or 1), tick_size=_decimal(item.get("tick_size")),
-                attributes={key: str(item[key]) for key in ("exchange_token", "security_type",
-                                                             "instrument_type") if key in item},
-            ))
+            records.append(
+                InstrumentRecord(
+                    ref=ref,
+                    name=str(item.get("name") or ref.trading_symbol),
+                    product_type="common",
+                    currency=CURRENCY,
+                    lot_size=int(item.get("lot_size") or 1),
+                    tick_size=_decimal(item.get("tick_size")),
+                    attributes={
+                        key: str(item[key])
+                        for key in ("exchange_token", "security_type", "instrument_type")
+                        if key in item
+                    },
+                )
+            )
         except (KeyError, TypeError, ValueError):
             log.warning("skipping malformed Upstox instrument %r", item.get("instrument_key"))
     return records
@@ -125,8 +150,9 @@ def _expiry(value: Any) -> date | None:
     return datetime.fromtimestamp(int(value) / 1000, tz=UTC).date()
 
 
-def normalize_contracts(capture: RawCapture, *,
-                        underlying_types: Iterable[str] = ("EQUITY",)) -> list[ContractRecord]:
+def normalize_contracts(
+    capture: RawCapture, *, underlying_types: Iterable[str] = ("EQUITY",)
+) -> list[ContractRecord]:
     exchange, items = _master(capture)
     allowed = frozenset(underlying_types)
     records: list[ContractRecord] = []
@@ -141,21 +167,39 @@ def normalize_contracts(capture: RawCapture, *,
         underlying_symbol = str(item.get("underlying_symbol") or "")
         if expiry is None or not (underlying_key or underlying_symbol):
             continue
-        underlying_isin = _isin(underlying_key.partition("|")[2]) if "_EQ|" in underlying_key \
-            else None
+        underlying_isin = (
+            _isin(underlying_key.partition("|")[2]) if "_EQ|" in underlying_key else None
+        )
         try:
-            records.append(ContractRecord(
-                ref=InstrumentRef(ALIAS_KIND, str(item["instrument_key"]), exchange,
-                                  str(item["trading_symbol"]), COUNTRY),
-                underlying=InstrumentRef(
-                    ALIAS_KIND if underlying_key else "", underlying_key, exchange,
-                    underlying_symbol, COUNTRY, isin=underlying_isin),
-                product_type=_UNDERLYING_PRODUCT[underlying_type], expiry=expiry,
-                lot_size=int(item.get("lot_size") or 1), tick_size=_decimal(item.get("tick_size")),
-                weekly=bool(item.get("weekly", False)),
-                attributes={key: str(item[key]) for key in ("exchange_token", "asset_symbol")
-                            if key in item},
-            ))
+            records.append(
+                ContractRecord(
+                    ref=InstrumentRef(
+                        ALIAS_KIND,
+                        str(item["instrument_key"]),
+                        exchange,
+                        str(item["trading_symbol"]),
+                        COUNTRY,
+                    ),
+                    underlying=InstrumentRef(
+                        ALIAS_KIND if underlying_key else "",
+                        underlying_key,
+                        exchange,
+                        underlying_symbol,
+                        COUNTRY,
+                        isin=underlying_isin,
+                    ),
+                    product_type=_UNDERLYING_PRODUCT[underlying_type],
+                    expiry=expiry,
+                    lot_size=int(item.get("lot_size") or 1),
+                    tick_size=_decimal(item.get("tick_size")),
+                    weekly=bool(item.get("weekly", False)),
+                    attributes={
+                        key: str(item[key])
+                        for key in ("exchange_token", "asset_symbol")
+                        if key in item
+                    },
+                )
+            )
         except (KeyError, TypeError, ValueError):
             log.warning("skipping malformed Upstox contract %r", item.get("instrument_key"))
     return records
@@ -183,8 +227,7 @@ def _candle_rows(capture: RawCapture) -> list[tuple[datetime, tuple, int | None,
         try:
             stamp = datetime.fromisoformat(str(candle[0]))
         except (IndexError, TypeError, ValueError) as exc:
-            raise NormalizationError(f"{capture.request_key}: malformed candle {candle!r}") \
-                from exc
+            raise NormalizationError(f"{capture.request_key}: malformed candle {candle!r}") from exc
         if stamp.tzinfo is None:
             raise NormalizationError(f"{capture.request_key}: candle time without offset")
         prices = _prices(candle[1:5]) if len(candle) >= 5 else None
@@ -229,10 +272,13 @@ def _quote_rows(capture: RawCapture) -> list[tuple[str, datetime, tuple, int | N
     return rows
 
 
-def normalize_bars(capture: RawCapture, *, contract: bool = False
-                   ) -> list[BarRecord] | list[ContractBarRecord]:
-    refs = {item["alias_value"]: ref_from_metadata(item)
-            for item in capture.metadata.get("instruments", [])}
+def normalize_bars(
+    capture: RawCapture, *, contract: bool = False
+) -> list[BarRecord] | list[ContractBarRecord]:
+    refs = {
+        item["alias_value"]: ref_from_metadata(item)
+        for item in capture.metadata.get("instruments", [])
+    }
     if not refs:
         raise NormalizationError(f"{capture.request_key}: capture metadata names no instruments")
     record = ContractBarRecord if contract else BarRecord
@@ -241,8 +287,9 @@ def normalize_bars(capture: RawCapture, *, contract: bool = False
     if endpoint == "quote":
         for key, bar_time, (o, h, low, c), volume in _quote_rows(capture):
             if key in refs:
-                out.append(record(refs[key], "1min", bar_time, o, h, low, c, volume=volume,
-                                  oi=None))
+                out.append(
+                    record(refs[key], "1min", bar_time, o, h, low, c, volume=volume, oi=None)
+                )
         return out
     if endpoint not in ("intraday", "historical"):
         raise NormalizationError(f"{capture.request_key}: unknown endpoint {endpoint!r}")

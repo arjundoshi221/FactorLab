@@ -13,7 +13,9 @@ def _response(status_code: int) -> requests.Response:
 
 def test_session_adopts_token_from_runtime_secret(monkeypatch):
     session = SchwabSession("old-token")
-    monkeypatch.setattr("factorlab.components.ingest_us.legacy.schwab.client.get_secret", lambda *args: "new-token")
+    monkeypatch.setattr(
+        "factorlab.components.ingest_us.legacy.schwab.client.get_secret", lambda *args: "new-token"
+    )
     observed = []
 
     def fake_request(instance, method, url, *args, **kwargs):

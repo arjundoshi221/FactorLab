@@ -53,7 +53,9 @@ class IdentityResolver:
         self._contracts: dict[InstrumentRef, ContractIdentity] = {}
 
     # -- listings ------------------------------------------------------------
-    def _alias_targets(self, refs: list[InstrumentRef], target_kind: str) -> dict[InstrumentRef, UUID]:
+    def _alias_targets(
+        self, refs: list[InstrumentRef], target_kind: str
+    ) -> dict[InstrumentRef, UUID]:
         found: dict[InstrumentRef, UUID] = {}
         by_kind: dict[str, list[InstrumentRef]] = {}
         for ref in refs:
@@ -64,8 +66,11 @@ class IdentityResolver:
                 "SELECT alias_value, target_id, valid_from FROM ref.identifier_aliases FINAL "
                 "WHERE alias_kind = {kind:String} AND target_kind = {target:String} "
                 "AND valid_to IS NULL AND alias_value IN {values:Array(String)}",
-                parameters={"kind": kind, "target": target_kind,
-                            "values": sorted({ref.alias_value for ref in group})},
+                parameters={
+                    "kind": kind,
+                    "target": target_kind,
+                    "values": sorted({ref.alias_value for ref in group}),
+                },
             ).result_rows
             latest: dict[str, tuple[Any, UUID]] = {}
             for value, target, valid_from in rows:
@@ -81,8 +86,9 @@ class IdentityResolver:
         # Blank exchange = country-scoped lookup (e.g. bare index tickers).
         scope, scope_params = (
             ("l.exchange_code = {exchange:String}", {"exchange": ref.exchange_code})
-            if ref.exchange_code else
-            ("l.country_code = {country:String}", {"country": ref.country_code}))
+            if ref.exchange_code
+            else ("l.country_code = {country:String}", {"country": ref.country_code})
+        )
         if ref.isin:
             rows = self.client.query(
                 "SELECT l.listing_id FROM ref.listings AS l FINAL "
@@ -114,8 +120,10 @@ class IdentityResolver:
         refs = list(dict.fromkeys(refs))
         pending = [ref for ref in refs if ref not in self._listings]
         if pending:
-            targets = {ref: (target, "exact")
-                       for ref, target in self._alias_targets(pending, "listing").items()}
+            targets = {
+                ref: (target, "exact")
+                for ref, target in self._alias_targets(pending, "listing").items()
+            }
             for ref in pending:
                 if ref not in targets:
                     natural = self._natural_listing(ref)
@@ -137,9 +145,12 @@ class IdentityResolver:
                 if row is None:
                     continue  # alias points at a listing that no longer exists
                 self._listings[ref] = ListingIdentity(
-                    listing_id=row[0], security_id=row[1], entity_id=row[2],
+                    listing_id=row[0],
+                    security_id=row[1],
+                    entity_id=row[2],
                     product_type=_product_type(row[3]),
-                    country_code=_decoded_text(row[4]), confidence=confidence,
+                    country_code=_decoded_text(row[4]),
+                    confidence=confidence,
                 )
         return {ref: self._listings[ref] for ref in refs if ref in self._listings}
 
@@ -165,8 +176,10 @@ class IdentityResolver:
                 row = details.get(target)
                 if row is not None:
                     self._contracts[ref] = ContractIdentity(
-                        contract_id=row[0], underlying_listing_id=row[1],
-                        country_code=_decoded_text(row[2]), confidence="exact",
+                        contract_id=row[0],
+                        underlying_listing_id=row[1],
+                        country_code=_decoded_text(row[2]),
+                        confidence="exact",
                     )
         return {ref: self._contracts[ref] for ref in refs if ref in self._contracts}
 

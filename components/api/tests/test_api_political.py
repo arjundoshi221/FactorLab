@@ -110,7 +110,8 @@ def test_repository_filters_and_returns_cursor_page():
     assert len(page.items) == 2
     assert page.next_cursor is not None
     assert decode_cursor(page.next_cursor) == (
-        date(2026, 8, 2), UUID("00000000-0000-0000-0000-000000000002")
+        date(2026, 8, 2),
+        UUID("00000000-0000-0000-0000-000000000002"),
     )
     assert page.data_as_of == datetime(2026, 8, 3, 12, tzinfo=UTC)
 
@@ -121,7 +122,9 @@ def test_legacy_political_cursor_is_rejected_clearly():
 
     from fastapi import HTTPException
 
-    legacy = base64.urlsafe_b64encode(json.dumps({"date": "2026-08-02", "trade_key": "a" * 64}).encode()).decode()
+    legacy = base64.urlsafe_b64encode(
+        json.dumps({"date": "2026-08-02", "trade_key": "a" * 64}).encode()
+    ).decode()
     with pytest.raises(HTTPException, match="Legacy cursor"):
         decode_cursor(legacy)
 

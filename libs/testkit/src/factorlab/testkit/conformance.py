@@ -54,29 +54,38 @@ def fixtures_dir(provider: str) -> Path:
 
 def dump_capture(capture: RawCapture) -> dict[str, Any]:
     return {
-        "request_key": capture.request_key, "transport": capture.transport,
-        "fetched_at": capture.fetched_at.isoformat(), "source_url": capture.source_url,
-        "content_type": capture.content_type, "status_code": capture.status_code,
-        "headers": dict(capture.headers), "metadata": dict(capture.metadata),
+        "request_key": capture.request_key,
+        "transport": capture.transport,
+        "fetched_at": capture.fetched_at.isoformat(),
+        "source_url": capture.source_url,
+        "content_type": capture.content_type,
+        "status_code": capture.status_code,
+        "headers": dict(capture.headers),
+        "metadata": dict(capture.metadata),
         "body_b64": base64.b64encode(capture.body).decode("ascii"),
     }
 
 
 def load_capture(data: Mapping[str, Any]) -> RawCapture:
     return RawCapture(
-        body=base64.b64decode(data["body_b64"]), request_key=data["request_key"],
-        transport=data["transport"], fetched_at=datetime.fromisoformat(data["fetched_at"]),
+        body=base64.b64decode(data["body_b64"]),
+        request_key=data["request_key"],
+        transport=data["transport"],
+        fetched_at=datetime.fromisoformat(data["fetched_at"]),
         source_url=data.get("source_url", ""),
         content_type=data.get("content_type", "application/json"),
-        status_code=data.get("status_code"), headers=data.get("headers", {}),
+        status_code=data.get("status_code"),
+        headers=data.get("headers", {}),
         metadata=data.get("metadata", {}),
     )
 
 
 def jsonable(value: Any) -> Any:
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        return {"_type": type(value).__name__,
-                **{f.name: jsonable(getattr(value, f.name)) for f in dataclasses.fields(value)}}
+        return {
+            "_type": type(value).__name__,
+            **{f.name: jsonable(getattr(value, f.name)) for f in dataclasses.fields(value)},
+        }
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, datetime | date):
@@ -97,19 +106,31 @@ def load_request(dataset_id: str, data: Mapping[str, Any]) -> Any:
     if spec.request_type is ReferenceRequest:
         return ReferenceRequest(market=data["market"], params=data.get("params", {}))
     if spec.request_type is CompanyRequest:
-        return CompanyRequest(market=data["market"], params=data.get("params", {}),
-                              companies=tuple(CompanyRef(**c) for c in data["companies"]))
+        return CompanyRequest(
+            market=data["market"],
+            params=data.get("params", {}),
+            companies=tuple(CompanyRef(**c) for c in data["companies"]),
+        )
     if spec.request_type is FilingsRequest:
-        return FilingsRequest(market=data["market"], params=data.get("params", {}),
-                              filings=tuple(FilingRef(**f) for f in data["filings"]))
+        return FilingsRequest(
+            market=data["market"],
+            params=data.get("params", {}),
+            filings=tuple(FilingRef(**f) for f in data["filings"]),
+        )
     if spec.request_type is SnapshotRequest:
         return SnapshotRequest(market=data["market"], params=data.get("params", {}))
     if spec.request_type is BarRequest:
         return BarRequest(
-            market=data["market"], resolution=data["resolution"],
-            series=tuple(SeriesWindow(_ref(w["instrument"]), datetime.fromisoformat(w["start"]),
-                                      datetime.fromisoformat(w["end"]))
-                         for w in data["series"]),
+            market=data["market"],
+            resolution=data["resolution"],
+            series=tuple(
+                SeriesWindow(
+                    _ref(w["instrument"]),
+                    datetime.fromisoformat(w["start"]),
+                    datetime.fromisoformat(w["end"]),
+                )
+                for w in data["series"]
+            ),
             params=data.get("params", {}),
         )
     raise NotImplementedError(f"no request loader for {dataset_id}")
@@ -121,8 +142,11 @@ def cases(provider: str, dataset_id: str) -> list[tuple[str, RawCapture, Any]]:
     for path in sorted(folder.glob("*.capture.json")):
         name = path.name.removesuffix(".capture.json")
         expected_path = folder / f"{name}.expected.json"
-        expected = json.loads(expected_path.read_text(encoding="utf-8")) \
-            if expected_path.exists() else None
+        expected = (
+            json.loads(expected_path.read_text(encoding="utf-8"))
+            if expected_path.exists()
+            else None
+        )
         found.append((name, load_capture(json.loads(path.read_text(encoding="utf-8"))), expected))
     return found
 
@@ -136,8 +160,7 @@ def requests(provider: str, dataset_id: str) -> list[Any]:
 
 def binding_for(provider: str, dataset_id: str, cls: type) -> Binding:
     market = min(cls.capabilities.markets)
-    resolution = min(cls.capabilities.resolutions) \
-        if DATASETS[dataset_id].has_resolution else None
+    resolution = min(cls.capabilities.resolutions) if DATASETS[dataset_id].has_resolution else None
     return Binding(dataset=dataset_id, market=market, provider=provider, resolution=resolution)
 
 
@@ -151,8 +174,9 @@ def all_providers() -> tuple[str, ...]:
 
     import factorlab.sources
 
-    return tuple(sorted(m.name for m in pkgutil.iter_modules(factorlab.sources.__path__)
-                        if m.ispkg))
+    return tuple(
+        sorted(m.name for m in pkgutil.iter_modules(factorlab.sources.__path__) if m.ispkg)
+    )
 
 
 def regen(provider: str) -> None:
@@ -165,8 +189,10 @@ def regen(provider: str) -> None:
         source = source_for(binding_for(name, dataset_id, cls))
         for case, capture, _ in cases(name, dataset_id):
             out = fixtures_dir(name) / dataset_id / f"{case}.expected.json"
-            out.write_text(json.dumps(jsonable(list(source.normalize(capture))), indent=1)
-                           + "\n", encoding="utf-8")
+            out.write_text(
+                json.dumps(jsonable(list(source.normalize(capture))), indent=1) + "\n",
+                encoding="utf-8",
+            )
             print(f"wrote {out}")
 
 

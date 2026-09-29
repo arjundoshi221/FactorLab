@@ -22,6 +22,7 @@ def _connector(ibs, failing=()):
         if mode in failing:
             raise IBKRConnectError(f"{mode} Gateway unreachable")
         return ibs[mode]
+
     return connect
 
 
@@ -36,7 +37,8 @@ def _loaded(ib):
 def test_both_modes_archive_then_write_every_dataset(mock_ib_paper, mock_ib_live, now_utc):
     storage = DryRunBrokerStorage()
     provider = IBKRBrokerProvider(
-        storage, SnapshotConfig(),
+        storage,
+        SnapshotConfig(),
         connector=_connector({"paper": _loaded(mock_ib_paper), "live": _loaded(mock_ib_live)}),
         clock=lambda: now_utc,
     )
@@ -44,11 +46,15 @@ def test_both_modes_archive_then_write_every_dataset(mock_ib_paper, mock_ib_live
 
     assert summary.status == "success"
     assert [u.name for u in summary.units] == [
-        f"{mode}:{name}" for mode in ("paper", "live")
+        f"{mode}:{name}"
+        for mode in ("paper", "live")
         for name in ("positions", "account_state", "executions", "open_orders")
     ]
-    assert storage.counts == {f"{ch}:{d}": 1 for ch in ("paper_gateway", "live_gateway")
-                              for d in ("positions", "account_state", "executions", "open_orders")}
+    assert storage.counts == {
+        f"{ch}:{d}": 1
+        for ch in ("paper_gateway", "live_gateway")
+        for d in ("positions", "account_state", "executions", "open_orders")
+    }
     assert [(src, ch, cap.request_key) for src, ch, cap in storage.archived][:2] == [
         ("ibkr", "paper_gateway", "portfolio:paper"),
         ("ibkr", "paper_gateway", "account_values:paper"),
@@ -63,7 +69,8 @@ def test_both_modes_archive_then_write_every_dataset(mock_ib_paper, mock_ib_live
 def test_unreachable_gateway_is_one_failed_unit(mock_ib_paper, now_utc):
     storage = DryRunBrokerStorage()
     provider = IBKRBrokerProvider(
-        storage, connector=_connector({"paper": _loaded(mock_ib_paper)}, failing={"live"}),
+        storage,
+        connector=_connector({"paper": _loaded(mock_ib_paper)}, failing={"live"}),
         clock=lambda: now_utc,
     )
     summary = run_provider(provider, storage)
@@ -82,8 +89,12 @@ def test_dataset_failure_does_not_stop_other_datasets(mock_ib_paper, now_utc):
             raise RuntimeError("insert rejected")
 
     storage = FailingPositions()
-    provider = IBKRBrokerProvider(storage, SnapshotConfig(modes=("paper",)),
-                                  connector=_connector({"paper": ib}), clock=lambda: now_utc)
+    provider = IBKRBrokerProvider(
+        storage,
+        SnapshotConfig(modes=("paper",)),
+        connector=_connector({"paper": ib}),
+        clock=lambda: now_utc,
+    )
     summary = run_provider(provider, storage)
     assert summary.status == "partial"
     assert {u.name for u in summary.failed_units} == {"paper:positions", "paper:open_orders"}
@@ -93,8 +104,9 @@ def test_dataset_failure_does_not_stop_other_datasets(mock_ib_paper, now_utc):
 
 def test_all_gateways_down_fails_the_run(now_utc):
     storage = DryRunBrokerStorage()
-    provider = IBKRBrokerProvider(storage, connector=_connector({}, failing={"paper", "live"}),
-                                  clock=lambda: now_utc)
+    provider = IBKRBrokerProvider(
+        storage, connector=_connector({}, failing={"paper", "live"}), clock=lambda: now_utc
+    )
     assert run_provider(provider, storage).status == "failed"
 
 
@@ -113,9 +125,12 @@ def test_raw_id_from_archive_reaches_provenance(mock_ib_paper, now_utc):
             return len(rows)
 
     storage = Recording()
-    provider = IBKRBrokerProvider(storage, SnapshotConfig(modes=("paper",)),
-                                  connector=_connector({"paper": _loaded(mock_ib_paper)}),
-                                  clock=lambda: now_utc)
+    provider = IBKRBrokerProvider(
+        storage,
+        SnapshotConfig(modes=("paper",)),
+        connector=_connector({"paper": _loaded(mock_ib_paper)}),
+        clock=lambda: now_utc,
+    )
     assert run_provider(provider, storage).status == "success"
 
 

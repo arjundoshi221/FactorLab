@@ -52,9 +52,12 @@ def read_lock(path: Path = LOCK) -> dict[str, tuple[str, str]]:
 
 def write_lock(entries: dict[str, tuple[str, str]], path: Path = LOCK) -> None:
     order = {m.migration_id: i for i, m in enumerate(discover_migrations(path.parent))}
-    lines = [f"{checksum}  {status:<7}  {migration_id}"
-             for migration_id, (checksum, status) in
-             sorted(entries.items(), key=lambda item: (order.get(item[0], 10**6), item[0]))]
+    lines = [
+        f"{checksum}  {status:<7}  {migration_id}"
+        for migration_id, (checksum, status) in sorted(
+            entries.items(), key=lambda item: (order.get(item[0], 10**6), item[0])
+        )
+    ]
     path.write_text(HEADER + "\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
 
@@ -66,8 +69,11 @@ def problems(directory: Path = MIGRATION_DIR, path: Path | None = None) -> list[
         if migration_id not in current:
             found.append(f"{migration_id} ({status}) was deleted; migrations are forward-only")
         elif current[migration_id] != checksum:
-            hint = ("applied migrations never change; add a new wave" if status == "applied"
-                    else f"run: tools/schema_checksums.py update {migration_id}")
+            hint = (
+                "applied migrations never change; add a new wave"
+                if status == "applied"
+                else f"run: tools/schema_checksums.py update {migration_id}"
+            )
             found.append(f"{migration_id} changed ({hint})")
     for migration_id in sorted(set(current) - set(lock)):
         found.append(f"{migration_id} is not in the lock (run: tools/schema_checksums.py add)")

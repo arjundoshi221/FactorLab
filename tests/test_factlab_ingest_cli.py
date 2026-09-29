@@ -32,21 +32,50 @@ def test_repository_bindings_validate(capsys):
 
 def test_dry_run_bars_uses_registry_source_and_memory_sink(tmp_path, monkeypatch, capsys):
     bindings = tmp_path / "bindings.yaml"
-    bindings.write_text(yaml.safe_dump({"version": 1, "bindings": [
-        {"dataset": "market.bars", "market": "IND", "resolution": "1min", "provider": "upstox",
-         "role": "primary", "params": {"mode": "quote"}},
-    ]}), encoding="utf-8")
+    bindings.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "bindings": [
+                    {
+                        "dataset": "market.bars",
+                        "market": "IND",
+                        "resolution": "1min",
+                        "provider": "upstox",
+                        "role": "primary",
+                        "params": {"mode": "quote"},
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     quote = {name: c for name, c, _ in kit.cases("upstox", "market.bars")}["quote_batch"]
 
     def fake_get(self, url, *, request_key, auth=True, metadata=None):
-        return RawCapture(quote.body, request_key, "http", quote.fetched_at,
-                          metadata=dict(metadata or {}))
+        return RawCapture(
+            quote.body, request_key, "http", quote.fetched_at, metadata=dict(metadata or {})
+        )
 
     from factorlab.sources.upstox.client import UpstoxClient
+
     monkeypatch.setattr(UpstoxClient, "get", fake_get)
-    code = cli.main(["--bindings", str(bindings), "run", "--dataset", "market.bars",
-                     "--market", "IND", "--resolution", "1min", "--dry-run",
-                     "--instrument", "NSE_EQ|INE002A01018,RELIANCE,INE002A01018"])
+    code = cli.main(
+        [
+            "--bindings",
+            str(bindings),
+            "run",
+            "--dataset",
+            "market.bars",
+            "--market",
+            "IND",
+            "--resolution",
+            "1min",
+            "--dry-run",
+            "--instrument",
+            "NSE_EQ|INE002A01018,RELIANCE,INE002A01018",
+        ]
+    )
     report = json.loads(capsys.readouterr().out)
     # The empty in-memory sink knows no listing, so the bars are parked, not written.
     assert (code, report["status"], report["rows_written"]) == (0, "success", 0)
@@ -56,10 +85,10 @@ def test_dry_run_bars_uses_registry_source_and_memory_sink(tmp_path, monkeypatch
 def test_session_gate_uses_the_exchange_calendar():
     from datetime import UTC, datetime
 
-    assert cli.in_session("IND", datetime(2026, 9, 23, 4, 30, tzinfo=UTC))       # Wed 10:00 IST
-    assert not cli.in_session("IND", datetime(2026, 9, 23, 11, 0, tzinfo=UTC))   # 16:30 IST
-    assert not cli.in_session("IND", datetime(2026, 9, 20, 4, 30, tzinfo=UTC))   # Sunday
-    assert cli.in_session("USA", datetime(2026, 9, 23, 14, 0, tzinfo=UTC))       # 10:00 ET
+    assert cli.in_session("IND", datetime(2026, 9, 23, 4, 30, tzinfo=UTC))  # Wed 10:00 IST
+    assert not cli.in_session("IND", datetime(2026, 9, 23, 11, 0, tzinfo=UTC))  # 16:30 IST
+    assert not cli.in_session("IND", datetime(2026, 9, 20, 4, 30, tzinfo=UTC))  # Sunday
+    assert cli.in_session("USA", datetime(2026, 9, 23, 14, 0, tzinfo=UTC))  # 10:00 ET
     assert cli.in_session("USA", datetime(2026, 9, 23, 13, 15, tzinfo=UTC), pre_open_min=30)
 
 
@@ -99,6 +128,10 @@ def test_daemon_runs_cycles_until_shutdown(monkeypatch):
     monkeypatch.setattr(runtime, "GracefulShutdown", fake_shutdown)
     monkeypatch.setattr(runtime, "Heartbeat", Beat)
     monkeypatch.setattr(engine_cli, "cmd_run", fake_run)
-    assert cli.main(["daemon", "--dataset", "ref.listings", "--market", "IND",
-                     "--interval-seconds", "1"]) == 0
+    assert (
+        cli.main(
+            ["daemon", "--dataset", "ref.listings", "--market", "IND", "--interval-seconds", "1"]
+        )
+        == 0
+    )
     assert cycles == ["ref.listings", "tick"]

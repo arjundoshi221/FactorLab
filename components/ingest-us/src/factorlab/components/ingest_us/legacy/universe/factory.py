@@ -26,7 +26,4 @@ def create_resolver(config, storage, *, schwab_client=None, eodhd_client=None, s
     common = {"indexes": mapping.indexes, "validator": validator}
     if config.provider == "github_csv":
         return resolver_type(**common, storage=storage, session=session)
-    return resolver_type(
-        **common, client=eodhd_client or EODHDClient(storage=storage)
-    )
-
+    return resolver_type(**common, client=eodhd_client or EODHDClient(storage=storage))

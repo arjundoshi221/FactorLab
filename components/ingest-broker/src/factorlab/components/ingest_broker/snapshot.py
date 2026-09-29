@@ -52,8 +52,12 @@ from factorlab.sources.ibkr.shapes import Mode
 SERVICE = "ibkr_broker_snapshot"
 DEFAULT_TIMES = "06:00,16:30"
 TICK_SECONDS = 30.0
-STATUS_BY_RUN = {"success": "ready", "partial": "incomplete", "failed": "error",
-                 "cancelled": "stopped"}
+STATUS_BY_RUN = {
+    "success": "ready",
+    "partial": "incomplete",
+    "failed": "error",
+    "cancelled": "stopped",
+}
 
 log = logging.getLogger("factorlab.ibkr.snapshot")
 
@@ -84,16 +88,19 @@ def describe(summary: RunSummary) -> str:
     if not summary.failed_units:
         return f"IBKR snapshot ok: {summary.rows_written} rows across {len(summary.units)} units"
     failed = ", ".join(unit.name for unit in summary.failed_units)
-    return (f"IBKR snapshot {summary.status}: {summary.rows_written} rows; "
-            f"failed units: {failed}")
+    return f"IBKR snapshot {summary.status}: {summary.rows_written} rows; failed units: {failed}"
 
 
 def report(storage: Any, summary: RunSummary, *, dry_run: bool) -> None:
     """Publish the run outcome to logs, ``meta.source_status`` and notifications."""
     detail = describe(summary)
     for unit in summary.units:
-        log.info("  %-24s rows=%-6d %s", unit.name, unit.rows_written,
-                 "ok" if unit.ok else f"FAILED: {unit.error}")
+        log.info(
+            "  %-24s rows=%-6d %s",
+            unit.name,
+            unit.rows_written,
+            "ok" if unit.ok else f"FAILED: {unit.error}",
+        )
     log.info("%s (run_id=%s)", detail, summary.run_id)
     if dry_run:
         return
@@ -102,18 +109,31 @@ def report(storage: Any, summary: RunSummary, *, dry_run: bool) -> None:
     except Exception:
         log.exception("Could not write meta.source_status for ibkr")
     if summary.status != "success":
-        _notify(f"IBKR snapshot {summary.status}", detail,
-                severity="warn" if summary.status == "partial" else "fail",
-                context={"run_id": str(summary.run_id),
-                         **{u.name: u.error for u in summary.failed_units}})
+        _notify(
+            f"IBKR snapshot {summary.status}",
+            detail,
+            severity="warn" if summary.status == "partial" else "fail",
+            context={
+                "run_id": str(summary.run_id),
+                **{u.name: u.error for u in summary.failed_units},
+            },
+        )
 
 
 def _notify(subject: str, body: str, *, severity: str, context: dict[str, Any]) -> None:
     try:
         from factorlab.runtime.notify import notify
 
-        notify(subject, body, severity=severity, source=SERVICE, vendor="ibkr",
-               country="US", context=context, dedupe_key=f"{SERVICE}|{subject}")
+        notify(
+            subject,
+            body,
+            severity=severity,
+            source=SERVICE,
+            vendor="ibkr",
+            country="US",
+            context=context,
+            dedupe_key=f"{SERVICE}|{subject}",
+        )
     except Exception:
         log.exception("Notification failed for %s", subject)
 
@@ -121,10 +141,15 @@ def _notify(subject: str, body: str, *, severity: str, context: dict[str, Any]) 
 def run_once(storage: Any, config: SnapshotConfig, *, dry_run: bool = False) -> RunSummary:
     provider = IBKRBrokerProvider(storage, config)
     summary = run_provider(
-        provider, storage, universe="ibkr_accounts",
+        provider,
+        storage,
+        universe="ibkr_accounts",
         requested_series=len(config.modes) * 4,
-        metadata={"modes": list(config.modes), "client_id": config.client_id,
-                  "executions_lookback_hours": config.executions_lookback.total_seconds() / 3600},
+        metadata={
+            "modes": list(config.modes),
+            "client_id": config.client_id,
+            "executions_lookback_hours": config.executions_lookback.total_seconds() / 3600,
+        },
     )
     report(storage, summary, dry_run=dry_run)
     return summary
@@ -150,11 +175,15 @@ def run_daemon(
             pending_start = False
         else:
             due = next_scheduled_run(clock(), slots)
-            log.info("Next IBKR snapshot at %s (%s New York)", due.isoformat(),
-                     due.astimezone(NY).strftime("%a %H:%M"))
+            log.info(
+                "Next IBKR snapshot at %s (%s New York)",
+                due.isoformat(),
+                due.astimezone(NY).strftime("%a %H:%M"),
+            )
             try:
-                storage.source_status("waiting", f"Next snapshot at {due.isoformat()}",
-                                      source="ibkr")
+                storage.source_status(
+                    "waiting", f"Next snapshot at {due.isoformat()}", source="ibkr"
+                )
             except Exception:
                 log.warning("Could not write meta.source_status for ibkr", exc_info=True)
             while not should_stop() and clock() < due:
@@ -167,8 +196,9 @@ def run_daemon(
             take()
         except Exception as exc:
             log.exception("IBKR snapshot run failed")
-            _notify("IBKR snapshot crashed", f"{type(exc).__name__}: {exc}",
-                    severity="fail", context={})
+            _notify(
+                "IBKR snapshot crashed", f"{type(exc).__name__}: {exc}", severity="fail", context={}
+            )
     try:
         storage.source_status("stopped", "IBKR snapshot daemon stopped", source="ibkr")
     except Exception:
@@ -177,23 +207,43 @@ def run_daemon(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     run_mode = parser.add_mutually_exclusive_group()
-    run_mode.add_argument("--once", action="store_true", help="Take one snapshot and exit (default)")
+    run_mode.add_argument(
+        "--once", action="store_true", help="Take one snapshot and exit (default)"
+    )
     run_mode.add_argument("--daemon", action="store_true", help="Snapshot at each scheduled slot")
-    parser.add_argument("--modes", type=parse_modes, default=parse_modes("paper,live"),
-                        help="Comma-separated Gateway modes (default: paper,live)")
-    parser.add_argument("--at", type=parse_times,
-                        default=parse_times(os.getenv("IBKR_SNAPSHOT_TIMES", DEFAULT_TIMES)),
-                        help="Daemon slots, HH:MM America/New_York (default: 06:00,16:30)")
-    parser.add_argument("--run-on-start", action="store_true",
-                        help="Daemon: take a snapshot immediately, then follow the schedule")
-    parser.add_argument("--client-id", type=int, default=SNAPSHOT_CLIENT_ID,
-                        help=f"IBKR API clientId (default: {SNAPSHOT_CLIENT_ID})")
+    parser.add_argument(
+        "--modes",
+        type=parse_modes,
+        default=parse_modes("paper,live"),
+        help="Comma-separated Gateway modes (default: paper,live)",
+    )
+    parser.add_argument(
+        "--at",
+        type=parse_times,
+        default=parse_times(os.getenv("IBKR_SNAPSHOT_TIMES", DEFAULT_TIMES)),
+        help="Daemon slots, HH:MM America/New_York (default: 06:00,16:30)",
+    )
+    parser.add_argument(
+        "--run-on-start",
+        action="store_true",
+        help="Daemon: take a snapshot immediately, then follow the schedule",
+    )
+    parser.add_argument(
+        "--client-id",
+        type=int,
+        default=SNAPSHOT_CLIENT_ID,
+        help=f"IBKR API clientId (default: {SNAPSHOT_CLIENT_ID})",
+    )
     parser.add_argument("--executions-lookback-hours", type=float, default=24.0)
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Connect, capture and normalize; write nothing to ClickHouse")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Connect, capture and normalize; write nothing to ClickHouse",
+    )
     parser.add_argument("--log-level", default="INFO")
     return parser
 
@@ -202,22 +252,30 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     configure_logging(component="ingest-broker", service="ibkr-snapshot", level=args.log_level)
     config = SnapshotConfig(
-        modes=args.modes, client_id=args.client_id,
+        modes=args.modes,
+        client_id=args.client_id,
         executions_lookback=timedelta(hours=args.executions_lookback_hours),
     )
-    lock_path = Path(os.getenv("IBKR_SNAPSHOT_LOCK", str(paths.home() / "data" / "ibkr-snapshot.lock")))
+    lock_path = Path(
+        os.getenv("IBKR_SNAPSHOT_LOCK", str(paths.home() / "data" / "ibkr-snapshot.lock"))
+    )
     try:
         with acquire_lock(lock_path):
             storage = _storage(dry_run=args.dry_run)
             try:
                 if not args.daemon:
                     summary = run_once(storage, config, dry_run=args.dry_run)
-                    return int({"success": ExitCode.OK, "partial": ExitCode.WARN}.get(
-                        summary.status, ExitCode.FATAL))
+                    return int(
+                        {"success": ExitCode.OK, "partial": ExitCode.WARN}.get(
+                            summary.status, ExitCode.FATAL
+                        )
+                    )
                 heartbeat = Heartbeat(SERVICE)
                 with GracefulShutdown(log) as shutdown:
                     return run_daemon(
-                        storage, config, args.at,
+                        storage,
+                        config,
+                        args.at,
                         should_stop=lambda: shutdown.triggered,
                         run_on_start=args.run_on_start,
                         sleep=_interruptible_sleep(lambda: shutdown.triggered),

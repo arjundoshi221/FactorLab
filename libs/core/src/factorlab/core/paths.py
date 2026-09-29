@@ -81,14 +81,14 @@ HEARTBEAT_ROOT: Path = Path(
 # ── Per-source legacy layout maps (Phase 1: preserve existing shape) ────────
 
 _RAW_LAYOUT: dict[str, str] = {
-    "political":          "political/raw",
-    "fec":                "political/raw/fec",
-    "senate_efd":         "political/raw/senate_efd",
-    "senate_efd_ptrs":    "political/raw/senate_efd/ptrs",
-    "senate_efd_llm":     "political/raw/senate_efd/_llm_extractions",
-    "eodhd":              "eodhd",
+    "political": "political/raw",
+    "fec": "political/raw/fec",
+    "senate_efd": "political/raw/senate_efd",
+    "senate_efd_ptrs": "political/raw/senate_efd/ptrs",
+    "senate_efd_llm": "political/raw/senate_efd/_llm_extractions",
+    "eodhd": "eodhd",
     "upstox_instruments": "upstox/instruments",
-    "upstox_live":        "in/live",
+    "upstox_live": "in/live",
 }
 
 # Sources whose state still lives in a vendor-nested directory (legacy).
@@ -98,9 +98,9 @@ _STATE_LEGACY: dict[str, Path] = {
 }
 
 _TOKEN_LAYOUT: dict[str, str] = {
-    "upstox":            "upstox/.token",
-    "upstox_auth_code":  "upstox/.auth_code",
-    "schwab":            "schwab/.token",
+    "upstox": "upstox/.token",
+    "upstox_auth_code": "upstox/.auth_code",
+    "schwab": "schwab/.token",
 }
 
 
@@ -128,9 +128,7 @@ def assert_under_root(path: Path, root: Path) -> Path:
     try:
         resolved.relative_to(root_resolved)
     except ValueError as e:
-        raise PermissionError(
-            f"path escapes root: {resolved} not under {root_resolved}"
-        ) from e
+        raise PermissionError(f"path escapes root: {resolved} not under {root_resolved}") from e
     return resolved
 
 

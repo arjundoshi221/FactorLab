@@ -44,15 +44,21 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, TextIO
 
-_CONTEXT: ContextVar[Mapping[str, Any]] = ContextVar("factorlab_log_context",
-                                                     default=MappingProxyType({}))
+_CONTEXT: ContextVar[Mapping[str, Any]] = ContextVar(
+    "factorlab_log_context", default=MappingProxyType({})
+)
 # Standard LogRecord attributes, plus uvicorn's ANSI-coloured duplicate of the message.
-_RESERVED = frozenset(vars(logging.makeLogRecord({}))) | {"message", "asctime", "taskName",
-                                                          "color_message"}
+_RESERVED = frozenset(vars(logging.makeLogRecord({}))) | {
+    "message",
+    "asctime",
+    "taskName",
+    "color_message",
+}
 _SECRET_KEY = re.compile(r"(?i)pass(word)?|secret|token|api[_-]?key|authorization|cookie")
 _SECRET_TEXT = re.compile(
     r"(?i)(bearer\s+|access_token=|refresh_token=|api_key=|apikey=|password=|token=)"
-    r"[^\s&\"',]+")
+    r"[^\s&\"',]+"
+)
 _MAX_MESSAGE = 16_384
 _MAX_EXCEPTION = 32_768
 _QUIET = ("urllib3", "clickhouse_connect", "httpx", "httpcore", "ib_async", "asyncio")
@@ -93,16 +99,22 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         doc: dict[str, Any] = {
-            "ts": datetime.fromtimestamp(record.created, UTC).isoformat(timespec="milliseconds")
+            "ts": datetime.fromtimestamp(record.created, UTC)
+            .isoformat(timespec="milliseconds")
             .replace("+00:00", "Z"),
             "level": record.levelname,
             **self._static,
             "logger": record.name,
             "msg": redact(record.getMessage())[:_MAX_MESSAGE],
         }
-        extras = {**_CONTEXT.get(),
-                  **{k: v for k, v in vars(record).items()
-                     if k not in _RESERVED and not k.startswith("_")}}
+        extras = {
+            **_CONTEXT.get(),
+            **{
+                k: v
+                for k, v in vars(record).items()
+                if k not in _RESERVED and not k.startswith("_")
+            },
+        }
         for key, value in extras.items():
             doc.setdefault(key, "[redacted]" if _SECRET_KEY.search(key) else value)
         if record.exc_info:
@@ -150,12 +162,18 @@ def configure_logging(
     level = level or os.getenv("FACTORLAB_LOG_LEVEL") or "INFO"
     directory = log_dir or os.getenv("FACTORLAB_LOG_DIR") or None
     stream = stream or sys.stderr
-    fmt = (fmt or os.getenv("FACTORLAB_LOG_FORMAT")
-           or ("text" if getattr(stream, "isatty", lambda: False)() else "json"))
-    static = {"component": component, "service": service,
-              # Per-component images set FACTORLAB_VERSION; the monolith only a release id.
-              "version": os.getenv("FACTORLAB_VERSION") or os.getenv("FACTORLAB_RELEASE_ID", ""),
-              "commit": os.getenv("FACTORLAB_COMMIT", "")[:12]}
+    fmt = (
+        fmt
+        or os.getenv("FACTORLAB_LOG_FORMAT")
+        or ("text" if getattr(stream, "isatty", lambda: False)() else "json")
+    )
+    static = {
+        "component": component,
+        "service": service,
+        # Per-component images set FACTORLAB_VERSION; the monolith only a release id.
+        "version": os.getenv("FACTORLAB_VERSION") or os.getenv("FACTORLAB_RELEASE_ID", ""),
+        "commit": os.getenv("FACTORLAB_COMMIT", "")[:12],
+    }
     formatter: logging.Formatter = TextFormatter() if fmt == "text" else JsonFormatter(static)
 
     root = logging.getLogger()
@@ -183,7 +201,8 @@ def configure_logging(
     _install_exception_hooks()
     if problem is not None:
         logging.getLogger(__name__).warning(
-            "file logging disabled; continuing on stderr only: %s", problem)
+            "file logging disabled; continuing on stderr only: %s", problem
+        )
 
 
 def _install_exception_hooks() -> None:
@@ -191,19 +210,29 @@ def _install_exception_hooks() -> None:
         if issubclass(kind, KeyboardInterrupt):
             sys.__excepthook__(kind, value, tb)
             return
-        logging.getLogger("factorlab.uncaught").critical("uncaught exception",
-                                                         exc_info=(kind, value, tb))
+        logging.getLogger("factorlab.uncaught").critical(
+            "uncaught exception", exc_info=(kind, value, tb)
+        )
 
     def thread_hook(args: threading.ExceptHookArgs) -> None:
         if args.exc_type is SystemExit:
             return
         logging.getLogger("factorlab.uncaught").critical(
-            "uncaught exception in thread %s", getattr(args.thread, "name", "?"),
-            exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+            "uncaught exception in thread %s",
+            getattr(args.thread, "name", "?"),
+            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+        )
 
     sys.excepthook = excepthook
     threading.excepthook = thread_hook
 
 
-__all__ = ["JsonFormatter", "TextFormatter", "bind", "configure_logging", "log_context",
-           "redact", "unbind"]
+__all__ = [
+    "JsonFormatter",
+    "TextFormatter",
+    "bind",
+    "configure_logging",
+    "log_context",
+    "redact",
+    "unbind",
+]

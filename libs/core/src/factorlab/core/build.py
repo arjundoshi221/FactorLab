@@ -24,5 +24,9 @@ def build_info() -> BuildInfo:
     def value(name: str) -> str | None:
         return os.getenv(name) or None
 
-    return BuildInfo(component=value("FACTORLAB_COMPONENT"), version=value("FACTORLAB_VERSION"),
-                     commit=value("FACTORLAB_COMMIT"), release_id=value("FACTORLAB_RELEASE_ID"))
+    return BuildInfo(
+        component=value("FACTORLAB_COMPONENT"),
+        version=value("FACTORLAB_VERSION"),
+        commit=value("FACTORLAB_COMMIT"),
+        release_id=value("FACTORLAB_RELEASE_ID"),
+    )

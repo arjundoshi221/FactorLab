@@ -18,9 +18,16 @@ class Client:
     def query(self, sql):
         if "system.tables" in sql:
             if "sorting_key" in sql:
-                return Result([(table, "country_code, listing_id") for table in (
-                    "meta.expected_series", "meta.session_coverage", "meta.recovery_state"
-                )])
+                return Result(
+                    [
+                        (table, "country_code, listing_id")
+                        for table in (
+                            "meta.expected_series",
+                            "meta.session_coverage",
+                            "meta.recovery_state",
+                        )
+                    ]
+                )
             return Result([(table,) for table in self.tables])
         return Result([("wave_09_schema_application_cutover", self.migration_status)])
 

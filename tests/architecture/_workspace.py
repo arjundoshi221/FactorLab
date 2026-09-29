@@ -11,8 +11,12 @@ MEMBER_GROUPS = ("libs", "providers", "components")
 
 def package_roots() -> list[Path]:
     """Every member's ``src/factorlab`` directory."""
-    return sorted(root for group in MEMBER_GROUPS
-                  for root in (REPO / group).glob("*/src/factorlab") if root.is_dir())
+    return sorted(
+        root
+        for group in MEMBER_GROUPS
+        for root in (REPO / group).glob("*/src/factorlab")
+        if root.is_dir()
+    )
 
 
 def python_files() -> Iterator[tuple[Path, str]]:

@@ -381,7 +381,11 @@ def validation_files(directory: Path, through_wave: int) -> list[Path]:
     files: list[tuple[int, Path]] = []
     for path in directory.glob("wave_*.sql"):
         match = FILE_RE.match(path.name)
-        if match and match.group("phase") == "validate" and int(match.group("wave")) <= through_wave:
+        if (
+            match
+            and match.group("phase") == "validate"
+            and int(match.group("wave")) <= through_wave
+        ):
             files.append((int(match.group("wave")), path))
     return [path for _, path in sorted(files)]
 

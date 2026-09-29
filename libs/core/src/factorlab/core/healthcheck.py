@@ -30,7 +30,9 @@ def _fresh(path: Path, max_age: float) -> str | None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="factorlab-healthcheck", description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(
+        prog="factorlab-healthcheck", description=__doc__.split("\n\n")[0]
+    )
     commands = parser.add_subparsers(dest="check", required=True)
     beat = commands.add_parser("heartbeat", help="a daemon's heartbeat file is recent")
     beat.add_argument("service")

@@ -78,7 +78,8 @@ class Binding(BaseModel):
         shadow    -> ``resolve_only``: resolve and report, write nothing to ``ref.*``
         """
         return {"primary": "authoritative", "secondary": "alias_only"}.get(
-            self.role, "resolve_only")  # type: ignore[return-value]
+            self.role, "resolve_only"
+        )  # type: ignore[return-value]
 
     @property
     def pipeline(self) -> str:
@@ -105,27 +106,41 @@ class BindingsFile(BaseModel):
             if not spec.has_resolution and binding.resolution:
                 errors.append(f"{binding.pipeline}: {binding.dataset} takes no resolution")
         seen = Counter((b.key, b.instance_name) for b in self.bindings)
-        errors += [f"duplicate instance {inst!r} for {key}" for (key, inst), n in seen.items()
-                   if n > 1]
+        errors += [
+            f"duplicate instance {inst!r} for {key}" for (key, inst), n in seen.items() if n > 1
+        ]
         primaries = Counter(b.key for b in self.bindings if b.role == "primary")
         errors += [f"more than one primary for {key}" for key, n in primaries.items() if n > 1]
         readable = Counter(
-            (b.key, b.provider, b.priority) for b in self.bindings
-            if b.role in ("primary", "secondary") and DATASETS.get(b.dataset) is not None
-            and DATASETS[b.dataset].source_keyed)
+            (b.key, b.provider, b.priority)
+            for b in self.bindings
+            if b.role in ("primary", "secondary")
+            and DATASETS.get(b.dataset) is not None
+            and DATASETS[b.dataset].source_keyed
+        )
         ranks = Counter((key, priority) for key, _, priority in readable)
-        errors += [f"two providers share priority {priority} for {key}; *_best needs an order"
-                   for (key, priority), n in ranks.items() if n > 1]
+        errors += [
+            f"two providers share priority {priority} for {key}; *_best needs an order"
+            for (key, priority), n in ranks.items()
+            if n > 1
+        ]
         if errors:
             raise ValueError("; ".join(errors))
         return self
 
-    def enabled(self, *, dataset: str | None = None, market: str | None = None,
-                resolution: str | None = None) -> tuple[Binding, ...]:
+    def enabled(
+        self,
+        *,
+        dataset: str | None = None,
+        market: str | None = None,
+        resolution: str | None = None,
+    ) -> tuple[Binding, ...]:
         """Writing bindings, optionally filtered; primaries first, then by priority."""
         chosen = [
-            b for b in self.bindings
-            if b.writes and (dataset is None or b.dataset == dataset)
+            b
+            for b in self.bindings
+            if b.writes
+            and (dataset is None or b.dataset == dataset)
             and (market is None or b.market == market)
             and (resolution is None or b.resolution == resolution)
         ]
@@ -138,8 +153,9 @@ class BindingsFile(BaseModel):
         ran when this file was loaded, so they still hold for the subset.
         """
         names = frozenset(providers)
-        return self.model_copy(update={"bindings": tuple(
-            b for b in self.bindings if b.provider in names)})
+        return self.model_copy(
+            update={"bindings": tuple(b for b in self.bindings if b.provider in names)}
+        )
 
 
 def load_bindings(path: Path | None = None) -> BindingsFile:
@@ -193,8 +209,9 @@ def _deep_merge(base: dict[str, Any], override: Mapping[str, Any]) -> dict[str, 
     return merged
 
 
-def provider_settings_data(provider: str, *, instance: str | None = None,
-                           configs_dir: Path | None = None) -> dict[str, Any]:
+def provider_settings_data(
+    provider: str, *, instance: str | None = None, configs_dir: Path | None = None
+) -> dict[str, Any]:
     """Raw settings for one instance: the provider file merged with its instance override."""
     path = (configs_dir or CONFIGS_DIR) / "sources" / f"{provider}.yaml"
     data: dict[str, Any] = {}
@@ -212,9 +229,13 @@ def provider_settings_data(provider: str, *, instance: str | None = None,
     return data
 
 
-def load_provider_settings(provider: str, model: type[ProviderSettings] = ProviderSettings, *,
-                           instance: str | None = None,
-                           configs_dir: Path | None = None) -> ProviderSettings:
+def load_provider_settings(
+    provider: str,
+    model: type[ProviderSettings] = ProviderSettings,
+    *,
+    instance: str | None = None,
+    configs_dir: Path | None = None,
+) -> ProviderSettings:
     return model.model_validate(
         provider_settings_data(provider, instance=instance, configs_dir=configs_dir)
     )

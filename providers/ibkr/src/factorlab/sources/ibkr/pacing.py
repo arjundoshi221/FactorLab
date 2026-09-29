@@ -87,7 +87,9 @@ class RateLimiter:
                 continue
             log.info(
                 "Pacing cap reached (%d in %.0fs); sleeping %.1fs",
-                len(self._events), self.window_sec, wait,
+                len(self._events),
+                self.window_sec,
+                wait,
             )
             self._sleep(wait)
             now = self._clock()

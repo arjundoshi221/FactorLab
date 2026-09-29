@@ -18,12 +18,12 @@ from factorlab.ingest import (
 @pytest.mark.parametrize(
     "url,expected",
     [
-        ("https://api.fec.gov/x?api_key=ABC123",
-         "https://api.fec.gov/x?api_key=REDACTED"),
-        ("https://finnhub.io/x?token=XYZ&foo=1",
-         "https://finnhub.io/x?token=REDACTED&foo=1"),
-        ("https://example.com?Access_Token=secret&q=z",
-         "https://example.com?Access_Token=REDACTED&q=z"),
+        ("https://api.fec.gov/x?api_key=ABC123", "https://api.fec.gov/x?api_key=REDACTED"),
+        ("https://finnhub.io/x?token=XYZ&foo=1", "https://finnhub.io/x?token=REDACTED&foo=1"),
+        (
+            "https://example.com?Access_Token=secret&q=z",
+            "https://example.com?Access_Token=REDACTED&q=z",
+        ),
         ("https://example.com/no-secret", "https://example.com/no-secret"),
     ],
 )

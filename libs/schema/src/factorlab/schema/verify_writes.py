@@ -14,20 +14,23 @@ log = logging.getLogger(__name__)
 
 
 def _count(client, table: str, since: datetime) -> int:
-    return int(client.query(
-        f"SELECT count() FROM {table} "
-        "WHERE ingested_at >= {since:DateTime64(3, 'UTC')} "
-        "AND raw_id IN (SELECT raw_id FROM raw.archive) "
-        "AND ingest_run_id IN (SELECT run_id FROM meta.ingestion_runs FINAL)",
-        parameters={"since": since},
-    ).result_rows[0][0])
+    return int(
+        client.query(
+            f"SELECT count() FROM {table} "
+            "WHERE ingested_at >= {since:DateTime64(3, 'UTC')} "
+            "AND raw_id IN (SELECT raw_id FROM raw.archive) "
+            "AND ingest_run_id IN (SELECT run_id FROM meta.ingestion_runs FINAL)",
+            parameters={"since": since},
+        ).result_rows[0][0]
+    )
 
 
 def fresh_lineage(client, since: datetime) -> dict[str, int]:
     """Count new market and political rows with real raw and run references."""
-    return {table: _count(client, table, since) for table in (
-        "market.bars", "market.futures_contract_bars", "alt.political_trades"
-    )}
+    return {
+        table: _count(client, table, since)
+        for table in ("market.bars", "market.futures_contract_bars", "alt.political_trades")
+    }
 
 
 def universe_ready(client, since: datetime) -> bool:
@@ -62,8 +65,9 @@ def main(argv: list[str] | None = None) -> None:
             counts = fresh_lineage(storage.client, args.since)
             ready = not args.require_universe_ready or universe_ready(storage.client, args.since)
             if any(counts.values()) and ready:
-                log.info("Fresh v2 raw-to-curated write verified: %s; universe_ready=%s",
-                         counts, ready)
+                log.info(
+                    "Fresh v2 raw-to-curated write verified: %s; universe_ready=%s", counts, ready
+                )
                 return
             now = time.monotonic()
             if now - last_report >= 60:

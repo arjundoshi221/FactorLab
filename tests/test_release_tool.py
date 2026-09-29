@@ -31,6 +31,7 @@ release = _load("release")
 
 # ── the real workspace ───────────────────────────────────────────────────────
 
+
 def test_every_component_platform_and_worker_is_a_release_unit():
     names = {u.name for u in affected.units()}
     components = {p.parent.name for p in (REPO / "components").glob("*/component.yaml")}
@@ -65,17 +66,24 @@ def test_check_tag_accepts_the_declared_version_and_rejects_anything_else():
     outputs = release.check_tag(f"api/v{version}")
     assert outputs["image"] == "ghcr.io/arjundoshi221/factorlab-api"
     assert outputs["dockerfile"] == "components/api/Dockerfile"
-    assert release.check_tag(f"platform/v{release.read_version(affected.unit('platform'))}")[
-        "kind"] == "platform"
+    assert (
+        release.check_tag(f"platform/v{release.read_version(affected.unit('platform'))}")["kind"]
+        == "platform"
+    )
     for bad in ("api/v99.0.0", "api/1.0.0", "release/20260101T000000Z-abcdef1", "nope/v1.0.0"):
         with pytest.raises(release.ReleaseError):
             release.check_tag(bad)
 
 
-@pytest.mark.parametrize(("version", "part", "expected"), [
-    ("1.2.3", "patch", "1.2.4"), ("1.2.3", "minor", "1.3.0"), ("1.2.3", "major", "2.0.0"),
-    ("0.1.0", "major", "1.0.0"),
-])
+@pytest.mark.parametrize(
+    ("version", "part", "expected"),
+    [
+        ("1.2.3", "patch", "1.2.4"),
+        ("1.2.3", "minor", "1.3.0"),
+        ("1.2.3", "major", "2.0.0"),
+        ("0.1.0", "major", "1.0.0"),
+    ],
+)
 def test_bump(version, part, expected):
     assert release.bump(version, part) == expected
 
@@ -85,18 +93,21 @@ def test_pre_releases_are_refused_for_now():
         release.bump("1.0.0-rc.1", "patch")
 
 
-@pytest.mark.parametrize(("subject", "body", "section"), [
-    ("feat(api): add x", "", "feat"),
-    ("fix: y", "", "fix"),
-    ("perf(storage): z", "", "perf"),
-    ("refactor!: drop v1", "", "breaking"),
-    ("fix: a", "BREAKING CHANGE: b", "breaking"),
-    ("deploy(host): c", "", "other"),
-    ("Merge-less plain subject", "", "other"),
-    ("chore(release): api v1.0.0", "", None),
-    ("docs: typo", "", None),
-    ("test: more", "", None),
-])
+@pytest.mark.parametrize(
+    ("subject", "body", "section"),
+    [
+        ("feat(api): add x", "", "feat"),
+        ("fix: y", "", "fix"),
+        ("perf(storage): z", "", "perf"),
+        ("refactor!: drop v1", "", "breaking"),
+        ("fix: a", "BREAKING CHANGE: b", "breaking"),
+        ("deploy(host): c", "", "other"),
+        ("Merge-less plain subject", "", "other"),
+        ("chore(release): api v1.0.0", "", None),
+        ("docs: typo", "", None),
+        ("test: more", "", None),
+    ],
+)
 def test_commit_sections(subject, body, section):
     assert release.Commit("0" * 40, subject, body, []).section() == section
 
@@ -129,9 +140,24 @@ def repo(tmp_path, monkeypatch):
     root.mkdir()
 
     def git(*args):
-        return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid",
-                               "-c", "core.autocrlf=false", "-c", "commit.gpgsign=false", *args],
-                              cwd=root, check=True, capture_output=True, text=True).stdout
+        return subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@example.invalid",
+                "-c",
+                "core.autocrlf=false",
+                "-c",
+                "commit.gpgsign=false",
+                *args,
+            ],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
 
     def commit(message, files):
         for name, text in files.items():
@@ -142,11 +168,16 @@ def repo(tmp_path, monkeypatch):
         git("commit", "-q", "-m", message)
 
     git("init", "-q")
-    commit("chore: start", {
-        "components/x/pyproject.toml": '[project]\nname = "factorlab-component-x"\n'
-                                       'version = "0.1.0"\n',
-        "components/x/src/a.py": "a = 1\n", "libs/y/src/b.py": "b = 1\n",
-        "uv.lock": LOCK.format(pandas="2.2.1")})
+    commit(
+        "chore: start",
+        {
+            "components/x/pyproject.toml": '[project]\nname = "factorlab-component-x"\n'
+            'version = "0.1.0"\n',
+            "components/x/src/a.py": "a = 1\n",
+            "libs/y/src/b.py": "b = 1\n",
+            "uv.lock": LOCK.format(pandas="2.2.1"),
+        },
+    )
     git("tag", "cx/v0.1.0")
     commit("feat(x): a new thing", {"components/x/src/a.py": "a = 2\n"})
     commit("fix(y): a library fix", {"libs/y/src/b.py": "b = 2\n"})
@@ -154,8 +185,9 @@ def repo(tmp_path, monkeypatch):
     commit("docs: unrelated", {"docs/readme.md": "hi\n"})
     commit("refactor(x)!: rename the thing", {"components/x/src/a.py": "renamed = 2\n"})
     commit("build(deps): bump pandas", {"uv.lock": LOCK.format(pandas="2.2.3")})
-    unit = affected.Unit("cx", "python", "components/x/", "factorlab-component-x",
-                         ("components/x/", "libs/y/"))
+    unit = affected.Unit(
+        "cx", "python", "components/x/", "factorlab-component-x", ("components/x/", "libs/y/")
+    )
     monkeypatch.setattr(affected, "REPO", root)
     monkeypatch.setattr(release, "REPO", root)
     monkeypatch.setattr(affected, "unit", lambda name: unit)
@@ -227,11 +259,21 @@ def test_dry_run_changes_nothing(repo):
 def test_npm_versions_update_package_and_lock(tmp_path, monkeypatch):
     root = tmp_path / "npm"
     (root / "w").mkdir(parents=True)
-    (root / "w" / "package.json").write_text(json.dumps(
-        {"name": "w", "version": "0.1.0", "private": True}, indent=2) + "\n")
-    (root / "w" / "package-lock.json").write_text(json.dumps(
-        {"name": "w", "version": "0.1.0", "lockfileVersion": 3,
-         "packages": {"": {"name": "w", "version": "0.1.0"}}}, indent=2) + "\n")
+    (root / "w" / "package.json").write_text(
+        json.dumps({"name": "w", "version": "0.1.0", "private": True}, indent=2) + "\n"
+    )
+    (root / "w" / "package-lock.json").write_text(
+        json.dumps(
+            {
+                "name": "w",
+                "version": "0.1.0",
+                "lockfileVersion": 3,
+                "packages": {"": {"name": "w", "version": "0.1.0"}},
+            },
+            indent=2,
+        )
+        + "\n"
+    )
     monkeypatch.setattr(release, "REPO", root)
     unit = affected.Unit("w", "worker", "w/", paths=("w/",))
     release.write_version(unit, "0.2.0")

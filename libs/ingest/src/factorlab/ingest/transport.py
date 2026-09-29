@@ -31,8 +31,14 @@ def retry_after_seconds(headers: Mapping[str, str], default: float = 1.0) -> flo
             return default
 
 
-def raise_for_status(provider: str, status: int, headers: Mapping[str, str], what: str, *,
-                     quota_statuses: frozenset[int] = frozenset()) -> None:
+def raise_for_status(
+    provider: str,
+    status: int,
+    headers: Mapping[str, str],
+    what: str,
+    *,
+    quota_statuses: frozenset[int] = frozenset(),
+) -> None:
     """Raise the taxonomy error for a non-200 response; return quietly on 200."""
     if status == 200:
         return

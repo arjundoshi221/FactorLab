@@ -34,11 +34,20 @@ ONLY_IN = {  # distribution -> the only components allowed to ship it
     "pytest": set(),
 }
 # The images are linux/amd64 on CPython 3.12.
-LINUX = {"sys_platform": "linux", "platform_system": "Linux", "os_name": "posix",
-         "platform_machine": "x86_64", "python_version": "3.12", "python_full_version": "3.12.0",
-         "implementation_name": "cpython", "platform_python_implementation": "CPython"}
-LIST_DISTS = ("import importlib.metadata as m, json; "
-              "print(json.dumps(sorted({d.metadata['Name'] for d in m.distributions()})))")
+LINUX = {
+    "sys_platform": "linux",
+    "platform_system": "Linux",
+    "os_name": "posix",
+    "platform_machine": "x86_64",
+    "python_version": "3.12",
+    "python_full_version": "3.12.0",
+    "implementation_name": "cpython",
+    "platform_python_implementation": "CPython",
+}
+LIST_DISTS = (
+    "import importlib.metadata as m, json; "
+    "print(json.dumps(sorted({d.metadata['Name'] for d in m.distributions()})))"
+)
 
 
 def norm(name: str) -> str:
@@ -50,9 +59,20 @@ def run(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def expected_dists(package: str) -> set[str]:
-    out = run("uv", "export", "--frozen", "--no-dev", "--package", package, "--no-hashes",
-              "--no-emit-workspace", "--no-header", "--no-annotate", "--format",
-              "requirements-txt")
+    out = run(
+        "uv",
+        "export",
+        "--frozen",
+        "--no-dev",
+        "--package",
+        package,
+        "--no-hashes",
+        "--no-emit-workspace",
+        "--no-header",
+        "--no-annotate",
+        "--format",
+        "requirements-txt",
+    )
     if out.returncode:
         raise SystemExit(out.stderr)
     wanted = set()

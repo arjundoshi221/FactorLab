@@ -31,8 +31,13 @@ log = logging.getLogger(__name__)
 
 # Index names that appear as FUT underlyings but are not single stocks
 _INDEX_UNDERLYINGS = {
-    "NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "NIFTYNXT50",
-    "SENSEX", "BANKEX",
+    "NIFTY",
+    "BANKNIFTY",
+    "FINNIFTY",
+    "MIDCPNIFTY",
+    "NIFTYNXT50",
+    "SENSEX",
+    "BANKEX",
 }
 
 
@@ -81,6 +86,7 @@ def _read_universe_file(path: Path) -> list[str]:
         return symbols
     elif suffix == ".csv":
         import pandas as pd
+
         df = pd.read_csv(path)
         col = "symbol" if "symbol" in df.columns else df.columns[0]
         return df[col].tolist()
@@ -116,13 +122,13 @@ def build_fo_eligible(instruments: list[dict]) -> list[str]:
 
 
 _NSE_INDEX_URLS = {
-    "nifty50":      "https://archives.nseindia.com/content/indices/ind_nifty50list.csv",
+    "nifty50": "https://archives.nseindia.com/content/indices/ind_nifty50list.csv",
     "nifty_next50": "https://archives.nseindia.com/content/indices/ind_niftynext50list.csv",
-    "nifty100":     "https://archives.nseindia.com/content/indices/ind_nifty100list.csv",
-    "nifty500":     "https://archives.nseindia.com/content/indices/ind_nifty500list.csv",
-    "midcap150":    "https://archives.nseindia.com/content/indices/ind_niftymidcap150list.csv",
-    "smallcap250":  "https://archives.nseindia.com/content/indices/ind_niftysmallcap250list.csv",
-    "microcap250":  "https://archives.nseindia.com/content/indices/ind_niftymicrocap250_list.csv",
+    "nifty100": "https://archives.nseindia.com/content/indices/ind_nifty100list.csv",
+    "nifty500": "https://archives.nseindia.com/content/indices/ind_nifty500list.csv",
+    "midcap150": "https://archives.nseindia.com/content/indices/ind_niftymidcap150list.csv",
+    "smallcap250": "https://archives.nseindia.com/content/indices/ind_niftysmallcap250list.csv",
+    "microcap250": "https://archives.nseindia.com/content/indices/ind_niftymicrocap250_list.csv",
 }
 
 # NSE blocks bare python-requests; a browser UA is required.
@@ -185,8 +191,9 @@ def build_universes(
         merged = _append_only_merge(path, symbols)
         _write_universe_yaml(path, merged)
         result[name] = len(merged)
-        log.info("Built %s: %d symbols (append-only, +%d new)",
-                 name, len(merged), len(merged) - prior)
+        log.info(
+            "Built %s: %d symbols (append-only, +%d new)", name, len(merged), len(merged) - prior
+        )
 
     return result
 

@@ -37,9 +37,7 @@ def _unsigned_count(value: Any) -> int | None:
 
 def _session(bar_time: datetime) -> str:
     local = bar_time.astimezone(IST).time()
-    return "pre" if local < time(9, 15) else (
-        "regular" if local < time(15, 30) else "post"
-    )
+    return "pre" if local < time(9, 15) else ("regular" if local < time(15, 30) else "post")
 
 
 class V2IndiaStorage(ClickHouseStorage):
@@ -55,60 +53,107 @@ class V2IndiaStorage(ClickHouseStorage):
             return
         columns = list(records[0])
         self.client.insert(
-            table, [[row[column] for column in columns] for row in records],
+            table,
+            [[row[column] for column in columns] for row in records],
             column_names=columns,
         )
 
-    def _identity_status(self, *, source: str, alias_kind: str, alias_value: str,
-                         raw_id: uuid.UUID | None, reason: str = "",
-                         target_kind: str | None = None,
-                         target_id: uuid.UUID | None = None) -> None:
+    def _identity_status(
+        self,
+        *,
+        source: str,
+        alias_kind: str,
+        alias_value: str,
+        raw_id: uuid.UUID | None,
+        reason: str = "",
+        target_kind: str | None = None,
+        target_id: uuid.UUID | None = None,
+    ) -> None:
         now = datetime.now(UTC)
-        self._insert_dicts("meta.unresolved_entities", [{
-            "first_seen": now, "last_seen": now,
-            "source": source, "alias_kind": alias_kind, "alias_value": alias_value,
-            "scope_country": self.country_code, "scope_exchange": None,
-            "context_json": json.dumps({"raw_id": str(raw_id) if raw_id else None}),
-            "occurrence_count": 1, "retry_count": 0, "last_retry_at": now,
-            "resolved_at": now if target_id else None,
-            "resolved_target_kind": target_kind,
-            "resolved_target_id": target_id,
-            "resolved_by": "auto_resolver" if target_id else None,
-            "resolution_note": reason or None,
-            "version": _version(now), "ingested_at": now,
-        }])
+        self._insert_dicts(
+            "meta.unresolved_entities",
+            [
+                {
+                    "first_seen": now,
+                    "last_seen": now,
+                    "source": source,
+                    "alias_kind": alias_kind,
+                    "alias_value": alias_value,
+                    "scope_country": self.country_code,
+                    "scope_exchange": None,
+                    "context_json": json.dumps({"raw_id": str(raw_id) if raw_id else None}),
+                    "occurrence_count": 1,
+                    "retry_count": 0,
+                    "last_retry_at": now,
+                    "resolved_at": now if target_id else None,
+                    "resolved_target_kind": target_kind,
+                    "resolved_target_id": target_id,
+                    "resolved_by": "auto_resolver" if target_id else None,
+                    "resolution_note": reason or None,
+                    "version": _version(now),
+                    "ingested_at": now,
+                }
+            ],
+        )
 
     def archive_raw(self, capture: RawCapture, *, source: str, source_channel: str) -> uuid.UUID:
         """Persist one provider response to immutable ``raw.archive`` and return its id."""
         raw_id = uuid.uuid4()
-        self._insert_dicts("raw.archive", [{
-            "raw_id": raw_id, "source": source, "source_channel": source_channel,
-            "transport": capture.transport, "country_code": self.country_code,
-            "source_url": capture.source_url,
-            "request_key": capture.request_key, "status_code": capture.status_code,
-            "response_headers": json.dumps(dict(capture.headers), sort_keys=True),
-            "response_body": gzip.compress(capture.body), "content_type": capture.content_type,
-            "content_encoding": "gzip",
-            "response_sha256": hashlib.sha256(capture.body).hexdigest(),
-            "fetched_at": capture.fetched_at, "window_start_at": None, "event_count": None,
-            "as_of_time": capture.fetched_at,
-            "metadata_json": json.dumps(dict(capture.metadata), sort_keys=True),
-        }])
+        self._insert_dicts(
+            "raw.archive",
+            [
+                {
+                    "raw_id": raw_id,
+                    "source": source,
+                    "source_channel": source_channel,
+                    "transport": capture.transport,
+                    "country_code": self.country_code,
+                    "source_url": capture.source_url,
+                    "request_key": capture.request_key,
+                    "status_code": capture.status_code,
+                    "response_headers": json.dumps(dict(capture.headers), sort_keys=True),
+                    "response_body": gzip.compress(capture.body),
+                    "content_type": capture.content_type,
+                    "content_encoding": "gzip",
+                    "response_sha256": hashlib.sha256(capture.body).hexdigest(),
+                    "fetched_at": capture.fetched_at,
+                    "window_start_at": None,
+                    "event_count": None,
+                    "as_of_time": capture.fetched_at,
+                    "metadata_json": json.dumps(dict(capture.metadata), sort_keys=True),
+                }
+            ],
+        )
         return raw_id
 
     def archive_http_response(
-        self, *, source: str, source_url: str, response_body: bytes,
-        status_code: int, response_headers: Mapping[str, str] | None = None,
-        fetch_key: str = "", content_type: str = "application/octet-stream",
+        self,
+        *,
+        source: str,
+        source_url: str,
+        response_body: bytes,
+        status_code: int,
+        response_headers: Mapping[str, str] | None = None,
+        fetch_key: str = "",
+        content_type: str = "application/octet-stream",
         metadata: Mapping[str, Any] | None = None,
         fetched_at: datetime | None = None,
     ) -> uuid.UUID:
-        return self.archive_raw(RawCapture(
-            body=response_body, request_key=fetch_key, transport="http",
-            fetched_at=fetched_at or datetime.now(UTC), source_url=source_url,
-            content_type=content_type, status_code=status_code,
-            headers=dict(response_headers or {}), metadata=dict(metadata or {}),
-        ), source=source, source_channel=source)
+        return self.archive_raw(
+            RawCapture(
+                body=response_body,
+                request_key=fetch_key,
+                transport="http",
+                fetched_at=fetched_at or datetime.now(UTC),
+                source_url=source_url,
+                content_type=content_type,
+                status_code=status_code,
+                headers=dict(response_headers or {}),
+                metadata=dict(metadata or {}),
+            ),
+            source=source,
+            source_channel=source,
+        )
 
     def seed_india_reference_data(self) -> None:
         """Refuse collection unless the migrated exchange and currency exist."""
@@ -120,7 +165,10 @@ class V2IndiaStorage(ClickHouseStorage):
             raise UnresolvedReference("NSE reference is absent from ref.exchanges")
 
     def sync_instruments(
-        self, instruments: Sequence[Mapping[str, Any]], *, raw_id: uuid.UUID | None = None,
+        self,
+        instruments: Sequence[Mapping[str, Any]],
+        *,
+        raw_id: uuid.UUID | None = None,
     ) -> dict[str, uuid.UUID]:
         lookup: dict[str, uuid.UUID] = {}
         for item in instruments:
@@ -128,29 +176,49 @@ class V2IndiaStorage(ClickHouseStorage):
                 continue
             key = str(item["instrument_key"])
             try:
-                _, _, listing_id = self.references.upsert_listing({
-                    "instrument_key": key, "isin": item.get("isin"),
-                    "country_code": "IN", "exchange_code": "NSE", "currency_code": "INR",
-                    "trading_symbol": str(item["trading_symbol"]),
-                    "name": item.get("name") or item["trading_symbol"],
-                    "security_type": "common", "lot_size": item.get("lot_size") or 1,
-                    "tick_size": _decimal(item.get("tick_size"), 6),
-                }, alias_kind="upstox_instrument_key", alias_value=key, source="upstox")
+                _, _, listing_id = self.references.upsert_listing(
+                    {
+                        "instrument_key": key,
+                        "isin": item.get("isin"),
+                        "country_code": "IN",
+                        "exchange_code": "NSE",
+                        "currency_code": "INR",
+                        "trading_symbol": str(item["trading_symbol"]),
+                        "name": item.get("name") or item["trading_symbol"],
+                        "security_type": "common",
+                        "lot_size": item.get("lot_size") or 1,
+                        "tick_size": _decimal(item.get("tick_size"), 6),
+                    },
+                    alias_kind="upstox_instrument_key",
+                    alias_value=key,
+                    source="upstox",
+                )
             except UnresolvedReference as exc:
                 self._identity_status(
-                    source="upstox", alias_kind="upstox_instrument_key",
-                    alias_value=key, raw_id=raw_id, reason=str(exc),
+                    source="upstox",
+                    alias_kind="upstox_instrument_key",
+                    alias_value=key,
+                    raw_id=raw_id,
+                    reason=str(exc),
                 )
                 raise
-            self._identity_status(source="upstox", alias_kind="upstox_instrument_key",
-                                  alias_value=key, raw_id=raw_id,
-                                  target_kind="listing", target_id=listing_id)
+            self._identity_status(
+                source="upstox",
+                alias_kind="upstox_instrument_key",
+                alias_value=key,
+                raw_id=raw_id,
+                target_kind="listing",
+                target_id=listing_id,
+            )
             lookup[str(item["trading_symbol"])] = listing_id
         return lookup
 
     def sync_contracts(
-        self, instruments: Sequence[Mapping[str, Any]],
-        instrument_lookup: Mapping[str, uuid.UUID], *, raw_id: uuid.UUID | None = None,
+        self,
+        instruments: Sequence[Mapping[str, Any]],
+        instrument_lookup: Mapping[str, uuid.UUID],
+        *,
+        raw_id: uuid.UUID | None = None,
         instrument_keys: set[str] | None = None,
     ) -> dict[str, uuid.UUID]:
         from factorlab.storage.clickhouse import _epoch_ms_to_date
@@ -168,20 +236,36 @@ class V2IndiaStorage(ClickHouseStorage):
                     raise UnresolvedReference(
                         f"future underlying unresolved: {item.get('underlying_symbol')}"
                     )
-                lookup[key] = self.references.upsert_future({
-                    "contract_key": key, "exchange_code": "NSE", "country_code": "IN",
-                    "expiry": _epoch_ms_to_date(item.get("expiry")),
-                    "lot_size": item.get("lot_size") or 1,
-                    "tick_size": _decimal(item.get("tick_size"), 6),
-                    "weekly": item.get("weekly", False),
-                }, underlying_listing_id=underlying, source="upstox")
+                lookup[key] = self.references.upsert_future(
+                    {
+                        "contract_key": key,
+                        "exchange_code": "NSE",
+                        "country_code": "IN",
+                        "expiry": _epoch_ms_to_date(item.get("expiry")),
+                        "lot_size": item.get("lot_size") or 1,
+                        "tick_size": _decimal(item.get("tick_size"), 6),
+                        "weekly": item.get("weekly", False),
+                    },
+                    underlying_listing_id=underlying,
+                    source="upstox",
+                )
             except UnresolvedReference as exc:
-                self._identity_status(source="upstox", alias_kind="upstox_instrument_key",
-                                      alias_value=key, raw_id=raw_id, reason=str(exc))
+                self._identity_status(
+                    source="upstox",
+                    alias_kind="upstox_instrument_key",
+                    alias_value=key,
+                    raw_id=raw_id,
+                    reason=str(exc),
+                )
                 raise
-            self._identity_status(source="upstox", alias_kind="upstox_instrument_key",
-                                  alias_value=key, raw_id=raw_id,
-                                  target_kind="contract", target_id=lookup[key])
+            self._identity_status(
+                source="upstox",
+                alias_kind="upstox_instrument_key",
+                alias_value=key,
+                raw_id=raw_id,
+                target_kind="contract",
+                target_id=lookup[key],
+            )
         return lookup
 
     def start_ingestion_run(self, **kwargs: Any) -> IngestionRunHandle:
@@ -193,35 +277,78 @@ class V2IndiaStorage(ClickHouseStorage):
         super().finish_ingestion_run(handle, **kwargs)
         self._active_run_id = None
 
-    def _write_ingestion_run(self, handle: IngestionRunHandle, *, status: str,
-                             completed_at: datetime | None = None,
-                             successful_series: int = 0, failed_series: int = 0,
-                             rows_written: int = 0, error: str | None = None) -> None:
+    def _write_ingestion_run(
+        self,
+        handle: IngestionRunHandle,
+        *,
+        status: str,
+        completed_at: datetime | None = None,
+        successful_series: int = 0,
+        failed_series: int = 0,
+        rows_written: int = 0,
+        error: str | None = None,
+    ) -> None:
         now = datetime.now(UTC)
         country = {"IND": "IN", "USA": "US"}.get(handle.market_code, handle.market_code)
-        self._insert_dicts("meta.ingestion_runs", [{
-            "run_id": handle.run_id, "country_code": country,
-            "pipeline": handle.pipeline, "source": handle.source,
-            "source_channel": handle.source, "universe_id": handle.universe,
-            "status": status, "started_at": handle.started_at,
-            "completed_at": completed_at, "requested_series": handle.requested_series,
-            "successful_series": successful_series, "failed_series": failed_series,
-            "rows_written": rows_written, "listing_ids_touched": [],
-            "error": error, "metadata_json": json.dumps(dict(handle.metadata), sort_keys=True),
-            "parent_run_id": None, "version": _version(now), "ingested_at": now,
-        }])
+        self._insert_dicts(
+            "meta.ingestion_runs",
+            [
+                {
+                    "run_id": handle.run_id,
+                    "country_code": country,
+                    "pipeline": handle.pipeline,
+                    "source": handle.source,
+                    "source_channel": handle.source,
+                    "universe_id": handle.universe,
+                    "status": status,
+                    "started_at": handle.started_at,
+                    "completed_at": completed_at,
+                    "requested_series": handle.requested_series,
+                    "successful_series": successful_series,
+                    "failed_series": failed_series,
+                    "rows_written": rows_written,
+                    "listing_ids_touched": [],
+                    "error": error,
+                    "metadata_json": json.dumps(dict(handle.metadata), sort_keys=True),
+                    "parent_run_id": None,
+                    "version": _version(now),
+                    "ingested_at": now,
+                }
+            ],
+        )
 
-    def write_candles_1min(self, candles: pd.DataFrame, *, instrument_id: uuid.UUID,
-                           symbol: str, contract_id: uuid.UUID | None = None,
-                           source: str = "upstox", raw_id: uuid.UUID | None = None,
-                           market_code: str = "IND") -> int:
-        return self.write_candles_1min_batch([{
-            "candles": candles, "instrument_id": instrument_id,
-            "contract_id": contract_id, "symbol": symbol, "raw_id": raw_id,
-        }], source=source, market_code=market_code)
+    def write_candles_1min(
+        self,
+        candles: pd.DataFrame,
+        *,
+        instrument_id: uuid.UUID,
+        symbol: str,
+        contract_id: uuid.UUID | None = None,
+        source: str = "upstox",
+        raw_id: uuid.UUID | None = None,
+        market_code: str = "IND",
+    ) -> int:
+        return self.write_candles_1min_batch(
+            [
+                {
+                    "candles": candles,
+                    "instrument_id": instrument_id,
+                    "contract_id": contract_id,
+                    "symbol": symbol,
+                    "raw_id": raw_id,
+                }
+            ],
+            source=source,
+            market_code=market_code,
+        )
 
-    def write_candles_1min_batch(self, series_batches: Sequence[Mapping[str, Any]], *,
-                                 source: str = "upstox", market_code: str = "IND") -> int:
+    def write_candles_1min_batch(
+        self,
+        series_batches: Sequence[Mapping[str, Any]],
+        *,
+        source: str = "upstox",
+        market_code: str = "IND",
+    ) -> int:
         if self._active_run_id is None:
             raise RuntimeError("start an ingestion run before writing v2 bars")
         now = datetime.now(UTC)
@@ -254,43 +381,70 @@ class V2IndiaStorage(ClickHouseStorage):
             for candle in candles.to_dict("records"):
                 bar_time = _as_utc_datetime(candle["timestamp"])
                 common = {
-                    "country_code": "IN", "resolution": "1min",
-                    "session": _session(bar_time), "bar_time": bar_time,
+                    "country_code": "IN",
+                    "resolution": "1min",
+                    "session": _session(bar_time),
+                    "bar_time": bar_time,
                     "trade_date": bar_time.astimezone(IST).date(),
-                    **{key: _decimal(candle.get(key), 6)
-                       for key in ("open", "high", "low", "close")},
+                    **{
+                        key: _decimal(candle.get(key), 6)
+                        for key in ("open", "high", "low", "close")
+                    },
                     "volume": _unsigned_count(candle.get("volume")),
-                    "oi": _unsigned_count(candle.get("oi")), "source": source,
-                    "raw_id": item.get("raw_id"), "ingest_run_id": self._active_run_id,
-                    "as_of_time": now, "ingested_at": now, "version": _version(now),
+                    "oi": _unsigned_count(candle.get("oi")),
+                    "source": source,
+                    "raw_id": item.get("raw_id"),
+                    "ingest_run_id": self._active_run_id,
+                    "as_of_time": now,
+                    "ingested_at": now,
+                    "version": _version(now),
                 }
                 if contract:
-                    futures.append({
-                        "country_code": "IN", "underlying_listing_id": listing_id,
-                        "contract_id": contract, "source_symbol": item["symbol"],
-                        **{key: value for key, value in common.items() if key != "country_code"},
-                    })
+                    futures.append(
+                        {
+                            "country_code": "IN",
+                            "underlying_listing_id": listing_id,
+                            "contract_id": contract,
+                            "source_symbol": item["symbol"],
+                            **{
+                                key: value for key, value in common.items() if key != "country_code"
+                            },
+                        }
+                    )
                 else:
-                    bars.append({
-                        "country_code": "IN", "listing_id": listing_id,
-                        "security_id": ref[0][0], "entity_id": ref[0][1],
-                        "product_type": str(ref[0][2]),
-                        **{key: value for key, value in common.items() if key != "country_code"},
-                        "turnover": None, "trades_count": None,
-                        "settlement_price": None, "source_channel": "upstox_candles",
-                        "latency_ms": None,
-                    })
+                    bars.append(
+                        {
+                            "country_code": "IN",
+                            "listing_id": listing_id,
+                            "security_id": ref[0][0],
+                            "entity_id": ref[0][1],
+                            "product_type": str(ref[0][2]),
+                            **{
+                                key: value for key, value in common.items() if key != "country_code"
+                            },
+                            "turnover": None,
+                            "trades_count": None,
+                            "settlement_price": None,
+                            "source_channel": "upstox_candles",
+                            "latency_ms": None,
+                        }
+                    )
         self._insert_dicts("market.bars", bars)
         self._insert_dicts("market.futures_contract_bars", futures)
         return len(bars) + len(futures)
 
     def latest_candle_times(
-        self, series: Sequence[Mapping[str, Any]], *, source: str = "upstox",
+        self,
+        series: Sequence[Mapping[str, Any]],
+        *,
+        source: str = "upstox",
         before: datetime | None = None,
     ) -> dict[tuple[uuid.UUID, uuid.UUID], datetime]:
         requested = {
-            (uuid.UUID(str(item["instrument_id"])),
-             uuid.UUID(str(item.get("contract_id") or _NO_CONTRACT_ID)))
+            (
+                uuid.UUID(str(item["instrument_id"])),
+                uuid.UUID(str(item.get("contract_id") or _NO_CONTRACT_ID)),
+            )
             for item in series
         }
         if not requested:
@@ -324,14 +478,20 @@ class V2IndiaStorage(ClickHouseStorage):
         return {key: value for key, value in latest.items() if key in requested}
 
     def sync_expected_india_series(
-        self, series: Sequence[Mapping[str, Any]], *, source: str = "upstox",
-        universe: str = "default", resolution: str = "1min",
+        self,
+        series: Sequence[Mapping[str, Any]],
+        *,
+        source: str = "upstox",
+        universe: str = "default",
+        resolution: str = "1min",
     ) -> int:
         now = datetime.now(UTC)
         version = _version(now)
         current = {
-            (uuid.UUID(str(item["instrument_id"])),
-             uuid.UUID(str(item.get("contract_id") or _NO_CONTRACT_ID))): item
+            (
+                uuid.UUID(str(item["instrument_id"])),
+                uuid.UUID(str(item.get("contract_id") or _NO_CONTRACT_ID)),
+            ): item
             for item in series
         }
         existing = self.client.query(
@@ -343,27 +503,49 @@ class V2IndiaStorage(ClickHouseStorage):
         ).result_rows
         records: list[dict[str, Any]] = []
         for (listing_id, contract_id), item in current.items():
-            records.append({
-                "country_code": "IN", "listing_id": listing_id,
-                "contract_id": None if contract_id == _NO_CONTRACT_ID else contract_id,
-                "legacy_instrument_id": None, "legacy_contract_id": None,
-                "source_table": None, "symbol": str(item["symbol"]),
-                "provider_symbol": None, "source": source, "universe": universe,
-                "resolution": resolution, "active": True, "source_hash": None,
-                "version": version, "ingested_at": now, "migrated_at": None,
-            })
+            records.append(
+                {
+                    "country_code": "IN",
+                    "listing_id": listing_id,
+                    "contract_id": None if contract_id == _NO_CONTRACT_ID else contract_id,
+                    "legacy_instrument_id": None,
+                    "legacy_contract_id": None,
+                    "source_table": None,
+                    "symbol": str(item["symbol"]),
+                    "provider_symbol": None,
+                    "source": source,
+                    "universe": universe,
+                    "resolution": resolution,
+                    "active": True,
+                    "source_hash": None,
+                    "version": version,
+                    "ingested_at": now,
+                    "migrated_at": None,
+                }
+            )
         for listing_id, contract_id, symbol, old_universe, old_resolution in existing:
             key = (listing_id, contract_id or _NO_CONTRACT_ID)
             if key in current:
                 continue
-            records.append({
-                "country_code": "IN", "listing_id": listing_id,
-                "contract_id": contract_id, "legacy_instrument_id": None,
-                "legacy_contract_id": None, "source_table": None,
-                "symbol": symbol, "provider_symbol": None, "source": source,
-                "universe": old_universe, "resolution": old_resolution,
-                "active": False, "source_hash": None, "version": version,
-                "ingested_at": now, "migrated_at": None,
-            })
+            records.append(
+                {
+                    "country_code": "IN",
+                    "listing_id": listing_id,
+                    "contract_id": contract_id,
+                    "legacy_instrument_id": None,
+                    "legacy_contract_id": None,
+                    "source_table": None,
+                    "symbol": symbol,
+                    "provider_symbol": None,
+                    "source": source,
+                    "universe": old_universe,
+                    "resolution": old_resolution,
+                    "active": False,
+                    "source_hash": None,
+                    "version": version,
+                    "ingested_at": now,
+                    "migrated_at": None,
+                }
+            )
         self._insert_dicts("meta.expected_series", records)
         return len(current)

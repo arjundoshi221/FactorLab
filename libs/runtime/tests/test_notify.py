@@ -90,7 +90,8 @@ class _RecordingBackend(Backend):
 def test_notify_fans_out_to_explicit_backends():
     rec = _RecordingBackend()
     results = notify(
-        "subj", "body",
+        "subj",
+        "body",
         severity="warn",
         source="src",
         dedupe_key=False,
@@ -140,10 +141,13 @@ def test_notify_env_selection_includes_jsonl_always(monkeypatch, tmp_path):
     import importlib
 
     import factorlab.core.paths as _paths
+
     importlib.reload(_paths)
     import factorlab.runtime.notify.jsonl as _jsonl
+
     importlib.reload(_jsonl)
     import factorlab.runtime.notify as _notify
+
     importlib.reload(_notify)
 
     # Send through env-driven backends

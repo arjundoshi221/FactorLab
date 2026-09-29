@@ -104,29 +104,55 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
         if not records:
             return
         columns = list(records[0])
-        self.client.insert(table, [[row[column] for column in columns] for row in records],
-                           column_names=columns)
+        self.client.insert(
+            table, [[row[column] for column in columns] for row in records], column_names=columns
+        )
 
     def _park(self, provenance: Provenance, refs: Sequence[InstrumentRef], reason: str) -> None:
         now = datetime.now(UTC)
-        self._insert("meta.unresolved_entities", [{
-            "first_seen": now, "last_seen": now, "source": provenance.source,
-            "alias_kind": ref.alias_kind or "natural_key", "alias_value": ref.label(),
-            "scope_country": ref.country_code, "scope_exchange": ref.exchange_code or None,
-            "context_json": json.dumps({
-                "raw_id": str(provenance.raw_id) if provenance.raw_id else None,
-                "source_channel": provenance.source_channel,
-                "trading_symbol": ref.trading_symbol, "isin": ref.isin,
-            }, sort_keys=True),
-            "occurrence_count": 1, "retry_count": 0, "last_retry_at": now,
-            "resolved_at": None, "resolved_target_kind": None, "resolved_target_id": None,
-            "resolved_by": None, "resolution_note": reason,
-            "version": _version(now), "ingested_at": now,
-        } for ref in dict.fromkeys(refs)])
+        self._insert(
+            "meta.unresolved_entities",
+            [
+                {
+                    "first_seen": now,
+                    "last_seen": now,
+                    "source": provenance.source,
+                    "alias_kind": ref.alias_kind or "natural_key",
+                    "alias_value": ref.label(),
+                    "scope_country": ref.country_code,
+                    "scope_exchange": ref.exchange_code or None,
+                    "context_json": json.dumps(
+                        {
+                            "raw_id": str(provenance.raw_id) if provenance.raw_id else None,
+                            "source_channel": provenance.source_channel,
+                            "trading_symbol": ref.trading_symbol,
+                            "isin": ref.isin,
+                        },
+                        sort_keys=True,
+                    ),
+                    "occurrence_count": 1,
+                    "retry_count": 0,
+                    "last_retry_at": now,
+                    "resolved_at": None,
+                    "resolved_target_kind": None,
+                    "resolved_target_id": None,
+                    "resolved_by": None,
+                    "resolution_note": reason,
+                    "version": _version(now),
+                    "ingested_at": now,
+                }
+                for ref in dict.fromkeys(refs)
+            ],
+        )
 
     # -- ref.listings ----------------------------------------------------------
-    def upsert_instruments(self, rows: Sequence[InstrumentRecord], *, provenance: Provenance,
-                           mode: ReferenceMode = "authoritative") -> WriteResult:
+    def upsert_instruments(
+        self,
+        rows: Sequence[InstrumentRecord],
+        *,
+        provenance: Provenance,
+        mode: ReferenceMode = "authoritative",
+    ) -> WriteResult:
         self._check_lineage(provenance)
         _check_mode(mode)
         resolver = IdentityResolver(self.client)
@@ -145,32 +171,48 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
                 continue
             if mode == "alias_only":
                 self.references.attach_alias(
-                    target_kind="listing", target_id=identity.listing_id,
-                    alias_kind=ref.alias_kind, alias_value=ref.alias_value,
-                    scope_country=ref.country_code, scope_exchange=ref.exchange_code or None,
-                    source=provenance.source, confidence=identity.confidence)
+                    target_kind="listing",
+                    target_id=identity.listing_id,
+                    alias_kind=ref.alias_kind,
+                    alias_value=ref.alias_value,
+                    scope_country=ref.country_code,
+                    scope_exchange=ref.exchange_code or None,
+                    source=provenance.source,
+                    confidence=identity.confidence,
+                )
                 written += 1
                 continue
-            natural = natural_listing_ids(exchange_code=ref.exchange_code,
-                                          trading_symbol=ref.trading_symbol, isin=ref.isin)
+            natural = natural_listing_ids(
+                exchange_code=ref.exchange_code, trading_symbol=ref.trading_symbol, isin=ref.isin
+            )
             if identity is not None:
-                ids = (identity.entity_id or natural[0], identity.security_id,
-                       identity.listing_id)
+                ids = (identity.entity_id or natural[0], identity.security_id, identity.listing_id)
                 confidence = identity.confidence
             else:
                 ids, confidence = natural, "exact"
             try:
-                self.references.upsert_listing({
-                    "instrument_key": ref.alias_value, "isin": ref.isin,
-                    "country_code": ref.country_code, "exchange_code": ref.exchange_code,
-                    "currency_code": row.currency, "trading_symbol": ref.trading_symbol,
-                    "name": row.name, "security_type": row.product_type,
-                    "lot_size": row.lot_size, "tick_size": _price(row.tick_size),
-                    "active": row.active,
-                    # the writer keeps the earliest of this and what it already knows
-                    "first_seen": row.first_traded,
-                }, alias_kind=ref.alias_kind, alias_value=ref.alias_value,
-                    source=provenance.source, ids=ids, confidence=confidence)
+                self.references.upsert_listing(
+                    {
+                        "instrument_key": ref.alias_value,
+                        "isin": ref.isin,
+                        "country_code": ref.country_code,
+                        "exchange_code": ref.exchange_code,
+                        "currency_code": row.currency,
+                        "trading_symbol": ref.trading_symbol,
+                        "name": row.name,
+                        "security_type": row.product_type,
+                        "lot_size": row.lot_size,
+                        "tick_size": _price(row.tick_size),
+                        "active": row.active,
+                        # the writer keeps the earliest of this and what it already knows
+                        "first_seen": row.first_traded,
+                    },
+                    alias_kind=ref.alias_kind,
+                    alias_value=ref.alias_value,
+                    source=provenance.source,
+                    ids=ids,
+                    confidence=confidence,
+                )
             except UnresolvedReference as exc:
                 parked.setdefault(str(exc), []).append(ref)
                 continue
@@ -180,8 +222,13 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
         return WriteResult(written, sum(len(refs) for refs in parked.values()), resolved)
 
     # -- ref.contracts ---------------------------------------------------------
-    def upsert_contracts(self, rows: Sequence[ContractRecord], *, provenance: Provenance,
-                         mode: ReferenceMode = "authoritative") -> WriteResult:
+    def upsert_contracts(
+        self,
+        rows: Sequence[ContractRecord],
+        *,
+        provenance: Provenance,
+        mode: ReferenceMode = "authoritative",
+    ) -> WriteResult:
         self._check_lineage(provenance)
         _check_mode(mode)
         resolver = IdentityResolver(self.client)
@@ -198,14 +245,23 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
                 parked.setdefault("underlying listing unresolved", []).append(row.ref)
                 continue
             contract = known.get(row.ref)
-            contract_id = contract.contract_id if contract else resolver.natural_future(
-                underlying_listing_id=underlying.listing_id, expiry=row.expiry)
+            contract_id = (
+                contract.contract_id
+                if contract
+                else resolver.natural_future(
+                    underlying_listing_id=underlying.listing_id, expiry=row.expiry
+                )
+            )
             if contract_id is not None:
                 resolved += 1
             elif mode == "authoritative":
                 contract_id = natural_contract_id(
-                    underlying_listing_id=underlying.listing_id, contract_type="future",
-                    expiry=row.expiry, right=None, strike=None)
+                    underlying_listing_id=underlying.listing_id,
+                    contract_type="future",
+                    expiry=row.expiry,
+                    right=None,
+                    strike=None,
+                )
             else:
                 parked.setdefault(f"no contract ({mode} mode cannot mint)", []).append(row.ref)
                 continue
@@ -213,21 +269,35 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
                 continue
             if mode == "alias_only":
                 self.references.attach_alias(
-                    target_kind="contract", target_id=contract_id,
-                    alias_kind=row.ref.alias_kind, alias_value=row.ref.alias_value,
+                    target_kind="contract",
+                    target_id=contract_id,
+                    alias_kind=row.ref.alias_kind,
+                    alias_value=row.ref.alias_value,
                     scope_country=row.ref.country_code,
                     scope_exchange=row.ref.exchange_code or None,
-                    source=provenance.source, confidence="exact" if contract else "high")
+                    source=provenance.source,
+                    confidence="exact" if contract else "high",
+                )
                 written += 1
                 continue
             try:
-                self.references.upsert_future({
-                    "contract_key": row.ref.alias_value, "exchange_code": row.ref.exchange_code,
-                    "country_code": row.ref.country_code, "expiry": row.expiry,
-                    "lot_size": row.lot_size, "tick_size": _price(row.tick_size),
-                    "multiplier": row.multiplier, "weekly": row.weekly, "active": row.active,
-                }, underlying_listing_id=underlying.listing_id, source=provenance.source,
-                    canonical_id=contract_id, alias_kind=row.ref.alias_kind)
+                self.references.upsert_future(
+                    {
+                        "contract_key": row.ref.alias_value,
+                        "exchange_code": row.ref.exchange_code,
+                        "country_code": row.ref.country_code,
+                        "expiry": row.expiry,
+                        "lot_size": row.lot_size,
+                        "tick_size": _price(row.tick_size),
+                        "multiplier": row.multiplier,
+                        "weekly": row.weekly,
+                        "active": row.active,
+                    },
+                    underlying_listing_id=underlying.listing_id,
+                    source=provenance.source,
+                    canonical_id=contract_id,
+                    alias_kind=row.ref.alias_kind,
+                )
             except UnresolvedReference as exc:
                 parked.setdefault(str(exc), []).append(row.ref)
                 continue
@@ -245,8 +315,9 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
         ).result_rows
         return {row[0]: row[1] for row in rows}
 
-    def _ensure_universe(self, universe_code: str, name: str, country: str,
-                         provenance: Provenance) -> None:
+    def _ensure_universe(
+        self, universe_code: str, name: str, country: str, provenance: Provenance
+    ) -> None:
         exists = self.client.query(
             "SELECT count() FROM ref.universes FINAL WHERE universe_id = {universe:String}",
             parameters={"universe": universe_code},
@@ -254,15 +325,29 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
         if exists:
             return
         now = datetime.now(UTC)
-        self._insert("ref.universes", [{
-            "universe_id": universe_code, "name": name or universe_code,
-            "provider": provenance.source, "rebalance_freq": "continuous",
-            "country_scope": [country], "active": True, "version": _version(now),
-            "ingested_at": now,
-        }])
+        self._insert(
+            "ref.universes",
+            [
+                {
+                    "universe_id": universe_code,
+                    "name": name or universe_code,
+                    "provider": provenance.source,
+                    "rebalance_freq": "continuous",
+                    "country_scope": [country],
+                    "active": True,
+                    "version": _version(now),
+                    "ingested_at": now,
+                }
+            ],
+        )
 
-    def write_constituents(self, rows: Sequence[ConstituentRecord], *, provenance: Provenance,
-                           mode: ReferenceMode = "authoritative") -> WriteResult:
+    def write_constituents(
+        self,
+        rows: Sequence[ConstituentRecord],
+        *,
+        provenance: Provenance,
+        mode: ReferenceMode = "authoritative",
+    ) -> WriteResult:
         """Each universe in ``rows`` is a complete snapshot as of ``provenance.as_of_time``."""
         self._check_lineage(provenance)
         _check_mode(mode)
@@ -289,34 +374,52 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
             diff = diff_snapshot(code, current, set(members), as_of=as_of)
             if not diff.unchanged:
                 sample = next(iter(members.values()))
-                self._ensure_universe(code, sample.universe_name,
-                                      sample.instrument.country_code, provenance)
-            base = {"universe_id": code, "source": provenance.source,
-                    "raw_id": provenance.raw_id, "ingested_at": now}
-            records = [{
-                **base, "listing_id": listing,
-                "weight": float(members[listing].weight) if members[listing].weight else None,
-                "effective_from": diff.effective_from, "effective_to": None,
-                "reason": "snapshot_add", "version": _version(now),
-            } for listing in diff.add] + [{
-                **base, "listing_id": listing, "weight": None,
-                "effective_from": since, "effective_to": diff.effective_to,
-                "reason": "snapshot_remove", "version": _version(now),
-            } for listing, since in diff.close]
+                self._ensure_universe(
+                    code, sample.universe_name, sample.instrument.country_code, provenance
+                )
+            base = {
+                "universe_id": code,
+                "source": provenance.source,
+                "raw_id": provenance.raw_id,
+                "ingested_at": now,
+            }
+            records = [
+                {
+                    **base,
+                    "listing_id": listing,
+                    "weight": float(members[listing].weight) if members[listing].weight else None,
+                    "effective_from": diff.effective_from,
+                    "effective_to": None,
+                    "reason": "snapshot_add",
+                    "version": _version(now),
+                }
+                for listing in diff.add
+            ] + [
+                {
+                    **base,
+                    "listing_id": listing,
+                    "weight": None,
+                    "effective_from": since,
+                    "effective_to": diff.effective_to,
+                    "reason": "snapshot_remove",
+                    "version": _version(now),
+                }
+                for listing, since in diff.close
+            ]
             self._insert("ref.universe_membership", records)
             written += len(records)
         return WriteResult(written, len(unresolved), resolved)
 
-    def universe_members(self, universe_codes: Sequence[str], *,
-                         as_of: date | None = None) -> list[UUID]:
+    def universe_members(
+        self, universe_codes: Sequence[str], *, as_of: date | None = None
+    ) -> list[UUID]:
         if not universe_codes:
             return []
         rows = self.client.query(
             "SELECT DISTINCT listing_id FROM ref.universe_membership FINAL "
             "WHERE universe_id IN {codes:Array(String)} AND effective_from <= {day:Date} "
             "AND (effective_to IS NULL OR effective_to >= {day:Date})",
-            parameters={"codes": list(universe_codes),
-                        "day": as_of or datetime.now(UTC).date()},
+            parameters={"codes": list(universe_codes), "day": as_of or datetime.now(UTC).date()},
         ).result_rows
         return sorted((row[0] for row in rows), key=str)
 
@@ -324,13 +427,21 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
     def sync_source_priorities(self, rows: Sequence[Mapping[str, Any]]) -> int:
         """Upsert one row per (dataset, country, resolution, source); rows come from bindings."""
         now = datetime.now(UTC)
-        records = [{
-            "dataset": row["dataset"], "country_code": row["country_code"],
-            "resolution": row.get("resolution") or "", "source": row["source"],
-            "priority": int(row["priority"]), "role": row["role"],
-            "active": row["role"] in ("primary", "secondary"), "synced_at": now,
-            "version": _version(now), "ingested_at": now,
-        } for row in rows]
+        records = [
+            {
+                "dataset": row["dataset"],
+                "country_code": row["country_code"],
+                "resolution": row.get("resolution") or "",
+                "source": row["source"],
+                "priority": int(row["priority"]),
+                "role": row["role"],
+                "active": row["role"] in ("primary", "secondary"),
+                "synced_at": now,
+                "version": _version(now),
+                "ingested_at": now,
+            }
+            for row in rows
+        ]
         self._insert("ref.source_priorities", records)
         return len(records)
 
@@ -360,19 +471,29 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
         return WriteResult(written, 0, written)
 
     # -- market.bars -----------------------------------------------------------
-    def _bar_columns(self, row: BarRecord | ContractBarRecord, country: str,
-                     provenance: Provenance, now: datetime) -> dict[str, Any]:
+    def _bar_columns(
+        self,
+        row: BarRecord | ContractBarRecord,
+        country: str,
+        provenance: Provenance,
+        now: datetime,
+    ) -> dict[str, Any]:
         return {
             "resolution": row.resolution,
             "session": row.session or session_for(country, row.bar_time, row.resolution),
             "bar_time": canonical_bar_time(country, row.bar_time, row.resolution),
             "trade_date": trade_date_for(country, row.bar_time, row.resolution),
-            "open": _price(row.open), "high": _price(row.high),
-            "low": _price(row.low), "close": _price(row.close),
-            "volume": row.volume, "oi": row.oi,
-            "source": provenance.source, "raw_id": provenance.raw_id,
+            "open": _price(row.open),
+            "high": _price(row.high),
+            "low": _price(row.low),
+            "close": _price(row.close),
+            "volume": row.volume,
+            "oi": row.oi,
+            "source": provenance.source,
+            "raw_id": provenance.raw_id,
             "ingest_run_id": provenance.ingest_run_id,
-            "as_of_time": provenance.as_of_time, "ingested_at": provenance.ingested_at,
+            "as_of_time": provenance.as_of_time,
+            "ingested_at": provenance.ingested_at,
             "version": _version(now),
         }
 
@@ -387,22 +508,29 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
             if identity is None:
                 unresolved.append(row.instrument)
                 continue
-            records.append({
-                "country_code": identity.country_code, "listing_id": identity.listing_id,
-                "security_id": identity.security_id, "entity_id": identity.entity_id,
-                "product_type": identity.product_type,
-                **self._bar_columns(row, identity.country_code, provenance, now),
-                "turnover": _price(row.turnover, 4), "trades_count": row.trades_count,
-                "settlement_price": _price(row.settlement_price),
-                "source_channel": provenance.source_channel, "latency_ms": None,
-            })
+            records.append(
+                {
+                    "country_code": identity.country_code,
+                    "listing_id": identity.listing_id,
+                    "security_id": identity.security_id,
+                    "entity_id": identity.entity_id,
+                    "product_type": identity.product_type,
+                    **self._bar_columns(row, identity.country_code, provenance, now),
+                    "turnover": _price(row.turnover, 4),
+                    "trades_count": row.trades_count,
+                    "settlement_price": _price(row.settlement_price),
+                    "source_channel": provenance.source_channel,
+                    "latency_ms": None,
+                }
+            )
         self._insert("market.bars", records)
         if unresolved:
             self._park(provenance, unresolved, "market.bars: listing unresolved")
         return WriteResult(len(records), len(unresolved), len(records))
 
-    def write_contract_bars(self, rows: Sequence[ContractBarRecord], *,
-                            provenance: Provenance) -> WriteResult:
+    def write_contract_bars(
+        self, rows: Sequence[ContractBarRecord], *, provenance: Provenance
+    ) -> WriteResult:
         self._check_lineage(provenance)
         identities = IdentityResolver(self.client).contracts(row.contract for row in rows)
         now = datetime.now(UTC)
@@ -413,21 +541,24 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
             if identity is None:
                 unresolved.append(row.contract)
                 continue
-            records.append({
-                "country_code": identity.country_code,
-                "underlying_listing_id": identity.underlying_listing_id,
-                "contract_id": identity.contract_id,
-                "source_symbol": row.contract.trading_symbol,
-                **self._bar_columns(row, identity.country_code, provenance, now),
-            })
+            records.append(
+                {
+                    "country_code": identity.country_code,
+                    "underlying_listing_id": identity.underlying_listing_id,
+                    "contract_id": identity.contract_id,
+                    "source_symbol": row.contract.trading_symbol,
+                    **self._bar_columns(row, identity.country_code, provenance, now),
+                }
+            )
         self._insert("market.futures_contract_bars", records)
         if unresolved:
             self._park(provenance, unresolved, "market.futures_contract_bars: contract unresolved")
         return WriteResult(len(records), len(unresolved), len(records))
 
     # -- read ports --------------------------------------------------------------
-    def aliases_for(self, listing_ids: Sequence[UUID], *,
-                    alias_kind: str) -> Mapping[UUID, InstrumentRef]:
+    def aliases_for(
+        self, listing_ids: Sequence[UUID], *, alias_kind: str
+    ) -> Mapping[UUID, InstrumentRef]:
         if not listing_ids:
             return {}
         rows = self.client.query(
@@ -443,9 +574,12 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
         best: dict[UUID, tuple[date, InstrumentRef]] = {}
         for target, value, valid_from, exchange, symbol, country, isin in rows:
             ref = InstrumentRef(
-                alias_kind=alias_kind, alias_value=_decoded_text(value),
-                exchange_code=_decoded_text(exchange), trading_symbol=_decoded_text(symbol),
-                country_code=_decoded_text(country), isin=_decoded_text(isin) if isin else None,
+                alias_kind=alias_kind,
+                alias_value=_decoded_text(value),
+                exchange_code=_decoded_text(exchange),
+                trading_symbol=_decoded_text(symbol),
+                country_code=_decoded_text(country),
+                isin=_decoded_text(isin) if isin else None,
             )
             since = valid_from or date.min
             if target not in best or since > best[target][0]:
@@ -470,13 +604,21 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
             "WHERE l.listing_id IN {ids:Array(UUID)}",
             parameters={"ids": list(listing_ids)},
         ).result_rows
-        return {row[0]: InstrumentRef("", "", _decoded_text(row[1]), _decoded_text(row[2]),
-                                      _decoded_text(row[3]),
-                                      isin=_decoded_text(row[4]) if row[4] else None)
-                for row in rows}
+        return {
+            row[0]: InstrumentRef(
+                "",
+                "",
+                _decoded_text(row[1]),
+                _decoded_text(row[2]),
+                _decoded_text(row[3]),
+                isin=_decoded_text(row[4]) if row[4] else None,
+            )
+            for row in rows
+        }
 
-    def watermarks(self, listing_ids: Sequence[UUID], *, dataset: str, source: str,
-                   resolution: str) -> Mapping[UUID, datetime]:
+    def watermarks(
+        self, listing_ids: Sequence[UUID], *, dataset: str, source: str, resolution: str
+    ) -> Mapping[UUID, datetime]:
         key = _BAR_TABLES.get(dataset)
         if key is None:
             raise ValueError(f"no watermark for dataset {dataset!r}")
@@ -500,19 +642,37 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
         ).result_rows
         if not rows:
             raise KeyError(f"raw_id {raw_id} is not in raw.archive")
-        (source, channel, transport, url, request_key, status, headers, body,
-         content_type, encoding, fetched_at, metadata) = rows[0]
+        (
+            source,
+            channel,
+            transport,
+            url,
+            request_key,
+            status,
+            headers,
+            body,
+            content_type,
+            encoding,
+            fetched_at,
+            metadata,
+        ) = rows[0]
         body = body if isinstance(body, bytes) else str(body).encode("latin-1")
         if _decoded_text(encoding) == "gzip":
             body = gzip.decompress(body)
         return ArchivedCapture(
-            raw_id=raw_id, source=_decoded_text(source), source_channel=_decoded_text(channel),
+            raw_id=raw_id,
+            source=_decoded_text(source),
+            source_channel=_decoded_text(channel),
             capture=RawCapture(
-                body=body, request_key=_decoded_text(request_key),
+                body=body,
+                request_key=_decoded_text(request_key),
                 transport=_decoded_text(transport),  # type: ignore[arg-type]
-                fetched_at=_utc(fetched_at), source_url=_decoded_text(url),
-                content_type=_decoded_text(content_type), status_code=status,
-                headers=json.loads(headers or "{}"), metadata=json.loads(metadata or "{}"),
+                fetched_at=_utc(fetched_at),
+                source_url=_decoded_text(url),
+                content_type=_decoded_text(content_type),
+                status_code=status,
+                headers=json.loads(headers or "{}"),
+                metadata=json.loads(metadata or "{}"),
             ),
         )
 

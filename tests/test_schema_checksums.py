@@ -12,8 +12,9 @@ import pytest
 from factorlab.schema.migrate import MIGRATION_DIR
 
 REPO = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("schema_checksums_tool",
-                                              REPO / "tools" / "schema_checksums.py")
+spec = importlib.util.spec_from_file_location(
+    "schema_checksums_tool", REPO / "tools" / "schema_checksums.py"
+)
 tool = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = tool
 spec.loader.exec_module(tool)
@@ -38,7 +39,9 @@ def sql(tmp_path):
 def test_an_edited_applied_migration_is_refused(sql, capsys):
     with (sql / "wave_01_schema.sql").open("a", encoding="utf-8") as handle:
         handle.write("\n-- edited\n")
-    assert any("applied migrations never change" in p for p in tool.problems(sql, sql / tool.LOCK.name))
+    assert any(
+        "applied migrations never change" in p for p in tool.problems(sql, sql / tool.LOCK.name)
+    )
     assert tool.main(["update", "wave_01_schema"], sql) == 1
     assert "add a new wave" in capsys.readouterr().err
 

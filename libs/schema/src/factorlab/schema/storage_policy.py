@@ -14,10 +14,9 @@ def main() -> None:
     configure_logging(component="schema-migrator", service="bootstrap")
     storage = ClickHouse.from_environment()
     result = storage.client.query(
-        "SELECT storage_policy FROM system.tables "
-        "WHERE database = 'raw' AND name = 'archive'"
+        "SELECT storage_policy FROM system.tables WHERE database = 'raw' AND name = 'archive'"
     )
-    if result.result_rows != [('raw_archive',)]:
+    if result.result_rows != [("raw_archive",)]:
         raise RuntimeError("raw.archive must use the raw_archive storage policy")
     log.info("raw.archive uses the raw_archive storage policy.")
 

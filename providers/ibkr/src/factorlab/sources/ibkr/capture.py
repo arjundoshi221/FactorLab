@@ -41,7 +41,12 @@ TRANSPORT = "tcp_socket"
 EXECUTION_FILTER_TIME_FMT = "%Y%m%d-%H:%M:%S"
 
 CaptureKind = Literal["portfolio", "account_values", "executions", "open_orders"]
-CAPTURE_KINDS: tuple[CaptureKind, ...] = ("portfolio", "account_values", "executions", "open_orders")
+CAPTURE_KINDS: tuple[CaptureKind, ...] = (
+    "portfolio",
+    "account_values",
+    "executions",
+    "open_orders",
+)
 
 
 def to_jsonable(value: Any) -> Any:
@@ -76,8 +81,13 @@ def _utc(value: datetime | None) -> datetime:
     return stamp.astimezone(UTC)
 
 
-def _capture(kind: CaptureKind, mode: Mode, fetched_at: datetime, data: list[Any],
-             request: Mapping[str, Any] | None = None) -> RawCapture:
+def _capture(
+    kind: CaptureKind,
+    mode: Mode,
+    fetched_at: datetime,
+    data: list[Any],
+    request: Mapping[str, Any] | None = None,
+) -> RawCapture:
     envelope = {
         "schema": f"ibkr.{kind}.v{CAPTURE_VERSION}",
         "kind": kind,
@@ -88,8 +98,12 @@ def _capture(kind: CaptureKind, mode: Mode, fetched_at: datetime, data: list[Any
     }
     body = json.dumps(envelope, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return RawCapture(
-        body=body, request_key=f"{kind}:{mode}", transport=TRANSPORT, fetched_at=fetched_at,
-        source_url=f"ibkr-gateway://{mode}/{kind}", content_type=CONTENT_TYPE,
+        body=body,
+        request_key=f"{kind}:{mode}",
+        transport=TRANSPORT,
+        fetched_at=fetched_at,
+        source_url=f"ibkr-gateway://{mode}/{kind}",
+        content_type=CONTENT_TYPE,
         metadata={"schema": envelope["schema"], "records": len(data)},
     )
 
@@ -103,12 +117,14 @@ def capture_portfolio(ib: IB, *, fetched_at: datetime | None = None) -> RawCaptu
 def capture_account_values(ib: IB, *, fetched_at: datetime | None = None) -> RawCapture:
     """``ib.accountValues()`` — every account tag/segment/currency the Gateway reports."""
     stamp = _utc(fetched_at)
-    return _capture("account_values", mode_of(ib), stamp,
-                    [to_jsonable(v) for v in ib.accountValues()])
+    return _capture(
+        "account_values", mode_of(ib), stamp, [to_jsonable(v) for v in ib.accountValues()]
+    )
 
 
-def capture_executions(ib: IB, *, since: datetime | None = None,
-                       fetched_at: datetime | None = None) -> RawCapture:
+def capture_executions(
+    ib: IB, *, since: datetime | None = None, fetched_at: datetime | None = None
+) -> RawCapture:
     """``ib.reqExecutions()`` fills; ``since`` narrows via ``ExecutionFilter(time=...)``."""
     stamp = _utc(fetched_at)
     request: dict[str, Any] = {}
@@ -121,23 +137,29 @@ def capture_executions(ib: IB, *, since: datetime | None = None,
 
         request["since"] = since.astimezone(UTC).strftime(EXECUTION_FILTER_TIME_FMT)
         fills = ib.reqExecutions(ExecutionFilter(time=request["since"]))
-    data = [{
-        "contract": to_jsonable(getattr(fill, "contract", None)),
-        "execution": to_jsonable(getattr(fill, "execution", None)),
-        "commissionReport": to_jsonable(getattr(fill, "commissionReport", None)),
-        "time": to_jsonable(getattr(fill, "time", None)),
-    } for fill in fills]
+    data = [
+        {
+            "contract": to_jsonable(getattr(fill, "contract", None)),
+            "execution": to_jsonable(getattr(fill, "execution", None)),
+            "commissionReport": to_jsonable(getattr(fill, "commissionReport", None)),
+            "time": to_jsonable(getattr(fill, "time", None)),
+        }
+        for fill in fills
+    ]
     return _capture("executions", mode_of(ib), stamp, data, request)
 
 
 def capture_open_orders(ib: IB, *, fetched_at: datetime | None = None) -> RawCapture:
     """``ib.openTrades()`` — contract, order parameters and status (observe only)."""
     stamp = _utc(fetched_at)
-    data = [{
-        "contract": to_jsonable(getattr(trade, "contract", None)),
-        "order": to_jsonable(getattr(trade, "order", None)),
-        "orderStatus": to_jsonable(getattr(trade, "orderStatus", None)),
-    } for trade in ib.openTrades()]
+    data = [
+        {
+            "contract": to_jsonable(getattr(trade, "contract", None)),
+            "order": to_jsonable(getattr(trade, "order", None)),
+            "orderStatus": to_jsonable(getattr(trade, "orderStatus", None)),
+        }
+        for trade in ib.openTrades()
+    ]
     return _capture("open_orders", mode_of(ib), stamp, data)
 
 
@@ -176,5 +198,10 @@ def decode_capture(body: bytes, *, expected_kind: CaptureKind | None = None) -> 
     except ValueError as exc:
         raise IBKRCaptureError(f"IBKR capture has invalid fetched_at: {exc}") from exc
     request = envelope.get("request")
-    return CapturedPayload(kind=kind, mode=mode, fetched_at=fetched_at,
-                           request=request if isinstance(request, dict) else {}, data=data)
+    return CapturedPayload(
+        kind=kind,
+        mode=mode,
+        fetched_at=fetched_at,
+        request=request if isinstance(request, dict) else {},
+        data=data,
+    )

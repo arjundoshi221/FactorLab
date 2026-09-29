@@ -71,14 +71,21 @@ class Registry:
         except KeyError:
             raise RegistryError(f"no source registered for {provider!r} / {dataset_id!r}") from None
 
-    def build(self, binding: Binding, *, settings: ProviderSettings | None = None,
-              configs_dir: Path | None = None) -> DatasetSource[Any, Any]:
+    def build(
+        self,
+        binding: Binding,
+        *,
+        settings: ProviderSettings | None = None,
+        configs_dir: Path | None = None,
+    ) -> DatasetSource[Any, Any]:
         """Instantiate the source for ``binding`` with its instance's settings."""
         cls = self.source_class(binding.provider, binding.dataset)
         if settings is None:
             settings = load_provider_settings(
-                binding.provider, getattr(cls, "settings_model", ProviderSettings),
-                instance=binding.instance_name, configs_dir=configs_dir,
+                binding.provider,
+                getattr(cls, "settings_model", ProviderSettings),
+                instance=binding.instance_name,
+                configs_dir=configs_dir,
             )
         return cls(settings, instance=binding.instance_name)
 

@@ -81,8 +81,12 @@ Connector = Callable[[Mode, SnapshotConfig], "IB"]
 
 
 def _default_connector(mode: Mode, config: SnapshotConfig) -> IB:
-    return connect_with_retry(mode, client_id=config.client_id, timeout=config.connect_timeout,
-                              attempts=config.connect_attempts)
+    return connect_with_retry(
+        mode,
+        client_id=config.client_id,
+        timeout=config.connect_timeout,
+        attempts=config.connect_attempts,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,9 +103,14 @@ class IBKRBrokerProvider:
     pipeline: ClassVar[str] = "ibkr_broker_snapshot"
     market_code: ClassVar[str] = "USA"
 
-    def __init__(self, storage: BrokerStorage, config: SnapshotConfig | None = None, *,
-                 connector: Connector = _default_connector,
-                 clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+    def __init__(
+        self,
+        storage: BrokerStorage,
+        config: SnapshotConfig | None = None,
+        *,
+        connector: Connector = _default_connector,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self.storage = storage
         self.config = config or SnapshotConfig()
         self._connector = connector
@@ -126,14 +135,20 @@ class IBKRBrokerProvider:
     def _datasets(self) -> tuple[_Dataset, ...]:
         lookback = self.config.executions_lookback
         return (
-            _Dataset("positions", "portfolio",
-                     lambda ib, at: capture_portfolio(ib, fetched_at=at)),
-            _Dataset("account_state", "account_values",
-                     lambda ib, at: capture_account_values(ib, fetched_at=at)),
-            _Dataset("executions", "executions",
-                     lambda ib, at: capture_executions(ib, since=at - lookback, fetched_at=at)),
-            _Dataset("open_orders", "open_orders",
-                     lambda ib, at: capture_open_orders(ib, fetched_at=at)),
+            _Dataset("positions", "portfolio", lambda ib, at: capture_portfolio(ib, fetched_at=at)),
+            _Dataset(
+                "account_state",
+                "account_values",
+                lambda ib, at: capture_account_values(ib, fetched_at=at),
+            ),
+            _Dataset(
+                "executions",
+                "executions",
+                lambda ib, at: capture_executions(ib, since=at - lookback, fetched_at=at),
+            ),
+            _Dataset(
+                "open_orders", "open_orders", lambda ib, at: capture_open_orders(ib, fetched_at=at)
+            ),
         )
 
     def _writer(self, dataset: str) -> Callable[..., int]:
@@ -153,8 +168,9 @@ class IBKRBrokerProvider:
                 raw_id = ctx.archive(capture, source_channel=channel)
                 payload = decode_capture(capture.body, expected_kind=dataset.kind)
                 rows = NORMALIZERS[dataset.kind](payload, country_code=self.config.country_code)
-                provenance = ctx.provenance(source_channel=channel, raw_id=raw_id,
-                                            as_of_time=capture.fetched_at)
+                provenance = ctx.provenance(
+                    source_channel=channel, raw_id=raw_id, as_of_time=capture.fetched_at
+                )
                 written = self._writer(dataset.name)(rows, provenance=provenance)
             except Exception as exc:  # isolate dataset failures into run units
                 log.warning("IBKR %s failed", unit, exc_info=True)

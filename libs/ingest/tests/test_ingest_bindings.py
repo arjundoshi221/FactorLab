@@ -30,8 +30,12 @@ class FakeSettings(ProviderSettings):
 class FakeBars:
     provider = "fake"
     dataset = "market.bars"
-    capabilities = Capabilities(markets=frozenset({"IND"}), resolutions=frozenset({"1min"}),
-                                alias_kind="fake_key", max_lookback=timedelta(days=30))
+    capabilities = Capabilities(
+        markets=frozenset({"IND"}),
+        resolutions=frozenset({"1min"}),
+        alias_kind="fake_key",
+        max_lookback=timedelta(days=30),
+    )
     settings_model = FakeSettings
 
     def __init__(self, settings, *, instance):
@@ -67,11 +71,11 @@ def test_bindings_file_rejects_inconsistent_config(tmp_path):
     assert ok.bindings[0].instance_name == "fake"
     assert ok.bindings[0].pipeline == "market.bars.1min:fake"
     bad_cases = [
-        _bindings({**BARS, "resolution": None}),                      # bars need a resolution
-        _bindings({**BARS, "dataset": "ref.listings"}),                # listings take none
+        _bindings({**BARS, "resolution": None}),  # bars need a resolution
+        _bindings({**BARS, "dataset": "ref.listings"}),  # listings take none
         _bindings({**BARS, "dataset": "market.nope"}),
-        _bindings(BARS, {**BARS}),                                     # duplicate instance
-        _bindings(BARS, {**BARS, "instance": "fake_b"}),               # two primaries
+        _bindings(BARS, {**BARS}),  # duplicate instance
+        _bindings(BARS, {**BARS, "instance": "fake_b"}),  # two primaries
         _bindings({**BARS, "role": "leader"}),
         _bindings({**BARS, "surprise": 1}),
     ]
@@ -81,17 +85,22 @@ def test_bindings_file_rejects_inconsistent_config(tmp_path):
 
 
 def test_enabled_orders_primary_first_and_skips_disabled():
-    file = BindingsFile.model_validate(_bindings(
-        {**BARS, "instance": "b", "role": "secondary", "priority": 5},
-        {**BARS, "instance": "c", "role": "disabled"},
-        {**BARS, "priority": 50},
-        {**BARS, "instance": "d", "role": "shadow", "priority": 1},
-    ))
+    file = BindingsFile.model_validate(
+        _bindings(
+            {**BARS, "instance": "b", "role": "secondary", "priority": 5},
+            {**BARS, "instance": "c", "role": "disabled"},
+            {**BARS, "priority": 50},
+            {**BARS, "instance": "d", "role": "shadow", "priority": 1},
+        )
+    )
     assert [b.instance_name for b in file.enabled(dataset="market.bars")] == ["fake", "d", "b"]
     shadow = Binding(**{**BARS, "role": "shadow"})
     assert (shadow.reference_mode, shadow.source_name) == ("resolve_only", "fake:shadow")
     assert Binding(**{**BARS, "role": "secondary"}).reference_mode == "alias_only"
-    assert (Binding(**BARS).reference_mode, Binding(**BARS).source_name) ==         ("authoritative", "fake")
+    assert (Binding(**BARS).reference_mode, Binding(**BARS).source_name) == (
+        "authoritative",
+        "fake",
+    )
 
 
 def test_registry_validates_and_rejects_duplicates():
@@ -127,34 +136,52 @@ def test_validate_bindings_against_capabilities(tmp_path):
     registry = Registry()
     registry.register(FakeBars)
     validate_bindings(BindingsFile.model_validate(_bindings(BARS)), registry)
-    for case in ({**BARS, "market": "USA"}, {**BARS, "resolution": "daily"},
-                 {**BARS, "provider": "ghost"}):
+    for case in (
+        {**BARS, "market": "USA"},
+        {**BARS, "resolution": "daily"},
+        {**BARS, "provider": "ghost"},
+    ):
         with pytest.raises(BindingError):
             validate_bindings(BindingsFile.model_validate(_bindings(case)), registry)
     # disabled bindings are not validated against the registry
-    validate_bindings(BindingsFile.model_validate(_bindings(
-        {**BARS, "provider": "ghost", "role": "disabled"})), registry)
+    validate_bindings(
+        BindingsFile.model_validate(_bindings({**BARS, "provider": "ghost", "role": "disabled"})),
+        registry,
+    )
 
 
 def test_provider_settings_merge_instance_overrides(tmp_path):
-    _write(tmp_path, "sources/fake.yaml", {
-        "name": "fake", "base_url": "https://api.invalid", "token_env": "FAKE_TOKEN",
-        "rate_limits": {"per_second": 50, "per_minute": 500},
-        "instances": {"fake_backup": {"token_env": "FAKE_BACKUP_TOKEN",
-                                      "rate_limits": {"per_second": 5}}},
-    })
+    _write(
+        tmp_path,
+        "sources/fake.yaml",
+        {
+            "name": "fake",
+            "base_url": "https://api.invalid",
+            "token_env": "FAKE_TOKEN",
+            "rate_limits": {"per_second": 50, "per_minute": 500},
+            "instances": {
+                "fake_backup": {"token_env": "FAKE_BACKUP_TOKEN", "rate_limits": {"per_second": 5}}
+            },
+        },
+    )
     main = load_provider_settings("fake", FakeSettings, configs_dir=tmp_path)
-    backup = load_provider_settings("fake", FakeSettings, instance="fake_backup",
-                                    configs_dir=tmp_path)
-    assert (main.instance, main.token_env, main.rate_limits["per_second"]) == \
-        ("fake", "FAKE_TOKEN", 50)
+    backup = load_provider_settings(
+        "fake", FakeSettings, instance="fake_backup", configs_dir=tmp_path
+    )
+    assert (main.instance, main.token_env, main.rate_limits["per_second"]) == (
+        "fake",
+        "FAKE_TOKEN",
+        50,
+    )
     assert (backup.instance, backup.token_env) == ("fake_backup", "FAKE_BACKUP_TOKEN")
     assert backup.rate_limits == {"per_second": 5, "per_minute": 500}
     with pytest.raises(BindingError):
         load_provider_settings("fake", FakeSettings, instance="nope", configs_dir=tmp_path)
     # a provider without a settings file gets model defaults
-    assert load_provider_settings("ghost", FakeSettings, configs_dir=tmp_path).base_url == \
-        "https://default.invalid"
+    assert (
+        load_provider_settings("ghost", FakeSettings, configs_dir=tmp_path).base_url
+        == "https://default.invalid"
+    )
 
 
 def test_registry_builds_source_with_instance_settings(tmp_path):

@@ -34,12 +34,19 @@ def test_us_daily_bar_uses_local_session_date_and_run_lineage():
     storage = V2USStorage(client)
     listing_id, run_id, raw_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     storage._active_run_id = run_id
-    frame = pd.DataFrame([{
-        "trade_date": date(2026, 9, 23), "open": 10, "high": 11,
-        "low": 9, "close": 10, "volume": 100,
-    }])
-    assert storage.write_daily(frame, instrument_id=listing_id,
-                               symbol="AAPL", raw_id=raw_id) == 1
+    frame = pd.DataFrame(
+        [
+            {
+                "trade_date": date(2026, 9, 23),
+                "open": 10,
+                "high": 11,
+                "low": 9,
+                "close": 10,
+                "volume": 100,
+            }
+        ]
+    )
+    assert storage.write_daily(frame, instrument_id=listing_id, symbol="AAPL", raw_id=raw_id) == 1
     table, records = client.inserts[0]
     assert table == "market.bars"
     assert records[0]["listing_id"] == listing_id
@@ -53,14 +60,29 @@ def test_us_daily_history_bounds_partitions_and_reuses_reference():
     client = Client()
     storage = V2USStorage(client)
     storage._active_run_id = uuid.uuid4()
-    frame = pd.DataFrame([
-        {"trade_date": date(1985, 1, 2), "open": 1, "high": 1,
-         "low": 1, "close": 1, "volume": 1},
-        {"trade_date": date(2026, 9, 23), "open": 2, "high": 2,
-         "low": 2, "close": 2, "volume": 2},
-    ])
-    assert storage.write_daily(frame, instrument_id=uuid.uuid4(),
-                               symbol="A", raw_id=uuid.uuid4()) == 2
+    frame = pd.DataFrame(
+        [
+            {
+                "trade_date": date(1985, 1, 2),
+                "open": 1,
+                "high": 1,
+                "low": 1,
+                "close": 1,
+                "volume": 1,
+            },
+            {
+                "trade_date": date(2026, 9, 23),
+                "open": 2,
+                "high": 2,
+                "low": 2,
+                "close": 2,
+                "volume": 2,
+            },
+        ]
+    )
+    assert (
+        storage.write_daily(frame, instrument_id=uuid.uuid4(), symbol="A", raw_id=uuid.uuid4()) == 2
+    )
     assert client.reference_queries == 1
     assert [len(records) for table, records in client.inserts if table == "market.bars"] == [1, 1]
 
@@ -68,18 +90,33 @@ def test_us_daily_history_bounds_partitions_and_reuses_reference():
 def test_us_reference_maps_mic_and_seeds_verified_cboe_exchange():
     client = Client()
     storage = V2USStorage(client)
-    storage.references.upsert_listing = Mock(return_value=(uuid.uuid4(), uuid.uuid4(), uuid.uuid4()))
+    storage.references.upsert_listing = Mock(
+        return_value=(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
+    )
     storage._identity_status = Mock()
 
-    storage.upsert_resolved_constituents([{
-        "symbol": "CBOE", "exchange": "BATS", "currency": "USD",
-        "name": "Cboe Global Markets",
-    }])
+    storage.upsert_resolved_constituents(
+        [
+            {
+                "symbol": "CBOE",
+                "exchange": "BATS",
+                "currency": "USD",
+                "name": "Cboe Global Markets",
+            }
+        ]
+    )
     exchange = next(records[0] for table, records in client.inserts if table == "ref.exchanges")
     assert (exchange["exchange_code"], exchange["mic"]) == ("Cboe BZX", "BATS")
     assert storage.references.upsert_listing.call_args.args[0]["exchange_code"] == "Cboe BZX"
 
-    storage.upsert_resolved_constituents([{
-        "symbol": "AAPL", "exchange": "XNAS", "currency": "USD", "name": "Apple",
-    }])
+    storage.upsert_resolved_constituents(
+        [
+            {
+                "symbol": "AAPL",
+                "exchange": "XNAS",
+                "currency": "USD",
+                "name": "Apple",
+            }
+        ]
+    )
     assert storage.references.upsert_listing.call_args.args[0]["exchange_code"] == "NASDAQ"

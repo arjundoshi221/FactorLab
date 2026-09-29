@@ -21,9 +21,16 @@ def test_snapshot_open_orders_maps_fields(mock_ib_paper, now_utc):
     trade = make_trade(
         contract=make_contract(symbol="AAPL", con_id=265598),
         order=make_order(
-            order_id=42, perm_id=555_111_222, client_id=10, account="DUE375963",
-            action="BUY", order_type="LMT", tif="DAY",
-            total_quantity=200.0, lmt_price=170.0, aux_price=None,
+            order_id=42,
+            perm_id=555_111_222,
+            client_id=10,
+            account="DUE375963",
+            action="BUY",
+            order_type="LMT",
+            tif="DAY",
+            total_quantity=200.0,
+            lmt_price=170.0,
+            aux_price=None,
         ),
         order_status=make_order_status(status="Submitted", filled=50.0, remaining=150.0),
     )

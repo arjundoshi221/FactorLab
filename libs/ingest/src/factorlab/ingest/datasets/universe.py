@@ -46,16 +46,22 @@ class ConstituentRecord:
 
 @runtime_checkable
 class UniverseSink(ProviderStorage, Protocol):
-    def write_constituents(self, rows: Sequence[ConstituentRecord], *, provenance: Provenance,
-                           mode: ReferenceMode = "authoritative") -> WriteResult:
+    def write_constituents(
+        self,
+        rows: Sequence[ConstituentRecord],
+        *,
+        provenance: Provenance,
+        mode: ReferenceMode = "authoritative",
+    ) -> WriteResult:
         """Each universe present in ``rows`` is treated as a complete snapshot."""
         ...
 
 
 @runtime_checkable
 class UniverseReader(Protocol):
-    def universe_members(self, universe_codes: Sequence[str], *,
-                         as_of: date | None = None) -> list[UUID]:
+    def universe_members(
+        self, universe_codes: Sequence[str], *, as_of: date | None = None
+    ) -> list[UUID]:
         """Listings that belong to any of ``universe_codes`` on ``as_of`` (default: today)."""
         ...
 

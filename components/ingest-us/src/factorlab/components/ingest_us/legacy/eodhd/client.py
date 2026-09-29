@@ -53,15 +53,19 @@ class EODHDClient:
             except (requests.Timeout, requests.ConnectionError):
                 if attempt == 4:
                     raise
-                self.sleep(2 ** attempt)
+                self.sleep(2**attempt)
                 continue
             self._last_request_at = time.monotonic()
             self.last_raw_id = None
             if self.storage is not None:
                 self.last_raw_id = self.storage.archive_http_response(
-                    source="eodhd", source_url=url, response_body=resp.content,
-                    status_code=resp.status_code, response_headers=dict(resp.headers),
-                    fetch_key=path, content_type=resp.headers.get("Content-Type", "application/json"),
+                    source="eodhd",
+                    source_url=url,
+                    response_body=resp.content,
+                    status_code=resp.status_code,
+                    response_headers=dict(resp.headers),
+                    fetch_key=path,
+                    content_type=resp.headers.get("Content-Type", "application/json"),
                     metadata={"params": safe_params},
                 )
             remaining = resp.headers.get("X-RateLimit-Remaining")
@@ -70,14 +74,17 @@ class EODHDClient:
             if resp.status_code == 429 or resp.status_code >= 500:
                 if attempt == 4:
                     resp.raise_for_status()
-                delay = 2 ** attempt
+                delay = 2**attempt
                 retry = resp.headers.get("Retry-After")
                 if retry:
                     try:
                         delay = max(delay, float(retry))
                     except ValueError:
                         try:
-                            delay = max(delay, (parsedate_to_datetime(retry) - datetime.now(UTC)).total_seconds())
+                            delay = max(
+                                delay,
+                                (parsedate_to_datetime(retry) - datetime.now(UTC)).total_seconds(),
+                            )
                         except (ValueError, TypeError):
                             pass
                 self.sleep(max(0, delay))
@@ -113,7 +120,9 @@ class EODHDClient:
         log.info("EODHD eod %s: %d bars", symbol, len(data))
         return data
 
-    def get_exchange_symbols(self, exchange: str = "US", *, instrument_type: str | None = None) -> list[dict]:
+    def get_exchange_symbols(
+        self, exchange: str = "US", *, instrument_type: str | None = None
+    ) -> list[dict]:
         """Fetch all symbols listed on an exchange.
 
         Returns list of dicts: Code, Name, Country, Exchange, Currency, Type, Isin.

@@ -27,8 +27,14 @@ class StatusStorage:
 
 def _summary(status, failed=()):
     units = [UnitOutcome("paper:positions", 3)] + [UnitOutcome(n, 0, "boom") for n in failed]
-    return RunSummary(run_id=uuid.uuid4(), source="ibkr", pipeline="p", status=status,
-                      rows_written=3, units=tuple(units))
+    return RunSummary(
+        run_id=uuid.uuid4(),
+        source="ibkr",
+        pipeline="p",
+        status=status,
+        rows_written=3,
+        units=tuple(units),
+    )
 
 
 def test_parse_modes_and_times(script):
@@ -77,9 +83,14 @@ def test_daemon_runs_on_start_then_at_each_slot_and_survives_crashes(script, mon
 
     storage = StatusStorage()
     code = script.run_daemon(
-        storage, None, (time(6), time(16, 30)),
-        should_stop=lambda: len(runs) >= 3, run_on_start=True,
-        clock=lambda: now[0], sleep=sleep, snapshot=snapshot,
+        storage,
+        None,
+        (time(6), time(16, 30)),
+        should_stop=lambda: len(runs) >= 3,
+        run_on_start=True,
+        clock=lambda: now[0],
+        sleep=sleep,
+        snapshot=snapshot,
     )
     assert code == 0
     assert runs[0] == datetime(2026, 9, 24, 12, 0, tzinfo=UTC)

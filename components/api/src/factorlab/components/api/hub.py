@@ -94,8 +94,12 @@ def current_build() -> HubBuild:
     """Describe the image this API runs from, as baked in by the release build."""
 
     build = build_info()
-    return HubBuild(release_id=build.release_id, commit=build.commit,
-                    component=build.component, version=build.version)
+    return HubBuild(
+        release_id=build.release_id,
+        commit=build.commit,
+        component=build.component,
+        version=build.version,
+    )
 
 
 class HubOverview(BaseModel):
@@ -132,57 +136,153 @@ NO_PRODUCER_NOTE = "The v2 schema is ready; no producer writes this table yet."
 DERIVED_NOTE = "No daily freshness rule; dates reflect stored rows."
 
 
-def _v2(database: str, category: str, first: str, last: str, ingested: str, today: str, **options: Any) -> TableProfile:
+def _v2(
+    database: str, category: str, first: str, last: str, ingested: str, today: str, **options: Any
+) -> TableProfile:
     return TableProfile(V2_DOMAINS[database], category, first, last, ingested, today, **options)
 
 
 V2_TABLE_PROFILES: dict[str, TableProfile] = {
-    "raw.archive": _v2("raw", "Raw payloads", "fetched_at", "fetched_at", "fetched_at", "fetched_at", final=False),
-    "ref.countries": _v2("ref", "Reference", "ingested_at", "ingested_at", "ingested_at", "ingested_at"),
-    "ref.exchanges": _v2("ref", "Reference", "ingested_at", "ingested_at", "ingested_at", "ingested_at"),
-    "ref.listings": _v2("ref", "Market reference", "ingested_at", "ingested_at", "ingested_at", "ingested_at"),
-    "ref.contracts": _v2("ref", "Market reference", "expiry", "expiry", "ingested_at", "ingested_at"),
-    "market.bars": _v2("market", "Equity bars", "bar_time", "bar_time", "ingested_at", "bar_time", note=MARKET_PANEL_NOTE),
+    "raw.archive": _v2(
+        "raw", "Raw payloads", "fetched_at", "fetched_at", "fetched_at", "fetched_at", final=False
+    ),
+    "ref.countries": _v2(
+        "ref", "Reference", "ingested_at", "ingested_at", "ingested_at", "ingested_at"
+    ),
+    "ref.exchanges": _v2(
+        "ref", "Reference", "ingested_at", "ingested_at", "ingested_at", "ingested_at"
+    ),
+    "ref.listings": _v2(
+        "ref", "Market reference", "ingested_at", "ingested_at", "ingested_at", "ingested_at"
+    ),
+    "ref.contracts": _v2(
+        "ref", "Market reference", "expiry", "expiry", "ingested_at", "ingested_at"
+    ),
+    "market.bars": _v2(
+        "market",
+        "Equity bars",
+        "bar_time",
+        "bar_time",
+        "ingested_at",
+        "bar_time",
+        note=MARKET_PANEL_NOTE,
+    ),
     "market.futures_contract_bars": _v2(
-        "market", "Futures contract bars", "bar_time", "bar_time", "ingested_at", "bar_time", note=MARKET_PANEL_NOTE
+        "market",
+        "Futures contract bars",
+        "bar_time",
+        "bar_time",
+        "ingested_at",
+        "bar_time",
+        note=MARKET_PANEL_NOTE,
     ),
-    "alt.political_committees": _v2("alt", "Political reference", "ingested_at", "ingested_at", "ingested_at", "ingested_at"),
+    "alt.political_committees": _v2(
+        "alt", "Political reference", "ingested_at", "ingested_at", "ingested_at", "ingested_at"
+    ),
     "alt.political_committee_memberships": _v2(
-        "alt", "Political", "effective_from", "effective_from", "ingested_at", "effective_from", status_policy="political"
-    ),
-    "alt.political_filings": _v2(
-        "alt", "Political", "filing_date", "filing_date", "ingested_at", "filing_date", status_policy="political"
-    ),
-    "alt.political_trades": _v2(
-        "alt", "Political", "transaction_date", "transaction_date", "ingested_at", "transaction_date",
+        "alt",
+        "Political",
+        "effective_from",
+        "effective_from",
+        "ingested_at",
+        "effective_from",
         status_policy="political",
     ),
-    "meta.expected_series": _v2("meta", "Collection plan", "ingested_at", "ingested_at", "ingested_at", "ingested_at"),
+    "alt.political_filings": _v2(
+        "alt",
+        "Political",
+        "filing_date",
+        "filing_date",
+        "ingested_at",
+        "filing_date",
+        status_policy="political",
+    ),
+    "alt.political_trades": _v2(
+        "alt",
+        "Political",
+        "transaction_date",
+        "transaction_date",
+        "ingested_at",
+        "transaction_date",
+        status_policy="political",
+    ),
+    "meta.expected_series": _v2(
+        "meta", "Collection plan", "ingested_at", "ingested_at", "ingested_at", "ingested_at"
+    ),
     # Decades of daily rows per listing: physical rows keep the overview inside the deploy check's timeout.
     "meta.session_coverage": _v2(
-        "meta", "Collection coverage", "trade_date", "trade_date", "ingested_at", "ingested_at", final=False
+        "meta",
+        "Collection coverage",
+        "trade_date",
+        "trade_date",
+        "ingested_at",
+        "ingested_at",
+        final=False,
     ),
-    "meta.recovery_state": _v2("meta", "History recovery", "ingested_at", "ingested_at", "ingested_at", "ingested_at"),
-    "meta.source_status": _v2("meta", "Source status", "checked_at", "checked_at", "checked_at", "checked_at"),
+    "meta.recovery_state": _v2(
+        "meta", "History recovery", "ingested_at", "ingested_at", "ingested_at", "ingested_at"
+    ),
+    "meta.source_status": _v2(
+        "meta", "Source status", "checked_at", "checked_at", "checked_at", "checked_at"
+    ),
     "meta.ingestion_runs": _v2(
-        "meta", "Pipelines", "started_at", "started_at", "ingested_at", "started_at", status_policy="ingestion"
+        "meta",
+        "Pipelines",
+        "started_at",
+        "started_at",
+        "ingested_at",
+        "started_at",
+        status_policy="ingestion",
     ),
 }
 
 # Business-time columns in order of preference for a table's coverage dates.
 DATA_TIME_COLUMNS = (
-    "bar_time", "observed_at", "exec_time", "event_time", "snapshot_time", "trade_date", "transaction_date",
-    "filing_date", "period_end", "event_date", "ex_date", "effective_date", "effective_from", "term_start",
-    "holiday_date", "valid_from", "detected_at", "fetched_at", "produced_at", "started_at", "checked_at",
-    "assigned_at", "computed_at", "as_of_time", "ingested_at", "updated_at",
+    "bar_time",
+    "observed_at",
+    "exec_time",
+    "event_time",
+    "snapshot_time",
+    "trade_date",
+    "transaction_date",
+    "filing_date",
+    "period_end",
+    "event_date",
+    "ex_date",
+    "effective_date",
+    "effective_from",
+    "term_start",
+    "holiday_date",
+    "valid_from",
+    "detected_at",
+    "fetched_at",
+    "produced_at",
+    "started_at",
+    "checked_at",
+    "assigned_at",
+    "computed_at",
+    "as_of_time",
+    "ingested_at",
+    "updated_at",
 )
 INGESTED_TIME_COLUMNS = (
-    "ingested_at", "fetched_at", "produced_at", "checked_at", "updated_at", "computed_at", "started_at",
+    "ingested_at",
+    "fetched_at",
+    "produced_at",
+    "checked_at",
+    "updated_at",
+    "computed_at",
+    "started_at",
 )
-MIGRATION_TABLES = frozenset({
-    "meta.schema_migrations", "meta.migration_runs", "meta.migration_id_crosswalk",
-    "meta.migration_reference_enrichment", "meta.migration_political_trade_enrichment",
-})
+MIGRATION_TABLES = frozenset(
+    {
+        "meta.schema_migrations",
+        "meta.migration_runs",
+        "meta.migration_id_crosswalk",
+        "meta.migration_reference_enrichment",
+        "meta.migration_political_trade_enrichment",
+    }
+)
 
 
 def _default_profile(name: str, columns: list[str]) -> TableProfile | None:
@@ -202,7 +302,9 @@ def _default_profile(name: str, columns: list[str]) -> TableProfile | None:
     else:
         category, note = domain, DERIVED_NOTE
     # Physical counts keep the refresh inexpensive on tables without a health rule.
-    return TableProfile(domain, category, data_time, data_time, ingested, ingested, note=note, final=False)
+    return TableProfile(
+        domain, category, data_time, data_time, ingested, ingested, note=note, final=False
+    )
 
 
 def _rows(result: Any) -> list[dict[str, Any]]:
@@ -270,7 +372,9 @@ class HubRepository:
                 kind="view" if is_view else "table",
                 stored_rows=int(row["stored_rows"] or 0),
                 bytes_on_disk=int(row["bytes_on_disk"] or 0),
-                today_status="not_expected" if is_view else ("not_configured" if profile is None else "unknown"),
+                today_status="not_expected"
+                if is_view
+                else ("not_configured" if profile is None else "unknown"),
                 status_reason=(
                     VIEW_NOTE
                     if is_view
@@ -279,7 +383,11 @@ class HubRepository:
                     else "Health has not been evaluated."
                 ),
             )
-            if profile is not None and table.stored_rows == 0 and profile.status_policy == "not_expected":
+            if (
+                profile is not None
+                and table.stored_rows == 0
+                and profile.status_policy == "not_expected"
+            ):
                 # Nothing to aggregate; say whether any producer is expected to fill it.
                 table.today_status, table.status_reason = (
                     ("not_expected", profile.note)
@@ -361,7 +469,12 @@ class HubRepository:
         return _rows(result)
 
     def _profile_aggregate(
-        self, table_name: str, profile: TableProfile, today_ist: date, *, market_code: str | None = None
+        self,
+        table_name: str,
+        profile: TableProfile,
+        today_ist: date,
+        *,
+        market_code: str | None = None,
     ) -> dict[str, Any]:
         timezone = profile.today_timezone
         today_expression = (
@@ -375,10 +488,13 @@ class HubRepository:
                    maxOrNull({profile.last_expression}) AS last_data_at,
                    maxOrNull({profile.ingested_expression}) AS last_ingested_at,
                    countIf({today_expression} = {{today:Date}}) AS today_rows
-            FROM {table_name}{' FINAL' if profile.final else ''}
+            FROM {table_name}{" FINAL" if profile.final else ""}
             {"WHERE country_code = {market_code:String}" if market_code else ""}
             """,
-            parameters={"today": today_ist, **({"market_code": market_code} if market_code else {})},
+            parameters={
+                "today": today_ist,
+                **({"market_code": market_code} if market_code else {}),
+            },
         )
         return _rows(result)[0]
 
@@ -421,19 +537,28 @@ class HubRepository:
         if profile.status_policy == "not_configured":
             return "not_configured", "No active producer is configured for this table yet."
         if profile.status_policy == "not_expected":
-            return "not_expected", profile.note or "This table does not have a daily row-count expectation."
+            return (
+                "not_expected",
+                profile.note or "This table does not have a daily row-count expectation.",
+            )
         if profile.status_policy == "political":
             if table.stored_rows == 0:
                 return "missing", "This dataset has never been populated."
             age = _freshness_seconds(table.last_ingested_at, now)
             if age is None or age > POLITICAL_FRESHNESS_SECONDS:
-                return "attention", "The latest ingestion is older than the 48-hour freshness window."
+                return (
+                    "attention",
+                    "The latest ingestion is older than the 48-hour freshness window.",
+                )
             return "healthy", "The dataset is within its 48-hour freshness window."
         if profile.status_policy == "ingestion":
             if table.stored_rows == 0:
                 return "missing", "No ingestion runs have been recorded."
             if latest_run_failures:
-                return "attention", f"{latest_run_failures} pipeline(s) most recently failed or were partial."
+                return (
+                    "attention",
+                    f"{latest_run_failures} pipeline(s) most recently failed or were partial.",
+                )
             return "healthy", "All recorded pipelines have a non-failing latest outcome."
         if profile.status_policy == "market_intraday":
             market_status, points_per_series = _session_state(trading_date, now)
@@ -449,9 +574,14 @@ class HubRepository:
             coverage = min(actual * 100.0 / expected, 100.0)
             freshness = _freshness_seconds(table.last_ingested_at, now)
             target = 95.0 if market_status == "open" else 99.0
-            if coverage >= target and (market_status == "closed" or (freshness or 0) <= MARKET_FRESHNESS_SECONDS):
+            if coverage >= target and (
+                market_status == "closed" or (freshness or 0) <= MARKET_FRESHNESS_SECONDS
+            ):
                 return "healthy", f"{coverage:.1f}% of expected intraday points are present."
-            return "attention", f"{coverage:.1f}% coverage; the {target:.0f}% target is not currently met."
+            return (
+                "attention",
+                f"{coverage:.1f}% coverage; the {target:.0f}% target is not currently met.",
+            )
         return "unknown", "No health rule is available."
 
     def _india_summary(
@@ -465,12 +595,21 @@ class HubRepository:
         table = next((item for item in tables if item.name == "market.bars"), None)
         if table:
             table = table.model_copy(deep=True)
-            profile = replace(V2_TABLE_PROFILES["market.bars"],
-                              today_timezone="Asia/Kolkata", status_policy="market_intraday")
+            profile = replace(
+                V2_TABLE_PROFILES["market.bars"],
+                today_timezone="Asia/Kolkata",
+                status_policy="market_intraday",
+            )
             try:
-                aggregate = self._profile_aggregate("market.bars", profile, trading_date, market_code="IN")
-                future = self._profile_aggregate("market.futures_contract_bars", profile, trading_date, market_code="IN")
-                table.today_rows = int(aggregate["today_rows"] or 0) + int(future["today_rows"] or 0)
+                aggregate = self._profile_aggregate(
+                    "market.bars", profile, trading_date, market_code="IN"
+                )
+                future = self._profile_aggregate(
+                    "market.futures_contract_bars", profile, trading_date, market_code="IN"
+                )
+                table.today_rows = int(aggregate["today_rows"] or 0) + int(
+                    future["today_rows"] or 0
+                )
                 table.last_ingested_at = max(
                     (
                         value
@@ -483,7 +622,8 @@ class HubRepository:
                     default=None,
                 )
                 table.today_status, table.status_reason = self._table_status(
-                    table, profile, now, trading_date, expected_series, 0)
+                    table, profile, now, trading_date, expected_series, 0
+                )
             except Exception:  # noqa: BLE001 - keep the overview available when a table is unavailable
                 table.today_rows = None
                 table.last_ingested_at = None
@@ -508,9 +648,7 @@ class HubRepository:
             status_reason=reason,
         )
 
-    def _political_summary(
-        self, tables: list[HubTable], now: datetime
-    ) -> HubPoliticalSummary:
+    def _political_summary(self, tables: list[HubTable], now: datetime) -> HubPoliticalSummary:
         datasets = [
             item
             for item in tables

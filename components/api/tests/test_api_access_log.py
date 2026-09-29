@@ -22,8 +22,11 @@ def test_each_request_logs_route_status_duration_and_ray_id():
     finally:
         for handler in [h for h in root.handlers if h not in before]:
             root.removeHandler(handler)
-    [line] = [json.loads(x) for x in out.getvalue().splitlines()
-              if json.loads(x)["logger"] == "factorlab.api.access"]
+    [line] = [
+        json.loads(x)
+        for x in out.getvalue().splitlines()
+        if json.loads(x)["logger"] == "factorlab.api.access"
+    ]
     assert line["status"] == 404 and line["method"] == "GET"
     assert line["route"] == "/definitely-not-a-route"
     assert line["request_id"] == "8c1f-SIN" and line["duration_ms"] >= 0

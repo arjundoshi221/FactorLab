@@ -52,23 +52,27 @@ def make_series():
 def test_recovery_resumes_inclusively_from_the_last_stored_session(monkeypatch):
     item = make_series()
     no_contract = uuid.UUID(int=0)
-    storage = FakeStorage({
-        (item.instrument_id, no_contract): datetime(2026, 8, 14, 9, 59, tzinfo=UTC)
-    })
+    storage = FakeStorage(
+        {(item.instrument_id, no_contract): datetime(2026, 8, 14, 9, 59, tzinfo=UTC)}
+    )
     requested_ranges = []
 
     def fetch(session, instrument_key, from_date, to_date, target_storage, *, limiter):
         del session, target_storage, limiter
         requested_ranges.append((instrument_key, from_date, to_date))
-        frame = pd.DataFrame([{
-            "timestamp": pd.Timestamp("2026-08-17T03:45:00Z"),
-            "open": 1,
-            "high": 1,
-            "low": 1,
-            "close": 1,
-            "volume": 1,
-            "oi": 0,
-        }])
+        frame = pd.DataFrame(
+            [
+                {
+                    "timestamp": pd.Timestamp("2026-08-17T03:45:00Z"),
+                    "open": 1,
+                    "high": 1,
+                    "low": 1,
+                    "close": 1,
+                    "volume": 1,
+                    "oi": 0,
+                }
+            ]
+        )
         return frame, "raw-id"
 
     monkeypatch.setattr(ingest, "fetch_historical_candles", fetch)
@@ -85,9 +89,7 @@ def test_recovery_resumes_inclusively_from_the_last_stored_session(monkeypatch):
 
     assert completed is True
     assert storage.latest_before == datetime(2026, 8, 17, 10, 0, tzinfo=UTC)
-    assert requested_ranges == [
-        ("NSE_EQ|INE002A01018", date(2026, 8, 14), date(2026, 8, 17))
-    ]
+    assert requested_ranges == [("NSE_EQ|INE002A01018", date(2026, 8, 14), date(2026, 8, 17))]
     assert storage.started[0]["pipeline"] == "india_historical_1min_recovery"
     assert storage.finished[0][1]["status"] == "success"
     assert storage.finished[0][1]["rows_written"] == 1
@@ -95,9 +97,9 @@ def test_recovery_resumes_inclusively_from_the_last_stored_session(monkeypatch):
 
 def test_recovery_skips_a_complete_previous_session(monkeypatch):
     item = make_series()
-    storage = FakeStorage({
-        (item.instrument_id, uuid.UUID(int=0)): datetime(2026, 8, 17, 9, 59, tzinfo=UTC)
-    })
+    storage = FakeStorage(
+        {(item.instrument_id, uuid.UUID(int=0)): datetime(2026, 8, 17, 9, 59, tzinfo=UTC)}
+    )
     monkeypatch.setattr(
         ingest,
         "fetch_historical_candles",
@@ -139,6 +141,4 @@ def test_never_seen_series_seeds_only_the_previous_session(monkeypatch):
         universe="demo",
         now=datetime(2026, 8, 18, 4, 0, tzinfo=UTC),
     )
-    assert requested_ranges == [
-        (date(2026, 8, 17), date(2026, 8, 17))
-    ]
+    assert requested_ranges == [(date(2026, 8, 17), date(2026, 8, 17))]

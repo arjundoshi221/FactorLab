@@ -33,10 +33,17 @@ def sync_once(config, storage, resolver) -> list[dict]:
     """Resolve fully, then publish only validated membership."""
     provider = config.provider
     handle = storage.start_ingestion_run(
-        pipeline="us_universe_sync", market_code="USA", source=provider,
-        universe=config.name, requested_series=len(config.indexes),
-        metadata={"provider": provider, "indexes": [
-            getattr(item, "name", getattr(item, "symbol", "")) for item in config.indexes]},
+        pipeline="us_universe_sync",
+        market_code="USA",
+        source=provider,
+        universe=config.name,
+        requested_series=len(config.indexes),
+        metadata={
+            "provider": provider,
+            "indexes": [
+                getattr(item, "name", getattr(item, "symbol", "")) for item in config.indexes
+            ],
+        },
     )
     try:
         if getattr(config, "version", None) == 1:  # compatibility for old callers only
@@ -47,32 +54,40 @@ def sync_once(config, storage, resolver) -> list[dict]:
             if previous and len(master) < int(previous * 0.8):
                 raise ValueError(f"US master rejected: {len(master)} is below 80% of {previous}")
             lookup = storage.sync_reference_master(
-                master, getattr(resolver, "last_exchange_raw_id", None))
+                master, getattr(resolver, "last_exchange_raw_id", None)
+            )
             series = [{"instrument_id": lookup[item["symbol"]], **item} for item in resolved]
             storage.sync_expected_series(
-                series, source="eodhd", universe=config.name, resolution="daily")
+                series, source="eodhd", universe=config.name, resolution="daily"
+            )
         else:
             universe = resolver.resolve(config.request())
             if isinstance(getattr(handle, "metadata", None), dict):
                 handle.metadata["provenance"] = universe.provenance
-            lookup = storage.upsert_resolved_constituents(
-                universe.constituents, source="schwab")
-            series = [{"instrument_id": lookup[item.symbol], **item.model_dump(),
-                       "provider_symbol": item.symbol}
-                      for item in universe.constituents]
+            lookup = storage.upsert_resolved_constituents(universe.constituents, source="schwab")
+            series = [
+                {
+                    "instrument_id": lookup[item.symbol],
+                    **item.model_dump(),
+                    "provider_symbol": item.symbol,
+                }
+                for item in universe.constituents
+            ]
             storage.sync_expected_series(
-                series, source=config.daily_source, universe=config.name, resolution="daily")
+                series, source=config.daily_source, universe=config.name, resolution="daily"
+            )
             storage.deactivate_expected_series(source="eodhd", resolution="daily")
         storage.finish_ingestion_run(
-            handle, status="success", successful_series=len(series), rows_written=len(series))
+            handle, status="success", successful_series=len(series), rows_written=len(series)
+        )
         safe_status(storage, "ready", f"{provider}: {len(series)} configured US stocks resolved")
         log.info("Published %d configured US stocks", len(series))
         return series
     except Exception as exc:
         detail = str(exc) if isinstance(exc, (ValueError, RuntimeError)) else type(exc).__name__
         storage.finish_ingestion_run(
-            handle, status="failed", failed_series=max(1, len(config.indexes)),
-            error=detail[:300])
+            handle, status="failed", failed_series=max(1, len(config.indexes)), error=detail[:300]
+        )
         safe_status(storage, "error", f"Universe refresh failed: {detail[:240]}")
         raise
 
@@ -82,19 +97,25 @@ def run_daemon(config, storage, resolver=None) -> int:
     next_refresh = datetime.min.replace(tzinfo=UTC)
     last_heartbeat = datetime.min.replace(tzinfo=UTC)
     last_result: tuple[str, str] = (
-        "error", f"{config.provider}: universe resolver has not completed")
+        "error",
+        f"{config.provider}: universe resolver has not completed",
+    )
     while not stop.is_set():
         now = datetime.now(UTC)
         if now >= next_refresh:
             try:
                 series = sync_once(config, storage, resolver)
                 last_result = (
-                    "ready", f"{config.provider}: {len(series)} configured US stocks resolved")
+                    "ready",
+                    f"{config.provider}: {len(series)} configured US stocks resolved",
+                )
                 next_refresh = now + timedelta(minutes=config.refresh_interval_minutes)
             except Exception as exc:
                 log.error("Universe refresh failed: %s", type(exc).__name__)
                 last_result = (
-                    "error", f"{config.provider}: universe refresh failed: {type(exc).__name__}")
+                    "error",
+                    f"{config.provider}: universe refresh failed: {type(exc).__name__}",
+                )
                 next_refresh = now + timedelta(minutes=RETRY_MINUTES)
             last_heartbeat = now
         elif (now - last_heartbeat).total_seconds() >= 60:

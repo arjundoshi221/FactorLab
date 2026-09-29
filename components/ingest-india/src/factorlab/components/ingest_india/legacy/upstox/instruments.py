@@ -16,9 +16,7 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-_URL_TEMPLATE = (
-    "https://assets.upstox.com/market-quote/instruments/exchange/{exchange}.json.gz"
-)
+_URL_TEMPLATE = "https://assets.upstox.com/market-quote/instruments/exchange/{exchange}.json.gz"
 _DEFAULT_EXCHANGES = ("NSE",)
 ResponseObserver = Callable[[str, bytes, int, Mapping[str, str], str], None]
 
@@ -57,7 +55,9 @@ def load_or_download(exchange: str, cache_dir: Path) -> list[dict]:
                 data = json.load(f)
             log.info(
                 "Using cached %s instruments (%d items, mtime=%s)",
-                exchange, len(data), mtime.date(),
+                exchange,
+                len(data),
+                mtime.date(),
             )
             return data
     return download_instruments(exchange, cache_dir)
@@ -108,7 +108,8 @@ def find_nearest_future(
 ) -> dict | None:
     """Return the nearest-expiry FUT contract for *underlying*, or ``None``."""
     candidates = [
-        i for i in instruments
+        i
+        for i in instruments
         if i.get("segment") == segment
         and i.get("instrument_type") == "FUT"
         and i.get("underlying_symbol") == underlying

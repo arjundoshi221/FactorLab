@@ -24,18 +24,20 @@ class FakeClock:
 def _limiter(max_requests=3, cooldown=15.0, window=600.0):
     clock = FakeClock()
     lim = RateLimiter(
-        window_sec=window, max_requests=max_requests,
+        window_sec=window,
+        max_requests=max_requests,
         identical_cooldown_sec=cooldown,
-        clock=clock.now, sleep=clock.sleep,
+        clock=clock.now,
+        sleep=clock.sleep,
     )
     return lim, clock
 
 
 def test_cap_forces_wait():
     lim, clock = _limiter(max_requests=2, window=100.0)
-    lim.wait_for_slot("a")   # t=0
+    lim.wait_for_slot("a")  # t=0
     clock.t = 10.0
-    lim.wait_for_slot("b")   # t=10
+    lim.wait_for_slot("b")  # t=10
     clock.t = 20.0
     # 3rd request must wait until t=0 falls out of window => 100s from t=0
     lim.wait_for_slot("c")

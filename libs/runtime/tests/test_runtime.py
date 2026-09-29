@@ -126,10 +126,14 @@ def test_acquire_lock_creates_and_clears(tmp_path):
 def test_acquire_lock_refuses_overlap(tmp_path):
     lock = tmp_path / "busy.lock"
     # Plant a fresh lock as if another process is running
-    lock.write_text(json.dumps({
-        "pid": 99999,
-        "started_at": datetime.now(UTC).isoformat(),
-    }))
+    lock.write_text(
+        json.dumps(
+            {
+                "pid": 99999,
+                "started_at": datetime.now(UTC).isoformat(),
+            }
+        )
+    )
     with pytest.raises(SystemExit) as exc_info, acquire_lock(lock, stale_seconds=3600):
         pass
     assert "another orchestrator" in str(exc_info.value)
@@ -170,12 +174,15 @@ def test_supervised_returns_main_exit_code():
 def test_supervised_converts_uncaught_to_crash():
     def boom():
         raise RuntimeError("boom")
+
     rc = supervised(boom, name="zz_test_crash")
     assert rc == int(ExitCode.CRASH)
 
 
 def test_supervised_passes_system_exit_through():
-    def quit_(): raise SystemExit(7)
+    def quit_():
+        raise SystemExit(7)
+
     with pytest.raises(SystemExit) as exc:
         supervised(quit_, name="zz_test_systemexit")
     assert exc.value.code == 7
@@ -183,9 +190,11 @@ def test_supervised_passes_system_exit_through():
 
 def test_supervised_calls_on_crash_callback():
     captured: list[BaseException] = []
-    def boom(): raise ValueError("xyz")
-    rc = supervised(boom, name="zz_test_crashcb",
-                    on_crash=captured.append)
+
+    def boom():
+        raise ValueError("xyz")
+
+    rc = supervised(boom, name="zz_test_crashcb", on_crash=captured.append)
     assert rc == int(ExitCode.CRASH)
     assert len(captured) == 1
     assert isinstance(captured[0], ValueError)

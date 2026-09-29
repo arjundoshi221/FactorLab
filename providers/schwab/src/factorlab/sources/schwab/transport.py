@@ -26,10 +26,15 @@ MARKET_DATA_PATH = "/marketdata/v1"
 
 
 class SchwabTransport:
-    def __init__(self, settings: SchwabSettings, *, session: requests.Session | None = None,
-                 limiter: SlidingWindowLimiter | None = None,
-                 clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-                 secret: Callable[[str, str], str | None] = get_secret) -> None:
+    def __init__(
+        self,
+        settings: SchwabSettings,
+        *,
+        session: requests.Session | None = None,
+        limiter: SlidingWindowLimiter | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        secret: Callable[[str, str], str | None] = get_secret,
+    ) -> None:
         self.settings = settings
         self.session = session or requests.Session()
         self.limiter = limiter or SlidingWindowLimiter(settings.rate_limits.windows())
@@ -52,19 +57,28 @@ class SchwabTransport:
             raise AuthRequired(f"{name} expired at {expiry}; reauthenticate Schwab")
         return token
 
-    def get(self, endpoint: str, params: Mapping[str, Any], *, request_key: str,
-            metadata: Mapping[str, Any] | None = None) -> RawCapture:
+    def get(
+        self,
+        endpoint: str,
+        params: Mapping[str, Any],
+        *,
+        request_key: str,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> RawCapture:
         headers = {"Accept": "application/json", "Authorization": f"Bearer {self._token()}"}
         url = f"{self.settings.api.base_url.rstrip('/')}{MARKET_DATA_PATH}{endpoint}"
         self.limiter.acquire()
         try:
-            response = self.session.get(url, params=dict(params), headers=headers,
-                                        timeout=self.settings.api.timeout)
+            response = self.session.get(
+                url, params=dict(params), headers=headers, timeout=self.settings.api.timeout
+            )
         except requests.RequestException as exc:
             raise TransientError(f"Schwab request failed: {type(exc).__name__}") from exc
         raise_for_status("Schwab", response.status_code, response.headers, request_key)
         return RawCapture(
-            body=response.content, request_key=request_key, transport="http",
+            body=response.content,
+            request_key=request_key,
+            transport="http",
             fetched_at=self._clock(),
             source_url=f"{url}?{urlencode(sorted((k, str(v)) for k, v in params.items()))}",
             content_type=response.headers.get("Content-Type", "application/json"),

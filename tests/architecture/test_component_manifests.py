@@ -14,8 +14,11 @@ spec.loader.exec_module(components)
 
 
 def test_every_component_directory_has_a_manifest():
-    missing = [d.name for d in sorted((REPO / "components").iterdir())
-               if d.is_dir() and not (d / "component.yaml").exists()]
+    missing = [
+        d.name
+        for d in sorted((REPO / "components").iterdir())
+        if d.is_dir() and not (d / "component.yaml").exists()
+    ]
     assert not missing, f"add component.yaml to: {missing}"
 
 

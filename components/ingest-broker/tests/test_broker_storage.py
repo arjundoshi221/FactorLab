@@ -53,8 +53,10 @@ class Client:
 
     def query(self, sql, parameters=None):
         if "FROM ref.identifier_aliases" in sql:
-            rows = [("265598", "listing", LISTING, "exact"),
-                    ("495512557", "contract", CONTRACT, "high")]
+            rows = [
+                ("265598", "listing", LISTING, "exact"),
+                ("495512557", "contract", CONTRACT, "high"),
+            ]
             return Result([r for r in rows if r[0] in parameters["values"]])
         if "FROM ref.listings AS l" in sql:
             return Result([(LISTING, SECURITY, ENTITY)])
@@ -79,9 +81,14 @@ def storage():
 
 
 def _provenance(storage, now_utc):
-    return Provenance(source="ibkr", source_channel="paper_gateway", raw_id=uuid.uuid4(),
-                      ingest_run_id=storage._active_run_id, as_of_time=now_utc,
-                      ingested_at=now_utc)
+    return Provenance(
+        source="ibkr",
+        source_channel="paper_gateway",
+        raw_id=uuid.uuid4(),
+        ingest_run_id=storage._active_run_id,
+        as_of_time=now_utc,
+        ingested_at=now_utc,
+    )
 
 
 def test_positions_rows_match_ddl_and_resolve_identity(storage, mock_ib_paper, now_utc):
@@ -89,13 +96,19 @@ def test_positions_rows_match_ddl_and_resolve_identity(storage, mock_ib_paper, n
         make_portfolio_item(avg_cost=150.123456789),
         make_portfolio_item(contract=make_contract(symbol="ZZZZ", con_id=1)),
     ]
-    rows = normalize_positions(decode_capture(capture_portfolio(mock_ib_paper, fetched_at=now_utc).body))
+    rows = normalize_positions(
+        decode_capture(capture_portfolio(mock_ib_paper, fetched_at=now_utc).body)
+    )
     provenance = _provenance(storage, now_utc)
 
     assert storage.write_positions(rows, provenance=provenance) == 2
     aapl, unknown = storage.client.rows("broker.positions_snapshot")
     assert set(aapl) == wave7_columns("broker.positions_snapshot")
-    assert (aapl["listing_id"], aapl["security_id"], aapl["entity_id"]) == (LISTING, SECURITY, ENTITY)
+    assert (aapl["listing_id"], aapl["security_id"], aapl["entity_id"]) == (
+        LISTING,
+        SECURITY,
+        ENTITY,
+    )
     assert aapl["resolution_confidence"] == "exact"
     assert aapl["avg_cost"] == Decimal("150.123457")  # quantized to Decimal(20,6)
     assert aapl["raw_id"] == provenance.raw_id
@@ -110,10 +123,12 @@ def test_positions_rows_match_ddl_and_resolve_identity(storage, mock_ib_paper, n
 
 def test_account_state_maps_canonical_metrics(storage, mock_ib_paper, now_utc):
     mock_ib_paper.accountValues.return_value = [
-        make_account_value(), make_account_value(tag="Cushion", value="0.5"),
+        make_account_value(),
+        make_account_value(tag="Cushion", value="0.5"),
     ]
-    rows = normalize_account_state(decode_capture(
-        capture_account_values(mock_ib_paper, fetched_at=now_utc).body))
+    rows = normalize_account_state(
+        decode_capture(capture_account_values(mock_ib_paper, fetched_at=now_utc).body)
+    )
     storage.write_account_state(rows, provenance=_provenance(storage, now_utc))
     nav, cushion = storage.client.rows("broker.account_state_snapshot")
     assert set(nav) == wave7_columns("broker.account_state_snapshot")
@@ -128,8 +143,9 @@ def test_executions_map_execution_method_and_contract_identity(storage, mock_ib_
     unmapped = make_fill()
     unmapped.execution.clientId = 77
     mock_ib_paper.reqExecutions.return_value = [make_fill(contract=es), manual, unmapped]
-    rows = normalize_executions(decode_capture(
-        capture_executions(mock_ib_paper, fetched_at=now_utc).body))
+    rows = normalize_executions(
+        decode_capture(capture_executions(mock_ib_paper, fetched_at=now_utc).body)
+    )
     storage.write_executions(rows, provenance=_provenance(storage, now_utc))
     future, manual_row, unmapped_row = storage.client.rows("broker.executions")
     assert set(future) == wave7_columns("broker.executions")
@@ -143,8 +159,9 @@ def test_executions_map_execution_method_and_contract_identity(storage, mock_ib_
 
 def test_open_orders_rows_match_ddl(storage, mock_ib_paper, now_utc):
     mock_ib_paper.openTrades.return_value = [make_trade(order=make_order(client_id=10))]
-    rows = normalize_open_orders(decode_capture(
-        capture_open_orders(mock_ib_paper, fetched_at=now_utc).body))
+    rows = normalize_open_orders(
+        decode_capture(capture_open_orders(mock_ib_paper, fetched_at=now_utc).body)
+    )
     storage.write_open_orders(rows, provenance=_provenance(storage, now_utc))
     [row] = storage.client.rows("broker.open_orders_snapshot")
     assert set(row) == wave7_columns("broker.open_orders_snapshot")
@@ -153,9 +170,17 @@ def test_open_orders_rows_match_ddl(storage, mock_ib_paper, now_utc):
 
 def test_writes_require_the_active_run(storage, mock_ib_paper, now_utc):
     mock_ib_paper.portfolio.return_value = [make_portfolio_item()]
-    rows = normalize_positions(decode_capture(capture_portfolio(mock_ib_paper, fetched_at=now_utc).body))
-    stale = Provenance(source="ibkr", source_channel="paper_gateway", raw_id=None,
-                       ingest_run_id=uuid.uuid4(), as_of_time=now_utc, ingested_at=now_utc)
+    rows = normalize_positions(
+        decode_capture(capture_portfolio(mock_ib_paper, fetched_at=now_utc).body)
+    )
+    stale = Provenance(
+        source="ibkr",
+        source_channel="paper_gateway",
+        raw_id=None,
+        ingest_run_id=uuid.uuid4(),
+        as_of_time=now_utc,
+        ingested_at=now_utc,
+    )
     with pytest.raises(RuntimeError, match="active ingestion run"):
         storage.write_positions(rows, provenance=stale)
 
@@ -169,7 +194,9 @@ def test_empty_writes_touch_nothing(storage, now_utc):
 
 def test_versions_are_monotonic(storage, mock_ib_paper, now_utc):
     mock_ib_paper.portfolio.return_value = [make_portfolio_item(), make_portfolio_item()]
-    rows = normalize_positions(decode_capture(capture_portfolio(mock_ib_paper, fetched_at=now_utc).body))
+    rows = normalize_positions(
+        decode_capture(capture_portfolio(mock_ib_paper, fetched_at=now_utc).body)
+    )
     storage.write_positions(rows, provenance=_provenance(storage, now_utc))
     versions = [r["version"] for r in storage.client.rows("broker.positions_snapshot")]
     assert versions == sorted(set(versions))

@@ -25,16 +25,31 @@ def logs(tmp_path):
     (root / "ingest-us").mkdir(parents=True)
     now = datetime.now(UTC)
     lines = [
-        {"ts": (now - timedelta(minutes=30)).isoformat(), "level": "INFO",
-         "component": "ingest-us", "service": "ingest-us", "logger": "factorlab.us",
-         "msg": "run started", "run_id": "r-1", "pipeline": "us_live"},
-        {"ts": (now - timedelta(minutes=20)).isoformat(), "level": "ERROR",
-         "component": "ingest-us", "service": "ingest-us", "logger": "factorlab.us",
-         "msg": "schwab 429 after 4 tries", "run_id": "r-1", "authorization": "Bearer x",
-         "exc": "Traceback (most recent call last):\nHTTPError: 429 Too Many Requests"},
+        {
+            "ts": (now - timedelta(minutes=30)).isoformat(),
+            "level": "INFO",
+            "component": "ingest-us",
+            "service": "ingest-us",
+            "logger": "factorlab.us",
+            "msg": "run started",
+            "run_id": "r-1",
+            "pipeline": "us_live",
+        },
+        {
+            "ts": (now - timedelta(minutes=20)).isoformat(),
+            "level": "ERROR",
+            "component": "ingest-us",
+            "service": "ingest-us",
+            "logger": "factorlab.us",
+            "msg": "schwab 429 after 4 tries",
+            "run_id": "r-1",
+            "authorization": "Bearer x",
+            "exc": "Traceback (most recent call last):\nHTTPError: 429 Too Many Requests",
+        },
     ]
     (root / "ingest-us" / "ingest-us.jsonl").write_text(
-        "\n".join(json.dumps(line) for line in lines) + "\n", encoding="utf-8")
+        "\n".join(json.dumps(line) for line in lines) + "\n", encoding="utf-8"
+    )
     return root
 
 
@@ -82,8 +97,10 @@ def test_local_usage_errors_are_reported(logs, capsys):
 
 
 def test_the_ssh_command_keeps_host_key_checking_and_quotes_arguments():
-    command = client.ssh_command({"host": "vps", "port": "22", "user": "factorlab-logs",
-                                  "key": "/k"}, ["tail", "--component", "api", "--grep", "a b;c"])
+    command = client.ssh_command(
+        {"host": "vps", "port": "22", "user": "factorlab-logs", "key": "/k"},
+        ["tail", "--component", "api", "--grep", "a b;c"],
+    )
     assert "StrictHostKeyChecking=yes" in command and "BatchMode=yes" in command
     assert "ClearAllForwardings=yes" in command and "RequestTTY=no" in command
     assert command[-2] == "factorlab-logs@vps"
@@ -91,8 +108,9 @@ def test_the_ssh_command_keeps_host_key_checking_and_quotes_arguments():
 
 
 def test_remote_errors_are_short_and_redacted(monkeypatch):
-    monkeypatch.setattr(client, "settings", lambda: {"host": "h", "port": "22",
-                                                     "user": "u", "key": ""})
+    monkeypatch.setattr(
+        client, "settings", lambda: {"host": "h", "port": "22", "user": "u", "key": ""}
+    )
 
     def fake(*args, **kwargs):
         return subprocess.CompletedProcess(args, 2, b"", b"error: invalid --run-id token=abc")

@@ -31,8 +31,7 @@ class WebhookBackend(Backend):
         pin = os.environ.get("FACTORLAB_NOTIFY_PIN", "").strip()
         if not pin:
             log.warning(
-                "[notify:webhook] FACTORLAB_NOTIFY_PIN not set -- daemon will "
-                "reject the request"
+                "[notify:webhook] FACTORLAB_NOTIFY_PIN not set -- daemon will reject the request"
             )
         headers = {"Content-Type": "application/json"}
         if pin:

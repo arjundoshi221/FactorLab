@@ -27,9 +27,27 @@ class HubQueryClient:
             return result(
                 ["name", "engine", "stored_rows", "bytes_on_disk", "columns"],
                 ("market.bars", "ReplacingMergeTree", 10_000, 500_000, ["bar_time", "ingested_at"]),
-                ("market.futures_contract_bars", "ReplacingMergeTree", 0, 0, ["bar_time", "ingested_at"]),
-                ("alt.political_trades", "ReplacingMergeTree", 244, 80_000, ["transaction_date", "ingested_at"]),
-                ("meta.ingestion_runs", "ReplacingMergeTree", 300, 15_000, ["started_at", "ingested_at"]),
+                (
+                    "market.futures_contract_bars",
+                    "ReplacingMergeTree",
+                    0,
+                    0,
+                    ["bar_time", "ingested_at"],
+                ),
+                (
+                    "alt.political_trades",
+                    "ReplacingMergeTree",
+                    244,
+                    80_000,
+                    ["transaction_date", "ingested_at"],
+                ),
+                (
+                    "meta.ingestion_runs",
+                    "ReplacingMergeTree",
+                    300,
+                    15_000,
+                    ["started_at", "ingested_at"],
+                ),
                 ("future_table", "MergeTree", 4, 100, ["payload"]),
             )
         if "FROM meta.expected_series FINAL" in query:
@@ -94,8 +112,20 @@ def test_overview_profiles_every_v2_table_from_its_columns(monkeypatch):
             return result(
                 ["name", "engine", "stored_rows", "bytes_on_disk", "columns"],
                 ("market.bars", "ReplacingMergeTree", 10_000, 500_000, ["bar_time", "ingested_at"]),
-                ("meta.session_coverage", "ReplacingMergeTree", 50, 900, ["trade_date", "ingested_at"]),
-                ("ref.identifier_aliases", "ReplacingMergeTree", 7, 300, ["valid_from", "ingested_at"]),
+                (
+                    "meta.session_coverage",
+                    "ReplacingMergeTree",
+                    50,
+                    900,
+                    ["trade_date", "ingested_at"],
+                ),
+                (
+                    "ref.identifier_aliases",
+                    "ReplacingMergeTree",
+                    7,
+                    300,
+                    ["valid_from", "ingested_at"],
+                ),
                 ("meta.expected_series_canonical", "ReplacingMergeTree", 9, 400, ["ingested_at"]),
                 ("broker.executions", "ReplacingMergeTree", 0, 0, ["exec_time", "ingested_at"]),
                 ("research.bars", "View", 0, 0, ["bar_time"]),
@@ -172,9 +202,9 @@ def test_overview_service_caches_until_ttl_expires():
 
         def get_overview(self):
             self.calls += 1
-            return HubRepository(HubQueryClient(datetime(2026, 8, 20, 5, 30, tzinfo=UTC))).get_overview(
-                now=datetime(2026, 8, 20, 5, 30, tzinfo=UTC)
-            )
+            return HubRepository(
+                HubQueryClient(datetime(2026, 8, 20, 5, 30, tzinfo=UTC))
+            ).get_overview(now=datetime(2026, 8, 20, 5, 30, tzinfo=UTC))
 
     ticks = iter([0.0, 0.0, 10.0, 60.0, 60.0])
     repository = Repository()

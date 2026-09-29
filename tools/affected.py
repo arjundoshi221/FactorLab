@@ -44,8 +44,8 @@ class Unit:
 
     name: str
     kind: Literal["python", "static", "platform", "worker"]
-    root: str                      # repository-relative directory
-    package: str | None = None     # Python distribution name
+    root: str  # repository-relative directory
+    package: str | None = None  # Python distribution name
     paths: tuple[str, ...] = field(default=())  # closure path prefixes (directories end in /)
 
     @property
@@ -56,8 +56,11 @@ class Unit:
 def members() -> dict[str, str]:
     """Workspace distribution name -> repository-relative member directory."""
     found = {}
-    for pattern in ("libs/*/pyproject.toml", "providers/*/pyproject.toml",
-                    "components/*/pyproject.toml"):
+    for pattern in (
+        "libs/*/pyproject.toml",
+        "providers/*/pyproject.toml",
+        "components/*/pyproject.toml",
+    ):
         for path in sorted(REPO.glob(pattern)):
             project = tomllib.loads(path.read_text(encoding="utf-8"))["project"]
             found[project["name"]] = path.parent.relative_to(REPO).as_posix()
@@ -81,8 +84,11 @@ def workspace_closure(package: str) -> list[str]:
         seen.append(name)
         pyproject = REPO / directories[name] / "pyproject.toml"
         project = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]
-        pending += [dep for dep in map(_requirement_name, project.get("dependencies", []))
-                    if dep in directories]
+        pending += [
+            dep
+            for dep in map(_requirement_name, project.get("dependencies", []))
+            if dep in directories
+        ]
     return sorted(seen)
 
 
@@ -116,11 +122,13 @@ def unit(name: str) -> Unit:
 
 def ships(unit_: Unit, path: str) -> bool:
     """Whether a changed repository path is part of what ``unit_`` releases."""
-    return (any(path.startswith(prefix) for prefix in unit_.paths)
-            and not any(marker in f"/{path}" for marker in NOT_SHIPPED))
+    return any(path.startswith(prefix) for prefix in unit_.paths) and not any(
+        marker in f"/{path}" for marker in NOT_SHIPPED
+    )
 
 
 # ── uv.lock: third-party versions per package ────────────────────────────────
+
 
 def lock_packages(text: str) -> dict[str, dict]:
     return {p["name"]: p for p in tomllib.loads(text).get("package", [])} if text else {}
@@ -147,23 +155,35 @@ def lock_changes(unit_: Unit, base: str, head: str | None = None) -> list[str]:
     if unit_.kind != "python":
         return []
     old = lock_packages(_git_show(base, "uv.lock"))
-    new = lock_packages(_git_show(head, "uv.lock") if head else
-                        (REPO / "uv.lock").read_text(encoding="utf-8"))
+    new = lock_packages(
+        _git_show(head, "uv.lock") if head else (REPO / "uv.lock").read_text(encoding="utf-8")
+    )
     before, after = third_party(old, unit_.package), third_party(new, unit_.package)
-    return [f"{name} {before.get(name, '(new)')} -> {after.get(name, '(removed)')}"
-            for name in sorted(set(before) | set(after)) if before.get(name) != after.get(name)]
+    return [
+        f"{name} {before.get(name, '(new)')} -> {after.get(name, '(removed)')}"
+        for name in sorted(set(before) | set(after))
+        if before.get(name) != after.get(name)
+    ]
 
 
 # ── git ──────────────────────────────────────────────────────────────────────
 
+
 def _git(*args: str) -> str:
-    return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True,
-                          encoding="utf-8", check=True).stdout
+    return subprocess.run(
+        ["git", *args], cwd=REPO, capture_output=True, text=True, encoding="utf-8", check=True
+    ).stdout
 
 
 def _git_show(ref: str, path: str) -> str:
-    result = subprocess.run(["git", "show", f"{ref}:{path}"], cwd=REPO, capture_output=True,
-                            text=True, encoding="utf-8", check=False)
+    result = subprocess.run(
+        ["git", "show", f"{ref}:{path}"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
     return result.stdout if result.returncode == 0 else ""
 
 

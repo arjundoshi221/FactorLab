@@ -253,7 +253,9 @@ class PoliticalObservabilityRepository:
             ("alt_political_house_filings", _FILINGS),
             ("alt_political_trades", _TRADES),
         ):
-            sql = sql.replace(f"{old} AS filings FINAL", projection.format(final="FINAL") + " AS filings")
+            sql = sql.replace(
+                f"{old} AS filings FINAL", projection.format(final="FINAL") + " AS filings"
+            )
             sql = sql.replace(f"{old} FINAL", projection.format(final="FINAL"))
             sql = sql.replace(old, projection.format(final=""))
         sql = sql.replace("alt_political_legislators FINAL", _LEGISLATORS)

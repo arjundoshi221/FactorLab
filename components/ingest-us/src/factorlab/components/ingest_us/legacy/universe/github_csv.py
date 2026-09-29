@@ -39,8 +39,10 @@ class GithubCsvUniverseResolver(UniverseResolver):
         raw_id = None
         if self.storage is not None:
             raw_id = self.storage.archive_http_response(
-                source="github_csv", source_url=response.url,
-                response_body=response.content, status_code=response.status_code,
+                source="github_csv",
+                source_url=response.url,
+                response_body=response.content,
+                status_code=response.status_code,
                 content_type=response.headers.get("Content-Type", "text/csv"),
                 metadata={"index": name},
             )
@@ -49,9 +51,7 @@ class GithubCsvUniverseResolver(UniverseResolver):
         try:
             reader = csv.DictReader(io.StringIO(response.content.decode("utf-8-sig")))
             if not reader.fieldnames or mapping.symbol_column not in reader.fieldnames:
-                raise ValueError(
-                    f"GitHub CSV for {name} has no {mapping.symbol_column!r} column"
-                )
+                raise ValueError(f"GitHub CSV for {name} has no {mapping.symbol_column!r} column")
             symbols = []
             for row in reader:
                 value = row.get(mapping.symbol_column)
@@ -63,6 +63,7 @@ class GithubCsvUniverseResolver(UniverseResolver):
         if not symbols:
             raise ValueError(f"GitHub CSV for {name} returned no constituents")
         self._provenance.setdefault("indexes", {})[name] = {
-            "url": response.url, "raw_id": str(raw_id) if raw_id else None,
+            "url": response.url,
+            "raw_id": str(raw_id) if raw_id else None,
         }
         return symbols

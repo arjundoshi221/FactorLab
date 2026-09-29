@@ -35,13 +35,27 @@ def config() -> dict[str, str]:
     def get(name: str) -> str:
         return (os.environ.get(name) or values.get(name) or "").strip()
 
-    result = {name: get(name) for name in (
-        "CLICKHOUSE_SSH_HOST", "CLICKHOUSE_SSH_USER", "CLICKHOUSE_SSH_PORT",
-        "CLICKHOUSE_SSH_KEY_PATH", "CLICKHOUSE_HOST", "CLICKHOUSE_PORT",
-        "CLICKHOUSE_USERNAME", "CLICKHOUSE_PASSWORD", "CLICKHOUSE_DATABASE",
-    )}
-    required = ("CLICKHOUSE_SSH_HOST", "CLICKHOUSE_SSH_USER", "CLICKHOUSE_USERNAME",
-                "CLICKHOUSE_PASSWORD", "CLICKHOUSE_DATABASE")
+    result = {
+        name: get(name)
+        for name in (
+            "CLICKHOUSE_SSH_HOST",
+            "CLICKHOUSE_SSH_USER",
+            "CLICKHOUSE_SSH_PORT",
+            "CLICKHOUSE_SSH_KEY_PATH",
+            "CLICKHOUSE_HOST",
+            "CLICKHOUSE_PORT",
+            "CLICKHOUSE_USERNAME",
+            "CLICKHOUSE_PASSWORD",
+            "CLICKHOUSE_DATABASE",
+        )
+    }
+    required = (
+        "CLICKHOUSE_SSH_HOST",
+        "CLICKHOUSE_SSH_USER",
+        "CLICKHOUSE_USERNAME",
+        "CLICKHOUSE_PASSWORD",
+        "CLICKHOUSE_DATABASE",
+    )
     missing = [name for name in required if not result[name]]
     if missing:
         raise ReaderError(f"Missing configuration: {', '.join(missing)}")
@@ -108,11 +122,33 @@ def validate_sql(sql: str) -> str:
         sql = sql.rstrip()[:-1].rstrip()
     if ";" in visible or not re.match(r"^(SELECT|WITH)\b", visible, re.IGNORECASE):
         raise ReaderError("Only one SELECT or WITH query is allowed")
-    if re.match(r"^WITH\b", visible, re.IGNORECASE) and not re.search(r"\bSELECT\b", visible, re.IGNORECASE):
+    if re.match(r"^WITH\b", visible, re.IGNORECASE) and not re.search(
+        r"\bSELECT\b", visible, re.IGNORECASE
+    ):
         raise ReaderError("WITH query must contain SELECT")
-    forbidden = ("INSERT", "UPDATE", "DELETE", "ALTER", "DROP", "CREATE", "TRUNCATE",
-                 "OPTIMIZE", "SYSTEM", "GRANT", "REVOKE", "ATTACH", "DETACH", "RENAME",
-                 "SET", "SETTINGS", "FORMAT", "INTO", "OUTFILE", "KILL", "EXPLAIN")
+    forbidden = (
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "ALTER",
+        "DROP",
+        "CREATE",
+        "TRUNCATE",
+        "OPTIMIZE",
+        "SYSTEM",
+        "GRANT",
+        "REVOKE",
+        "ATTACH",
+        "DETACH",
+        "RENAME",
+        "SET",
+        "SETTINGS",
+        "FORMAT",
+        "INTO",
+        "OUTFILE",
+        "KILL",
+        "EXPLAIN",
+    )
     if re.search(r"\b(?:" + "|".join(forbidden) + r")\b", visible, re.IGNORECASE):
         raise ReaderError("Query contains a disallowed SQL keyword")
     return sql
@@ -123,18 +159,34 @@ def ssh_tunnel(settings: dict[str, str]):
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         local_port = probe.getsockname()[1]
-    command = ["ssh", "-N", "-T", "-o", "BatchMode=yes", "-o",
-               "PreferredAuthentications=publickey", "-o", "StrictHostKeyChecking=yes",
-               "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=10",
-               "-p", settings["CLICKHOUSE_SSH_PORT"]]
+    command = [
+        "ssh",
+        "-N",
+        "-T",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "PreferredAuthentications=publickey",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "-o",
+        "ExitOnForwardFailure=yes",
+        "-o",
+        "ConnectTimeout=10",
+        "-p",
+        settings["CLICKHOUSE_SSH_PORT"],
+    ]
     if settings["CLICKHOUSE_SSH_KEY_PATH"]:
         command += ["-i", settings["CLICKHOUSE_SSH_KEY_PATH"], "-o", "IdentitiesOnly=yes"]
-    command += ["-L", (f"127.0.0.1:{local_port}:{settings['CLICKHOUSE_HOST']}:"
-                       f"{settings['CLICKHOUSE_PORT']}"),
-                f"{settings['CLICKHOUSE_SSH_USER']}@{settings['CLICKHOUSE_SSH_HOST']}"]
+    command += [
+        "-L",
+        (f"127.0.0.1:{local_port}:{settings['CLICKHOUSE_HOST']}:{settings['CLICKHOUSE_PORT']}"),
+        f"{settings['CLICKHOUSE_SSH_USER']}@{settings['CLICKHOUSE_SSH_HOST']}",
+    ]
     try:
-        process = subprocess.Popen(command, stdin=subprocess.DEVNULL,
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        process = subprocess.Popen(
+            command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
     except OSError as exc:
         raise ReaderError("Could not start SSH") from exc
     try:
@@ -161,16 +213,22 @@ def ssh_tunnel(settings: dict[str, str]):
 
 
 def query(sql: str, settings: dict[str, str], local_port: int) -> dict:
-    parameters = urllib.parse.urlencode({
-        "readonly": "1", "max_execution_time": "30", "max_result_rows": str(MAX_ROWS),
-        "result_overflow_mode": "break", "max_result_bytes": "49152",
-        "default_format": "JSONCompact",
-    })
+    parameters = urllib.parse.urlencode(
+        {
+            "readonly": "1",
+            "max_execution_time": "30",
+            "max_result_rows": str(MAX_ROWS),
+            "result_overflow_mode": "break",
+            "max_result_bytes": "49152",
+            "default_format": "JSONCompact",
+        }
+    )
     auth = base64.b64encode(
         f"{settings['CLICKHOUSE_USERNAME']}:{settings['CLICKHOUSE_PASSWORD']}".encode()
     ).decode("ascii")
     request = urllib.request.Request(
-        f"http://127.0.0.1:{local_port}/?{parameters}", data=sql.encode("utf-8"),
+        f"http://127.0.0.1:{local_port}/?{parameters}",
+        data=sql.encode("utf-8"),
         headers={"Authorization": f"Basic {auth}", "Content-Type": "text/plain; charset=utf-8"},
         method="POST",
     )
@@ -199,8 +257,7 @@ def format_result(result: dict) -> str:
         raise ReaderError("ClickHouse result header exceeds output limit")
     shown = 0
     for row in rows:
-        line = " | ".join(str(value).replace("\n", "\\n").replace("\r", "\\r")
-                          for value in row)
+        line = " | ".join(str(value).replace("\n", "\\n").replace("\r", "\\r") for value in row)
         size = len(line.encode("utf-8")) + 1
         if used + size > MAX_OUTPUT_BYTES:
             break

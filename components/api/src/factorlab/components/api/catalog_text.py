@@ -42,7 +42,11 @@ def table_text(name: str) -> TableText:
     manual = curated.get("tables", {}).get(name, {})
     columns = {**design.get("columns", {}), **manual.get("columns", {})}
     design_notes = design.get("description")
-    summary = manual.get("summary") or design_notes or "No description has been written for this table yet."
+    summary = (
+        manual.get("summary")
+        or design_notes
+        or "No description has been written for this table yet."
+    )
     return TableText(
         title=manual.get("title") or _humanize(name),
         summary=summary,

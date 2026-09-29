@@ -101,7 +101,7 @@ def main() -> int:
     print(
         "\nFix: import the helper and route through it, e.g."
         "\n  from factorlab.core.paths import raw_dir"
-        "\n  CACHE_DIR = raw_dir(\"eodhd\")",
+        '\n  CACHE_DIR = raw_dir("eodhd")',
         file=sys.stderr,
     )
     return 1

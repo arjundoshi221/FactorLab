@@ -54,10 +54,17 @@ VERSION = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-rc\.\d+)?$")
 DIGEST = r"@sha256:[0-9a-f]{64}"
 FORBIDDEN_KEYS = ("privileged", "network_mode", "pid", "ipc", "cap_add", "container_name")
 # Host paths a component may bind-mount; everything else in a fragment is refused.
-ALLOWED_HOST_PREFIXES = ("/var/log/factorlab/", "/var/lib/factorlab/app-data",
-                         "/var/lib/factorlab/docker-images", "/etc/factorlab/")
-PROFILE_FLAGS = {"FACTORLAB_IBKR_ENABLED": "ibkr", "FACTORLAB_IBKR_VPS_GATEWAYS": "ibkr-gateway",
-                 "FACTORLAB_WEB_ENABLED": "web"}
+ALLOWED_HOST_PREFIXES = (
+    "/var/log/factorlab/",
+    "/var/lib/factorlab/app-data",
+    "/var/lib/factorlab/docker-images",
+    "/etc/factorlab/",
+)
+PROFILE_FLAGS = {
+    "FACTORLAB_IBKR_ENABLED": "ibkr",
+    "FACTORLAB_IBKR_VPS_GATEWAYS": "ibkr-gateway",
+    "FACTORLAB_WEB_ENABLED": "web",
+}
 
 
 class DeployError(RuntimeError):
@@ -92,10 +99,14 @@ def release_lock(path: Path, timeout: float = 1200) -> Iterator[None]:
 
 @dataclass
 class Host:
-    root: Path = field(default_factory=lambda: Path(os.getenv("FACTORLAB_HOST_ROOT",
-                                                              "/opt/factorlab")))
-    lock_path: Path = field(default_factory=lambda: Path(os.getenv(
-        "FACTORLAB_RELEASE_LOCK", "/var/lock/factorlab-release.lock")))
+    root: Path = field(
+        default_factory=lambda: Path(os.getenv("FACTORLAB_HOST_ROOT", "/opt/factorlab"))
+    )
+    lock_path: Path = field(
+        default_factory=lambda: Path(
+            os.getenv("FACTORLAB_RELEASE_LOCK", "/var/lock/factorlab-release.lock")
+        )
+    )
     run: Runner = _run
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
@@ -125,8 +136,10 @@ class Host:
     def docker(self, *args: str, check: bool = True) -> subprocess.CompletedProcess:
         result = self.run(["docker", *args])
         if check and result.returncode:
-            raise DeployError(f"docker {' '.join(args[:3])} failed: "
-                              f"{(result.stderr or result.stdout).strip()[:500]}")
+            raise DeployError(
+                f"docker {' '.join(args[:3])} failed: "
+                f"{(result.stderr or result.stdout).strip()[:500]}"
+            )
         return result
 
     def profiles(self) -> list[str]:
@@ -145,21 +158,34 @@ class Host:
             files += ["-f", str(fragments[name])]
         return files
 
-    def compose_args(self, *args: str, override: dict[str, Path] | None = None,
-                     images: Path | None = None) -> list[str]:
+    def compose_args(
+        self, *args: str, override: dict[str, Path] | None = None, images: Path | None = None
+    ) -> list[str]:
         """``docker compose`` arguments for the live model (base, fragments, pins, profiles)."""
         env_files = ["--env-file", str(self.platform / "production.env")]
         pins = images or self.images_env
         if pins.exists():
             env_files += ["--env-file", str(pins)]
-        return ["compose", "--project-name", "factorlab", "--project-directory",
-                str(self.platform), *env_files, *self.compose_files(override),
-                *self.profiles(), *args]
+        return [
+            "compose",
+            "--project-name",
+            "factorlab",
+            "--project-directory",
+            str(self.platform),
+            *env_files,
+            *self.compose_files(override),
+            *self.profiles(),
+            *args,
+        ]
 
-    def compose(self, *args: str, override: dict[str, Path] | None = None,
-                images: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
-        return self.docker(*self.compose_args(*args, override=override, images=images),
-                           check=check)
+    def compose(
+        self,
+        *args: str,
+        override: dict[str, Path] | None = None,
+        images: Path | None = None,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess:
+        return self.docker(*self.compose_args(*args, override=override, images=images), check=check)
 
     def container(self, service: str) -> str | None:
         out = self.compose("ps", "-q", service).stdout.strip()
@@ -195,9 +221,11 @@ def write_atomic(path: Path, text: str, mode: int = 0o644) -> None:
 
 
 def set_pin(path: Path, variable: str, image: str | None) -> None:
-    lines = [line for line in (path.read_text(encoding="utf-8").splitlines()
-                               if path.exists() else [])
-             if not line.startswith(f"{variable}=")]
+    lines = [
+        line
+        for line in (path.read_text(encoding="utf-8").splitlines() if path.exists() else [])
+        if not line.startswith(f"{variable}=")
+    ]
     if image:
         lines.append(f"{variable}={image}")
     write_atomic(path, "".join(f"{line}\n" for line in sorted(lines)))
@@ -259,8 +287,9 @@ def load_release(component: str, version: str, image: str, staged: Path) -> Rele
         raise DeployError("bundle must contain component.json and compose.yaml")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("name") != component or manifest.get("version") != version:
-        raise DeployError(f"bundle is {manifest.get('name')} {manifest.get('version')}, "
-                          f"not {component} {version}")
+        raise DeployError(
+            f"bundle is {manifest.get('name')} {manifest.get('version')}, not {component} {version}"
+        )
     return Release(component, version, image, manifest, fragment)
 
 
@@ -302,11 +331,13 @@ class Outcome:
     error: str = ""
 
     def lines(self) -> list[str]:
-        return [f"FACTORLAB_RESULT_COMPONENT={self.component}",
-                f"FACTORLAB_RESULT_VERSION={self.version}",
-                f"FACTORLAB_RESULT_PREVIOUS_VERSION={self.previous}",
-                f"FACTORLAB_RESULT_VERIFICATION={self.verification}",
-                f"FACTORLAB_RESULT_ROLLBACK={self.rollback}"]
+        return [
+            f"FACTORLAB_RESULT_COMPONENT={self.component}",
+            f"FACTORLAB_RESULT_VERSION={self.version}",
+            f"FACTORLAB_RESULT_PREVIOUS_VERSION={self.previous}",
+            f"FACTORLAB_RESULT_VERIFICATION={self.verification}",
+            f"FACTORLAB_RESULT_ROLLBACK={self.rollback}",
+        ]
 
 
 class Deployer:
@@ -332,19 +363,28 @@ class Deployer:
             if self.host.images_env.exists():
                 shutil.copy(self.host.images_env, pins)
             set_pin(pins, release.image_var, release.image)
-            model = json.loads(self.host.compose(
-                "config", "--format", "json", override={release.component: release.fragment},
-                images=pins).stdout)
+            model = json.loads(
+                self.host.compose(
+                    "config",
+                    "--format",
+                    "json",
+                    override={release.component: release.fragment},
+                    images=pins,
+                ).stdout
+            )
         lint_model(model, release)
         self.host.docker("pull", "--quiet", release.image)
-        labels = self.host.docker("image", "inspect", "--format", "{{json .Config.Labels}}",
-                                  release.image).stdout
+        labels = self.host.docker(
+            "image", "inspect", "--format", "{{json .Config.Labels}}", release.image
+        ).stdout
         labels = json.loads(labels or "{}") or {}
         if labels.get("io.factorlab.component") != release.component:
             raise DeployError("image label io.factorlab.component does not match")
         if labels.get("org.opencontainers.image.version") != release.version:
-            raise DeployError(f"image version label {labels.get('org.opencontainers.image.version')}"
-                              f" != {release.version}")
+            raise DeployError(
+                f"image version label {labels.get('org.opencontainers.image.version')}"
+                f" != {release.version}"
+            )
 
     def enabled(self, services: list[dict]) -> list[dict]:
         active = set(self.host.compose("config", "--services").stdout.split())
@@ -359,9 +399,12 @@ class Deployer:
         for spec in release.services:
             for volume in model.get("services", {}).get(spec["name"], {}).get("volumes", []):
                 source = Path(str(volume.get("source", "")))
-                if (volume.get("type") == "bind" and not volume.get("read_only")
-                        and str(source).startswith(("/var/log/factorlab/", "/var/lib/factorlab/"))
-                        and source.is_dir()):
+                if (
+                    volume.get("type") == "bind"
+                    and not volume.get("read_only")
+                    and str(source).startswith(("/var/log/factorlab/", "/var/lib/factorlab/"))
+                    and source.is_dir()
+                ):
                     is_log_dir = str(source).startswith("/var/log/factorlab/")
                     self.host.chown(source, uid, 10002 if is_log_dir else uid)
                     if is_log_dir:
@@ -407,8 +450,9 @@ class Deployer:
             self.host.sleep(self.host.stabilize_seconds)
         for spec in daemons:
             state = self.host.inspect(self.host.container(spec["name"]) or "")
-            if (state["State"]["Status"] != "running"
-                    or state.get("RestartCount", 0) != restarts.get(spec["name"], 0)):
+            if state["State"]["Status"] != "running" or state.get(
+                "RestartCount", 0
+            ) != restarts.get(spec["name"], 0):
                 raise DeployError(f"{spec['name']} did not stay up")
 
     # public operations
@@ -426,8 +470,10 @@ class Deployer:
             release = load_release(component, version, image, staged)
             record = self.host.releases(component) / version
             if (record / "result").exists():
-                raise DeployError(f"{component} {version} was already deployed; "
-                                  "use rollback --to to redeploy a recorded version")
+                raise DeployError(
+                    f"{component} {version} was already deployed; "
+                    "use rollback --to to redeploy a recorded version"
+                )
             outcome.previous = self.current_version(component) or "none"
             self.preflight(release)
 
@@ -436,14 +482,31 @@ class Deployer:
             shutil.copytree(staged, record / "bundle", dirs_exist_ok=True)
             previous_pin = read_env(self.host.images_env).get(release.image_var, "")
             live = self.host.components / component
-            write_atomic(record / "previous.json", json.dumps({
-                "version": outcome.previous, "image": previous_pin,
-                "manifest": self.installed_manifest(component)}, indent=1))
+            write_atomic(
+                record / "previous.json",
+                json.dumps(
+                    {
+                        "version": outcome.previous,
+                        "image": previous_pin,
+                        "manifest": self.installed_manifest(component),
+                    },
+                    indent=1,
+                ),
+            )
             if (live / "compose.yaml").exists():
                 shutil.copy(live / "compose.yaml", record / "previous-compose.yaml")
-            write_atomic(record / "release.json", json.dumps({
-                "component": component, "version": version, "image": image,
-                "started_at": _now()}, indent=1))
+            write_atomic(
+                record / "release.json",
+                json.dumps(
+                    {
+                        "component": component,
+                        "version": version,
+                        "image": image,
+                        "started_at": _now(),
+                    },
+                    indent=1,
+                ),
+            )
 
             try:
                 self._activate(release, staged)
@@ -484,9 +547,11 @@ class Deployer:
         if rollback_class == "forward-only":
             return "failed-forward-only"
         old_contract = ((previous.get("manifest") or {}).get("platform") or {}).get(
-            "data_contract", release.manifest["platform"].get("data_contract"))
+            "data_contract", release.manifest["platform"].get("data_contract")
+        )
         if rollback_class == "writer" and old_contract != release.manifest["platform"].get(
-                "data_contract"):
+            "data_contract"
+        ):
             for spec in self.enabled(release.services):
                 self.host.compose("stop", spec["name"], check=False)
             return "fix-forward-required"
@@ -558,8 +623,11 @@ class Deployer:
         with self.host.lock(self.host.lock_path), tempfile.TemporaryDirectory() as work:
             staged = Path(work)
             extract_bundle(bundle, staged)
-            for required in ("deploy/compose.base.yml", "deploy/host/factorlab_deploy.py",
-                             "deploy/scripts/prepare-host.sh"):
+            for required in (
+                "deploy/compose.base.yml",
+                "deploy/host/factorlab_deploy.py",
+                "deploy/scripts/prepare-host.sh",
+            ):
                 if not (staged / required).is_file():
                     raise DeployError(f"platform bundle is missing {required}")
             record = releases / version
@@ -567,8 +635,11 @@ class Deployer:
                 raise DeployError(f"platform {version} was already deployed")
             outcome.previous = self.current_version("platform") or "none"
             record.mkdir(parents=True, exist_ok=True)
-            live, fresh, old = (self.host.platform, self.host.root / ".deploy-new",
-                                self.host.root / ".deploy-old")
+            live, fresh, old = (
+                self.host.platform,
+                self.host.root / ".deploy-new",
+                self.host.root / ".deploy-old",
+            )
             shutil.rmtree(fresh, ignore_errors=True)
             shutil.copytree(staged / "deploy", fresh)
             for keep in ("production.env",):
@@ -601,8 +672,10 @@ class Deployer:
             drifted = self.drift()
             write_atomic(record / "drift", "".join(f"{name}\n" for name in drifted))
             if drifted:
-                self.log("services that differ from the model (recreated on their next release "
-                         f"or maintenance window): {', '.join(drifted)}")
+                self.log(
+                    "services that differ from the model (recreated on their next release "
+                    f"or maintenance window): {', '.join(drifted)}"
+                )
             outcome.verification = "succeeded"
             write_atomic(record / "result", "succeeded\n")
             write_atomic(releases / "current", version + "\n")
@@ -640,8 +713,10 @@ class Deployer:
         for path in sorted(self.host.components.glob("*/component.json")):
             manifest = json.loads(path.read_text("utf-8"))
             image = pins.get(manifest["platform"]["image_var"], "-")
-            rows.append(f"{manifest['name']:18} {self.current_version(manifest['name']) or 'seeded':10}"
-                        f" {image[-19:]}")
+            rows.append(
+                f"{manifest['name']:18} {self.current_version(manifest['name']) or 'seeded':10}"
+                f" {image[-19:]}"
+            )
         return rows
 
 
@@ -651,7 +726,9 @@ def _now() -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="factorlab_deploy.py", description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(
+        prog="factorlab_deploy.py", description=__doc__.split("\n\n")[0]
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     deploy = commands.add_parser("deploy")
     deploy.add_argument("component")

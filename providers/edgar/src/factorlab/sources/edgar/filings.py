@@ -26,15 +26,17 @@ log = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class FilingRef:
     """One row from an EDGAR index file."""
+
     form: str
     cik: int
     company: str
     filed_at: date
-    accession: str        # dashed form: 0001193125-24-123456
+    accession: str  # dashed form: 0001193125-24-123456
     primary_doc_path: str  # e.g. edgar/data/320193/000032019324000123/aapl-20240928.htm
 
 
 # ── URL builders ────────────────────────────────────────────────────────
+
 
 def filing_base_url(cik: int | str, accession: str) -> str:
     """Base URL for a filing's document folder."""
@@ -63,6 +65,7 @@ def company_rss_url(cik: int | str, form: str = "", count: int = 40) -> str:
 
 
 # ── index fetchers ──────────────────────────────────────────────────────
+
 
 def _quarter(d: date) -> int:
     return (d.month - 1) // 3 + 1
@@ -97,9 +100,7 @@ def get_daily_filings(
     if isinstance(day, str):
         day = datetime.strptime(day, "%Y-%m-%d").date()  # noqa: DTZ007 - a calendar date
     yyyymmdd = day.strftime("%Y%m%d")
-    path = (
-        f"/Archives/edgar/daily-index/{day.year}/QTR{_quarter(day)}/form.{yyyymmdd}.idx"
-    )
+    path = f"/Archives/edgar/daily-index/{day.year}/QTR{_quarter(day)}/form.{yyyymmdd}.idx"
     try:
         resp = client.get_www(path)
     except Exception as exc:  # noqa: BLE001 — 404 on non-trading days is expected
@@ -130,17 +131,15 @@ def parse_idx(text: str, *, forms: Iterable[str] | None = None) -> list[FilingRe
 
     lines = list(io.StringIO(text))
     # Locate the divider and infer field order from the preceding header block.
-    divider_idx = next(
-        (i for i, ln in enumerate(lines) if _DIVIDER_RE.match(ln)), -1
-    )
+    divider_idx = next((i for i, ln in enumerate(lines) if _DIVIDER_RE.match(ln)), -1)
     if divider_idx < 0:
         log.warning("Could not locate divider in .idx (%d chars)", len(text))
         return rows
 
-    header_block = " ".join(lines[max(0, divider_idx - 3): divider_idx]).upper()
+    header_block = " ".join(lines[max(0, divider_idx - 3) : divider_idx]).upper()
     cik_first = header_block.find("CIK") < header_block.find("FORM TYPE")
 
-    for raw in lines[divider_idx + 1:]:
+    for raw in lines[divider_idx + 1 :]:
         line = raw.rstrip("\n")
         if not line.strip():
             continue

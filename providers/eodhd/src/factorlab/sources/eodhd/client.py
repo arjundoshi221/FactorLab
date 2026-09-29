@@ -25,18 +25,29 @@ _QUOTA = frozenset({402})
 
 
 class EodhdClient:
-    def __init__(self, settings: EodhdSettings, *, session: requests.Session | None = None,
-                 limiter: SlidingWindowLimiter | None = None,
-                 clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-                 secret: Callable[[str, str], str | None] = get_secret) -> None:
+    def __init__(
+        self,
+        settings: EodhdSettings,
+        *,
+        session: requests.Session | None = None,
+        limiter: SlidingWindowLimiter | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        secret: Callable[[str, str], str | None] = get_secret,
+    ) -> None:
         self.settings = settings
         self.session = session or requests.Session()
         self.limiter = limiter or SlidingWindowLimiter(settings.rate_limits.windows())
         self._clock = clock
         self._secret = secret
 
-    def get(self, path: str, params: Mapping[str, Any] | None = None, *, request_key: str,
-            metadata: Mapping[str, Any] | None = None) -> RawCapture:
+    def get(
+        self,
+        path: str,
+        params: Mapping[str, Any] | None = None,
+        *,
+        request_key: str,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> RawCapture:
         key = (self._secret(self.settings.api.key_env, "") or "").strip()
         if not key:
             raise AuthRequired(f"{self.settings.api.key_env} is missing or empty")
@@ -44,15 +55,22 @@ class EodhdClient:
         url = f"{self.settings.api.base_url.rstrip('/')}{path}"
         self.limiter.acquire()
         try:
-            response = self.session.get(url, params={**safe, self.settings.api.key_param: key},
-                                        timeout=self.settings.api.timeout)
+            response = self.session.get(
+                url,
+                params={**safe, self.settings.api.key_param: key},
+                timeout=self.settings.api.timeout,
+            )
         except requests.RequestException as exc:
             raise TransientError(f"EODHD request failed: {type(exc).__name__}") from exc
-        raise_for_status("EODHD", response.status_code, response.headers, request_key,
-                         quota_statuses=_QUOTA)
+        raise_for_status(
+            "EODHD", response.status_code, response.headers, request_key, quota_statuses=_QUOTA
+        )
         return RawCapture(
-            body=response.content, request_key=request_key, transport="http",
-            fetched_at=self._clock(), source_url=f"{url}?{urlencode(sorted(safe.items()))}",
+            body=response.content,
+            request_key=request_key,
+            transport="http",
+            fetched_at=self._clock(),
+            source_url=f"{url}?{urlencode(sorted(safe.items()))}",
             content_type=response.headers.get("Content-Type", "application/json"),
             status_code=response.status_code,
             headers={k: v for k, v in response.headers.items() if k.lower() != "set-cookie"},

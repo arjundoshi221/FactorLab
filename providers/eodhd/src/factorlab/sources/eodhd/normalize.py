@@ -67,18 +67,29 @@ def _decimal(value: Any) -> Decimal | None:
 
 
 def ref_to_metadata(ref: InstrumentRef) -> dict[str, Any]:
-    return {"alias_value": ref.alias_value, "exchange_code": ref.exchange_code,
-            "trading_symbol": ref.trading_symbol, "isin": ref.isin}
+    return {
+        "alias_value": ref.alias_value,
+        "exchange_code": ref.exchange_code,
+        "trading_symbol": ref.trading_symbol,
+        "isin": ref.isin,
+    }
 
 
 def ref_from_metadata(item: Mapping[str, Any]) -> InstrumentRef:
-    return InstrumentRef(ALIAS_KIND, str(item["alias_value"]), str(item.get("exchange_code", "")),
-                         str(item.get("trading_symbol", "")), COUNTRY, isin=item.get("isin"))
+    return InstrumentRef(
+        ALIAS_KIND,
+        str(item["alias_value"]),
+        str(item.get("exchange_code", "")),
+        str(item.get("trading_symbol", "")),
+        COUNTRY,
+        isin=item.get("isin"),
+    )
 
 
 # -- ref.listings ------------------------------------------------------------------
-def normalize_listings(capture: RawCapture, *, venues: Mapping[str, str],
-                       listing_types: Mapping[str, str]) -> list[InstrumentRecord]:
+def normalize_listings(
+    capture: RawCapture, *, venues: Mapping[str, str], listing_types: Mapping[str, str]
+) -> list[InstrumentRecord]:
     data = _json(capture)
     if not isinstance(data, list):
         raise NormalizationError("exchange symbol list is not a JSON array")
@@ -95,9 +106,17 @@ def normalize_listings(capture: RawCapture, *, venues: Mapping[str, str],
         if str(item.get("Currency") or "").upper() != "USD":
             continue
         record = InstrumentRecord(
-            ref=InstrumentRef(ALIAS_KIND, eodhd_symbol(item["Code"]), exchange, symbol, COUNTRY,
-                              isin=_isin(item.get("Isin") or item.get("ISIN"))),
-            name=str(item.get("Name") or symbol).strip(), product_type=product, currency="USD",
+            ref=InstrumentRef(
+                ALIAS_KIND,
+                eodhd_symbol(item["Code"]),
+                exchange,
+                symbol,
+                COUNTRY,
+                isin=_isin(item.get("Isin") or item.get("ISIN")),
+            ),
+            name=str(item.get("Name") or symbol).strip(),
+            product_type=product,
+            currency="USD",
         )
         previous = candidates.get(symbol)
         if previous is not None and previous != record:
@@ -129,8 +148,16 @@ def _bar(ref: InstrumentRef, item: Mapping[str, Any], fetched_at: datetime) -> B
         log.warning("dropping inconsistent EODHD bar %s %s", ref.alias_value, day)
         return None
     volume = _decimal(item.get("volume"))
-    return BarRecord(ref, "daily", datetime.combine(day, time(0), tzinfo=NY), o, h, low, c,
-                     volume=int(volume) if volume is not None and volume >= 0 else None)
+    return BarRecord(
+        ref,
+        "daily",
+        datetime.combine(day, time(0), tzinfo=NY),
+        o,
+        h,
+        low,
+        c,
+        volume=int(volume) if volume is not None and volume >= 0 else None,
+    )
 
 
 def _sorted_unique(bars: Iterable[BarRecord | None]) -> list[BarRecord]:
@@ -150,14 +177,17 @@ def normalize_eod(capture: RawCapture) -> list[BarRecord]:
     data = _json(capture)
     if not isinstance(data, list):
         raise NormalizationError(f"{capture.request_key}: eod response is not an array")
-    return _sorted_unique(_bar(ref, item, capture.fetched_at)
-                          for item in data if isinstance(item, Mapping))
+    return _sorted_unique(
+        _bar(ref, item, capture.fetched_at) for item in data if isinstance(item, Mapping)
+    )
 
 
 def normalize_bulk(capture: RawCapture) -> list[BarRecord]:
     """``/eod-bulk-last-day/US`` for one date, filtered to the requested instruments."""
-    wanted = {item["alias_value"]: ref_from_metadata(item)
-              for item in capture.metadata.get("instruments") or []}
+    wanted = {
+        item["alias_value"]: ref_from_metadata(item)
+        for item in capture.metadata.get("instruments") or []
+    }
     data = _json(capture)
     if not isinstance(data, list):
         raise NormalizationError(f"{capture.request_key}: bulk response is not an array")
@@ -190,12 +220,15 @@ def normalize_components(capture: RawCapture) -> list[ConstituentRecord]:
         if symbol is None:
             raise NormalizationError(f"{code}: unusable symbol {item['Code']!r}")
         members[symbol] = ConstituentRecord(
-            code, InstrumentRef(ALIAS_KIND, eodhd_symbol(item["Code"]), "", symbol, COUNTRY),
-            universe_name=str(meta.get("name") or ""))
+            code,
+            InstrumentRef(ALIAS_KIND, eodhd_symbol(item["Code"]), "", symbol, COUNTRY),
+            universe_name=str(meta.get("name") or ""),
+        )
     minimum = int(meta["minimum_constituents"])
     if len(members) < minimum:
         raise NormalizationError(
-            f"{code}: {len(members)} constituents is below the minimum of {minimum}")
+            f"{code}: {len(members)} constituents is below the minimum of {minimum}"
+        )
     return [members[symbol] for symbol in sorted(members)]
 
 

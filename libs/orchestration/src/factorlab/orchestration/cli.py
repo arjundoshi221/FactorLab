@@ -79,12 +79,18 @@ def _load(args: argparse.Namespace) -> BindingsFile:
 
 
 def _select(bindings: BindingsFile, args: argparse.Namespace) -> list[Binding]:
-    chosen = [b for b in bindings.enabled(dataset=args.dataset, market=args.market,
-                                          resolution=args.resolution)
-              if args.instance is None or b.instance_name == args.instance]
+    chosen = [
+        b
+        for b in bindings.enabled(
+            dataset=args.dataset, market=args.market, resolution=args.resolution
+        )
+        if args.instance is None or b.instance_name == args.instance
+    ]
     if not chosen:
-        raise SystemExit(f"no enabled binding for {args.dataset} {args.market} "
-                         f"{args.resolution or ''} {args.instance or ''}".strip())
+        raise SystemExit(
+            f"no enabled binding for {args.dataset} {args.market} "
+            f"{args.resolution or ''} {args.instance or ''}".strip()
+        )
     return chosen
 
 
@@ -100,12 +106,14 @@ def _parse_instrument(text: str, alias_kind: str, market: str) -> InstrumentRef:
     alias, _, rest = text.partition(",")
     symbol, _, isin = rest.partition(",")
     exchange = {"IND": "NSE"}.get(market, "")  # US refs resolve by alias; no default venue
-    return InstrumentRef(alias_kind, alias, exchange, symbol or alias, _COUNTRY[market],
-                         isin=isin or None)
+    return InstrumentRef(
+        alias_kind, alias, exchange, symbol or alias, _COUNTRY[market], isin=isin or None
+    )
 
 
-def _request(binding: Binding, source: Any, sink: Any, args: argparse.Namespace
-             ) -> tuple[Any, tuple[str, ...]]:
+def _request(
+    binding: Binding, source: Any, sink: Any, args: argparse.Namespace
+) -> tuple[Any, tuple[str, ...]]:
     spec = dataset(binding.dataset)
     if spec.request_type is FilingsRequest:
         filings = sink.recent_filings(chamber=args.chamber, limit=args.recent_filings)
@@ -126,37 +134,62 @@ def _request(binding: Binding, source: Any, sink: Any, args: argparse.Namespace
         listings = [uuid.UUID(x) for x in args.listing]
         request = reference_request(binding, listings, reference=sink if listings else None)
         if args.symbol:
-            params = {**request.params, "symbols": [*request.params.get("symbols", ()),
-                                                    *args.symbol]}
-            request = type(request)(market=request.market, params=params,
-                                    instruments=request.instruments)
+            params = {
+                **request.params,
+                "symbols": [*request.params.get("symbols", ()), *args.symbol],
+            }
+            request = type(request)(
+                market=request.market, params=params, instruments=request.instruments
+            )
         return request, ()
     now = datetime.now(UTC)
     lookback = timedelta(minutes=args.lookback_minutes)
     if args.instrument:
-        refs = [_parse_instrument(t, source.capabilities.alias_kind, binding.market)
-                for t in args.instrument]
-        return BarRequest(binding.market, binding.resolution or "",
-                          tuple(SeriesWindow(r, now - lookback, now) for r in refs),
-                          params=dict(binding.params)), ()
+        refs = [
+            _parse_instrument(t, source.capabilities.alias_kind, binding.market)
+            for t in args.instrument
+        ]
+        return BarRequest(
+            binding.market,
+            binding.resolution or "",
+            tuple(SeriesWindow(r, now - lookback, now) for r in refs),
+            params=dict(binding.params),
+        ), ()
     listings = [uuid.UUID(x) for x in args.listing]
     if args.universe:
         listings += sink.universe_members(args.universe)
     for exchange in args.exchange:
         listings += sink.active_listings(exchange)
     if not listings:
-        raise SystemExit("bar datasets need --universe <code>, --exchange <code>, --listing <uuid> "
-                         "or --instrument <alias[,sym,isin]>")
-    return bar_request(binding, source, list(dict.fromkeys(listings)), reference=sink,
-                       checkpoints=sink, now=now, default_lookback=lookback)
+        raise SystemExit(
+            "bar datasets need --universe <code>, --exchange <code>, --listing <uuid> "
+            "or --instrument <alias[,sym,isin]>"
+        )
+    return bar_request(
+        binding,
+        source,
+        list(dict.fromkeys(listings)),
+        reference=sink,
+        checkpoints=sink,
+        now=now,
+        default_lookback=lookback,
+    )
 
 
 def _report(summary: RunSummary) -> None:
-    print(json.dumps({
-        "run_id": str(summary.run_id), "source": summary.source, "pipeline": summary.pipeline,
-        "status": summary.status, "rows_written": summary.rows_written,
-        "failed_units": [{"name": u.name, "error": u.error} for u in summary.failed_units],
-    }, indent=1))
+    print(
+        json.dumps(
+            {
+                "run_id": str(summary.run_id),
+                "source": summary.source,
+                "pipeline": summary.pipeline,
+                "status": summary.status,
+                "rows_written": summary.rows_written,
+                "failed_units": [{"name": u.name, "error": u.error} for u in summary.failed_units],
+            },
+            indent=1,
+        )
+    )
 
 
 def _exit(summaries: list[RunSummary]) -> int:
@@ -178,8 +211,10 @@ def cmd_sync_priorities(args: argparse.Namespace) -> int:
     bindings = _load(args)
     rows = source_priority_rows(bindings.bindings)
     for row in rows:
-        print(f"{row['role']:9} {row['dataset']:30} {row['country_code']} "
-              f"{row['resolution'] or '-':6} {row['source']:20} priority={row['priority']}")
+        print(
+            f"{row['role']:9} {row['dataset']:30} {row['country_code']} "
+            f"{row['resolution'] or '-':6} {row['source']:20} priority={row['priority']}"
+        )
     if args.dry_run:
         return int(ExitCode.OK)
     for market in sorted({b.market for b in bindings.bindings}):
@@ -199,8 +234,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         try:
             source = source_for(binding)
             request, unmapped = _request(binding, source, sink, args)
-            summary = run_binding(binding, source, sink, request, unmapped=unmapped,
-                                  metadata={"dry_run": args.dry_run})
+            summary = run_binding(
+                binding,
+                source,
+                sink,
+                request,
+                unmapped=unmapped,
+                metadata={"dry_run": args.dry_run},
+            )
         finally:
             close = getattr(sink, "close", None)
             if close:
@@ -217,19 +258,28 @@ MARKET_WINDOWS = {
 }
 
 
-def in_session(market: str, now: datetime | None = None, *, pre_open_min: int = 0,
-               post_close_min: int = 0) -> bool:
+def in_session(
+    market: str, now: datetime | None = None, *, pre_open_min: int = 0, post_close_min: int = 0
+) -> bool:
     """True inside the market's session (plus buffers) on a trading day."""
     from factorlab.calendars.window import MarketWindow
 
     calendar, opens, closes, zone = MARKET_WINDOWS[market]
-    window = MarketWindow(calendar_key=calendar, open_time=opens, close_time=closes, tz=zone,
-                          pre_open_min=pre_open_min)
+    window = MarketWindow(
+        calendar_key=calendar,
+        open_time=opens,
+        close_time=closes,
+        tz=zone,
+        pre_open_min=pre_open_min,
+    )
     local = (now or datetime.now(UTC)).astimezone(zone)
     if not window.is_trading_day(local.date()):
         return False
-    return (window.poll_start(local.date()) <= local
-            <= window.close_dt(local.date()) + timedelta(minutes=post_close_min))
+    return (
+        window.poll_start(local.date())
+        <= local
+        <= window.close_dt(local.date()) + timedelta(minutes=post_close_min)
+    )
 
 
 def cmd_daemon(args: argparse.Namespace) -> int:
@@ -246,8 +296,11 @@ def cmd_daemon(args: argparse.Namespace) -> int:
         while not shutdown.triggered:
             started = datetime.now(UTC)
             if args.sessions_only and not in_session(
-                    args.market, started, pre_open_min=args.pre_open_minutes,
-                    post_close_min=args.post_close_minutes):
+                args.market,
+                started,
+                pre_open_min=args.pre_open_minutes,
+                post_close_min=args.post_close_minutes,
+            ):
                 log.debug("outside the %s session; idle", args.market)
             else:
                 try:
@@ -282,16 +335,20 @@ def cmd_replay(args: argparse.Namespace) -> int:
     return _exit([summary])
 
 
-def main(argv: list[str] | None = None, *, providers: Sequence[str],
-         prog: str | None = None) -> int:
+def main(
+    argv: list[str] | None = None, *, providers: Sequence[str], prog: str | None = None
+) -> int:
     parser = argparse.ArgumentParser(prog=prog, description=__doc__.split("\n\n")[0])
     parser.set_defaults(providers=tuple(providers))
-    parser.add_argument("--bindings", help="bindings YAML (default configs/ingestion/bindings.yaml)")
+    parser.add_argument(
+        "--bindings", help="bindings YAML (default configs/ingestion/bindings.yaml)"
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("validate", help="load and validate bindings against the registry")
-    sync = commands.add_parser("sync-priorities",
-                               help="write binding priorities to ref.source_priorities")
+    sync = commands.add_parser(
+        "sync-priorities", help="write binding priorities to ref.source_priorities"
+    )
     sync.add_argument("--dry-run", action="store_true")
     for name in ("run", "daemon", "replay"):
         sub = commands.add_parser(name)
@@ -302,30 +359,57 @@ def main(argv: list[str] | None = None, *, providers: Sequence[str],
         if name in ("run", "daemon"):
             sub.add_argument("--dry-run", action="store_true")
             sub.add_argument("--listing", action="append", default=[])
-            sub.add_argument("--universe", action="append", default=[],
-                             help="bar datasets: fetch every current member of this universe")
-            sub.add_argument("--exchange", action="append", default=[],
-                             help="bar datasets: every active listing on this exchange")
+            sub.add_argument(
+                "--universe",
+                action="append",
+                default=[],
+                help="bar datasets: fetch every current member of this universe",
+            )
+            sub.add_argument(
+                "--exchange",
+                action="append",
+                default=[],
+                help="bar datasets: every active listing on this exchange",
+            )
             sub.add_argument("--instrument", action="append", default=[])
-            sub.add_argument("--symbol", action="append", default=[],
-                             help="per-symbol reference lookups (e.g. Schwab instruments)")
+            sub.add_argument(
+                "--symbol",
+                action="append",
+                default=[],
+                help="per-symbol reference lookups (e.g. Schwab instruments)",
+            )
             sub.add_argument("--lookback-minutes", type=int, default=24 * 60)
-            sub.add_argument("--recent-filings", type=int, default=20,
-                             help="alt.political_trades: fetch the N newest filings")
+            sub.add_argument(
+                "--recent-filings",
+                type=int,
+                default=20,
+                help="alt.political_trades: fetch the N newest filings",
+            )
             sub.add_argument("--chamber", default="house")
-            sub.add_argument("--cik", action="append", default=[],
-                             help="fundamentals: <cik>[:<ticker>] (the ticker resolves the issuer)")
+            sub.add_argument(
+                "--cik",
+                action="append",
+                default=[],
+                help="fundamentals: <cik>[:<ticker>] (the ticker resolves the issuer)",
+            )
         if name == "daemon":
             sub.add_argument("--interval-seconds", type=int, default=60)
-            sub.add_argument("--sessions-only", action="store_true",
-                             help="idle outside the market session (trading days only)")
+            sub.add_argument(
+                "--sessions-only",
+                action="store_true",
+                help="idle outside the market session (trading days only)",
+            )
             sub.add_argument("--pre-open-minutes", type=int, default=0)
             sub.add_argument("--post-close-minutes", type=int, default=5)
         if name == "replay":
             sub.add_argument("--raw-id", action="append", required=True)
     args = parser.parse_args(argv)
     configure_logging(level="DEBUG" if args.verbose else None)
-    handler = {"validate": cmd_validate, "run": cmd_run, "daemon": cmd_daemon,
-               "replay": cmd_replay,
-               "sync-priorities": cmd_sync_priorities}[args.command]
+    handler = {
+        "validate": cmd_validate,
+        "run": cmd_run,
+        "daemon": cmd_daemon,
+        "replay": cmd_replay,
+        "sync-priorities": cmd_sync_priorities,
+    }[args.command]
     return handler(args)

@@ -47,12 +47,15 @@ def test_mode_specific_port_used(monkeypatch):
     fake_ib.connect.side_effect = capturing_connect
 
     with patch("ib_async.IB", ib_class):
-        _patch_env(monkeypatch, {
-            "IBKR_HOST": "127.0.0.1",
-            "IBKR_PORT_PAPER": "4002",
-            "IBKR_PORT_LIVE": "4001",
-            "IBKR_CLIENT_ID": "7",
-        })
+        _patch_env(
+            monkeypatch,
+            {
+                "IBKR_HOST": "127.0.0.1",
+                "IBKR_PORT_PAPER": "4002",
+                "IBKR_PORT_LIVE": "4001",
+                "IBKR_CLIENT_ID": "7",
+            },
+        )
 
         ib_paper = client.connect(mode="paper")
         assert captured["port"] == 4002
@@ -108,11 +111,15 @@ def test_disconnect_is_idempotent():
 
 
 def test_per_mode_host_overrides_shared_host(monkeypatch):
-    _patch_env(monkeypatch, {
-        "IBKR_HOST": "shared",
-        "IBKR_HOST_PAPER": "ibkr-gateway-paper", "IBKR_PORT_PAPER": "4004",
-        "IBKR_PORT_LIVE": "4003",
-    })
+    _patch_env(
+        monkeypatch,
+        {
+            "IBKR_HOST": "shared",
+            "IBKR_HOST_PAPER": "ibkr-gateway-paper",
+            "IBKR_PORT_PAPER": "4004",
+            "IBKR_PORT_LIVE": "4003",
+        },
+    )
     paper = client.gateway_config("paper", client_id=2)
     live = client.gateway_config("live")
     assert (paper.host, paper.port, paper.client_id) == ("ibkr-gateway-paper", 4004, 2)

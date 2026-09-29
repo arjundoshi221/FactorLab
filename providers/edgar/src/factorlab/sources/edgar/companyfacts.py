@@ -32,9 +32,7 @@ def get_company_concept(
 ) -> dict[str, Any]:
     """One XBRL concept (e.g. 'Revenues') across every filing by one filer."""
     padded = cik_padded(cik)
-    return client.get_data(
-        f"/api/xbrl/companyconcept/CIK{padded}/{taxonomy}/{tag}.json"
-    ).json()
+    return client.get_data(f"/api/xbrl/companyconcept/CIK{padded}/{taxonomy}/{tag}.json").json()
 
 
 def get_frame(
@@ -60,6 +58,4 @@ def get_frame(
         period = f"CY{year}Q{quarter}I"
     else:
         period = f"CY{year}Q{quarter}"
-    return client.get_data(
-        f"/api/xbrl/frames/{taxonomy}/{tag}/{unit}/{period}.json"
-    ).json()
+    return client.get_data(f"/api/xbrl/frames/{taxonomy}/{tag}/{unit}/{period}.json").json()

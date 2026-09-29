@@ -67,18 +67,29 @@ def _decimal(value: Any) -> Decimal | None:
 
 
 def ref_to_metadata(ref: InstrumentRef) -> dict[str, Any]:
-    return {"alias_value": ref.alias_value, "exchange_code": ref.exchange_code,
-            "trading_symbol": ref.trading_symbol, "isin": ref.isin}
+    return {
+        "alias_value": ref.alias_value,
+        "exchange_code": ref.exchange_code,
+        "trading_symbol": ref.trading_symbol,
+        "isin": ref.isin,
+    }
 
 
 def ref_from_metadata(item: Mapping[str, Any]) -> InstrumentRef:
-    return InstrumentRef(ALIAS_KIND, str(item["alias_value"]), str(item.get("exchange_code", "")),
-                         str(item.get("trading_symbol", "")), COUNTRY, isin=item.get("isin"))
+    return InstrumentRef(
+        ALIAS_KIND,
+        str(item["alias_value"]),
+        str(item.get("exchange_code", "")),
+        str(item.get("trading_symbol", "")),
+        COUNTRY,
+        isin=item.get("isin"),
+    )
 
 
 # -- ref.listings (instrument lookup, one symbol per capture) ---------------------------
-def normalize_instrument(capture: RawCapture, *,
-                         exchanges: Mapping[str, str]) -> list[InstrumentRecord]:
+def normalize_instrument(
+    capture: RawCapture, *, exchanges: Mapping[str, str]
+) -> list[InstrumentRecord]:
     wanted = str(capture.metadata.get("symbol") or "")
     payload = _json(capture)
     items = payload.get("instruments") if isinstance(payload, Mapping) else None
@@ -94,12 +105,22 @@ def normalize_instrument(capture: RawCapture, *,
         return []
     cusip = str(item.get("cusip") or "").strip().upper() or None
     symbol = canonical_symbol(wanted)
-    return [InstrumentRecord(
-        ref=InstrumentRef(ALIAS_KIND, wanted, exchange, symbol, COUNTRY,
-                          isin=isin_from_cusip(cusip), cusip=cusip),
-        name=str(item.get("description") or symbol).strip(), product_type=product,
-        currency="USD",
-    )]
+    return [
+        InstrumentRecord(
+            ref=InstrumentRef(
+                ALIAS_KIND,
+                wanted,
+                exchange,
+                symbol,
+                COUNTRY,
+                isin=isin_from_cusip(cusip),
+                cusip=cusip,
+            ),
+            name=str(item.get("description") or symbol).strip(),
+            product_type=product,
+            currency="USD",
+        )
+    ]
 
 
 # -- market.bars (price history, one symbol per capture) -------------------------------
@@ -107,8 +128,9 @@ def normalize_pricehistory(capture: RawCapture) -> list[BarRecord]:
     instruments = capture.metadata.get("instruments") or []
     resolution = capture.metadata.get("resolution")
     if len(instruments) != 1 or resolution not in ("daily", "1min"):
-        raise NormalizationError(f"{capture.request_key}: metadata needs one instrument "
-                                 "and a daily/1min resolution")
+        raise NormalizationError(
+            f"{capture.request_key}: metadata needs one instrument and a daily/1min resolution"
+        )
     ref = ref_from_metadata(instruments[0])
     payload = _json(capture)
     candles = payload.get("candles") if isinstance(payload, Mapping) else None
@@ -141,8 +163,12 @@ def normalize_pricehistory(capture: RawCapture) -> list[BarRecord]:
             continue
         prices = [_decimal(candle.get(name)) for name in ("open", "high", "low", "close")]
         volume = _decimal(candle.get("volume"))
-        if (any(p is None or p < 0 for p in prices) or volume is None or volume < 0
-                or volume != volume.to_integral_value()):
+        if (
+            any(p is None or p < 0 for p in prices)
+            or volume is None
+            or volume < 0
+            or volume != volume.to_integral_value()
+        ):
             log.warning("%s: dropping invalid candle at %s", capture.request_key, stamp)
             continue
         o, h, low, c = prices

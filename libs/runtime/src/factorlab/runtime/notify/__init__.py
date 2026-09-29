@@ -71,6 +71,7 @@ def _resolve_backend(name: str) -> Backend | None:
     if name == "outlook":
         try:
             from factorlab.runtime.notify.outlook import OutlookBackend
+
             return OutlookBackend()
         except ImportError as e:
             log.warning("[notify] outlook backend unavailable: %s", e)
@@ -78,6 +79,7 @@ def _resolve_backend(name: str) -> Backend | None:
     if name == "smtp":
         try:
             from factorlab.runtime.notify.smtp import SMTPBackend
+
             return SMTPBackend()
         except Exception as e:
             log.warning("[notify] smtp backend unavailable: %s", e)
@@ -85,6 +87,7 @@ def _resolve_backend(name: str) -> Backend | None:
     if name == "telegram":
         try:
             from factorlab.runtime.notify.telegram import TelegramBackend
+
             return TelegramBackend()
         except Exception as e:
             log.warning("[notify] telegram backend unavailable: %s", e)
@@ -92,6 +95,7 @@ def _resolve_backend(name: str) -> Backend | None:
     if name == "webhook":
         try:
             from factorlab.runtime.notify.webhook import WebhookBackend
+
             return WebhookBackend()
         except Exception as e:
             log.warning("[notify] webhook backend unavailable: %s", e)
@@ -180,8 +184,7 @@ def notify(
         try:
             ok = bool(backend.send(notification))
         except Exception as e:
-            log.warning("[notify] backend %s raised: %s",
-                        backend.__class__.__name__, e)
+            log.warning("[notify] backend %s raised: %s", backend.__class__.__name__, e)
             ok = False
         results.append(ok)
     return results

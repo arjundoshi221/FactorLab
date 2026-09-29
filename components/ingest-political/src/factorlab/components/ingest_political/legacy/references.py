@@ -58,4 +58,3 @@ def fetch_reference_snapshot(
         memberships=datasets["memberships"],
         raw_ids=raw_ids,
     )
-

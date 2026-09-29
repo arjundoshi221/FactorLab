@@ -53,15 +53,18 @@ def test_render_bundle_writes_static_and_rotating_secrets(tmp_path, monkeypatch)
     assert (us / "EODHD_API_KEY").read_text() == "eodhd-key"
     assert (political / "CLICKHOUSE_PASSWORD").read_text() == "database-password"
     assert (political / "FACTORLAB_API_KEY").read_text() == "factorlab-api-key"
-    assert "<password_sha256_hex>" + hashlib.sha256(b"database-password").hexdigest() in (
-        clickhouse / "runtime-users.xml"
-    ).read_text()
-    assert "<query_profiler_cpu_time_period_ns>0</query_profiler_cpu_time_period_ns>" in (
-        clickhouse / "runtime-users.xml"
-    ).read_text()
-    assert "<query_profiler_real_time_period_ns>0</query_profiler_real_time_period_ns>" in (
-        clickhouse / "runtime-users.xml"
-    ).read_text()
+    assert (
+        "<password_sha256_hex>" + hashlib.sha256(b"database-password").hexdigest()
+        in (clickhouse / "runtime-users.xml").read_text()
+    )
+    assert (
+        "<query_profiler_cpu_time_period_ns>0</query_profiler_cpu_time_period_ns>"
+        in (clickhouse / "runtime-users.xml").read_text()
+    )
+    assert (
+        "<query_profiler_real_time_period_ns>0</query_profiler_real_time_period_ns>"
+        in (clickhouse / "runtime-users.xml").read_text()
+    )
 
 
 def test_render_bundle_removes_an_expired_upstox_token(tmp_path, monkeypatch):
@@ -140,7 +143,9 @@ def test_render_bundle_does_not_require_eodhd_for_github_universe(tmp_path, monk
 def test_render_bundle_writes_ibkr_gateway_and_client_secrets(tmp_path, monkeypatch):
     agent = _load_agent_module()
     _configure_paths(agent, tmp_path, monkeypatch)
-    paper, live, ibkr_client = (tmp_path / name for name in ("ibkr-paper", "ibkr-live", "ibkr-client"))
+    paper, live, ibkr_client = (
+        tmp_path / name for name in ("ibkr-paper", "ibkr-live", "ibkr-client")
+    )
     for directory in (paper, live, ibkr_client):
         directory.mkdir()
     monkeypatch.setattr(agent, "IBKR_PAPER_DIR", paper)

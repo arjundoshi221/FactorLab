@@ -36,8 +36,9 @@ def canonical_ids(instrument: Mapping[str, Any]) -> tuple[uuid.UUID, uuid.UUID, 
     )
 
 
-def natural_listing_ids(*, exchange_code: str, trading_symbol: str,
-                        isin: str | None) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+def natural_listing_ids(
+    *, exchange_code: str, trading_symbol: str, isin: str | None
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
     """Provider-neutral identity for a listing seen for the first time (07 §8.1 step 3).
 
     Issuer and security keep the ISIN derivation used by :func:`canonical_ids`,
@@ -57,8 +58,14 @@ def natural_listing_ids(*, exchange_code: str, trading_symbol: str,
     )
 
 
-def natural_contract_id(*, underlying_listing_id: uuid.UUID, contract_type: str,
-                        expiry: Any, right: str | None, strike: Any) -> uuid.UUID:
+def natural_contract_id(
+    *,
+    underlying_listing_id: uuid.UUID,
+    contract_type: str,
+    expiry: Any,
+    right: str | None,
+    strike: Any,
+) -> uuid.UUID:
     """Provider-neutral contract identity from the ``ref.contracts`` natural key."""
     return uuid.uuid5(
         CONTRACT_NAMESPACE,
@@ -82,9 +89,7 @@ def committee_id(legacy_committee_id: str) -> uuid.UUID:
 
 
 def political_trade_id(trade_key: str) -> uuid.UUID:
-    return uuid.uuid5(
-        POLITICAL_TRADE_NAMESPACE, f"factorlab:alt_political_trades:{trade_key}"
-    )
+    return uuid.uuid5(POLITICAL_TRADE_NAMESPACE, f"factorlab:alt_political_trades:{trade_key}")
 
 
 def filing_id(regulator: str, accession_number: str) -> uuid.UUID:

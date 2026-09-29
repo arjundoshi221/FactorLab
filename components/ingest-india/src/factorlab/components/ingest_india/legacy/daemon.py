@@ -103,12 +103,14 @@ def build_series(
             series.append(CandleSeries(equity["instrument_key"], instrument_id, symbol))
         future = find_nearest_future(instruments, symbol)
         if future and instrument_id and future["instrument_key"] in contract_lookup:
-            series.append(CandleSeries(
-                future["instrument_key"],
-                instrument_id,
-                symbol,
-                contract_lookup[future["instrument_key"]],
-            ))
+            series.append(
+                CandleSeries(
+                    future["instrument_key"],
+                    instrument_id,
+                    symbol,
+                    contract_lookup[future["instrument_key"]],
+                )
+            )
     return series
 
 
@@ -124,8 +126,7 @@ def build_full_equity_series(
         (
             record
             for record in instruments
-            if record.get("segment") == "NSE_EQ"
-            and record.get("instrument_type") == "EQ"
+            if record.get("segment") == "NSE_EQ" and record.get("instrument_type") == "EQ"
         ),
         key=lambda record: (
             str(record.get("trading_symbol") or ""),
@@ -156,7 +157,8 @@ def nearest_stock_futures(instruments, instrument_lookup) -> dict[str, dict]:
         previous = nearest.get(symbol)
         order = (item.get("expiry") or 0, str(item["instrument_key"]))
         if previous is None or order < (
-            previous.get("expiry") or 0, str(previous["instrument_key"])
+            previous.get("expiry") or 0,
+            str(previous["instrument_key"]),
         ):
             nearest[symbol] = item
     return nearest
@@ -182,8 +184,12 @@ def configure_collection_universe(
             instrument_keys={str(item["instrument_key"]) for item in nearest.values()},
         )
         futures = [
-            CandleSeries(str(item["instrument_key"]), instrument_lookup[symbol],
-                         symbol, contract_lookup[str(item["instrument_key"])])
+            CandleSeries(
+                str(item["instrument_key"]),
+                instrument_lookup[symbol],
+                symbol,
+                contract_lookup[str(item["instrument_key"])],
+            )
             for symbol, item in sorted(nearest.items())
             if str(item["instrument_key"]) in contract_lookup
         ]
@@ -208,8 +214,7 @@ def configure_collection_universe(
         "Activated %d expected series for universe %s (%s)",
         expected_count,
         universe,
-        "batched equity quotes and nearest futures" if full_equity_mode
-        else "per-series candles",
+        "batched equity quotes and nearest futures" if full_equity_mode else "per-series candles",
     )
     return series, full_equity_mode, expected_count
 
@@ -270,7 +275,7 @@ def poll_full_equity_once(
 
     for index, keys in enumerate(key_batches, start=1):
         if _shutdown:
-            failed += sum(len(batch) for batch in key_batches[index - 1:])
+            failed += sum(len(batch) for batch in key_batches[index - 1 :])
             break
         try:
             result = fetch_market_quote_ohlc(
@@ -287,13 +292,15 @@ def poll_full_equity_once(
                 item = by_key.get(instrument_key)
                 if item is None or frame.empty:
                     continue
-                candle_batches.append({
-                    "candles": frame,
-                    "instrument_id": item.instrument_id,
-                    "contract_id": None,
-                    "symbol": item.symbol,
-                    "raw_id": result.raw_id,
-                })
+                candle_batches.append(
+                    {
+                        "candles": frame,
+                        "instrument_id": item.instrument_id,
+                        "contract_id": None,
+                        "symbol": item.symbol,
+                        "raw_id": result.raw_id,
+                    }
+                )
             if candle_batches:
                 rows_written += storage.write_candles_1min_batch(candle_batches)
             if len(observed) != len(keys):
@@ -470,7 +477,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Upstox ClickHouse 1-minute poller")
     parser.add_argument("--universe", default="demo")
     parser.add_argument("--daemon", action="store_true")
-    parser.add_argument("--once", action="store_true", help="Run one polling batch regardless of market hours")
+    parser.add_argument(
+        "--once", action="store_true", help="Run one polling batch regardless of market hours"
+    )
     parser.add_argument(
         "--quote-batch-size",
         type=int,
@@ -570,7 +579,17 @@ def main(argv: list[str] | None = None) -> int:
         if not args.once and now.time() > MARKET_CLOSE_UTC:
             if not args.daemon:
                 return 0
-            time.sleep(max((datetime.combine(now.date() + timedelta(days=1), MARKET_OPEN_UTC, tzinfo=UTC) - now).total_seconds(), 1))
+            time.sleep(
+                max(
+                    (
+                        datetime.combine(
+                            now.date() + timedelta(days=1), MARKET_OPEN_UTC, tzinfo=UTC
+                        )
+                        - now
+                    ).total_seconds(),
+                    1,
+                )
+            )
             continue
 
         equity_series = [item for item in series if item.contract_id is None]
@@ -605,7 +624,11 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 if include_futures and not _shutdown:
                     future_successful, future_failed, future_rows = poll_once(
-                        session, future_series, storage, limiter, include_futures=True,
+                        session,
+                        future_series,
+                        storage,
+                        limiter,
+                        include_futures=True,
                     )
                     successful += future_successful
                     failed += future_failed

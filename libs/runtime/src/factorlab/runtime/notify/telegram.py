@@ -25,8 +25,7 @@ class TelegramBackend(Backend):
         chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
         if not (bot_token and chat_id):
             log.warning(
-                "[notify:telegram] missing TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID "
-                "-- skipping"
+                "[notify:telegram] missing TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID -- skipping"
             )
             return False
 

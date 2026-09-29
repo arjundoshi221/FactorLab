@@ -19,8 +19,9 @@ from factorlab.ingest.provider import RawCapture
 
 @runtime_checkable
 class ReferenceReader(Protocol):
-    def aliases_for(self, listing_ids: Sequence[UUID], *,
-                    alias_kind: str) -> Mapping[UUID, InstrumentRef]:
+    def aliases_for(
+        self, listing_ids: Sequence[UUID], *, alias_kind: str
+    ) -> Mapping[UUID, InstrumentRef]:
         """Canonical listing -> the provider's :class:`InstrumentRef`; missing ids are unmapped."""
         ...
 
@@ -35,8 +36,9 @@ class ReferenceReader(Protocol):
 
 @runtime_checkable
 class CheckpointStore(Protocol):
-    def watermarks(self, listing_ids: Sequence[UUID], *, dataset: str, source: str,
-                   resolution: str) -> Mapping[UUID, datetime]:
+    def watermarks(
+        self, listing_ids: Sequence[UUID], *, dataset: str, source: str, resolution: str
+    ) -> Mapping[UUID, datetime]:
         """Latest stored ``bar_time`` per listing for this source; absent = never fetched."""
         ...
 

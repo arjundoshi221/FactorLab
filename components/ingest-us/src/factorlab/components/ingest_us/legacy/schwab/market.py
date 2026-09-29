@@ -1,4 +1,5 @@
 """Read-only Schwab market data, regular-session normalization, and bounded retries."""
+
 from __future__ import annotations
 
 import logging
@@ -43,8 +44,9 @@ class AuthRequired(RuntimeError):
 
 
 class MarketClient:
-    def __init__(self, storage, *, session=None, sleep=time.sleep, clock=time.monotonic,
-                 min_interval=1.0):
+    def __init__(
+        self, storage, *, session=None, sleep=time.sleep, clock=time.monotonic, min_interval=1.0
+    ):
         self.storage = storage
         self.min_interval = min_interval
         self.session = session
@@ -65,13 +67,21 @@ class MarketClient:
             except (requests.Timeout, requests.ConnectionError) as exc:
                 if attempt == 4:
                     raise RuntimeError("Schwab network request failed after five attempts") from exc
-                log.warning("Schwab %s %s (attempt %d/5); retrying in %ds",
-                            endpoint, type(exc).__name__, attempt + 1, 2 ** attempt)
-                self.sleep(2 ** attempt)
+                log.warning(
+                    "Schwab %s %s (attempt %d/5); retrying in %ds",
+                    endpoint,
+                    type(exc).__name__,
+                    attempt + 1,
+                    2**attempt,
+                )
+                self.sleep(2**attempt)
                 continue
             raw_id = self.storage.archive_http_response(
-                source="schwab", source_url=BASE_URL + endpoint, response_body=response.content,
-                status_code=response.status_code, content_type="application/json",
+                source="schwab",
+                source_url=BASE_URL + endpoint,
+                response_body=response.content,
+                status_code=response.status_code,
+                content_type="application/json",
                 metadata={"params": params},
             )
             if response.status_code in (401, 403):
@@ -79,18 +89,27 @@ class MarketClient:
             if response.status_code == 429 or response.status_code >= 500:
                 if attempt == 4:
                     raise RuntimeError(f"Schwab HTTP {response.status_code} after five attempts")
-                delay = 2 ** attempt
+                delay = 2**attempt
                 retry = response.headers.get("Retry-After")
                 if retry:
                     try:
                         delay = max(delay, float(retry))
                     except ValueError:
                         try:
-                            delay = max(delay, (parsedate_to_datetime(retry) - datetime.now(UTC)).total_seconds())
+                            delay = max(
+                                delay,
+                                (parsedate_to_datetime(retry) - datetime.now(UTC)).total_seconds(),
+                            )
                         except (ValueError, TypeError):
                             pass
-                log.warning("Schwab %s HTTP %d (attempt %d/5, Retry-After=%s); retrying in %.1fs",
-                            endpoint, response.status_code, attempt + 1, retry or "-", delay)
+                log.warning(
+                    "Schwab %s HTTP %d (attempt %d/5, Retry-After=%s); retrying in %.1fs",
+                    endpoint,
+                    response.status_code,
+                    attempt + 1,
+                    retry or "-",
+                    delay,
+                )
                 self.sleep(delay)
                 continue
             if not response.ok:
@@ -99,19 +118,27 @@ class MarketClient:
         raise RuntimeError("Schwab retry budget exhausted")
 
     def instrument(self, symbol):
-        payload, raw_id = self.get("/instruments", {"symbol": symbol, "projection": "symbol-search"})
+        payload, raw_id = self.get(
+            "/instruments", {"symbol": symbol, "projection": "symbol-search"}
+        )
         exact = [r for r in payload.get("instruments", []) if r.get("symbol") == symbol]
         if len(exact) != 1 or exact[0].get("assetType") not in ("EQUITY", "ETF"):
             raise ValueError(f"No unique equity/ETF match for {symbol}")
         return exact[0], raw_id
 
     def candles(self, symbol, resolution, start, end):
-        payload, raw_id = self.get("/pricehistory", {
-            "symbol": symbol, "periodType": "year" if resolution == "daily" else "day",
-            "frequencyType": "daily" if resolution == "daily" else "minute", "frequency": 1,
-            "startDate": int(start.timestamp() * 1000), "endDate": int(end.timestamp() * 1000),
-            "needExtendedHoursData": "false",
-        })
+        payload, raw_id = self.get(
+            "/pricehistory",
+            {
+                "symbol": symbol,
+                "periodType": "year" if resolution == "daily" else "day",
+                "frequencyType": "daily" if resolution == "daily" else "minute",
+                "frequency": 1,
+                "startDate": int(start.timestamp() * 1000),
+                "endDate": int(end.timestamp() * 1000),
+                "needExtendedHoursData": "false",
+            },
+        )
         if not isinstance(payload.get("candles"), list):
             raise ValueError("Schwab response has no candle array")
         return normalize(payload["candles"], resolution, now=end), raw_id
@@ -144,21 +171,33 @@ def normalize(records, resolution, *, now):
             continue
         values = [float(record[k]) for k in ("open", "high", "low", "close")]
         volume = record["volume"]
-        if (not all(math.isfinite(v) and v >= 0 for v in values)
-                or values[1] < max(values[0], values[2], values[3])
-                or values[2] > min(values[0], values[1], values[3])
-                or not isinstance(volume, (int, float)) or not math.isfinite(volume)
-                or volume < 0 or int(volume) != volume):
+        if (
+            not all(math.isfinite(v) and v >= 0 for v in values)
+            or values[1] < max(values[0], values[2], values[3])
+            or values[2] > min(values[0], values[1], values[3])
+            or not isinstance(volume, (int, float))
+            or not math.isfinite(volume)
+            or volume < 0
+            or int(volume) != volume
+        ):
             if resolution != "daily":
                 raise ValueError("Invalid OHLCV candle")
             invalid_candles += 1
             continue
-        rows.append({"timestamp": stamp, "trade_date": day,
-                     **{k: record[k] for k in ("open", "high", "low", "close", "volume")}})
+        rows.append(
+            {
+                "timestamp": stamp,
+                "trade_date": day,
+                **{k: record[k] for k in ("open", "high", "low", "close", "volume")},
+            }
+        )
     key = "trade_date" if resolution == "daily" else "timestamp"
     if not rows and invalid_candles:
         raise ValueError("Invalid OHLCV candle")
-    frame = (pd.DataFrame(rows).drop_duplicates(key, keep="last").sort_values(key)
-             if rows else pd.DataFrame())
+    frame = (
+        pd.DataFrame(rows).drop_duplicates(key, keep="last").sort_values(key)
+        if rows
+        else pd.DataFrame()
+    )
     frame.attrs["invalid_candles"] = invalid_candles
     return frame

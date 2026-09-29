@@ -130,7 +130,7 @@ def test_instrument_page_combines_unique_history_and_selected_day_checks():
                 0,
                 2,
             ),
-        )
+        ),
     )
 
     page = IndiaHubRepository(client).list_instruments(

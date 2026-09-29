@@ -39,8 +39,13 @@ class _SchwabSource:
     provider: ClassVar[str] = "schwab"
     settings_model: ClassVar[type[SchwabSettings]] = SchwabSettings
 
-    def __init__(self, settings: SchwabSettings, *, instance: str = "schwab",
-                 transport: SchwabTransport | None = None) -> None:
+    def __init__(
+        self,
+        settings: SchwabSettings,
+        *,
+        instance: str = "schwab",
+        transport: SchwabTransport | None = None,
+    ) -> None:
         self.settings = settings
         self.instance = instance
         self._transport = transport
@@ -62,14 +67,21 @@ class SchwabListings(_SchwabSource):
     def plan(self, request: ReferenceRequest) -> Sequence[FetchUnit]:
         symbols = [provider_symbol(ref.trading_symbol) for ref in request.instruments]
         symbols += [provider_symbol(str(s)) for s in request.params.get("symbols", ())]
-        return [FetchUnit(f"instrument:{symbol}", self._channel("instruments"),
-                          params={"symbol": symbol}) for symbol in dict.fromkeys(symbols)]
+        return [
+            FetchUnit(
+                f"instrument:{symbol}", self._channel("instruments"), params={"symbol": symbol}
+            )
+            for symbol in dict.fromkeys(symbols)
+        ]
 
     def fetch(self, unit: FetchUnit) -> RawCapture:
         symbol = str(unit.params["symbol"])
-        return self.transport.get("/instruments", {"symbol": symbol,
-                                                   "projection": "symbol-search"},
-                                  request_key=unit.name, metadata={"symbol": symbol})
+        return self.transport.get(
+            "/instruments",
+            {"symbol": symbol, "projection": "symbol-search"},
+            request_key=unit.name,
+            metadata={"symbol": symbol},
+        )
 
     def normalize(self, capture: RawCapture) -> Sequence[InstrumentRecord]:
         return normalize_instrument(capture, exchanges=self.settings.exchanges)
@@ -78,7 +90,9 @@ class SchwabListings(_SchwabSource):
 class SchwabBars(_SchwabSource):
     dataset: ClassVar[str] = "market.bars"
     capabilities: ClassVar[Capabilities] = Capabilities(
-        markets=MARKETS, resolutions=frozenset({"daily", "1min"}), alias_kind=ALIAS_KIND,
+        markets=MARKETS,
+        resolutions=frozenset({"daily", "1min"}),
+        alias_kind=ALIAS_KIND,
     )
 
     def plan(self, request: BarRequest) -> Sequence[FetchUnit]:
@@ -90,8 +104,9 @@ class SchwabBars(_SchwabSource):
             if request.resolution == "daily":
                 units.append(self._unit(ref, "daily", window.start, window.end))
                 continue
-            start = max(window.start,
-                        window.end - timedelta(days=self.settings.minute_max_lookback_days))
+            start = max(
+                window.start, window.end - timedelta(days=self.settings.minute_max_lookback_days)
+            )
             step = timedelta(days=self.settings.minute_chunk_days)
             while start < window.end:
                 stop = min(start + step, window.end)
@@ -102,21 +117,34 @@ class SchwabBars(_SchwabSource):
     def _unit(self, ref: Any, resolution: str, start: Any, end: Any) -> FetchUnit:
         return FetchUnit(
             f"{ref.alias_value}:{resolution}:{start.isoformat()}..{end.isoformat()}",
-            self._channel("pricehistory"), params={"resolution": resolution},
-            instruments=(ref,), start=start, end=end,
+            self._channel("pricehistory"),
+            params={"resolution": resolution},
+            instruments=(ref,),
+            start=start,
+            end=end,
         )
 
     def fetch(self, unit: FetchUnit) -> RawCapture:
         ref = unit.instruments[0]
         daily = unit.params["resolution"] == "daily"
         params = {
-            "symbol": ref.alias_value, "periodType": "year" if daily else "day",
-            "frequencyType": "daily" if daily else "minute", "frequency": 1,
+            "symbol": ref.alias_value,
+            "periodType": "year" if daily else "day",
+            "frequencyType": "daily" if daily else "minute",
+            "frequency": 1,
             "startDate": int(unit.start.timestamp() * 1000),
-            "endDate": int(unit.end.timestamp() * 1000), "needExtendedHoursData": "false",
+            "endDate": int(unit.end.timestamp() * 1000),
+            "needExtendedHoursData": "false",
         }
-        return self.transport.get("/pricehistory", params, request_key=unit.name, metadata={
-            "resolution": unit.params["resolution"], "instruments": [ref_to_metadata(ref)]})
+        return self.transport.get(
+            "/pricehistory",
+            params,
+            request_key=unit.name,
+            metadata={
+                "resolution": unit.params["resolution"],
+                "instruments": [ref_to_metadata(ref)],
+            },
+        )
 
     def normalize(self, capture: RawCapture) -> Sequence[BarRecord]:
         return normalize_pricehistory(capture)

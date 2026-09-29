@@ -12,10 +12,17 @@ reader = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(reader)
 
 
-@pytest.mark.parametrize("sql", [
-    "DELETE FROM market", "SELECT 1; DROP TABLE market", "WITH x AS (DELETE FROM t) SELECT x",
-    "SELECT 1 FORMAT CSV", "SELECT 1 SETTINGS readonly=0", "SELECT 1; -- trailing comment",
-])
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "DELETE FROM market",
+        "SELECT 1; DROP TABLE market",
+        "WITH x AS (DELETE FROM t) SELECT x",
+        "SELECT 1 FORMAT CSV",
+        "SELECT 1 SETTINGS readonly=0",
+        "SELECT 1; -- trailing comment",
+    ],
+)
 def test_rejects_unsafe_sql(sql):
     with pytest.raises(reader.ReaderError):
         reader.validate_sql(sql)
@@ -28,8 +35,10 @@ def test_accepts_literals_comments_and_one_terminal_semicolon():
 
 def test_credentials_are_required_and_environment_wins(monkeypatch):
     values = {
-        "CLICKHOUSE_SSH_HOST": "vps.example", "CLICKHOUSE_SSH_USER": "ubuntu",
-        "CLICKHOUSE_USERNAME": "current", "CLICKHOUSE_PASSWORD": "secret",
+        "CLICKHOUSE_SSH_HOST": "vps.example",
+        "CLICKHOUSE_SSH_USER": "ubuntu",
+        "CLICKHOUSE_USERNAME": "current",
+        "CLICKHOUSE_PASSWORD": "secret",
         "CLICKHOUSE_DATABASE": "factorlab",
     }
     with patch.object(reader, "dotenv_values", return_value=values):
@@ -63,12 +72,18 @@ def test_tunnel_cleanup_on_failure(monkeypatch):
 
     monkeypatch.setattr(reader.subprocess, "Popen", popen)
     settings = {
-        "CLICKHOUSE_SSH_PORT": "22", "CLICKHOUSE_SSH_KEY_PATH": "key",
-        "CLICKHOUSE_HOST": "127.0.0.1", "CLICKHOUSE_PORT": "8123",
-        "CLICKHOUSE_SSH_USER": "ubuntu", "CLICKHOUSE_SSH_HOST": "vps.example",
+        "CLICKHOUSE_SSH_PORT": "22",
+        "CLICKHOUSE_SSH_KEY_PATH": "key",
+        "CLICKHOUSE_HOST": "127.0.0.1",
+        "CLICKHOUSE_PORT": "8123",
+        "CLICKHOUSE_SSH_USER": "ubuntu",
+        "CLICKHOUSE_SSH_HOST": "vps.example",
     }
-    with (patch.object(reader.socket, "create_connection"), pytest.raises(RuntimeError),
-          reader.ssh_tunnel(settings)):
+    with (
+        patch.object(reader.socket, "create_connection"),
+        pytest.raises(RuntimeError),
+        reader.ssh_tunnel(settings),
+    ):
         raise RuntimeError("query failed")
     assert process.stopped
     assert "StrictHostKeyChecking=yes" in commands[0]
@@ -92,9 +107,14 @@ def test_http_query_has_readonly_limits_and_keeps_password_in_header(monkeypatch
         return Response()
 
     monkeypatch.setattr(reader.urllib.request, "urlopen", open_request)
-    result = reader.query("SELECT 1", {
-        "CLICKHOUSE_USERNAME": "current", "CLICKHOUSE_PASSWORD": "private",
-    }, 12345)
+    result = reader.query(
+        "SELECT 1",
+        {
+            "CLICKHOUSE_USERNAME": "current",
+            "CLICKHOUSE_PASSWORD": "private",
+        },
+        12345,
+    )
     assert result["data"] == [[1]]
     request = captured["request"]
     assert "readonly=1" in request.full_url
@@ -112,7 +132,9 @@ def test_output_limits():
     assert "output limit reached" in output
 
 
-QUERIES = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "factorlab-clickhouse" / "queries"
+QUERIES = (
+    Path(__file__).resolve().parents[1] / ".claude" / "skills" / "factorlab-clickhouse" / "queries"
+)
 
 
 @pytest.mark.parametrize("path", sorted(QUERIES.glob("*.sql")), ids=lambda p: p.name)

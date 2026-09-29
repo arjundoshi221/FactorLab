@@ -91,7 +91,7 @@ def instrument_key_batches(
     if batch_size < 1:
         raise ValueError("batch_size must be positive")
     return [
-        instrument_keys[index:index + batch_size]
+        instrument_keys[index : index + batch_size]
         for index in range(0, len(instrument_keys), batch_size)
     ]
 
@@ -186,9 +186,7 @@ def _normalize_market_quote_ohlc(
     columns = ["timestamp", "open", "high", "low", "close", "volume", "oi"]
     candles: dict[str, pd.DataFrame] = {}
     observed: set[str] = set()
-    current_minute = (
-        now if now is not None else pd.Timestamp.now(tz="UTC")
-    ).floor("min")
+    current_minute = (now if now is not None else pd.Timestamp.now(tz="UTC")).floor("min")
 
     for response_key, quote_data in data.items():
         if not isinstance(quote_data, dict):
@@ -214,9 +212,15 @@ def _normalize_market_quote_ohlc(
                 low_price = float(candle["low"])
                 close_price = float(candle["close"])
                 if (
-                    not all(math.isfinite(value) for value in (
-                        open_price, high_price, low_price, close_price,
-                    ))
+                    not all(
+                        math.isfinite(value)
+                        for value in (
+                            open_price,
+                            high_price,
+                            low_price,
+                            close_price,
+                        )
+                    )
                     or low_price > high_price
                     or open_price < low_price
                     or open_price > high_price
@@ -224,15 +228,17 @@ def _normalize_market_quote_ohlc(
                     or close_price > high_price
                 ):
                     continue
-                rows.append({
-                    "timestamp": candle_time,
-                    "open": open_price,
-                    "high": high_price,
-                    "low": low_price,
-                    "close": close_price,
-                    "volume": candle.get("volume"),
-                    "oi": 0,
-                })
+                rows.append(
+                    {
+                        "timestamp": candle_time,
+                        "open": open_price,
+                        "high": high_price,
+                        "low": low_price,
+                        "close": close_price,
+                        "volume": candle.get("volume"),
+                        "oi": 0,
+                    }
+                )
             except (KeyError, TypeError, ValueError, OverflowError) as exc:
                 raise UpstoxFetchError(
                     f"Upstox returned malformed OHLC quote for {instrument_key}"
@@ -393,9 +399,7 @@ def _normalize_candles(candles: Any, instrument_key: str) -> pd.DataFrame:
         frame = pd.DataFrame(candles, columns=columns)
         frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
     except (TypeError, ValueError) as exc:
-        raise UpstoxFetchError(
-            f"Upstox returned malformed candles for {instrument_key}"
-        ) from exc
+        raise UpstoxFetchError(f"Upstox returned malformed candles for {instrument_key}") from exc
     return frame.sort_values("timestamp").reset_index(drop=True)
 
 

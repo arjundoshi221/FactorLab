@@ -31,9 +31,14 @@ class MembershipDiff:
         return not self.add and not self.close
 
 
-def diff_snapshot(universe_code: str, current: Mapping[UUID, date], snapshot: set[UUID], *,
-                  as_of: date,
-                  max_removal_fraction: float = MAX_REMOVAL_FRACTION) -> MembershipDiff:
+def diff_snapshot(
+    universe_code: str,
+    current: Mapping[UUID, date],
+    snapshot: set[UUID],
+    *,
+    as_of: date,
+    max_removal_fraction: float = MAX_REMOVAL_FRACTION,
+) -> MembershipDiff:
     """``current`` maps open listing -> its ``effective_from``; ``snapshot`` is the new membership."""
     if not snapshot:
         raise SnapshotRejected(f"{universe_code}: snapshot resolved to no listings")
@@ -41,11 +46,13 @@ def diff_snapshot(universe_code: str, current: Mapping[UUID, date], snapshot: se
     if current and len(removed) > max_removal_fraction * len(current):
         raise SnapshotRejected(
             f"{universe_code}: snapshot drops {len(removed)} of {len(current)} members "
-            f"(> {max_removal_fraction:.0%}); refusing as implausible")
+            f"(> {max_removal_fraction:.0%}); refusing as implausible"
+        )
     return MembershipDiff(
         add=tuple(sorted((listing for listing in snapshot if listing not in current), key=str)),
         close=tuple(sorted(((listing, current[listing]) for listing in removed), key=str)),
-        effective_from=as_of, effective_to=as_of - timedelta(days=1),
+        effective_from=as_of,
+        effective_to=as_of - timedelta(days=1),
     )
 
 

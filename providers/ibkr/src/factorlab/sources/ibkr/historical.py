@@ -102,7 +102,9 @@ def fetch_daily_bars(
                 delay = backoff_for(attempt)
                 log.warning(
                     "IBKR error 162 (pacing) on %s attempt=%d; sleeping %.1fs",
-                    contract.symbol, attempt, delay,
+                    contract.symbol,
+                    attempt,
+                    delay,
                 )
                 limiter._sleep(delay)  # reuse limiter's clock/sleep for tests
                 continue

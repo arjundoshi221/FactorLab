@@ -9,14 +9,25 @@ from factorlab.components.ingest_us.legacy.schwab import market
 
 
 def bar(stamp, **kwargs):
-    return {"datetime": int(datetime.fromisoformat(stamp).timestamp() * 1000),
-            "open": 10, "high": 12, "low": 9, "close": 11, "volume": 100, **kwargs}
+    return {
+        "datetime": int(datetime.fromisoformat(stamp).timestamp() * 1000),
+        "open": 10,
+        "high": 12,
+        "low": 9,
+        "close": 11,
+        "volume": 100,
+        **kwargs,
+    }
 
 
-@pytest.mark.parametrize("day,opened,closed", [
-    (date(2026, 3, 6), 14, 21), (date(2026, 3, 9), 13, 20),
-    (date(2026, 11, 27), 14, 18),
-])
+@pytest.mark.parametrize(
+    "day,opened,closed",
+    [
+        (date(2026, 3, 6), 14, 21),
+        (date(2026, 3, 9), 13, 20),
+        (date(2026, 11, 27), 14, 18),
+    ],
+)
 def test_dst_and_early_close(day, opened, closed):
     start, end = market.bounds(day)
     assert (start.hour, start.minute, end.hour) == (opened, 30, closed)
@@ -29,39 +40,61 @@ def test_holiday_and_postclose_grace():
 
 
 def test_minute_filters_extended_hours_incomplete_and_duplicates():
-    frame = market.normalize([
-        bar("2026-09-04T13:29:00+00:00"), bar("2026-09-04T13:30:00+00:00"),
-        bar("2026-09-04T13:30:00+00:00", close=10), bar("2026-09-04T13:31:00+00:00"),
-        bar("2026-09-04T20:00:00+00:00"),
-    ], "1min", now=datetime(2026, 9, 4, 13, 31, 30, tzinfo=UTC))
+    frame = market.normalize(
+        [
+            bar("2026-09-04T13:29:00+00:00"),
+            bar("2026-09-04T13:30:00+00:00"),
+            bar("2026-09-04T13:30:00+00:00", close=10),
+            bar("2026-09-04T13:31:00+00:00"),
+            bar("2026-09-04T20:00:00+00:00"),
+        ],
+        "1min",
+        now=datetime(2026, 9, 4, 13, 31, 30, tzinfo=UTC),
+    )
     assert len(frame) == 1
     assert frame.iloc[0]["close"] == 10
 
 
 def test_daily_uses_new_york_date_and_excludes_incomplete_session():
-    frame = market.normalize([bar("2026-09-04T05:00:00+00:00"), bar("2026-09-08T05:00:00+00:00")],
-                             "daily", now=datetime(2026, 9, 8, 15, tzinfo=UTC))
+    frame = market.normalize(
+        [bar("2026-09-04T05:00:00+00:00"), bar("2026-09-08T05:00:00+00:00")],
+        "daily",
+        now=datetime(2026, 9, 8, 15, tzinfo=UTC),
+    )
     assert list(frame.trade_date) == [date(2026, 9, 4)]
     assert "adj_close" not in frame
 
 
 def test_daily_skips_provider_history_before_calendar_start():
-    frame = market.normalize([
-        bar("1969-12-31T05:00:00+00:00"),
-        bar("1970-01-02T05:00:00+00:00"),
-    ], "daily", now=datetime(1970, 1, 5, tzinfo=UTC))
+    frame = market.normalize(
+        [
+            bar("1969-12-31T05:00:00+00:00"),
+            bar("1970-01-02T05:00:00+00:00"),
+        ],
+        "daily",
+        now=datetime(1970, 1, 5, tzinfo=UTC),
+    )
     assert list(frame.trade_date) == [date(1970, 1, 2)]
 
 
 def test_invalid_historical_bar_does_not_discard_valid_daily_history():
     client = market.MarketClient(Mock())
-    client.get = Mock(return_value=({"candles": [
-        bar("2026-09-03T05:00:00+00:00", low=-1),
-        bar("2026-09-04T05:00:00+00:00"),
-    ]}, "archived-response"))
+    client.get = Mock(
+        return_value=(
+            {
+                "candles": [
+                    bar("2026-09-03T05:00:00+00:00", low=-1),
+                    bar("2026-09-04T05:00:00+00:00"),
+                ]
+            },
+            "archived-response",
+        )
+    )
 
     frame, raw_id = client.candles(
-        "ACGL", "daily", datetime(1970, 1, 1, tzinfo=UTC),
+        "ACGL",
+        "daily",
+        datetime(1970, 1, 1, tzinfo=UTC),
         datetime(2026, 9, 4, 21, tzinfo=UTC),
     )
 
@@ -70,15 +103,23 @@ def test_invalid_historical_bar_does_not_discard_valid_daily_history():
     assert frame.attrs["invalid_candles"] == 1
 
 
-@pytest.mark.parametrize("update", [{"high": 8}, {"volume": -1}, {"volume": 1.2}, {"close": float("nan")}])
+@pytest.mark.parametrize(
+    "update", [{"high": 8}, {"volume": -1}, {"volume": 1.2}, {"close": float("nan")}]
+)
 def test_invalid_ohlcv_rejected(update):
     with pytest.raises(ValueError):
-        market.normalize([bar("2026-09-04T13:30:00+00:00", **update)], "1min",
-                         now=datetime(2026, 9, 4, 14, tzinfo=UTC))
+        market.normalize(
+            [bar("2026-09-04T13:30:00+00:00", **update)],
+            "1min",
+            now=datetime(2026, 9, 4, 14, tzinfo=UTC),
+        )
 
 
 def test_missing_and_expired_credentials_pause(monkeypatch):
-    values = {"SCHWAB_ACCESS_TOKEN": "example", "SCHWAB_ACCESS_TOKEN.expires_at": "2026-09-04T14:00:00Z"}
+    values = {
+        "SCHWAB_ACCESS_TOKEN": "example",
+        "SCHWAB_ACCESS_TOKEN.expires_at": "2026-09-04T14:00:00Z",
+    }
     monkeypatch.setattr(market, "get_secret", values.get)
     assert market.token_ready(datetime(2026, 9, 4, 13, tzinfo=UTC))
     assert not market.token_ready(datetime(2026, 9, 4, 15, tzinfo=UTC))
@@ -87,8 +128,13 @@ def test_missing_and_expired_credentials_pause(monkeypatch):
 
 
 def response(code, payload=None, headers=None):
-    return SimpleNamespace(status_code=code, ok=code == 200, headers=headers or {},
-                           content=b"{}", json=lambda: payload or {"candles": []})
+    return SimpleNamespace(
+        status_code=code,
+        ok=code == 200,
+        headers=headers or {},
+        content=b"{}",
+        json=lambda: payload or {"candles": []},
+    )
 
 
 def test_throttle_retry_after_and_raw_archive(monkeypatch):
@@ -126,7 +172,9 @@ def test_retries_are_bounded(monkeypatch, failure):
 
 def test_reference_requires_exact_symbol_and_handles_berkshire():
     client = market.MarketClient(Mock())
-    client.get = Mock(return_value=({"instruments": [{"symbol": "BRK/B", "assetType": "EQUITY"}]}, "raw"))
+    client.get = Mock(
+        return_value=({"instruments": [{"symbol": "BRK/B", "assetType": "EQUITY"}]}, "raw")
+    )
     assert client.instrument("BRK/B")[0]["symbol"] == "BRK/B"
     with pytest.raises(ValueError):
         client.instrument("BRK-B")
@@ -137,8 +185,9 @@ def test_pacing_floor_is_configurable(monkeypatch, min_interval):
     monkeypatch.setattr(market, "token_ready", lambda: True)
     session, sleep = Mock(), Mock()
     session.get.return_value = response(200)
-    client = market.MarketClient(Mock(), session=session, sleep=sleep, clock=lambda: 100.0,
-                                 min_interval=min_interval)
+    client = market.MarketClient(
+        Mock(), session=session, sleep=sleep, clock=lambda: 100.0, min_interval=min_interval
+    )
     client.get("/pricehistory", {})
     client.get("/pricehistory", {})
     assert sleep.call_args_list[-1].args == (min_interval,)
@@ -150,5 +199,6 @@ def test_throttle_is_logged(monkeypatch, caplog):
     session.get.side_effect = [response(429, headers={"Retry-After": "3"}), response(200)]
     with caplog.at_level("WARNING", logger=market.__name__):
         market.MarketClient(Mock(), session=session, sleep=lambda _: None).get(
-            "/pricehistory", {"symbol": "AAPL"})
+            "/pricehistory", {"symbol": "AAPL"}
+        )
     assert "HTTP 429 (attempt 1/5, Retry-After=3); retrying in 3.0s" in caplog.text

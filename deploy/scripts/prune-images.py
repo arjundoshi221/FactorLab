@@ -83,20 +83,33 @@ def plan(images: list[dict], used: set[str], protected: set[str], keep: int) -> 
                 continue
             removable[image["Id"]] = image
     # An image in several repositories is removed only if no repository keeps it.
-    kept = {image["Id"] for members in by_repository.values()
-            for image in sorted(members, key=lambda i: i.get("Created", ""), reverse=True)[:keep]}
+    kept = {
+        image["Id"]
+        for members in by_repository.values()
+        for image in sorted(members, key=lambda i: i.get("Created", ""), reverse=True)[:keep]
+    }
     return [image for image_id, image in removable.items() if image_id not in kept]
 
 
-def prune(root: Path = ROOT, *, keep: int = 3, dry_run: bool = False, run: Runner = _run,
-          log: Callable[[str], None] = print) -> int:
+def prune(
+    root: Path = ROOT,
+    *,
+    keep: int = 3,
+    dry_run: bool = False,
+    run: Runner = _run,
+    log: Callable[[str], None] = print,
+) -> int:
     listed = run(["docker", "image", "ls", "--no-trunc", "--quiet"])
     containers = run(["docker", "ps", "--all", "--no-trunc", "--quiet"])
     if listed.returncode or containers.returncode:
         log("docker is unavailable; nothing pruned")
         return 1
     image_ids = sorted(set(listed.stdout.split()))
-    images = json.loads(run(["docker", "image", "inspect", *image_ids]).stdout or "[]") if image_ids else []
+    images = (
+        json.loads(run(["docker", "image", "inspect", *image_ids]).stdout or "[]")
+        if image_ids
+        else []
+    )
     used = set()
     container_ids = containers.stdout.split()
     if container_ids:
@@ -115,8 +128,10 @@ def prune(root: Path = ROOT, *, keep: int = 3, dry_run: bool = False, run: Runne
             log(f"kept {label}: {result.stderr.strip()[:200]}")
         else:
             log(f"removed {label}")
-    log(f"{len(doomed) - failures} of {len(doomed)} old FactorLab images removed"
-        + (" (dry run)" if dry_run else ""))
+    log(
+        f"{len(doomed) - failures} of {len(doomed)} old FactorLab images removed"
+        + (" (dry run)" if dry_run else "")
+    )
     return 0
 
 

@@ -69,17 +69,22 @@ def normalize_daily(records: list[dict]) -> pd.DataFrame:
             values = {key: float(item[key]) for key in ("open", "high", "low", "close")}
             volume = item["volume"]
             adjusted = item.get("adjusted_close")
-            if (not all(math.isfinite(value) and value >= 0 for value in values.values())
-                    or values["high"] < max(values.values())
-                    or values["low"] > min(values.values())
-                    or not isinstance(volume, (int, float)) or not math.isfinite(volume)
-                    or volume < 0 or int(volume) != volume
-                    or (adjusted is not None and not math.isfinite(float(adjusted)))):
+            if (
+                not all(math.isfinite(value) and value >= 0 for value in values.values())
+                or values["high"] < max(values.values())
+                or values["low"] > min(values.values())
+                or not isinstance(volume, (int, float))
+                or not math.isfinite(volume)
+                or volume < 0
+                or int(volume) != volume
+                or (adjusted is not None and not math.isfinite(float(adjusted)))
+            ):
                 raise ValueError
         except (KeyError, TypeError, ValueError, OverflowError) as exc:
             raise ValueError("Invalid EODHD daily candle") from exc
-        rows.append({"trade_date": trade_date, **values, "adj_close": adjusted,
-                     "volume": int(volume)})
+        rows.append(
+            {"trade_date": trade_date, **values, "adj_close": adjusted, "volume": int(volume)}
+        )
     if not rows:
         return pd.DataFrame()
     return pd.DataFrame(rows).drop_duplicates("trade_date", keep="last").sort_values("trade_date")
@@ -106,7 +111,6 @@ def normalize_bulk(records: list[dict], lookup: dict[str, object], raw_id=None) 
         if frame.empty:
             continue
         row = frame.iloc[0].to_dict()
-        output.append({"instrument_id": lookup[symbol], "symbol": symbol,
-                       "raw_id": raw_id, **row})
+        output.append({"instrument_id": lookup[symbol], "symbol": symbol, "raw_id": raw_id, **row})
         seen.add(symbol)
     return output

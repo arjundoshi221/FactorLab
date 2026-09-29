@@ -62,9 +62,14 @@ class GithubCsvUniverse:
     capabilities: ClassVar[Capabilities] = Capabilities(markets=frozenset({"USA"}))
     settings_model: ClassVar[type[GithubCsvSettings]] = GithubCsvSettings
 
-    def __init__(self, settings: GithubCsvSettings, *, instance: str = "github_csv",
-                 session: requests.Session | None = None,
-                 clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+    def __init__(
+        self,
+        settings: GithubCsvSettings,
+        *,
+        instance: str = "github_csv",
+        session: requests.Session | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self.settings = settings
         self.instance = instance
         self.session = session or requests.Session()
@@ -75,25 +80,32 @@ class GithubCsvUniverse:
         unknown = sorted(set(codes) - set(self.settings.indexes))
         if unknown:
             raise ValueError(f"no github_csv index configured for {unknown}")
-        return [FetchUnit(f"universe:{code}", f"{self.instance}:csv",
-                          params={"universe": code}) for code in codes]
+        return [
+            FetchUnit(f"universe:{code}", f"{self.instance}:csv", params={"universe": code})
+            for code in codes
+        ]
 
     def fetch(self, unit: FetchUnit) -> RawCapture:
         code = str(unit.params["universe"])
         index = self.settings.indexes[code]
         validate_url(index.url)
         try:
-            response = self.session.get(index.url, timeout=self.settings.timeout,
-                                        allow_redirects=True)
+            response = self.session.get(
+                index.url, timeout=self.settings.timeout, allow_redirects=True
+            )
         except requests.RequestException as exc:
             raise TransientError(f"GitHub CSV request failed: {type(exc).__name__}") from exc
         validate_url(response.url)  # a redirect must stay on GitHub
         raise_for_status("GitHub", response.status_code, response.headers, unit.name)
         return RawCapture(
-            body=response.content, request_key=unit.name, transport="http",
-            fetched_at=self._clock(), source_url=response.url,
+            body=response.content,
+            request_key=unit.name,
+            transport="http",
+            fetched_at=self._clock(),
+            source_url=response.url,
             content_type=response.headers.get("Content-Type", "text/csv"),
-            status_code=response.status_code, headers=dict(response.headers),
+            status_code=response.status_code,
+            headers=dict(response.headers),
             metadata={"universe": code, **index.model_dump()},
         )
 
@@ -116,11 +128,17 @@ class GithubCsvUniverse:
         minimum = int(meta["minimum_constituents"])
         if len(symbols) < minimum:
             raise NormalizationError(
-                f"{code}: {len(symbols)} constituents is below the minimum of {minimum}")
+                f"{code}: {len(symbols)} constituents is below the minimum of {minimum}"
+            )
         country = str(meta.get("country") or "US")
-        return [ConstituentRecord(code, InstrumentRef("", "", "", symbol, country),
-                                  universe_name=str(meta.get("name") or ""))
-                for symbol in sorted(symbols)]
+        return [
+            ConstituentRecord(
+                code,
+                InstrumentRef("", "", "", symbol, country),
+                universe_name=str(meta.get("name") or ""),
+            )
+            for symbol in sorted(symbols)
+        ]
 
 
 __all__ = ["GithubCsvSettings", "GithubCsvUniverse", "normalize_symbol", "validate_url"]

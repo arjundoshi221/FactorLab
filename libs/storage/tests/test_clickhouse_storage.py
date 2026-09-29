@@ -35,11 +35,18 @@ def test_v2_ingestion_run_records_running_and_terminal_versions():
     storage = V2IndiaStorage(client)
 
     run = storage.start_ingestion_run(
-        pipeline="india_intraday_1min", source="upstox", universe="demo", requested_series=10,
+        pipeline="india_intraday_1min",
+        source="upstox",
+        universe="demo",
+        requested_series=10,
     )
     assert storage._active_run_id == run.run_id
     storage.finish_ingestion_run(
-        run, status="partial", successful_series=9, failed_series=1, rows_written=3375,
+        run,
+        status="partial",
+        successful_series=9,
+        failed_series=1,
+        rows_written=3375,
     )
 
     assert [table for table, _ in client.inserts] == ["meta.ingestion_runs"] * 2
@@ -61,7 +68,8 @@ def test_terminal_status_is_validated():
 def test_base_storage_does_not_write_v1_run_tables():
     with pytest.raises(NotImplementedError):
         ClickHouseStorage(FakeClient()).start_ingestion_run(
-            pipeline="p", source="s", market_code="IND")
+            pipeline="p", source="s", market_code="IND"
+        )
 
 
 def test_run_handle_ids_are_unique():

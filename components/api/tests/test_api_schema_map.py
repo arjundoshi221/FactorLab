@@ -6,11 +6,26 @@ from factorlab.components.api.app import app, get_schema_map_service
 from factorlab.components.api.schema_map import V2_DATABASES, SchemaMapRepository, SchemaMapService
 
 TABLE_COLUMNS = [
-    "database", "name", "engine", "stored_rows", "bytes_on_disk", "primary_key", "sorting_key", "partition_key",
+    "database",
+    "name",
+    "engine",
+    "stored_rows",
+    "bytes_on_disk",
+    "primary_key",
+    "sorting_key",
+    "partition_key",
 ]
 COLUMN_COLUMNS = [
-    "database", "table", "name", "type", "position", "default_kind", "default_expression",
-    "is_in_primary_key", "is_in_sorting_key", "is_in_partition_key",
+    "database",
+    "table",
+    "name",
+    "type",
+    "position",
+    "default_kind",
+    "default_expression",
+    "is_in_primary_key",
+    "is_in_sorting_key",
+    "is_in_partition_key",
 ]
 
 
@@ -35,9 +50,27 @@ class V2SchemaQueryClient:
             return result(
                 TABLE_COLUMNS,
                 ("ref", "listings", "ReplacingMergeTree", 10, 500, "listing_id", "listing_id", ""),
-                ("ref", "countries", "ReplacingMergeTree", 2, 50, "country_code", "country_code", ""),
+                (
+                    "ref",
+                    "countries",
+                    "ReplacingMergeTree",
+                    2,
+                    50,
+                    "country_code",
+                    "country_code",
+                    "",
+                ),
                 ("raw", "archive", "MergeTree", 9, 900, "source", "source, fetched_at", ""),
-                ("market", "bars", "ReplacingMergeTree", 100, 5000, "", "listing_id, bar_time", "toYYYYMM(bar_time)"),
+                (
+                    "market",
+                    "bars",
+                    "ReplacingMergeTree",
+                    100,
+                    5000,
+                    "",
+                    "listing_id, bar_time",
+                    "toYYYYMM(bar_time)",
+                ),
                 ("research", "bars", "View", 0, 0, "", "", ""),
             )
         if "FROM system.columns" in query:
@@ -57,20 +90,27 @@ class V2SchemaQueryClient:
 
 
 def test_schema_map_describes_v2_tables_columns_areas_and_link_categories():
-    schema = SchemaMapRepository(V2SchemaQueryClient()).get_schema_map(now=datetime(2026, 9, 26, tzinfo=UTC))
+    schema = SchemaMapRepository(V2SchemaQueryClient()).get_schema_map(
+        now=datetime(2026, 9, 26, tzinfo=UTC)
+    )
     tables = {table.name: table for table in schema.tables}
 
     bars = tables["market.bars"]
     assert bars.namespace == "market" and bars.title == "Price bars" and bars.kind == "table"
     assert bars.summary.startswith("Open, high, low, close")
     assert any(note.startswith("Filter by resolution") for note in bars.notes)
-    assert next(column for column in bars.columns if column.name == "bar_time").description == "When the bar starts, in UTC."
+    assert (
+        next(column for column in bars.columns if column.name == "bar_time").description
+        == "When the bar starts, in UTC."
+    )
     assert tables["research.bars"].kind == "view"
 
     assert [area.id for area in schema.areas] == ["ref", "market", "raw", "research"]
     assert schema.areas[1].title == "Market data"
 
-    categories = {(item.source.table, item.source.column): item.category for item in schema.relationships}
+    categories = {
+        (item.source.table, item.source.column): item.category for item in schema.relationships
+    }
     assert categories[("market.bars", "listing_id")] == "identity"
     assert categories[("market.bars", "raw_id")] == "lineage"
     assert categories[("ref.listings", "country_code")] == "lookup"
@@ -122,7 +162,9 @@ class EmptyV2SchemaQueryClient:
 
 
 def test_schema_map_falls_back_to_migration_ddl_preview_when_databases_are_absent():
-    schema = SchemaMapRepository(EmptyV2SchemaQueryClient()).get_schema_map(now=datetime(2026, 9, 21, tzinfo=UTC))
+    schema = SchemaMapRepository(EmptyV2SchemaQueryClient()).get_schema_map(
+        now=datetime(2026, 9, 21, tzinfo=UTC)
+    )
 
     namespaces = {table.name.split(".", 1)[0] for table in schema.tables}
     assert namespaces == set(V2_DATABASES)

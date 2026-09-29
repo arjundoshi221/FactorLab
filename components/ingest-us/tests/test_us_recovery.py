@@ -17,9 +17,15 @@ def test_pilot_aliases():
 def test_resume_uses_checkpoint_overlap_and_does_not_advance_on_failure():
     now = datetime(2026, 9, 8, 21, tzinfo=UTC)
     ident = uuid.uuid5(uuid.NAMESPACE_URL, "schwab:USA:AAPL")
-    state = {"instrument_id": ident, "history_complete": True,
-             "available_from": datetime(1985, 1, 2, 5, tzinfo=UTC), "last_bar": now - timedelta(days=4),
-             "checked_through": now - timedelta(days=4), "full_refreshed_at": now - timedelta(days=1), "error": None}
+    state = {
+        "instrument_id": ident,
+        "history_complete": True,
+        "available_from": datetime(1985, 1, 2, 5, tzinfo=UTC),
+        "last_bar": now - timedelta(days=4),
+        "checked_through": now - timedelta(days=4),
+        "full_refreshed_at": now - timedelta(days=1),
+        "error": None,
+    }
     storage = Mock()
     storage.coverage.return_value = 0
     storage.state.return_value = state.copy()
@@ -39,12 +45,33 @@ def test_checkpoint_is_written_only_after_candles_and_coverage():
     ident = uuid.uuid5(uuid.NAMESPACE_URL, "schwab:USA:AAPL")
     storage = Mock()
     storage.coverage.return_value = 0
-    storage.state.return_value = {"instrument_id": ident, "history_complete": False, "available_from": None,
-                                  "last_bar": None, "checked_through": None, "full_refreshed_at": None}
+    storage.state.return_value = {
+        "instrument_id": ident,
+        "history_complete": False,
+        "available_from": None,
+        "last_bar": None,
+        "checked_through": None,
+        "full_refreshed_at": None,
+    }
     storage.write_daily.return_value = 1
     client = Mock()
-    client.candles.return_value = (normalize([{"datetime": 1788498000000, "open": 10, "high": 12,
-        "low": 9, "close": 11, "volume": 10}], "daily", now=now), "raw")
+    client.candles.return_value = (
+        normalize(
+            [
+                {
+                    "datetime": 1788498000000,
+                    "open": 10,
+                    "high": 12,
+                    "low": 9,
+                    "close": 11,
+                    "volume": 10,
+                }
+            ],
+            "daily",
+            now=now,
+        ),
+        "raw",
+    )
     runner.collect(storage, client, ("AAPL", "AAPL", ident), "daily", now=now)
     names = [call[0] for call in storage.mock_calls]
     assert names.index("write_daily") < names.index("coverage") < names.index("save_state")
@@ -60,13 +87,25 @@ def test_skipped_provider_candles_remain_visible_without_blocking_next_daily_upd
     now = datetime(2026, 9, 8, 21, tzinfo=UTC)
     ident = uuid.uuid5(uuid.NAMESPACE_URL, "schwab:USA:ACGL")
     storage = Mock()
-    storage.state.return_value = {"instrument_id": ident, "history_complete": False,
-        "available_from": None, "last_bar": None, "checked_through": None,
-        "full_refreshed_at": None, "error": None}
+    storage.state.return_value = {
+        "instrument_id": ident,
+        "history_complete": False,
+        "available_from": None,
+        "last_bar": None,
+        "checked_through": None,
+        "full_refreshed_at": None,
+        "error": None,
+    }
     storage.write_daily.return_value = 1
     storage.coverage.return_value = 0
-    frame = pd.DataFrame([{"timestamp": pd.Timestamp("2026-09-04T05:00:00Z"),
-        "trade_date": datetime(2026, 9, 4, tzinfo=UTC).date()}])
+    frame = pd.DataFrame(
+        [
+            {
+                "timestamp": pd.Timestamp("2026-09-04T05:00:00Z"),
+                "trade_date": datetime(2026, 9, 4, tzinfo=UTC).date(),
+            }
+        ]
+    )
     frame.attrs["invalid_candles"] = 2
     client = Mock()
     client.candles.return_value = (frame, "archived-response")
@@ -76,15 +115,19 @@ def test_skipped_provider_candles_remain_visible_without_blocking_next_daily_upd
     assert saved["history_complete"] is True
     assert saved["error"] == "Invalid Schwab candles: 2 skipped"
     assert storage.finish_ingestion_run.call_args.kwargs["status"] == "partial"
-    assert runner.pending_daily([{"instrument_id": ident}], {ident: saved},
-                                datetime(2026, 9, 4, tzinfo=UTC).date()) == []
+    assert (
+        runner.pending_daily(
+            [{"instrument_id": ident}], {ident: saved}, datetime(2026, 9, 4, tzinfo=UTC).date()
+        )
+        == []
+    )
 
     prior_error = saved["error"]
-    assert runner.pending_daily([{"instrument_id": ident}], {ident: saved},
-                                datetime(2026, 9, 9, tzinfo=UTC).date())
+    assert runner.pending_daily(
+        [{"instrument_id": ident}], {ident: saved}, datetime(2026, 9, 9, tzinfo=UTC).date()
+    )
     storage.state.return_value = saved
     frame.attrs["invalid_candles"] = 0
-    runner.collect(storage, client, ("ACGL", "ACGL", ident), "daily",
-                   now=now + timedelta(days=1))
+    runner.collect(storage, client, ("ACGL", "ACGL", ident), "daily", now=now + timedelta(days=1))
     assert storage.save_state.call_args.args[0]["error"] == prior_error
     storage.gap_start.assert_not_called()

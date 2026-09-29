@@ -10,11 +10,18 @@ ALIAS_KIND = "schwab_symbol"
 
 # Schwab exchange names/codes -> ref.exchanges code; matches universe/schwab.SUPPORTED_EXCHANGES.
 DEFAULT_EXCHANGES = {
-    "A": "XASE", "AMEX": "XASE", "NYSE AMERICAN": "XASE",
-    "N": "XNYS", "NYSE": "XNYS",
-    "P": "ARCX", "NYSE ARCA": "ARCX",
-    "Q": "XNAS", "NASDAQ": "XNAS", "NASDAQ GLOBAL MARKET": "XNAS",
-    "NASDAQ GLOBAL SELECT": "XNAS", "NASDAQ CAPITAL MARKET": "XNAS",
+    "A": "XASE",
+    "AMEX": "XASE",
+    "NYSE AMERICAN": "XASE",
+    "N": "XNYS",
+    "NYSE": "XNYS",
+    "P": "ARCX",
+    "NYSE ARCA": "ARCX",
+    "Q": "XNAS",
+    "NASDAQ": "XNAS",
+    "NASDAQ GLOBAL MARKET": "XNAS",
+    "NASDAQ GLOBAL SELECT": "XNAS",
+    "NASDAQ CAPITAL MARKET": "XNAS",
 }
 
 

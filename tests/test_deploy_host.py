@@ -12,13 +12,16 @@ PREPARE_HOST = REPO / "deploy" / "scripts" / "prepare-host.sh"
 
 
 def _manifest_names() -> set[str]:
-    return {yaml.safe_load(p.read_text(encoding="utf-8"))["name"]
-            for p in (REPO / "components").glob("*/component.yaml")}
+    return {
+        yaml.safe_load(p.read_text(encoding="utf-8"))["name"]
+        for p in (REPO / "components").glob("*/component.yaml")
+    }
 
 
 def test_every_component_gets_a_log_directory():
-    match = re.search(r'^FACTORLAB_COMPONENTS="([^"]+)"', PREPARE_HOST.read_text(encoding="utf-8"),
-                      re.MULTILINE)
+    match = re.search(
+        r'^FACTORLAB_COMPONENTS="([^"]+)"', PREPARE_HOST.read_text(encoding="utf-8"), re.MULTILINE
+    )
     assert match, "prepare-host.sh must list FACTORLAB_COMPONENTS"
     assert set(match.group(1).split()) == _manifest_names()
 
@@ -70,8 +73,13 @@ def test_the_log_reader_account_is_provisioned_safely():
     check, reload = text.index("sshd -t"), text.index("systemctl reload ssh")
     assert check < reload and 'rm -f "$sshd_dropin"' in text[check:reload]
     dropin = (REPO / "deploy" / "ssh" / "60-factorlab-logs.conf").read_text(encoding="utf-8")
-    for rule in ("Match User factorlab-logs", "ForceCommand /usr/local/bin/factorlab-log-reader",
-                 "PermitTTY no", "DisableForwarding yes", "AuthenticationMethods publickey",
-                 "AuthorizedKeysFile /etc/factorlab/log-reader/authorized_keys"):
+    for rule in (
+        "Match User factorlab-logs",
+        "ForceCommand /usr/local/bin/factorlab-log-reader",
+        "PermitTTY no",
+        "DisableForwarding yes",
+        "AuthenticationMethods publickey",
+        "AuthorizedKeysFile /etc/factorlab/log-reader/authorized_keys",
+    ):
         assert rule in dropin, rule
     assert dropin.rstrip().endswith("Match all")

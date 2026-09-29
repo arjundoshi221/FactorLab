@@ -15,16 +15,27 @@ from factorlab.components.ingest_us.legacy.eodhd.us_universe import (
 
 
 def master_item(code, *, exchange="NASDAQ", kind="Common Stock", currency="USD"):
-    return {"Code": code, "Name": f"{code} Incorporated", "Exchange": exchange,
-            "Type": kind, "Currency": currency, "Isin": None}
+    return {
+        "Code": code,
+        "Name": f"{code} Incorporated",
+        "Exchange": exchange,
+        "Type": kind,
+        "Currency": currency,
+        "Isin": None,
+    }
 
 
 def test_master_keeps_selected_common_stock_venues_and_adrs():
-    result = normalize_master([
-        master_item("AAPL"), master_item("BABA", exchange="NYSE"),
-        master_item("SMALL", exchange="NYSE MKT"), master_item("SPY", kind="ETF"),
-        master_item("OTC", exchange="PINK"), master_item("CAD", currency="CAD"),
-    ])
+    result = normalize_master(
+        [
+            master_item("AAPL"),
+            master_item("BABA", exchange="NYSE"),
+            master_item("SMALL", exchange="NYSE MKT"),
+            master_item("SPY", kind="ETF"),
+            master_item("OTC", exchange="PINK"),
+            master_item("CAD", currency="CAD"),
+        ]
+    )
     assert [item["symbol"] for item in result] == ["AAPL", "BABA", "SMALL"]
     assert [item["exchange_code"] for item in result] == ["XNAS", "XNYS", "XASE"]
 
@@ -32,22 +43,50 @@ def test_master_keeps_selected_common_stock_venues_and_adrs():
 def test_symbol_mapping_and_daily_validation():
     assert canonical_symbol("brk/b.us") == "BRK-B"
     assert schwab_symbol("BRK-B") == "BRK/B"
-    frame = normalize_daily([{"date": "2026-09-14", "open": 10, "high": 12,
-                              "low": 9, "close": 11, "adjusted_close": 10.5,
-                              "volume": 100}])
+    frame = normalize_daily(
+        [
+            {
+                "date": "2026-09-14",
+                "open": 10,
+                "high": 12,
+                "low": 9,
+                "close": 11,
+                "adjusted_close": 10.5,
+                "volume": 100,
+            }
+        ]
+    )
     assert frame.iloc[0]["trade_date"] == date(2026, 9, 14)
     assert frame.iloc[0]["adj_close"] == 10.5
     with pytest.raises(ValueError):
-        normalize_daily([{"date": "2026-09-14", "open": 10, "high": 8,
-                          "low": 9, "close": 11, "volume": 100}])
+        normalize_daily(
+            [{"date": "2026-09-14", "open": 10, "high": 8, "low": 9, "close": 11, "volume": 100}]
+        )
 
 
 def test_bulk_is_scoped_to_active_master_and_deduplicated():
     identifier = uuid4()
-    records = [{"code": "AAPL", "date": "2026-09-14", "open": 10, "high": 12,
-                "low": 9, "close": 11, "adjusted_close": 10.5, "volume": 100},
-               {"code": "OTC", "date": "2026-09-14", "open": 1, "high": 1,
-                "low": 1, "close": 1, "volume": 1}]
+    records = [
+        {
+            "code": "AAPL",
+            "date": "2026-09-14",
+            "open": 10,
+            "high": 12,
+            "low": 9,
+            "close": 11,
+            "adjusted_close": 10.5,
+            "volume": 100,
+        },
+        {
+            "code": "OTC",
+            "date": "2026-09-14",
+            "open": 1,
+            "high": 1,
+            "low": 1,
+            "close": 1,
+            "volume": 1,
+        },
+    ]
     result = normalize_bulk(records, {"AAPL": identifier}, "raw")
     assert len(result) == 1
     assert result[0]["instrument_id"] == identifier
@@ -57,10 +96,24 @@ def test_bulk_is_scoped_to_active_master_and_deduplicated():
 def test_bulk_skips_one_malformed_row_without_losing_snapshot():
     identifiers = {symbol: uuid4() for symbol in ("AAPL", "MSFT")}
     records = [
-        {"code": "AAPL", "date": "2026-09-14", "open": 10, "high": 12,
-         "low": 9, "close": 11, "volume": 100},
-        {"code": "MSFT", "date": "2026-09-14", "open": 10, "high": 8,
-         "low": 9, "close": 11, "volume": 100},
+        {
+            "code": "AAPL",
+            "date": "2026-09-14",
+            "open": 10,
+            "high": 12,
+            "low": 9,
+            "close": 11,
+            "volume": 100,
+        },
+        {
+            "code": "MSFT",
+            "date": "2026-09-14",
+            "open": 10,
+            "high": 8,
+            "low": 9,
+            "close": 11,
+            "volume": 100,
+        },
     ]
     result = normalize_bulk(records, identifiers)
     assert [item["symbol"] for item in result] == ["AAPL"]
@@ -71,27 +124,38 @@ def test_pending_daily_includes_incomplete_stale_and_error_states():
     target_day = runner.latest_completed(now)
     target = runner.bounds(target_day)[1]
     identifiers = [uuid4() for _ in range(4)]
-    items = [{"instrument_id": identifier, "symbol": str(index)}
-             for index, identifier in enumerate(identifiers)]
+    items = [
+        {"instrument_id": identifier, "symbol": str(index)}
+        for index, identifier in enumerate(identifiers)
+    ]
     states = {
         identifiers[0]: {"history_complete": False, "checked_through": None, "error": None},
-        identifiers[1]: {"history_complete": True, "checked_through": target - runner.timedelta(days=1), "error": None},
+        identifiers[1]: {
+            "history_complete": True,
+            "checked_through": target - runner.timedelta(days=1),
+            "error": None,
+        },
         identifiers[2]: {"history_complete": True, "checked_through": target, "error": "retry"},
         identifiers[3]: {"history_complete": True, "checked_through": target, "error": None},
     }
-    assert [item["instrument_id"] for item in runner.pending_daily(items, states, target_day)] == identifiers[:3]
+    assert [
+        item["instrument_id"] for item in runner.pending_daily(items, states, target_day)
+    ] == identifiers[:3]
 
 
 def test_schwab_health_stays_incomplete_after_daily_queue_drains():
     storage = Mock()
     storage.unresolved_series.return_value = 3
     assert runner.collection_status(storage, [], [{}] * 503) == (
-        "incomplete", "3 series have unresolved errors or gaps")
+        "incomplete",
+        "3 series have unresolved errors or gaps",
+    )
     assert runner.collection_status(storage, [{}], [{}] * 503) == (
-        "recovering", "1 daily histories pending")
+        "recovering",
+        "1 daily histories pending",
+    )
     storage.unresolved_series.return_value = 0
-    assert runner.collection_status(storage, [], [{}] * 503) == (
-        "ready", "503 configured equities")
+    assert runner.collection_status(storage, [], [{}] * 503) == ("ready", "503 configured equities")
 
 
 def test_liquid_tier_uses_resolver_validated_symbols(monkeypatch):
@@ -100,23 +164,30 @@ def test_liquid_tier_uses_resolver_validated_symbols(monkeypatch):
     storage = Mock()
     storage.liquid_candidates.return_value = [
         {"instrument_id": identifier, "symbol": symbol}
-        for identifier, symbol in zip(identifiers, ["BAD", "AAPL", "MSFT"], strict=True)]
+        for identifier, symbol in zip(identifiers, ["BAD", "AAPL", "MSFT"], strict=True)
+    ]
     client = Mock()
-    items = [{"instrument_id": identifier, "symbol": symbol, "provider_symbol": f"{symbol}.US"}
-             for identifier, symbol in zip(identifiers, ["BAD", "AAPL", "MSFT"], strict=True)]
+    items = [
+        {"instrument_id": identifier, "symbol": symbol, "provider_symbol": f"{symbol}.US"}
+        for identifier, symbol in zip(identifiers, ["BAD", "AAPL", "MSFT"], strict=True)
+    ]
     result = runner.select_minute_tier(storage, client, items)
     assert [item[0] for item in result] == ["BAD", "AAPL"]
     client.instrument.assert_not_called()
     assert storage.sync_expected_series.call_args.kwargs == {
-        "source": "schwab", "universe": "us_liquid_250", "resolution": "1min"}
+        "source": "schwab",
+        "universe": "us_liquid_250",
+        "resolution": "1min",
+    }
 
 
 def test_liquid_tier_targets_configured_count_when_below_cap(monkeypatch):
     monkeypatch.setattr(runner, "MINUTE_TIER_SIZE", 250)
     identifiers = [uuid4() for _ in range(2)]
-    items = [{"instrument_id": identifier, "symbol": symbol,
-              "provider_symbol": f"{symbol}.US"}
-             for identifier, symbol in zip(identifiers, ["AAPL", "MSFT"], strict=True)]
+    items = [
+        {"instrument_id": identifier, "symbol": symbol, "provider_symbol": f"{symbol}.US"}
+        for identifier, symbol in zip(identifiers, ["AAPL", "MSFT"], strict=True)
+    ]
     storage = Mock()
     storage.liquid_candidates.return_value = items
     client = Mock()

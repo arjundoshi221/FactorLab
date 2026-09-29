@@ -168,7 +168,9 @@ def decode_cursor(cursor: str) -> tuple[date, UUID]:
         padding = "=" * (-len(cursor) % 4)
         payload = json.loads(base64.urlsafe_b64decode(cursor + padding))
         if not isinstance(payload, dict) or payload.get("v") != 2:
-            raise HTTPException(400, "Legacy cursor; restart pagination with canonical political trade IDs")
+            raise HTTPException(
+                400, "Legacy cursor; restart pagination with canonical political trade IDs"
+            )
         cursor_date = date.fromisoformat(payload["date"])
         political_trade_id = UUID(payload["political_trade_id"])
         return cursor_date, political_trade_id

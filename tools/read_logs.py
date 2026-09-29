@@ -39,15 +39,27 @@ from dotenv import dotenv_values
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT, MAX_OUTPUT = 12 * 1024, 64 * 1024
 MAX_RESPONSE = 256 * 1024
-STANDARD = {"ts", "level", "component", "service", "logger", "msg", "version", "commit",
-            "exc", "exc_summary", "raw"}
+STANDARD = {
+    "ts",
+    "level",
+    "component",
+    "service",
+    "logger",
+    "msg",
+    "version",
+    "commit",
+    "exc",
+    "exc_summary",
+    "raw",
+}
 
 
 def _load_reader():
     key = "factorlab_log_reader"
     if key not in sys.modules:
         spec = importlib.util.spec_from_file_location(
-            key, REPO / "deploy" / "host" / "factorlab_log_reader.py")
+            key, REPO / "deploy" / "host" / "factorlab_log_reader.py"
+        )
         module = importlib.util.module_from_spec(spec)
         sys.modules[key] = module
         spec.loader.exec_module(module)
@@ -71,10 +83,12 @@ def settings() -> dict[str, str]:
                 return value
         return ""
 
-    result = {"host": get("FACTORLAB_LOGS_SSH_HOST", "CLICKHOUSE_SSH_HOST"),
-              "port": get("FACTORLAB_LOGS_SSH_PORT", "CLICKHOUSE_SSH_PORT") or "22",
-              "user": get("FACTORLAB_LOGS_SSH_USER") or "factorlab-logs",
-              "key": get("FACTORLAB_LOGS_SSH_KEY_PATH")}
+    result = {
+        "host": get("FACTORLAB_LOGS_SSH_HOST", "CLICKHOUSE_SSH_HOST"),
+        "port": get("FACTORLAB_LOGS_SSH_PORT", "CLICKHOUSE_SSH_PORT") or "22",
+        "user": get("FACTORLAB_LOGS_SSH_USER") or "factorlab-logs",
+        "key": get("FACTORLAB_LOGS_SSH_KEY_PATH"),
+    }
     if not result["host"]:
         raise ClientError("set FACTORLAB_LOGS_SSH_HOST (or CLICKHOUSE_SSH_HOST)")
     if not result["port"].isdigit() or not 1 <= int(result["port"]) <= 65535:
@@ -83,9 +97,24 @@ def settings() -> dict[str, str]:
 
 
 def ssh_command(config: dict[str, str], argv: list[str]) -> list[str]:
-    command = ["ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-               "-o", "PreferredAuthentications=publickey", "-o", "ConnectTimeout=10",
-               "-o", "RequestTTY=no", "-o", "ClearAllForwardings=yes", "-p", config["port"]]
+    command = [
+        "ssh",
+        "-T",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "-o",
+        "PreferredAuthentications=publickey",
+        "-o",
+        "ConnectTimeout=10",
+        "-o",
+        "RequestTTY=no",
+        "-o",
+        "ClearAllForwardings=yes",
+        "-p",
+        config["port"],
+    ]
     if config["key"]:
         command += ["-i", config["key"], "-o", "IdentitiesOnly=yes"]
     # The remote side splits this with shlex and never passes it to a shell.
@@ -94,8 +123,9 @@ def ssh_command(config: dict[str, str], argv: list[str]) -> list[str]:
 
 def fetch_remote(argv: list[str]) -> str:
     try:
-        result = subprocess.run(ssh_command(settings(), argv), capture_output=True,
-                                timeout=90, check=False)
+        result = subprocess.run(
+            ssh_command(settings(), argv), capture_output=True, timeout=90, check=False
+        )
     except OSError as exc:
         raise ClientError("could not start ssh") from exc
     except subprocess.TimeoutExpired:
@@ -104,8 +134,10 @@ def fetch_remote(argv: list[str]) -> str:
     if result.returncode == 2 and stderr.startswith(("error:", "usage:")):
         raise ClientError(reader.redact(stderr.splitlines()[-1]))
     if result.returncode:
-        raise ClientError("ssh failed (key, known_hosts or the factorlab-logs account?): "
-                          + reader.redact(stderr[-300:]))
+        raise ClientError(
+            "ssh failed (key, known_hosts or the factorlab-logs account?): "
+            + reader.redact(stderr[-300:])
+        )
     return result.stdout[:MAX_RESPONSE].decode("utf-8", "replace")
 
 
@@ -115,11 +147,14 @@ def fetch_local(argv: list[str], root: Path) -> str:
     except reader.UsageError as exc:
         raise ClientError(str(exc)) from None
     lines = [json.dumps(item, ensure_ascii=False, default=str) for item in items]
-    return "\n".join([*lines, json.dumps({"_meta": {**meta, "returned": len(items),
-                                                      "truncated": 0}})]) + "\n"
+    return (
+        "\n".join([*lines, json.dumps({"_meta": {**meta, "returned": len(items), "truncated": 0}})])
+        + "\n"
+    )
 
 
 # ── formatting ───────────────────────────────────────────────────────────────
+
 
 def _extras(record: dict) -> str:
     pairs = [f"{k}={v}" for k, v in record.items() if k not in STANDARD and v not in (None, "")]
@@ -129,8 +164,16 @@ def _extras(record: dict) -> str:
 
 def format_record(record: dict) -> list[str]:
     where = f"{record.get('component', '?')}/{record.get('service', '?')}"
-    head = " ".join(str(part) for part in (record.get("ts", "-"), record.get("level", "-"),
-                                            where, record.get("logger", "")) if part)
+    head = " ".join(
+        str(part)
+        for part in (
+            record.get("ts", "-"),
+            record.get("level", "-"),
+            where,
+            record.get("logger", ""),
+        )
+        if part
+    )
     lines = [f"{head}: {record.get('msg', '')}{_extras(record)}"]
     if record.get("exc"):
         lines += ["    " + line for line in str(record["exc"]).splitlines()]
@@ -154,19 +197,23 @@ def format_group(group: dict) -> list[str]:
 def format_listing(item: dict) -> list[str]:
     if "containers" in item:
         lines = [f"containers (snapshot {item.get('snapshot_at')}):"]
-        lines += [f"  {c.get('service')!s:24} {c.get('status')!s:10} {c.get('version') or '-'}"
-                  for c in item["containers"]]
+        lines += [
+            f"  {c.get('service')!s:24} {c.get('status')!s:10} {c.get('version') or '-'}"
+            for c in item["containers"]
+        ]
         return lines
-    files = ", ".join(f"{f['file']} ({f['bytes']} B, {f['modified'][:16]})"
-                      for f in item.get("files", []))
+    files = ", ".join(
+        f"{f['file']} ({f['bytes']} B, {f['modified'][:16]})" for f in item.get("files", [])
+    )
     return [f"{item['component']}: {files or '(no log files)'}"]
 
 
 def scrub(value):
     """Redact again after parsing: credential-looking keys and text anywhere in a record."""
     if isinstance(value, dict):
-        return {k: "[redacted]" if reader.SECRET_KEY.search(k) else scrub(v)
-                for k, v in value.items()}
+        return {
+            k: "[redacted]" if reader.SECRET_KEY.search(k) else scrub(v) for k, v in value.items()
+        }
     if isinstance(value, list):
         return [scrub(v) for v in value]
     return reader.redact(value) if isinstance(value, str) else value
@@ -203,8 +250,10 @@ def cap(text: str, limit: int) -> str:
     if len(data) <= limit:
         return text
     kept = data[:limit].decode("utf-8", "ignore").rsplit("\n", 1)[0]
-    return (kept + f"\n[output truncated: {len(data) - len(kept.encode())} more bytes; narrow "
-            "with --since, --service, --level or --grep, or raise --max-bytes]\n")
+    return (
+        kept + f"\n[output truncated: {len(data) - len(kept.encode())} more bytes; narrow "
+        "with --since, --service, --level or --grep, or raise --max-bytes]\n"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -222,8 +271,7 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as exc:
         return int(exc.code or 0)
     try:
-        payload = (fetch_local(remote, options.local) if options.local
-                   else fetch_remote(remote))
+        payload = fetch_local(remote, options.local) if options.local else fetch_remote(remote)
     except ClientError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

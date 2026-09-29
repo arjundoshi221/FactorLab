@@ -21,14 +21,14 @@ def test_repo_root_resolves_to_repository():
 @pytest.mark.parametrize(
     "source,expected_subpath",
     [
-        ("political",          "political/raw"),
-        ("fec",                "political/raw/fec"),
-        ("senate_efd",         "political/raw/senate_efd"),
-        ("senate_efd_ptrs",    "political/raw/senate_efd/ptrs"),
-        ("senate_efd_llm",     "political/raw/senate_efd/_llm_extractions"),
-        ("eodhd",              "eodhd"),
+        ("political", "political/raw"),
+        ("fec", "political/raw/fec"),
+        ("senate_efd", "political/raw/senate_efd"),
+        ("senate_efd_ptrs", "political/raw/senate_efd/ptrs"),
+        ("senate_efd_llm", "political/raw/senate_efd/_llm_extractions"),
+        ("eodhd", "eodhd"),
         ("upstox_instruments", "upstox/instruments"),
-        ("upstox_live",        "in/live"),
+        ("upstox_live", "in/live"),
     ],
 )
 def test_raw_dir_preserves_legacy_layout(source, expected_subpath):
@@ -102,6 +102,7 @@ def test_env_override_for_raw_root(monkeypatch, tmp_path):
     import importlib
 
     import factorlab.core.paths as _paths
+
     importlib.reload(_paths)
     try:
         got = _paths.raw_dir("eodhd")

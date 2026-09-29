@@ -63,8 +63,12 @@ def _remove(path: Path) -> None:
 
 def _clickhouse_users_xml(password_hash: str) -> str:
     normalized = password_hash.strip().lower()
-    if len(normalized) != 64 or any(character not in "0123456789abcdef" for character in normalized):
-        raise ValueError("CLICKHOUSE_PASSWORD_SHA256 must contain exactly 64 hexadecimal characters")
+    if len(normalized) != 64 or any(
+        character not in "0123456789abcdef" for character in normalized
+    ):
+        raise ValueError(
+            "CLICKHOUSE_PASSWORD_SHA256 must contain exactly 64 hexadecimal characters"
+        )
     return f"""<clickhouse>
   <profiles>
     <default>
@@ -104,7 +108,9 @@ def _render_bundle(payload: dict[str, Any]) -> str:
     if not hmac.compare_digest(calculated_hash, clickhouse_hash.lower()):
         raise ValueError("CLICKHOUSE_PASSWORD_SHA256 does not match CLICKHOUSE_PASSWORD")
 
-    _atomic_write(CLICKHOUSE_DIR / "runtime-users.xml", _clickhouse_users_xml(clickhouse_hash), 0o444)
+    _atomic_write(
+        CLICKHOUSE_DIR / "runtime-users.xml", _clickhouse_users_xml(clickhouse_hash), 0o444
+    )
     for directory in (INDIA_DIR, US_DIR, POLITICAL_DIR):
         _atomic_write(directory / "CLICKHOUSE_PASSWORD", clickhouse_password)
     eodhd_api_key = secrets.get("EODHD_API_KEY")
@@ -252,10 +258,18 @@ def main(argv: list[str] | None = None) -> int:
         _expire_local_token()
         try:
             client_id = _read_identity_file(client_id_path, "Cloudflare Access client ID")
-            client_secret = _read_identity_file(client_secret_path, "Cloudflare Access client secret")
+            client_secret = _read_identity_file(
+                client_secret_path, "Cloudflare Access client secret"
+            )
             status = sync_once(url, client_id, client_secret)
             log.info("Runtime secrets synchronized; token status: %s", status)
-        except (OSError, TypeError, ValueError, requests.RequestException, json.JSONDecodeError) as exc:
+        except (
+            OSError,
+            TypeError,
+            ValueError,
+            requests.RequestException,
+            json.JSONDecodeError,
+        ) as exc:
             log.error("Runtime secret synchronization failed: %s", exc)
             if args.once:
                 return 1

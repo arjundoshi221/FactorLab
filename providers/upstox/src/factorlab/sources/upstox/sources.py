@@ -47,8 +47,9 @@ def _ist_midnight(day: date) -> datetime:
     return datetime.combine(day, time(0), tzinfo=IST).astimezone(UTC)
 
 
-def historical_windows(start: date, end: date, *, available_from: date,
-                       chunk_days: int) -> list[tuple[date, date]]:
+def historical_windows(
+    start: date, end: date, *, available_from: date, chunk_days: int
+) -> list[tuple[date, date]]:
     """Inclusive IST-date ranges accepted by the V3 minute history endpoint."""
     cursor = max(start, available_from)
     windows: list[tuple[date, date]] = []
@@ -63,8 +64,13 @@ class _UpstoxSource:
     provider: ClassVar[str] = "upstox"
     settings_model: ClassVar[type[UpstoxSettings]] = UpstoxSettings
 
-    def __init__(self, settings: UpstoxSettings, *, instance: str = "upstox",
-                 client: UpstoxClient | None = None) -> None:
+    def __init__(
+        self,
+        settings: UpstoxSettings,
+        *,
+        instance: str = "upstox",
+        client: UpstoxClient | None = None,
+    ) -> None:
         self.settings = settings
         self.instance = instance
         self._client = client
@@ -84,36 +90,44 @@ class _InstrumentMaster(_UpstoxSource):
 
     def plan(self, request: ReferenceRequest) -> Sequence[FetchUnit]:
         exchanges = request.params.get("exchanges") or self.settings.exchanges
-        return [FetchUnit(f"master:{exchange}", self._channel("instruments"),
-                          params={"exchange": exchange}) for exchange in exchanges]
+        return [
+            FetchUnit(
+                f"master:{exchange}", self._channel("instruments"), params={"exchange": exchange}
+            )
+            for exchange in exchanges
+        ]
 
     def fetch(self, unit: FetchUnit) -> RawCapture:
         exchange = str(unit.params["exchange"])
         url = self.settings.instruments_url.format(exchange=exchange)
-        return self.client.get(url, request_key=unit.name, auth=False,
-                               metadata={"exchange": exchange})
+        return self.client.get(
+            url, request_key=unit.name, auth=False, metadata={"exchange": exchange}
+        )
 
 
 class UpstoxListings(_InstrumentMaster):
     dataset: ClassVar[str] = "ref.listings"
 
     def normalize(self, capture: RawCapture) -> Sequence[InstrumentRecord]:
-        return normalize_listings(capture,
-                                  instrument_types=self.settings.listing_instrument_types)
+        return normalize_listings(capture, instrument_types=self.settings.listing_instrument_types)
 
 
 class UpstoxContracts(_InstrumentMaster):
     dataset: ClassVar[str] = "ref.contracts"
 
     def normalize(self, capture: RawCapture) -> Sequence[ContractRecord]:
-        return normalize_contracts(capture,
-                                   underlying_types=self.settings.contract_underlying_types)
+        return normalize_contracts(
+            capture, underlying_types=self.settings.contract_underlying_types
+        )
 
 
 class _UpstoxBars(_UpstoxSource):
     capabilities: ClassVar[Capabilities] = Capabilities(
-        markets=MARKETS, resolutions=frozenset({"1min"}), alias_kind=ALIAS_KIND,
-        max_batch=100, polling=True,
+        markets=MARKETS,
+        resolutions=frozenset({"1min"}),
+        alias_kind=ALIAS_KIND,
+        max_batch=100,
+        polling=True,
     )
     contract: ClassVar[bool] = False
 
@@ -131,23 +145,37 @@ class _UpstoxBars(_UpstoxSource):
             today = window.end.astimezone(IST).date()
             first = window.start.astimezone(IST).date()
             for start, stop in historical_windows(
-                    first, today - timedelta(days=1),
-                    available_from=self.settings.history_available_from,
-                    chunk_days=self.settings.historical_chunk_days):
-                units.append(FetchUnit(
-                    f"{ref.alias_value}:{start}..{stop}", self._channel("v3_historical"),
-                    params={"endpoint": "historical", "from": start.isoformat(),
-                            "to": stop.isoformat()},
-                    instruments=(ref,), start=_ist_midnight(start),
-                    end=_ist_midnight(stop + timedelta(days=1)),
-                ))
+                first,
+                today - timedelta(days=1),
+                available_from=self.settings.history_available_from,
+                chunk_days=self.settings.historical_chunk_days,
+            ):
+                units.append(
+                    FetchUnit(
+                        f"{ref.alias_value}:{start}..{stop}",
+                        self._channel("v3_historical"),
+                        params={
+                            "endpoint": "historical",
+                            "from": start.isoformat(),
+                            "to": stop.isoformat(),
+                        },
+                        instruments=(ref,),
+                        start=_ist_midnight(start),
+                        end=_ist_midnight(stop + timedelta(days=1)),
+                    )
+                )
             today_start = _ist_midnight(today)
             if window.end > today_start:
-                units.append(FetchUnit(
-                    f"{ref.alias_value}:intraday:{today}", self._channel("v3_intraday"),
-                    params={"endpoint": "intraday"}, instruments=(ref,),
-                    start=max(window.start, today_start), end=window.end,
-                ))
+                units.append(
+                    FetchUnit(
+                        f"{ref.alias_value}:intraday:{today}",
+                        self._channel("v3_intraday"),
+                        params={"endpoint": "intraday"},
+                        instruments=(ref,),
+                        start=max(window.start, today_start),
+                        end=window.end,
+                    )
+                )
         return units
 
     def _plan_quotes(self, request: BarRequest) -> list[FetchUnit]:
@@ -155,11 +183,15 @@ class _UpstoxBars(_UpstoxSource):
         size = self.settings.quote_batch_size
         units = []
         for index in range(0, len(refs), size):
-            batch = tuple(refs[index:index + size])
-            units.append(FetchUnit(
-                f"quote:{batch[0].alias_value}..{batch[-1].alias_value}",
-                self._channel("v3_quote_ohlc"), params={"endpoint": "quote"}, instruments=batch,
-            ))
+            batch = tuple(refs[index : index + size])
+            units.append(
+                FetchUnit(
+                    f"quote:{batch[0].alias_value}..{batch[-1].alias_value}",
+                    self._channel("v3_quote_ohlc"),
+                    params={"endpoint": "quote"},
+                    instruments=batch,
+                )
+            )
         return units
 
     def _url(self, unit: FetchUnit) -> str:
@@ -171,11 +203,14 @@ class _UpstoxBars(_UpstoxSource):
         key = quote(unit.instruments[0].alias_value, safe="")
         if endpoint == "intraday":
             return f"{base}/v3/historical-candle/intraday/{key}/minutes/1"
-        return f"{base}/v3/historical-candle/{key}/minutes/1/{unit.params['to']}/{unit.params['from']}"
+        return (
+            f"{base}/v3/historical-candle/{key}/minutes/1/{unit.params['to']}/{unit.params['from']}"
+        )
 
     def fetch(self, unit: FetchUnit) -> RawCapture:
         metadata: dict[str, Any] = {
-            "endpoint": unit.params["endpoint"], "resolution": "1min",
+            "endpoint": unit.params["endpoint"],
+            "resolution": "1min",
             "instruments": [ref_to_metadata(ref) for ref in unit.instruments],
         }
         for key in ("from", "to"):

@@ -15,9 +15,13 @@ from collections.abc import Callable, Sequence
 class SlidingWindowLimiter:
     """Block until one more request fits every ``(window_seconds, max_requests)`` bucket."""
 
-    def __init__(self, windows: Sequence[tuple[float, int]], *,
-                 clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], None] = time.sleep) -> None:
+    def __init__(
+        self,
+        windows: Sequence[tuple[float, int]],
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         cleaned = tuple(sorted((float(w), int(n)) for w, n in windows if n > 0))
         if not cleaned:
             raise ValueError("at least one positive rate-limit window is required")

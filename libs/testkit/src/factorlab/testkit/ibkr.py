@@ -22,9 +22,15 @@ def now_utc() -> datetime:
 
 
 def make_contract(
-    *, sec_type: str = "STK", con_id: int = 265598, symbol: str = "AAPL",
-    exchange: str = "SMART", primary: str = "NASDAQ", currency: str = "USD",
-    local_symbol: str | None = None, trading_class: str = "NMS",
+    *,
+    sec_type: str = "STK",
+    con_id: int = 265598,
+    symbol: str = "AAPL",
+    exchange: str = "SMART",
+    primary: str = "NASDAQ",
+    currency: str = "USD",
+    local_symbol: str | None = None,
+    trading_class: str = "NMS",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         secType=sec_type,
@@ -39,10 +45,15 @@ def make_contract(
 
 
 def make_portfolio_item(
-    *, account: str = "DUE375963", contract=None,
-    position: float = 100.0, avg_cost: float = 150.0,
-    market_price: float | None = 175.5, market_value: float | None = 17550.0,
-    unrealized_pnl: float | None = 2550.0, realized_pnl: float | None = 0.0,
+    *,
+    account: str = "DUE375963",
+    contract=None,
+    position: float = 100.0,
+    avg_cost: float = 150.0,
+    market_price: float | None = 175.5,
+    market_value: float | None = 17550.0,
+    unrealized_pnl: float | None = 2550.0,
+    realized_pnl: float | None = 0.0,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         account=account,
@@ -57,17 +68,28 @@ def make_portfolio_item(
 
 
 def make_account_value(
-    *, account: str = "DUE375963", tag: str = "NetLiquidation",
-    value: str = "1481501.63", currency: str = "USD",
+    *,
+    account: str = "DUE375963",
+    tag: str = "NetLiquidation",
+    value: str = "1481501.63",
+    currency: str = "USD",
 ) -> SimpleNamespace:
     return SimpleNamespace(account=account, tag=tag, value=value, currency=currency, modelCode="")
 
 
 def make_execution(
-    *, exec_id: str = "0001f8a3.66eb01c2.01.01", account: str = "DUE375963",
-    order_id: int = 12, perm_id: int = 987654321, client_id: int = 10,
-    side: str = "BOT", shares: float = 100.0, price: float = 175.32,
-    exchange: str = "NASDAQ", time_: datetime | None = None, last_liquidity: int = 1,
+    *,
+    exec_id: str = "0001f8a3.66eb01c2.01.01",
+    account: str = "DUE375963",
+    order_id: int = 12,
+    perm_id: int = 987654321,
+    client_id: int = 10,
+    side: str = "BOT",
+    shares: float = 100.0,
+    price: float = 175.32,
+    exchange: str = "NASDAQ",
+    time_: datetime | None = None,
+    last_liquidity: int = 1,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         execId=exec_id,
@@ -85,7 +107,10 @@ def make_execution(
 
 
 def make_commission_report(
-    *, commission: float = 1.05, currency: str = "USD", realized_pnl: float | None = None,
+    *,
+    commission: float = 1.05,
+    currency: str = "USD",
+    realized_pnl: float | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(commission=commission, currency=currency, realizedPNL=realized_pnl)
 
@@ -97,15 +122,24 @@ def make_fill(*, contract=None, execution=None, commission_report=_UNSET) -> Sim
     return SimpleNamespace(
         contract=contract or make_contract(),
         execution=execution or make_execution(),
-        commissionReport=make_commission_report() if commission_report is _UNSET else commission_report,
+        commissionReport=make_commission_report()
+        if commission_report is _UNSET
+        else commission_report,
         time=None,
     )
 
 
 def make_order(
-    *, order_id: int = 22, perm_id: int = 111222333, client_id: int = 10,
-    account: str = "DUE375963", action: str = "BUY", order_type: str = "LMT",
-    tif: str = "DAY", total_quantity: float = 200.0, lmt_price: float | None = 170.0,
+    *,
+    order_id: int = 22,
+    perm_id: int = 111222333,
+    client_id: int = 10,
+    account: str = "DUE375963",
+    action: str = "BUY",
+    order_type: str = "LMT",
+    tif: str = "DAY",
+    total_quantity: float = 200.0,
+    lmt_price: float | None = 170.0,
     aux_price: float | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
@@ -123,7 +157,10 @@ def make_order(
 
 
 def make_order_status(
-    *, status: str = "Submitted", filled: float = 0.0, remaining: float | None = None,
+    *,
+    status: str = "Submitted",
+    filled: float = 0.0,
+    remaining: float | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(status=status, filled=filled, remaining=remaining)
 
@@ -171,7 +208,7 @@ def wave7_columns(table: str) -> set[str]:
     """Column names of a ``broker.*`` table, parsed from the Wave 7 DDL."""
     text = WAVE_07_DDL.read_text(encoding="utf-8")
     start = text.index(f"CREATE TABLE IF NOT EXISTS {table} (")
-    body = text[start:text.index("\nENGINE", start)]
+    body = text[start : text.index("\nENGINE", start)]
     columns = set()
     for line in body.splitlines()[1:]:
         code = line.split("--", 1)[0]

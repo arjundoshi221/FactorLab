@@ -13,9 +13,9 @@ def build_name_resolver(
     resolver = {}
     for legislator in legislators:
         name = legislator["name"]
-        resolver[_name_key(name.get("first", ""), name.get("last", ""))] = (
-            legislator["id"]["bioguide"]
-        )
+        resolver[_name_key(name.get("first", ""), name.get("last", ""))] = legislator["id"][
+            "bioguide"
+        ]
     return resolver
 
 
@@ -46,4 +46,3 @@ def _normalize_role(title: str) -> str:
     if "chair" in normalized:
         return "chair"
     return "member"
-

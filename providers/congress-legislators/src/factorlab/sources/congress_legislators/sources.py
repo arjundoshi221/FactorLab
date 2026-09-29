@@ -34,11 +34,13 @@ _CHAMBER = {"rep": "house", "house": "house", "sen": "senate", "senate": "senate
 
 class CongressLegislatorsSettings(ProviderSettings):
     base_url: str = "https://unitedstates.github.io/congress-legislators"
-    files: dict[str, str] = Field(default_factory=lambda: {
-        "legislators": "legislators-current.json",
-        "committees": "committees-current.json",
-        "memberships": "committee-membership-current.json",
-    })
+    files: dict[str, str] = Field(
+        default_factory=lambda: {
+            "legislators": "legislators-current.json",
+            "committees": "committees-current.json",
+            "memberships": "committee-membership-current.json",
+        }
+    )
     timeout: float = 60.0
 
 
@@ -71,9 +73,12 @@ def _legislators(items: Any) -> list[LegislatorRecord]:
         terms = tuple(
             LegislatorTerm(
                 chamber=_CHAMBER[str(term.get("type", "")).lower()],  # type: ignore[arg-type]
-                state=str(term.get("state") or ""), start=date.fromisoformat(term["start"]),
-                end=date.fromisoformat(term["end"]), party=str(term.get("party") or ""),
-                district=_int(term.get("district")), seat_class=_int(term.get("class")),
+                state=str(term.get("state") or ""),
+                start=date.fromisoformat(term["start"]),
+                end=date.fromisoformat(term["end"]),
+                party=str(term.get("party") or ""),
+                district=_int(term.get("district")),
+                seat_class=_int(term.get("class")),
             )
             for term in item.get("terms") or []
             if str(term.get("type", "")).lower() in _CHAMBER
@@ -81,13 +86,18 @@ def _legislators(items: Any) -> list[LegislatorRecord]:
         if not bioguide or not terms:
             continue
         official = name.get("official_full") or " ".join(
-            str(v) for v in (name.get("first"), name.get("middle"), name.get("last"),
-                             name.get("suffix")) if v)
-        records.append(LegislatorRecord(
-            entity=EntityRef("bioguide", bioguide, "person_legislator", official),
-            first_name=str(name.get("first") or ""), last_name=str(name.get("last") or ""),
-            terms=terms,
-        ))
+            str(v)
+            for v in (name.get("first"), name.get("middle"), name.get("last"), name.get("suffix"))
+            if v
+        )
+        records.append(
+            LegislatorRecord(
+                entity=EntityRef("bioguide", bioguide, "person_legislator", official),
+                first_name=str(name.get("first") or ""),
+                last_name=str(name.get("last") or ""),
+                terms=terms,
+            )
+        )
     return records
 
 
@@ -98,15 +108,28 @@ def _committees(items: Any, congress: int) -> list[CommitteeRecord]:
     for committee in items:
         parent = str(committee["thomas_id"])
         chamber = str(committee.get("type") or "").lower()
-        records.append(CommitteeRecord(
-            parent, str(committee["name"]), chamber, congress,
-            jurisdiction=str(committee.get("jurisdiction") or ""),
-            url=str(committee.get("url") or "")))
+        records.append(
+            CommitteeRecord(
+                parent,
+                str(committee["name"]),
+                chamber,
+                congress,
+                jurisdiction=str(committee.get("jurisdiction") or ""),
+                url=str(committee.get("url") or ""),
+            )
+        )
         for sub in committee.get("subcommittees") or []:
-            records.append(CommitteeRecord(
-                parent + str(sub["thomas_id"]), str(sub["name"]), chamber, congress,
-                parent_code=parent, jurisdiction=str(sub.get("jurisdiction") or ""),
-                url=str(sub.get("url") or "")))
+            records.append(
+                CommitteeRecord(
+                    parent + str(sub["thomas_id"]),
+                    str(sub["name"]),
+                    chamber,
+                    congress,
+                    parent_code=parent,
+                    jurisdiction=str(sub.get("jurisdiction") or ""),
+                    url=str(sub.get("url") or ""),
+                )
+            )
     return records
 
 
@@ -119,10 +142,16 @@ def _memberships(items: Any, congress: int) -> list[MembershipRecord]:
             bioguide = member.get("bioguide")
             if not bioguide:
                 continue
-            records.append(MembershipRecord(
-                str(code), EntityRef("bioguide", str(bioguide), "person_legislator"),
-                normalize_role(member.get("title")), congress,  # type: ignore[arg-type]
-                party_side=str(member.get("party") or ""), rank=_int(member.get("rank")) or 0))
+            records.append(
+                MembershipRecord(
+                    str(code),
+                    EntityRef("bioguide", str(bioguide), "person_legislator"),
+                    normalize_role(member.get("title")),
+                    congress,  # type: ignore[arg-type]
+                    party_side=str(member.get("party") or ""),
+                    rank=_int(member.get("rank")) or 0,
+                )
+            )
     return records
 
 
@@ -132,10 +161,14 @@ class CongressLegislators:
     capabilities: ClassVar[Capabilities] = Capabilities(markets=frozenset({"USA"}))
     settings_model: ClassVar[type[CongressLegislatorsSettings]] = CongressLegislatorsSettings
 
-    def __init__(self, settings: CongressLegislatorsSettings, *,
-                 instance: str = "congress_legislators",
-                 session: requests.Session | None = None,
-                 clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+    def __init__(
+        self,
+        settings: CongressLegislatorsSettings,
+        *,
+        instance: str = "congress_legislators",
+        session: requests.Session | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self.settings = settings
         self.instance = instance
         self.session = session or requests.Session()
@@ -143,8 +176,11 @@ class CongressLegislators:
 
     def plan(self, request: ReferenceRequest) -> Sequence[FetchUnit]:
         wanted = set(request.params.get("files") or FILES)
-        return [FetchUnit(f"file:{name}", f"{self.instance}:{name}", params={"file": name})
-                for name in FILES if name in wanted]  # dependency order is fixed
+        return [
+            FetchUnit(f"file:{name}", f"{self.instance}:{name}", params={"file": name})
+            for name in FILES
+            if name in wanted
+        ]  # dependency order is fixed
 
     def fetch(self, unit: FetchUnit) -> RawCapture:
         name = str(unit.params["file"])
@@ -152,14 +188,19 @@ class CongressLegislators:
         try:
             response = self.session.get(url, timeout=self.settings.timeout)
         except requests.RequestException as exc:
-            raise TransientError(f"congress-legislators request failed: "
-                                 f"{type(exc).__name__}") from exc
+            raise TransientError(
+                f"congress-legislators request failed: {type(exc).__name__}"
+            ) from exc
         raise_for_status("congress-legislators", response.status_code, response.headers, name)
         return RawCapture(
-            body=response.content, request_key=unit.name, transport="http",
-            fetched_at=self._clock(), source_url=url,
+            body=response.content,
+            request_key=unit.name,
+            transport="http",
+            fetched_at=self._clock(),
+            source_url=url,
             content_type=response.headers.get("Content-Type", "application/json"),
-            status_code=response.status_code, headers=dict(response.headers),
+            status_code=response.status_code,
+            headers=dict(response.headers),
             metadata={"file": name},
         )
 

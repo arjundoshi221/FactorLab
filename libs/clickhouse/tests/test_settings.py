@@ -22,9 +22,17 @@ class _Example(FactorLabSettings):
 
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
-    for name in ("EXAMPLE_REGION", "EXAMPLE_TOKEN", "EXAMPLE_TOKEN_FILE", "FACTORLAB_SECRETS_DIR",
-                 "CLICKHOUSE_HOST", "CLICKHOUSE_PORT", "CLICKHOUSE_PASSWORD",
-                 "CLICKHOUSE_SSH_HOST", "CLICKHOUSE_SSH_KEY_PATH"):
+    for name in (
+        "EXAMPLE_REGION",
+        "EXAMPLE_TOKEN",
+        "EXAMPLE_TOKEN_FILE",
+        "FACTORLAB_SECRETS_DIR",
+        "CLICKHOUSE_HOST",
+        "CLICKHOUSE_PORT",
+        "CLICKHOUSE_PASSWORD",
+        "CLICKHOUSE_SSH_HOST",
+        "CLICKHOUSE_SSH_KEY_PATH",
+    ):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -96,8 +104,14 @@ def test_connect_passes_settings_to_the_client(monkeypatch):
     settings = ClickHouseSettings(host="db", port=8124, password="pw", database="default")
     with ClickHouse.connect(settings, connect_timeout=5) as connection:
         assert connection.client is not None
-    assert calls == {"host": "db", "port": 8124, "username": "factorlab", "password": "pw",
-                     "database": "default", "connect_timeout": 5}
+    assert calls == {
+        "host": "db",
+        "port": 8124,
+        "username": "factorlab",
+        "password": "pw",
+        "database": "default",
+        "connect_timeout": 5,
+    }
 
 
 def test_connect_uses_a_tunnel_only_when_configured(monkeypatch):
@@ -109,10 +123,14 @@ def test_connect_uses_a_tunnel_only_when_configured(monkeypatch):
         def stop(self):
             opened.append("stopped")
 
-    monkeypatch.setattr("factorlab.clickhouse.connection.open_ssh_tunnel",
-                        lambda s: opened.append(s.ssh_host) or Tunnel())
-    monkeypatch.setattr("factorlab.clickhouse.connection.clickhouse_connect.get_client",
-                        lambda **kw: SimpleNamespace(close=lambda: None, **kw))
+    monkeypatch.setattr(
+        "factorlab.clickhouse.connection.open_ssh_tunnel",
+        lambda s: opened.append(s.ssh_host) or Tunnel(),
+    )
+    monkeypatch.setattr(
+        "factorlab.clickhouse.connection.clickhouse_connect.get_client",
+        lambda **kw: SimpleNamespace(close=lambda: None, **kw),
+    )
     connection = ClickHouse.connect(ClickHouseSettings(ssh_host="vps"))
     assert (connection.client.host, connection.client.port) == ("127.0.0.1", 40123)
     connection.close()

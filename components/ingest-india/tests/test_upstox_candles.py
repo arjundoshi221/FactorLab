@@ -72,9 +72,7 @@ def test_historical_fetch_uses_v3_date_order_archives_and_sorts():
         storage,
     )
 
-    assert session.requests[0][0].endswith(
-        "/NSE_EQ%7CINE002A01018/minutes/1/2026-08-17/2026-08-14"
-    )
+    assert session.requests[0][0].endswith("/NSE_EQ%7CINE002A01018/minutes/1/2026-08-17/2026-08-14")
     assert raw_id == "raw-1"
     assert storage.archives[0]["source"] == "upstox_historical_candles"
     assert frame["timestamp"].tolist() == sorted(frame["timestamp"].tolist())
@@ -82,10 +80,12 @@ def test_historical_fetch_uses_v3_date_order_archives_and_sorts():
 
 
 def test_historical_fetch_retries_429_and_archives_each_response():
-    session = FakeSession([
-        FakeResponse(429, {}, headers={"Retry-After": "0"}),
-        FakeResponse(200, {"data": {"candles": []}}),
-    ])
+    session = FakeSession(
+        [
+            FakeResponse(429, {}, headers={"Retry-After": "0"}),
+            FakeResponse(200, {"data": {"candles": []}}),
+        ]
+    )
     storage = FakeStorage()
 
     frame, raw_id = fetch_historical_candles(

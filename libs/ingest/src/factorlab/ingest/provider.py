@@ -103,13 +103,25 @@ class RawArchive(Protocol):
 @runtime_checkable
 class IngestionRuns(Protocol):
     def start_ingestion_run(
-        self, *, pipeline: str, source: str, market_code: str = ..., universe: str = "",
-        requested_series: int = 0, metadata: Mapping[str, Any] | None = None,
+        self,
+        *,
+        pipeline: str,
+        source: str,
+        market_code: str = ...,
+        universe: str = "",
+        requested_series: int = 0,
+        metadata: Mapping[str, Any] | None = None,
     ) -> Any: ...
 
     def finish_ingestion_run(
-        self, handle: Any, *, status: str, successful_series: int = 0,
-        failed_series: int = 0, rows_written: int = 0, error: str | None = None,
+        self,
+        handle: Any,
+        *,
+        status: str,
+        successful_series: int = 0,
+        failed_series: int = 0,
+        rows_written: int = 0,
+        error: str | None = None,
     ) -> None: ...
 
 
@@ -151,8 +163,9 @@ def _safe_error(error: BaseException | str) -> str:
 class RunContext:
     """Per-run handle a provider uses to archive captures and record unit outcomes."""
 
-    def __init__(self, storage: ProviderStorage, handle: RunHandle, *,
-                 source: str, pipeline: str) -> None:
+    def __init__(
+        self, storage: ProviderStorage, handle: RunHandle, *, source: str, pipeline: str
+    ) -> None:
         self.storage = storage
         self.handle = handle
         self.source = source
@@ -166,11 +179,20 @@ class RunContext:
     def archive(self, capture: RawCapture, *, source_channel: str) -> UUID:
         return self.storage.archive_raw(capture, source=self.source, source_channel=source_channel)
 
-    def provenance(self, *, source_channel: str, raw_id: UUID | None,
-                   as_of_time: datetime, ingested_at: datetime | None = None) -> Provenance:
+    def provenance(
+        self,
+        *,
+        source_channel: str,
+        raw_id: UUID | None,
+        as_of_time: datetime,
+        ingested_at: datetime | None = None,
+    ) -> Provenance:
         return Provenance(
-            source=self.source, source_channel=source_channel, raw_id=raw_id,
-            ingest_run_id=self.run_id, as_of_time=as_of_time,
+            source=self.source,
+            source_channel=source_channel,
+            raw_id=raw_id,
+            ingest_run_id=self.run_id,
+            as_of_time=as_of_time,
             ingested_at=ingested_at or datetime.now(UTC),
         )
 
@@ -203,8 +225,12 @@ class RunContext:
 
     def summary(self, status: RunStatus | None = None) -> RunSummary:
         return RunSummary(
-            run_id=self.run_id, source=self.source, pipeline=self.pipeline,
-            status=status or self.status, rows_written=self.rows_written, units=self.units,
+            run_id=self.run_id,
+            source=self.source,
+            pipeline=self.pipeline,
+            status=status or self.status,
+            rows_written=self.rows_written,
+            units=self.units,
         )
 
 
@@ -225,17 +251,24 @@ def ingestion_run(
     the block marks the run ``failed`` (``cancelled`` for interrupts) and re-raises.
     """
     handle = storage.start_ingestion_run(
-        pipeline=pipeline, source=source, market_code=market_code, universe=universe,
-        requested_series=requested_series, metadata=dict(metadata or {}),
+        pipeline=pipeline,
+        source=source,
+        market_code=market_code,
+        universe=universe,
+        requested_series=requested_series,
+        metadata=dict(metadata or {}),
     )
     ctx = RunContext(storage, handle, source=source, pipeline=pipeline)
     try:
         with log_context(run_id=str(handle.run_id), pipeline=pipeline, source=source):
             yield ctx
     except BaseException as exc:
-        status: RunStatus = "cancelled" if isinstance(exc, KeyboardInterrupt | SystemExit) else "failed"
+        status: RunStatus = (
+            "cancelled" if isinstance(exc, KeyboardInterrupt | SystemExit) else "failed"
+        )
         storage.finish_ingestion_run(
-            handle, status=status,
+            handle,
+            status=status,
             successful_series=sum(1 for unit in ctx.units if unit.ok),
             failed_series=sum(1 for unit in ctx.units if not unit.ok),
             rows_written=ctx.rows_written,
@@ -243,10 +276,12 @@ def ingestion_run(
         )
         raise
     storage.finish_ingestion_run(
-        handle, status=ctx.status,
+        handle,
+        status=ctx.status,
         successful_series=sum(1 for unit in ctx.units if unit.ok),
         failed_series=sum(1 for unit in ctx.units if not unit.ok),
-        rows_written=ctx.rows_written, error=ctx.error_text(),
+        rows_written=ctx.rows_written,
+        error=ctx.error_text(),
     )
 
 
@@ -270,9 +305,13 @@ def run_provider(
 ) -> RunSummary:
     """Run ``provider.collect`` inside one ingestion run and return its summary."""
     with ingestion_run(
-        storage, pipeline=provider.pipeline, source=provider.source,
-        market_code=provider.market_code, universe=universe,
-        requested_series=requested_series, metadata=metadata,
+        storage,
+        pipeline=provider.pipeline,
+        source=provider.source,
+        market_code=provider.market_code,
+        universe=universe,
+        requested_series=requested_series,
+        metadata=metadata,
     ) as ctx:
         provider.collect(ctx)
     return ctx.summary()

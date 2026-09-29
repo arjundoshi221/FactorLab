@@ -17,12 +17,8 @@ from typing import Any
 import pdfplumber
 from defusedxml import ElementTree  # remote XML: refuse entity expansion and external refs
 
-_INDEX_URL = (
-    "https://disclosures-clerk.house.gov/public_disc/financial-pdfs/{year}FD.ZIP"
-)
-_PTR_URL = (
-    "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/{year}/{filing_id}.pdf"
-)
+_INDEX_URL = "https://disclosures-clerk.house.gov/public_disc/financial-pdfs/{year}FD.ZIP"
+_PTR_URL = "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/{year}/{filing_id}.pdf"
 PARSER_VERSION = "house_ptr_v1"
 
 _TRANSACTION_CORE_PATTERN = re.compile(
@@ -55,17 +51,12 @@ _OWNER_TYPES = {
 def parse_house_filing_index(payload: bytes, year: int) -> list[dict[str, Any]]:
     """Parse PTR filing rows from a House annual ZIP/XML payload."""
     with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-        xml_name = next(
-            name for name in archive.namelist() if name.lower().endswith(".xml")
-        )
+        xml_name = next(name for name in archive.namelist() if name.lower().endswith(".xml"))
         root = ElementTree.fromstring(archive.read(xml_name))
 
     filings = []
     for member in root.findall(".//Member"):
-        values = {
-            child.tag: (child.text or "").strip()
-            for child in member
-        }
+        values = {child.tag: (child.text or "").strip() for child in member}
         if values.get("FilingType") != "P":
             continue
         filing_year = int(values.get("Year") or year)
@@ -105,11 +96,7 @@ def parse_house_ptr_text(
     filing: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Parse transaction rows anchored on type, dates, and amount."""
-    lines = [
-        re.sub(r"\s+", " ", line).strip()
-        for line in text.splitlines()
-        if line.strip()
-    ]
+    lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines() if line.strip()]
     trades = []
     seen_keys = set()
     for index, line in enumerate(lines):
@@ -117,8 +104,8 @@ def parse_house_ptr_text(
         if not match:
             continue
 
-        asset_parts = [line[:match.start()].strip()]
-        for continuation in lines[index + 1:index + 4]:
+        asset_parts = [line[: match.start()].strip()]
+        for continuation in lines[index + 1 : index + 4]:
             if "\x00" in continuation:
                 break
             if _TRANSACTION_CORE_PATTERN.search(continuation):
@@ -131,9 +118,8 @@ def parse_house_ptr_text(
         asset_type_match = _ASSET_TYPE_PATTERN.search(asset_block)
         if not asset_type_match:
             continue
-        ticker_match = (
-            _PAREN_TICKER_PATTERN.search(asset_block)
-            or _BARE_TICKER_PATTERN.search(asset_block)
+        ticker_match = _PAREN_TICKER_PATTERN.search(asset_block) or _BARE_TICKER_PATTERN.search(
+            asset_block
         )
         ticker = ticker_match.group("ticker").upper() if ticker_match else None
         asset_name = _clean_asset_name(asset_block)
@@ -141,7 +127,7 @@ def parse_house_ptr_text(
         owner_match = re.match(r"^(SP|JT|DC|JR)\s+", asset_name)
         owner_code = owner_match.group(1) if owner_match else ""
         if owner_match:
-            asset_name = asset_name[owner_match.end():].strip()
+            asset_name = asset_name[owner_match.end() :].strip()
 
         groups = match.groupdict()
         amount_min, amount_max = _parse_amount(groups["amount"])
@@ -191,10 +177,7 @@ def _parse_date(value: str) -> date:
 
 
 def _parse_amount(value: str) -> tuple[int | None, int | None]:
-    numbers = [
-        int(number.replace(",", ""))
-        for number in re.findall(r"\$([\d,]+)", value)
-    ]
+    numbers = [int(number.replace(",", "")) for number in re.findall(r"\$([\d,]+)", value)]
     if not numbers:
         return None, None
     if value.lower().startswith("over"):

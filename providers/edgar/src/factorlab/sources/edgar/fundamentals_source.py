@@ -32,8 +32,13 @@ from factorlab.ingest.provider import RawCapture
 from factorlab.ingest.ratelimit import SlidingWindowLimiter
 from factorlab.ingest.transport import raise_for_status
 
-_PERIOD = {"FY": "annual", "Q1": "quarterly", "Q2": "quarterly", "Q3": "quarterly",
-           "Q4": "quarterly"}
+_PERIOD = {
+    "FY": "annual",
+    "Q1": "quarterly",
+    "Q2": "quarterly",
+    "Q3": "quarterly",
+    "Q4": "quarterly",
+}
 
 
 class EdgarSettings(ProviderSettings):
@@ -69,10 +74,15 @@ class EdgarCompanyFacts:
     capabilities: ClassVar[Capabilities] = Capabilities(markets=frozenset({"USA"}))
     settings_model: ClassVar[type[EdgarSettings]] = EdgarSettings
 
-    def __init__(self, settings: EdgarSettings, *, instance: str = "edgar",
-                 session: requests.Session | None = None,
-                 clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-                 secret: Callable[[str, str], str | None] = get_secret) -> None:
+    def __init__(
+        self,
+        settings: EdgarSettings,
+        *,
+        instance: str = "edgar",
+        session: requests.Session | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        secret: Callable[[str, str], str | None] = get_secret,
+    ) -> None:
         self.settings = settings
         self.instance = instance
         self.session = session or requests.Session()
@@ -81,10 +91,18 @@ class EdgarCompanyFacts:
         self._secret = secret
 
     def plan(self, request: CompanyRequest) -> Sequence[FetchUnit]:
-        return [FetchUnit(f"companyfacts:{company.padded}", f"{self.instance}:companyfacts",
-                          params={"cik": company.padded, "ticker": company.ticker or "",
-                                  "country": company.country_code})
-                for company in dict.fromkeys(request.companies)]
+        return [
+            FetchUnit(
+                f"companyfacts:{company.padded}",
+                f"{self.instance}:companyfacts",
+                params={
+                    "cik": company.padded,
+                    "ticker": company.ticker or "",
+                    "country": company.country_code,
+                },
+            )
+            for company in dict.fromkeys(request.companies)
+        ]
 
     def fetch(self, unit: FetchUnit) -> RawCapture:
         agent = (self._secret(self.settings.user_agent_env, "") or "").strip()
@@ -94,20 +112,28 @@ class EdgarCompanyFacts:
         url = f"{self.settings.base_url_data.rstrip('/')}/api/xbrl/companyfacts/CIK{cik}.json"
         self.limiter.acquire()
         try:
-            response = self.session.get(url, headers={"User-Agent": agent,
-                                                      "Accept-Encoding": "gzip, deflate"},
-                                        timeout=self.settings.timeout)
+            response = self.session.get(
+                url,
+                headers={"User-Agent": agent, "Accept-Encoding": "gzip, deflate"},
+                timeout=self.settings.timeout,
+            )
         except requests.RequestException as exc:
             raise TransientError(f"EDGAR request failed: {type(exc).__name__}") from exc
         raise_for_status("EDGAR", response.status_code, response.headers, unit.name)
         return RawCapture(
-            body=response.content, request_key=unit.name, transport="http",
-            fetched_at=self._clock(), source_url=url,
+            body=response.content,
+            request_key=unit.name,
+            transport="http",
+            fetched_at=self._clock(),
+            source_url=url,
             content_type=response.headers.get("Content-Type", "application/json"),
             status_code=response.status_code,
             headers={k: v for k, v in response.headers.items() if k.lower() != "set-cookie"},
-            metadata={"cik": cik, "ticker": unit.params.get("ticker") or "",
-                      "country": unit.params.get("country") or "US"},
+            metadata={
+                "cik": cik,
+                "ticker": unit.params.get("ticker") or "",
+                "country": unit.params.get("country") or "US",
+            },
         )
 
     def normalize(self, capture: RawCapture) -> Sequence[FundamentalsRow]:
@@ -121,8 +147,11 @@ class EdgarCompanyFacts:
         cik = str(capture.metadata["cik"]).zfill(10)
         issuer = EntityRef("cik", cik, "issuer", str(payload.get("entityName") or "") or None)
         ticker = str(capture.metadata.get("ticker") or "").strip().upper()
-        hint = (InstrumentRef("", "", "", ticker, str(capture.metadata.get("country") or "US"))
-                if ticker else None)
+        hint = (
+            InstrumentRef("", "", "", ticker, str(capture.metadata.get("country") or "US"))
+            if ticker
+            else None
+        )
         wanted_tags = set(self.settings.tags)
         filings: dict[str, dict[str, Any]] = {}
         items: dict[tuple, LineItemRecord] = {}
@@ -140,27 +169,52 @@ class EdgarCompanyFacts:
                         start = _date(fact.get("start"))
                         if start is not None and start > end:
                             continue
-                        filing = filings.setdefault(accn, {
-                            "form": str(fact.get("form") or ""), "filed": filed,
-                            "fy": fact.get("fy"), "fp": fact.get("fp"), "end": end})
+                        filing = filings.setdefault(
+                            accn,
+                            {
+                                "form": str(fact.get("form") or ""),
+                                "filed": filed,
+                                "fy": fact.get("fy"),
+                                "fp": fact.get("fp"),
+                                "end": end,
+                            },
+                        )
                         filing["end"] = max(filing["end"], end)
                         key = (accn, taxonomy, tag, unit, start, end)
                         items[key] = LineItemRecord(
-                            issuer, accn, taxonomy, tag, end, value, unit, period_start=start,
-                            frame=fact.get("frame"), issuer_hint=hint)
+                            issuer,
+                            accn,
+                            taxonomy,
+                            tag,
+                            end,
+                            value,
+                            unit,
+                            period_start=start,
+                            frame=fact.get("frame"),
+                            issuer_hint=hint,
+                        )
         records: list[FundamentalsRow] = []
         for accn in sorted(filings):
             f = filings[accn]
             fp = str(f["fp"]) if f["fp"] else None
-            records.append(FundamentalFilingRecord(
-                issuer=issuer, accession_number=accn, form_type=f["form"],
-                filing_date=f["filed"], period_end=f["end"],
-                period_type=_PERIOD.get(fp or "", "other"),  # type: ignore[arg-type]
-                fiscal_year=int(f["fy"]) if f["fy"] else None, fiscal_period=fp,
-                is_amendment=f["form"].endswith("/A"), issuer_hint=hint,
-                filing_url=(f"{self.settings.base_url_www.rstrip('/')}/Archives/edgar/data/"
-                            f"{int(cik)}/{accn.replace('-', '')}/"),
-            ))
+            records.append(
+                FundamentalFilingRecord(
+                    issuer=issuer,
+                    accession_number=accn,
+                    form_type=f["form"],
+                    filing_date=f["filed"],
+                    period_end=f["end"],
+                    period_type=_PERIOD.get(fp or "", "other"),  # type: ignore[arg-type]
+                    fiscal_year=int(f["fy"]) if f["fy"] else None,
+                    fiscal_period=fp,
+                    is_amendment=f["form"].endswith("/A"),
+                    issuer_hint=hint,
+                    filing_url=(
+                        f"{self.settings.base_url_www.rstrip('/')}/Archives/edgar/data/"
+                        f"{int(cik)}/{accn.replace('-', '')}/"
+                    ),
+                )
+            )
         records += [items[key] for key in sorted(items, key=lambda k: tuple(map(str, k)))]
         return records
 

@@ -24,10 +24,24 @@ from factorlab.ingest.provider import Provenance, ProviderStorage
 ReferenceMode = Literal["authoritative", "alias_only", "resolve_only"]
 REFERENCE_MODES: frozenset[str] = frozenset({"authoritative", "alias_only", "resolve_only"})
 
-PRODUCT_TYPES = frozenset({
-    "common", "preferred", "adr", "etf", "etn", "reit", "warrant", "index",
-    "index_future", "single_stock_future", "vol_future", "vol_etp", "option", "other",
-})
+PRODUCT_TYPES = frozenset(
+    {
+        "common",
+        "preferred",
+        "adr",
+        "etf",
+        "etn",
+        "reit",
+        "warrant",
+        "index",
+        "index_future",
+        "single_stock_future",
+        "vol_future",
+        "vol_etp",
+        "option",
+        "other",
+    }
+)
 CONTRACT_PRODUCT_TYPES = frozenset({"single_stock_future", "index_future", "vol_future", "option"})
 
 
@@ -108,14 +122,24 @@ class ReferenceRequest:
 
 @runtime_checkable
 class InstrumentSink(ProviderStorage, Protocol):
-    def upsert_instruments(self, rows: Sequence[InstrumentRecord], *, provenance: Provenance,
-                           mode: ReferenceMode = "authoritative") -> WriteResult: ...
+    def upsert_instruments(
+        self,
+        rows: Sequence[InstrumentRecord],
+        *,
+        provenance: Provenance,
+        mode: ReferenceMode = "authoritative",
+    ) -> WriteResult: ...
 
 
 @runtime_checkable
 class ContractSink(ProviderStorage, Protocol):
-    def upsert_contracts(self, rows: Sequence[ContractRecord], *, provenance: Provenance,
-                         mode: ReferenceMode = "authoritative") -> WriteResult: ...
+    def upsert_contracts(
+        self,
+        rows: Sequence[ContractRecord],
+        *,
+        provenance: Provenance,
+        mode: ReferenceMode = "authoritative",
+    ) -> WriteResult: ...
 
 
 __all__ = [

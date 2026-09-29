@@ -71,9 +71,12 @@ Connector = Callable[[str, IbkrSettings], "IB"]
 
 
 def _default_connector(mode: str, settings: IbkrSettings) -> IB:
-    return connect_with_retry(mode, client_id=settings.client_id,  # type: ignore[arg-type]
-                              timeout=settings.connect_timeout,
-                              attempts=settings.connect_attempts)
+    return connect_with_retry(
+        mode,
+        client_id=settings.client_id,  # type: ignore[arg-type]
+        timeout=settings.connect_timeout,
+        attempts=settings.connect_attempts,
+    )
 
 
 class IbkrBrokerSnapshot:
@@ -82,9 +85,14 @@ class IbkrBrokerSnapshot:
     capabilities: ClassVar[Capabilities] = Capabilities(markets=frozenset({"USA"}))
     settings_model: ClassVar[type[IbkrSettings]] = IbkrSettings
 
-    def __init__(self, settings: IbkrSettings, *, instance: str = "ibkr",
-                 connector: Connector = _default_connector,
-                 clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:
+    def __init__(
+        self,
+        settings: IbkrSettings,
+        *,
+        instance: str = "ibkr",
+        connector: Connector = _default_connector,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
         self.settings = settings
         self.instance = instance
         self._connector = connector
@@ -97,9 +105,15 @@ class IbkrBrokerSnapshot:
         unknown = sorted(set(modes) - {"paper", "live"})
         if unknown:
             raise ValueError(f"unknown IBKR modes {unknown}")
-        return [FetchUnit(f"{mode}:{name}", f"{self.instance}:{mode}_gateway",
-                          params={"mode": mode, "kind": kind})
-                for mode in dict.fromkeys(modes) for name, kind in DATASETS]
+        return [
+            FetchUnit(
+                f"{mode}:{name}",
+                f"{self.instance}:{mode}_gateway",
+                params={"mode": mode, "kind": kind},
+            )
+            for mode in dict.fromkeys(modes)
+            for name, kind in DATASETS
+        ]
 
     def _connection(self, mode: str) -> IB:
         if mode in self._failed:
@@ -109,8 +123,9 @@ class IbkrBrokerSnapshot:
                 self._connections[mode] = self._connector(mode, self.settings)
             except Exception as exc:  # one Gateway down must not stop the other
                 self._failed[mode] = type(exc).__name__
-                raise PermanentError(f"IBKR {mode} Gateway unavailable: "
-                                     f"{type(exc).__name__}") from exc
+                raise PermanentError(
+                    f"IBKR {mode} Gateway unavailable: {type(exc).__name__}"
+                ) from exc
         return self._connections[mode]
 
     def fetch(self, unit: FetchUnit) -> RawCapture:

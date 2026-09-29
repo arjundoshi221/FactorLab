@@ -84,9 +84,7 @@ def assert_under_root(p: Path, root: Path) -> Path:
     try:
         rp.relative_to(rr)
     except ValueError as e:
-        raise ValueError(
-            f"path traversal attempt: {p} resolves to {rp}, outside {rr}"
-        ) from e
+        raise ValueError(f"path traversal attempt: {p} resolves to {rp}, outside {rr}") from e
     return rp
 
 

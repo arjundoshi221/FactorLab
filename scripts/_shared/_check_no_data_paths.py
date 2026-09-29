@@ -33,15 +33,17 @@ def main() -> int:
     bad = [p for p in sys.argv[1:] if is_banned(p)]
     if not bad:
         return 0
-    print("ERROR: pre-commit blocked staging of data / logs / secrets paths:",
-          file=sys.stderr)
+    print("ERROR: pre-commit blocked staging of data / logs / secrets paths:", file=sys.stderr)
     for p in bad:
         print(f"  - {p}", file=sys.stderr)
     print(file=sys.stderr)
     print("Allowed exceptions: tests/fixtures/**, docs/**", file=sys.stderr)
-    print("If you genuinely need to commit one of these, do an explicit "
-          "`git add -f <path>` only after rotating any potentially-leaked "
-          "credentials.", file=sys.stderr)
+    print(
+        "If you genuinely need to commit one of these, do an explicit "
+        "`git add -f <path>` only after rotating any potentially-leaked "
+        "credentials.",
+        file=sys.stderr,
+    )
     return 1
 
 

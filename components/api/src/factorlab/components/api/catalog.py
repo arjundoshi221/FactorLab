@@ -373,7 +373,9 @@ def _key_explanation(table: SchemaTable) -> list[str]:
                 "the newer version replaces the older one."
             )
         else:
-            lines.append(f"Rows are stored in order of ({table.sorting_key}) and are never replaced.")
+            lines.append(
+                f"Rows are stored in order of ({table.sorting_key}) and are never replaced."
+            )
     if table.partition_key:
         lines.append(f"Data is split into storage partitions by {table.partition_key}.")
     return lines
@@ -521,7 +523,10 @@ class CatalogService:
         info = self._table_info(schema_table, self._overview_tables().get(name))
         if country is not None:
             # Anchor time windows on this market's newest row, not the table's overall newest row.
-            market = next((item for item in self._markets().get(name, []) if item.country_code == country), None)
+            market = next(
+                (item for item in self._markets().get(name, []) if item.country_code == country),
+                None,
+            )
             if market is not None and market.last_data_at:
                 info = replace(info, last_data_at=_as_datetime(market.last_data_at))
         return info
@@ -557,14 +562,17 @@ class CatalogService:
                         f"SELECT toString(country_code) AS country, count() AS rows, {first} AS first_data_at, "
                         f"{last} AS last_data_at, {ingested} AS last_ingested_at "
                         f"FROM {table.name} GROUP BY country ORDER BY rows DESC LIMIT 20",
-                        {}, query_settings("markets", max_rows=20),
+                        {},
+                        query_settings("markets", max_rows=20),
                     )
                 except CatalogError:
                     continue
                 slices = [
                     MarketSlice(
                         country_code=str(row["country"]).strip(),
-                        label=MARKET_LABELS.get(str(row["country"]).strip(), str(row["country"]).strip()),
+                        label=MARKET_LABELS.get(
+                            str(row["country"]).strip(), str(row["country"]).strip()
+                        ),
                         stored_rows=int(row["rows"]),
                         first_data_at=_iso(row["first_data_at"]),
                         last_data_at=_iso(row["last_data_at"]),
@@ -599,13 +607,17 @@ class CatalogService:
             column_count=len(column_names),
             columns=column_names,
             column_notes={key: value for key, value in text.columns.items() if key in column_names},
-            previewable=not is_view and env_flag("FACTORLAB_CATALOG_PREVIEW") and not preview_denied(schema_table.name),
+            previewable=not is_view
+            and env_flag("FACTORLAB_CATALOG_PREVIEW")
+            and not preview_denied(schema_table.name),
             markets=self._markets().get(schema_table.name, []),
         )
 
     def index(self) -> CatalogIndex:
         hub_tables = self._overview_tables()
-        summaries = [self._summary(table, hub_tables.get(table.name)) for table in self._schema().tables]
+        summaries = [
+            self._summary(table, hub_tables.get(table.name)) for table in self._schema().tables
+        ]
         namespaces: list[CatalogNamespace] = []
         for namespace in V2_DATABASES:
             members = [item for item in summaries if item.namespace == namespace]
@@ -616,14 +628,19 @@ class CatalogService:
             for item in stored:
                 counts[item.status] = counts.get(item.status, 0) + 1
             title, summary = namespace_text(namespace)
-            namespaces.append(CatalogNamespace(
-                id=namespace, title=title, summary=summary, table_count=len(stored),
-                populated_tables=sum(item.stored_rows > 0 for item in stored),
-                view_count=len(members) - len(stored),
-                stored_rows=sum(item.stored_rows for item in stored),
-                bytes_on_disk=sum(item.bytes_on_disk for item in stored),
-                status_counts=counts,
-            ))
+            namespaces.append(
+                CatalogNamespace(
+                    id=namespace,
+                    title=title,
+                    summary=summary,
+                    table_count=len(stored),
+                    populated_tables=sum(item.stored_rows > 0 for item in stored),
+                    view_count=len(members) - len(stored),
+                    stored_rows=sum(item.stored_rows for item in stored),
+                    bytes_on_disk=sum(item.bytes_on_disk for item in stored),
+                    status_counts=counts,
+                )
+            )
         return CatalogIndex(
             generated_at=self.now(),
             namespaces=namespaces,
@@ -642,15 +659,25 @@ class CatalogService:
         hidden = set(hidden_columns(info))
         titles = {table.name: table_text(table.name).title for table in schema.tables}
         related = [
-            CatalogRelation(direction="out", column=item.source.column, table=item.target.table,
-                            table_title=titles.get(item.target.table, item.target.table),
-                            target_column=item.target.column)
-            for item in schema.relationships if item.source.table == name
+            CatalogRelation(
+                direction="out",
+                column=item.source.column,
+                table=item.target.table,
+                table_title=titles.get(item.target.table, item.target.table),
+                target_column=item.target.column,
+            )
+            for item in schema.relationships
+            if item.source.table == name
         ] + [
-            CatalogRelation(direction="in", column=item.target.column, table=item.source.table,
-                            table_title=titles.get(item.source.table, item.source.table),
-                            target_column=item.source.column)
-            for item in schema.relationships if item.target.table == name
+            CatalogRelation(
+                direction="in",
+                column=item.target.column,
+                table=item.source.table,
+                table_title=titles.get(item.source.table, item.source.table),
+                target_column=item.source.column,
+            )
+            for item in schema.relationships
+            if item.target.table == name
         ]
         reason: str | None = None
         try:
@@ -665,29 +692,47 @@ class CatalogService:
             design_notes=text.design_notes,
             notes=text.notes,
             keys=CatalogKeys(
-                primary_key=schema_table.primary_key, sorting_key=schema_table.sorting_key,
-                partition_key=schema_table.partition_key, explanation=_key_explanation(schema_table),
+                primary_key=schema_table.primary_key,
+                sorting_key=schema_table.sorting_key,
+                partition_key=schema_table.partition_key,
+                explanation=_key_explanation(schema_table),
             ),
             column_details=[
                 CatalogColumn(
-                    name=column.name, type=column.type, friendly_type=friendly_type(column.type),
-                    type_class=type_class(column.type), description=text.columns.get(column.name),
-                    nullable=column.nullable, in_primary_key=column.in_primary_key,
-                    in_sorting_key=column.in_sorting_key, in_partition_key=column.in_partition_key,
+                    name=column.name,
+                    type=column.type,
+                    friendly_type=friendly_type(column.type),
+                    type_class=type_class(column.type),
+                    description=text.columns.get(column.name),
+                    nullable=column.nullable,
+                    in_primary_key=column.in_primary_key,
+                    in_sorting_key=column.in_sorting_key,
+                    in_partition_key=column.in_partition_key,
                     hidden=column.name in hidden,
-                    operators=[] if column.name in hidden else sorted(OPERATORS[type_class(column.type)]),
+                    operators=[]
+                    if column.name in hidden
+                    else sorted(OPERATORS[type_class(column.type)]),
                 )
                 for column in schema_table.columns
             ],
             related=sorted(related, key=lambda item: (item.direction, item.table, item.column)),
-            writers=[CatalogWriter(id=item.id, label=item.label, schedule=item.schedule) for item in writers_of(name)],
+            writers=[
+                CatalogWriter(id=item.id, label=item.label, schedule=item.schedule)
+                for item in writers_of(name)
+            ],
             preview=CatalogPreviewPolicy(
-                enabled=reason is None, reason=reason,
+                enabled=reason is None,
+                reason=reason,
                 csv_enabled=reason is None and env_flag("FACTORLAB_CATALOG_CSV"),
-                windowed=info.windowed, time_column=info.time_column,
-                default_start=window.start if window else None, default_end=window.end if window else None,
-                max_window_days=max_window_width(name).days, latest_version_only=info.uses_final,
-                hidden_columns=sorted(hidden), max_csv_rows=csv_max_rows(), max_page_rows=MAX_LIMIT,
+                windowed=info.windowed,
+                time_column=info.time_column,
+                default_start=window.start if window else None,
+                default_end=window.end if window else None,
+                max_window_days=max_window_width(name).days,
+                latest_version_only=info.uses_final,
+                hidden_columns=sorted(hidden),
+                max_csv_rows=csv_max_rows(),
+                max_page_rows=MAX_LIMIT,
             ),
         )
 
@@ -722,17 +767,26 @@ class CatalogService:
             rows.append(values)
             truncated += cut
         page = RowsPage(
-            table=name, columns=built.columns, rows=rows, offset=max(0, request.offset), limit=limit,
+            table=name,
+            columns=built.columns,
+            rows=rows,
+            offset=max(0, request.offset),
+            limit=limit,
             has_more=len(result.result_rows) > limit,
             window_start=built.window.start if built.window else None,
             window_end=built.window.end if built.window else None,
-            sort=request.sort or info.time_column, descending=request.descending,
-            latest_version_only=built.final_applied, truncated_cells=truncated, notes=built.notes,
+            sort=request.sort or info.time_column,
+            descending=request.descending,
+            latest_version_only=built.final_applied,
+            truncated_cells=truncated,
+            notes=built.notes,
         )
         self._cache.put(key, page, self.clock() + ROWS_TTL_SECONDS)
         return page
 
-    def csv_export(self, name: str, request: RowsRequest) -> tuple[str, dict[str, str], Iterator[str]]:
+    def csv_export(
+        self, name: str, request: RowsRequest
+    ) -> tuple[str, dict[str, str], Iterator[str]]:
         country = country_of(request.filters)
         info = self.table_info(name, country)
         ensure_preview_allowed(info, csv=True)
@@ -758,7 +812,9 @@ class CatalogService:
                 with stream as blocks:
                     for block in blocks:
                         for row in block:
-                            values, _ = clean_row(row, built.columns, table=name, limit=CSV_CELL_CHARS)
+                            values, _ = clean_row(
+                                row, built.columns, table=name, limit=CSV_CELL_CHARS
+                            )
                             writer.writerow([_csv_safe(value) for value in values])
                             written += 1
                             if written >= cap:
@@ -800,23 +856,33 @@ class CatalogService:
             def text(value: Any) -> str | None:
                 return None if value is None else scrub_text(str(value), limit=80)[0]
 
-            columns.append(ColumnStat(
-                name=column,
-                nulls_percent=round(int(nulls) * 100 / sample, 2) if sample and nulls is not None else None,
-                distinct_approx=int(distinct) if distinct is not None else None,
-                min=text(row.get(f"{column}__min")),
-                max=text(row.get(f"{column}__max")),
-                top_values=[scrub_text(str(value), limit=64)[0] for value in top][:5],
-            ))
+            columns.append(
+                ColumnStat(
+                    name=column,
+                    nulls_percent=round(int(nulls) * 100 / sample, 2)
+                    if sample and nulls is not None
+                    else None,
+                    distinct_approx=int(distinct) if distinct is not None else None,
+                    min=text(row.get(f"{column}__min")),
+                    max=text(row.get(f"{column}__max")),
+                    top_values=[scrub_text(str(value), limit=64)[0] for value in top][:5],
+                )
+            )
         stats = TableStats(
-            table=name, generated_at=self.now(), sample_rows=sample, sample_limit=STATS_SAMPLE_ROWS,
+            table=name,
+            generated_at=self.now(),
+            sample_rows=sample,
+            sample_limit=STATS_SAMPLE_ROWS,
             window_start=built.window.start if built.window else None,
-            window_end=built.window.end if built.window else None, columns=columns,
+            window_end=built.window.end if built.window else None,
+            columns=columns,
         )
         self._cache.put(key, stats, self.clock() + STATS_TTL_SECONDS)
         return stats
 
-    def activity(self, name: str, grain: Literal["day", "month"], country: str | None = None) -> TableActivity:
+    def activity(
+        self, name: str, grain: Literal["day", "month"], country: str | None = None
+    ) -> TableActivity:
         info = self.table_info(name, country)
         if info.is_view:
             raise CatalogError("Views have no stored rows to chart.")
@@ -839,7 +905,8 @@ class CatalogService:
                 if row["bucket"] is not None
             ]
         pipelines = [
-            item.id for item in writers_of(name)
+            item.id
+            for item in writers_of(name)
             if country is None or PIPELINE_COUNTRIES.get(item.market) == country
         ]
         runs: list[PipelineRun] = []
@@ -849,11 +916,16 @@ class CatalogService:
                 "WHERE has({pipelines:Array(String)}, pipeline) "
                 "AND started_at >= parseDateTime64BestEffort({since:String}, 3, 'UTC') "
                 "ORDER BY started_at DESC LIMIT 10",
-                {"pipelines": pipelines, "since": (self.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")},
+                {
+                    "pipelines": pipelines,
+                    "since": (self.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S"),
+                },
                 query_settings("rows", max_rows=10),
             )
             runs = [_run_from_row(row) for row in _rows(result)]
-        activity = TableActivity(table=name, grain=grain, time_column=info.time_column, buckets=buckets, runs=runs)
+        activity = TableActivity(
+            table=name, grain=grain, time_column=info.time_column, buckets=buckets, runs=runs
+        )
         self._cache.put(key, activity, self.clock() + ACTIVITY_TTL_SECONDS)
         return activity
 
@@ -874,8 +946,9 @@ class CatalogService:
         )
         parameters = {"pipelines": ids, "week": since_week, "day": since_day}
         day_start = "parseDateTime64BestEffort({day:String}, 3, 'UTC')"
-        summary = _rows(self._query(
-            f"""
+        summary = _rows(
+            self._query(
+                f"""
             SELECT pipeline,
                    argMax(status, started_at) AS last_status,
                    max(started_at) AS last_started_at,
@@ -891,10 +964,13 @@ class CatalogService:
             WHERE {window}
             GROUP BY pipeline
             """,
-            parameters, settings,
-        ))
-        days = _rows(self._query(
-            f"""
+                parameters,
+                settings,
+            )
+        )
+        days = _rows(
+            self._query(
+                f"""
             SELECT pipeline, toDate(started_at) AS day,
                    countIf(status = 'success') AS success,
                    countIf(status IN ('failed', 'partial')) AS problem,
@@ -904,38 +980,48 @@ class CatalogService:
             GROUP BY pipeline, day
             ORDER BY pipeline, day
             """,
-            parameters, settings,
-        ))
-        problems = _rows(self._query(
-            f"""
+                parameters,
+                settings,
+            )
+        )
+        problems = _rows(
+            self._query(
+                f"""
             SELECT {RUN_COLUMNS}
             FROM meta.ingestion_runs FINAL
             WHERE {window} AND status IN ('failed', 'partial')
             ORDER BY started_at DESC
             LIMIT 5 BY pipeline
             """,
-            parameters, settings,
-        ))
+                parameters,
+                settings,
+            )
+        )
         try:
             sources = [
                 SourceHealth(
-                    country_code=str(row["country_code"]), source=str(row["source"]),
+                    country_code=str(row["country_code"]),
+                    source=str(row["source"]),
                     status=str(row["status"]),
                     detail=scrub_text(str(row.get("detail") or ""), limit=JSON_CELL_CHARS)[0],
                     checked_at=_as_datetime(row.get("checked_at")),
                 )
-                for row in _rows(self._query(
-                    "SELECT country_code, source, status, detail, checked_at FROM meta.source_status FINAL "
-                    "ORDER BY country_code, source",
-                    {}, settings,
-                ))
+                for row in _rows(
+                    self._query(
+                        "SELECT country_code, source, status, detail, checked_at FROM meta.source_status FINAL "
+                        "ORDER BY country_code, source",
+                        {},
+                        settings,
+                    )
+                )
             ]
         except CatalogError:
             sources = []
         by_pipeline = {row["pipeline"]: row for row in summary}
         cards = [
             self._pipeline_card(
-                pipeline, by_pipeline.get(pipeline.id),
+                pipeline,
+                by_pipeline.get(pipeline.id),
                 [row for row in days if row["pipeline"] == pipeline.id],
                 [_run_from_row(row) for row in problems if row["pipeline"] == pipeline.id],
                 now,
@@ -958,28 +1044,51 @@ class CatalogService:
         last_started = _as_datetime(values.get("last_started_at"))
         status, reason = pipeline_status(pipeline, values, last_started, problems, now)
         return PipelineCard(
-            id=pipeline.id, label=pipeline.label, market=pipeline.market, source=pipeline.source,
-            description=pipeline.description, schedule=pipeline.schedule, scheduled=pipeline.scheduled,
-            per_symbol_runs=pipeline.per_symbol_runs, tables_written=list(pipeline.tables_written),
-            status=status, status_reason=reason,
+            id=pipeline.id,
+            label=pipeline.label,
+            market=pipeline.market,
+            source=pipeline.source,
+            description=pipeline.description,
+            schedule=pipeline.schedule,
+            scheduled=pipeline.scheduled,
+            per_symbol_runs=pipeline.per_symbol_runs,
+            tables_written=list(pipeline.tables_written),
+            status=status,
+            status_reason=reason,
             last_status=str(values["last_status"]) if values.get("last_status") else None,
-            last_started_at=last_started, last_completed_at=_as_datetime(values.get("last_completed_at")),
-            runs_24h=int(values.get("runs_24h") or 0), success_24h=int(values.get("success_24h") or 0),
-            problem_24h=int(values.get("problem_24h") or 0), runs_7d=int(values.get("runs_7d") or 0),
-            success_7d=int(values.get("success_7d") or 0), problem_7d=int(values.get("problem_7d") or 0),
+            last_started_at=last_started,
+            last_completed_at=_as_datetime(values.get("last_completed_at")),
+            runs_24h=int(values.get("runs_24h") or 0),
+            success_24h=int(values.get("success_24h") or 0),
+            problem_24h=int(values.get("problem_24h") or 0),
+            runs_7d=int(values.get("runs_7d") or 0),
+            success_7d=int(values.get("success_7d") or 0),
+            problem_7d=int(values.get("problem_7d") or 0),
             rows_24h=int(values.get("rows_24h") or 0),
             days=[
-                PipelineDay(day=row["day"], success=int(row["success"]), problem=int(row["problem"]),
-                            total=int(row["total"]))
+                PipelineDay(
+                    day=row["day"],
+                    success=int(row["success"]),
+                    problem=int(row["problem"]),
+                    total=int(row["total"]),
+                )
                 for row in days
             ],
             recent_problems=problems,
         )
 
-    def pipeline_runs(self, pipeline_id: str, *, status: str | None, limit: int, offset: int) -> PipelineRunsPage:
+    def pipeline_runs(
+        self, pipeline_id: str, *, status: str | None, limit: int, offset: int
+    ) -> PipelineRunsPage:
         if pipeline_id not in PIPELINES_BY_ID:
             raise CatalogNotFound("Pipeline not found.")
-        if status is not None and status not in {"running", "success", "partial", "failed", "cancelled"}:
+        if status is not None and status not in {
+            "running",
+            "success",
+            "partial",
+            "failed",
+            "cancelled",
+        }:
             raise CatalogError("Unknown run status.")
         limit = max(1, min(limit, 100))
         offset = max(0, min(offset, 5_000))
@@ -996,11 +1105,16 @@ class CatalogService:
             "WHERE pipeline = {pipeline:String} "
             "AND started_at >= parseDateTime64BestEffort({since:String}, 3, 'UTC') "
             f"{status_clause} ORDER BY started_at DESC LIMIT {limit + 1:d} OFFSET {offset:d}",
-            parameters, query_settings("rows", max_rows=limit + 1),
+            parameters,
+            query_settings("rows", max_rows=limit + 1),
         )
         runs = [_run_from_row(row) for row in _rows(result)]
         return PipelineRunsPage(
-            pipeline=pipeline_id, items=runs[:limit], limit=limit, offset=offset, has_more=len(runs) > limit,
+            pipeline=pipeline_id,
+            items=runs[:limit],
+            limit=limit,
+            offset=offset,
+            has_more=len(runs) > limit,
         )
 
 
@@ -1015,9 +1129,15 @@ def pipeline_status(
 
     if last_started is None:
         if not pipeline.scheduled:
-            return "not_configured", "Not scheduled in production; it runs only when started by hand."
+            return (
+                "not_configured",
+                "Not scheduled in production; it runs only when started by hand.",
+            )
         if pipeline.expected_interval_seconds is None:
-            return "not_expected", "No runs in the last 7 days; this pipeline runs only when there is work to do."
+            return (
+                "not_expected",
+                "No runs in the last 7 days; this pipeline runs only when there is work to do.",
+            )
         if pipeline.session_calendar and not _session_open(pipeline.session_calendar, now):
             return "not_expected", "No runs in the last 7 days and the market is closed now."
         return "missing", "No runs were recorded in the last 7 days."
@@ -1031,13 +1151,18 @@ def pipeline_status(
     if last_status == "running" and interval and age > 2 * interval:
         return "attention", f"The latest run started {ago} and has not finished."
     if interval and in_session and age > interval:
-        return "attention", f"No run for {_duration(age)}; it normally runs at least every {_duration(interval)}."
+        return (
+            "attention",
+            f"No run for {_duration(age)}; it normally runs at least every {_duration(interval)}.",
+        )
     if pipeline.per_symbol_runs:
         if runs_24h and problem_24h / runs_24h > 0.2:
             share = round(problem_24h * 100 / runs_24h)
             return "attention", f"{share}% of runs in the last 24 hours failed or were incomplete."
     elif last_status in PROBLEM_STATUSES:
-        detail = problems[0].error if problems and problems[0].error else "no error text was recorded"
+        detail = (
+            problems[0].error if problems and problems[0].error else "no error text was recorded"
+        )
         label = "failed" if last_status == "failed" else "was incomplete"
         return "attention", f"The latest run {label} ({ago}): {detail[:160]}"
     if pipeline.session_calendar and not in_session:

@@ -6,6 +6,7 @@ image's dependency closure honest. Run from the repo root:
 
     uv run python tools/check_isolated_imports.py [member-name ...]
 """
+
 from __future__ import annotations
 
 import os
@@ -18,7 +19,7 @@ REPO = Path.cwd()
 ENV = REPO / ".tmp" / "isolated-imports-venv"
 PY = ENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
-CHECK = r'''
+CHECK = r"""
 import importlib, pkgutil, sys
 from pathlib import Path
 root = Path(sys.argv[1])
@@ -36,7 +37,7 @@ for path in sorted(root.rglob("*.py")):
         failed.append(f"{name}: {type(exc).__name__}: {exc}")
 print("\n".join(failed) if failed else "ok")
 sys.exit(1 if failed else 0)
-'''
+"""
 
 
 def members() -> list[tuple[str, Path]]:
@@ -57,19 +58,34 @@ def main() -> int:
         if wanted and name not in wanted:
             continue
         env = {**os.environ, "UV_PROJECT_ENVIRONMENT": str(ENV)}
-        sync = subprocess.run(["uv", "sync", "--frozen", "--no-dev", "--package", name, "-q"],
-                              env=env, capture_output=True, text=True, check=False)
+        sync = subprocess.run(
+            ["uv", "sync", "--frozen", "--no-dev", "--package", name, "-q"],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         if sync.returncode:
             print(f"FAIL {name}: uv sync: {sync.stderr.strip()[:300]}")
             bad += 1
             continue
-        res = subprocess.run([str(PY), "-c", CHECK, str(root / "src" / "factorlab")],
-                             capture_output=True, text=True, check=False, env={**os.environ,
-                                                                  "FACTORLAB_HOME": str(REPO)})
+        res = subprocess.run(
+            [str(PY), "-c", CHECK, str(root / "src" / "factorlab")],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "FACTORLAB_HOME": str(REPO)},
+        )
         status = "ok  " if res.returncode == 0 else "FAIL"
         bad += res.returncode != 0
-        print(f"{status} {name}" + ("" if res.returncode == 0 else "\n    "
-                                     + res.stdout.strip().replace("\n", "\n    ")[:1500]))
+        print(
+            f"{status} {name}"
+            + (
+                ""
+                if res.returncode == 0
+                else "\n    " + res.stdout.strip().replace("\n", "\n    ")[:1500]
+            )
+        )
     return 1 if bad else 0
 
 

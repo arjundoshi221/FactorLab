@@ -14,9 +14,20 @@ from factorlab.components.api.india import (
 )
 
 COLUMNS = [
-    "listing_id", "contract_id", "symbol", "country_code", "bar_time",
-    "open", "high", "low", "close", "volume", "oi", "source",
-    "as_of_time", "ingested_at",
+    "listing_id",
+    "contract_id",
+    "symbol",
+    "country_code",
+    "bar_time",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "oi",
+    "source",
+    "as_of_time",
+    "ingested_at",
 ]
 INSTRUMENT_ID = UUID("11111111-1111-1111-1111-111111111111")
 CONTRACT_ID = UUID(int=0)
@@ -25,9 +36,20 @@ CONTRACT_ID = UUID(int=0)
 def candle_row(minute: int) -> tuple:
     timestamp = datetime(2026, 8, 12, 9, minute, tzinfo=UTC)
     return (
-        INSTRUMENT_ID, None, "RELIANCE", "IN", timestamp,
-        Decimal("100.000000"), Decimal("101.000000"), Decimal("99.000000"),
-        Decimal("100.500000"), 1000, None, "upstox", timestamp, timestamp,
+        INSTRUMENT_ID,
+        None,
+        "RELIANCE",
+        "IN",
+        timestamp,
+        Decimal("100.000000"),
+        Decimal("101.000000"),
+        Decimal("99.000000"),
+        Decimal("100.500000"),
+        1000,
+        None,
+        "upstox",
+        timestamp,
+        timestamp,
     )
 
 
@@ -77,17 +99,40 @@ def test_repository_filters_and_paginates_candles():
 
 def test_repository_lists_and_paginates_reference_instruments():
     columns = [
-        "listing_id", "security_id", "trading_symbol", "name", "isin",
-        "exchange_code", "security_type", "currency_code",
-        "lot_size", "tick_size", "status", "source", "first_seen", "last_seen",
+        "listing_id",
+        "security_id",
+        "trading_symbol",
+        "name",
+        "isin",
+        "exchange_code",
+        "security_type",
+        "currency_code",
+        "lot_size",
+        "tick_size",
+        "status",
+        "source",
+        "first_seen",
+        "last_seen",
         "ingested_at",
     ]
     timestamp = datetime(2026, 8, 12, tzinfo=UTC)
     rows = [
         (
-            UUID(int=index), UUID(int=index + 100), symbol, name, f"INE{index:09d}",
-            "NSE", "common", "INR", 1, Decimal("0.050000"),
-            "active", "upstox", date(2026, 8, 1), date(2026, 8, 12), timestamp,
+            UUID(int=index),
+            UUID(int=index + 100),
+            symbol,
+            name,
+            f"INE{index:09d}",
+            "NSE",
+            "common",
+            "INR",
+            1,
+            Decimal("0.050000"),
+            "active",
+            "upstox",
+            date(2026, 8, 1),
+            date(2026, 8, 12),
+            timestamp,
         )
         for index, symbol, name in [
             (1, "INFY", "Infosys"),
@@ -103,9 +148,7 @@ def test_repository_lists_and_paginates_reference_instruments():
     query, parameters = client.calls[0]
     assert "FROM ref.listings AS l FINAL" in query
     assert "positionCaseInsensitiveUTF8" in query
-    assert parameters == {
-        "fetch_limit": 3, "search": "rel", "status": "active", "source": "upstox"
-    }
+    assert parameters == {"fetch_limit": 3, "search": "rel", "status": "active", "source": "upstox"}
     assert [item.trading_symbol for item in page.items] == ["INFY", "RELIANCE"]
     assert decode_instrument_cursor(page.next_cursor) == ("RELIANCE", UUID(int=2))
 
@@ -114,9 +157,13 @@ def test_legacy_india_cursors_are_rejected():
     import base64
     import json
 
-    old = base64.urlsafe_b64encode(json.dumps({
-        "symbol": "RELIANCE", "instrument": str(INSTRUMENT_ID)
-    }).encode()).decode().rstrip("=")
+    old = (
+        base64.urlsafe_b64encode(
+            json.dumps({"symbol": "RELIANCE", "instrument": str(INSTRUMENT_ID)}).encode()
+        )
+        .decode()
+        .rstrip("=")
+    )
     with pytest.raises(HTTPException, match="Legacy cursor"):
         decode_instrument_cursor(old)
     with pytest.raises(HTTPException, match="Legacy cursor"):
@@ -126,8 +173,14 @@ def test_legacy_india_cursors_are_rejected():
 def test_repository_returns_overall_and_daily_stats():
     timestamp = datetime(2026, 8, 12, 10, tzinfo=UTC)
     overall_columns = [
-        "reference_instruments", "instruments_with_data", "unique_series", "data_points",
-        "trading_days", "first_bar_time", "last_bar_time", "data_as_of",
+        "reference_instruments",
+        "instruments_with_data",
+        "unique_series",
+        "data_points",
+        "trading_days",
+        "first_bar_time",
+        "last_bar_time",
+        "data_as_of",
     ]
     overall_client = FakeQueryClient(
         [(2464, 5, 10, 3750, 1, timestamp, timestamp, timestamp)],
@@ -146,8 +199,13 @@ def test_repository_returns_overall_and_daily_stats():
     assert stats.data_points == 3750
 
     daily_columns = [
-        "trading_date", "data_points", "unique_instruments", "unique_series",
-        "first_bar_time", "last_bar_time", "data_as_of",
+        "trading_date",
+        "data_points",
+        "unique_instruments",
+        "unique_series",
+        "first_bar_time",
+        "last_bar_time",
+        "data_as_of",
     ]
     daily_client = FakeQueryClient(
         [(date(2026, 8, 12), 3750, 5, 10, timestamp, timestamp, timestamp)],

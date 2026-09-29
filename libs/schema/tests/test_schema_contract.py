@@ -51,8 +51,7 @@ def test_checked_in_generated_schema_matches_design():
 
 
 def test_forward_tables_stay_out_of_applied_waves():
-    applied = {name for statements in generator.collect_tables().values()
-               for name, _ in statements}
+    applied = {name for statements in generator.collect_tables().values() for name, _ in statements}
     assert not applied & set(generator.FORWARD_TABLES)
     for name, (wave, _) in generator.FORWARD_TABLES.items():
         assert wave > max(generator.WAVES), f"{name} must land in a new forward wave"
@@ -60,7 +59,8 @@ def test_forward_tables_stay_out_of_applied_waves():
 
 def test_wave_10_bars_best_selects_only_readable_roles_by_priority():
     view = (migration.MIGRATION_DIR / "wave_10_views_source_priorities.sql").read_text(
-        encoding="utf-8")
+        encoding="utf-8"
+    )
     assert "CREATE VIEW IF NOT EXISTS market.bars_best" in view
     assert "role IN ('primary', 'secondary')" in view and "argMin(" in view
     assert "arrayIndexOf" not in view  # priorities come from ref.source_priorities
@@ -99,9 +99,7 @@ def test_backfills_never_mutate_or_generate_canonical_ids_in_legacy():
 
 def test_wave_02_does_not_collapse_contract_keyed_bars():
     sql = (migration.MIGRATION_DIR / "wave_02_backfill.sql").read_text(encoding="utf-8")
-    zero_contract_filter = (
-        "c.contract_id = toUUID('00000000-0000-0000-0000-000000000000')"
-    )
+    zero_contract_filter = "c.contract_id = toUUID('00000000-0000-0000-0000-000000000000')"
     assert sql.count(zero_contract_filter) == 2
     assert sql.count("x.source_hash = i.migration_source_hash") == 2
     assert "'extended'" not in sql

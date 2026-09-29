@@ -78,10 +78,15 @@ def gateway_config(mode: Mode | None = None, *, client_id: int | None = None) ->
     port_key = f"IBKR_PORT_{suffix}"
     default_port = DEFAULT_PORT_PAPER if resolved == "paper" else DEFAULT_PORT_LIVE
     port_raw = _setting(port_key, str(default_port))
-    client_raw = str(client_id) if client_id is not None else _setting(
-        "IBKR_CLIENT_ID", str(DEFAULT_CLIENT_ID))
+    client_raw = (
+        str(client_id)
+        if client_id is not None
+        else _setting("IBKR_CLIENT_ID", str(DEFAULT_CLIENT_ID))
+    )
     try:
-        return GatewayConfig(mode=resolved, host=host, port=int(port_raw), client_id=int(client_raw))
+        return GatewayConfig(
+            mode=resolved, host=host, port=int(port_raw), client_id=int(client_raw)
+        )
     except ValueError as exc:
         raise IBKRError(
             f"IBKR env parse error: {port_key}={port_raw!r} IBKR_CLIENT_ID={client_raw!r} ({exc})"
@@ -117,7 +122,10 @@ def connect(
     ib = IB()
     log.info(
         "Connecting IBKR [%s] %s:%s clientId=%s readonly=True",
-        cfg.mode, cfg.host, cfg.port, cfg.client_id,
+        cfg.mode,
+        cfg.host,
+        cfg.port,
+        cfg.client_id,
     )
     ib.connect(cfg.host, cfg.port, clientId=cfg.client_id, readonly=True, timeout=timeout)
     # Tag the mode on the ib object so downstream helpers can label rows
@@ -151,8 +159,14 @@ def connect_with_retry(
             if attempt == attempts:
                 break
             delay = backoff_for(attempt, base=CONNECT_BACKOFF_BASE_SEC, cap=CONNECT_BACKOFF_MAX_SEC)
-            log.warning("IBKR [%s] connect attempt %d/%d failed (%s); retrying in %.0fs",
-                        mode, attempt, attempts, type(exc).__name__, delay)
+            log.warning(
+                "IBKR [%s] connect attempt %d/%d failed (%s); retrying in %.0fs",
+                mode,
+                attempt,
+                attempts,
+                type(exc).__name__,
+                delay,
+            )
             sleep(delay)
     raise IBKRConnectError(
         f"IBKR [{mode}] Gateway unreachable after {attempts} attempts: "
@@ -187,7 +201,9 @@ def mode_of(ib: IB) -> Mode:
     """Return the mode tag we attached to ``ib`` at connect time."""
     m = getattr(ib, "_factorlab_mode", None)
     if m not in ("paper", "live"):
-        raise IBKRError(f"IB object was not connected via factorlab.sources.ibkr.client: mode={m!r}")
+        raise IBKRError(
+            f"IB object was not connected via factorlab.sources.ibkr.client: mode={m!r}"
+        )
     return m  # type: ignore[return-value]
 
 

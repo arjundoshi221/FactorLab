@@ -56,10 +56,12 @@ class EdgarClient:
             )
         self.user_agent = ua
         self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": ua,
-            "Accept-Encoding": "gzip, deflate",
-        })
+        self.session.headers.update(
+            {
+                "User-Agent": ua,
+                "Accept-Encoding": "gzip, deflate",
+            }
+        )
         self._last_request_at: float = 0.0
         self.storage = storage
         self.sleep = sleep
@@ -88,7 +90,7 @@ class EdgarClient:
         )
 
     def _backoff_delay(self, attempt: int, resp: requests.Response | None) -> float:
-        delay: float = 2 ** attempt
+        delay: float = 2**attempt
         if resp is None:
             return delay
         retry = resp.headers.get("Retry-After")
@@ -131,7 +133,7 @@ class EdgarClient:
             except (requests.Timeout, requests.ConnectionError):
                 if attempt == RETRY_ATTEMPTS - 1:
                     raise
-                self.sleep(2 ** attempt)
+                self.sleep(2**attempt)
                 continue
             self._last_request_at = time.monotonic()
             self._archive(url, resp, fetch_key or url)
@@ -165,6 +167,7 @@ class EdgarClient:
 
 
 # ── helpers ─────────────────────────────────────────────────────────────
+
 
 def cik_padded(cik: int | str) -> str:
     """Zero-pad a CIK to 10 digits (URL format for submissions + companyfacts)."""

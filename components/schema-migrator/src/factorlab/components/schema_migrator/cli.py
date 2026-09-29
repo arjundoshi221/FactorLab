@@ -38,8 +38,9 @@ def _migrate(argv: list[str]) -> int:
 
 
 COMMANDS = {
-    "bootstrap": Command("check v2 schema readiness and the raw archive storage policy",
-                         _bootstrap),
+    "bootstrap": Command(
+        "check v2 schema readiness and the raw archive storage policy", _bootstrap
+    ),
     "verify-writes": Command("wait for a fresh v2 write after a release", _verify_writes),
     "migrate": Command("run the forward-only v2 wave migrations", _migrate),
 }

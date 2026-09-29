@@ -44,8 +44,15 @@ class RecordingStorage:
 
 
 def _capture(**overrides) -> RawCapture:
-    return RawCapture(**{"body": b"{}", "request_key": "k", "transport": "tcp_socket",
-                         "fetched_at": NOW, **overrides})
+    return RawCapture(
+        **{
+            "body": b"{}",
+            "request_key": "k",
+            "transport": "tcp_socket",
+            "fetched_at": NOW,
+            **overrides,
+        }
+    )
 
 
 def test_raw_capture_requires_bytes_and_aware_time():
@@ -72,10 +79,16 @@ def test_run_succeeds_with_all_units_ok_and_stamps_provenance():
     assert provenance.ingest_run_id == ctx.run_id
     assert provenance.columns()["raw_id"] == raw_id
     assert storage.started[0]["market_code"] == "USA"
-    assert storage.finished == [{
-        "run_id": ctx.run_id, "status": "success", "successful_series": 2,
-        "failed_series": 0, "rows_written": 3, "error": None,
-    }]
+    assert storage.finished == [
+        {
+            "run_id": ctx.run_id,
+            "status": "success",
+            "successful_series": 2,
+            "failed_series": 0,
+            "rows_written": 3,
+            "error": None,
+        }
+    ]
 
 
 def test_run_is_partial_when_some_units_fail_and_errors_are_redacted():
@@ -100,9 +113,15 @@ def test_run_is_failed_when_every_unit_fails():
 
 def test_escaping_exception_marks_run_failed_and_reraises():
     storage = RecordingStorage()
-    with pytest.raises(RuntimeError), ingestion_run(
-        storage, pipeline="p", source="ibkr", market_code="USA",
-    ) as ctx:
+    with (
+        pytest.raises(RuntimeError),
+        ingestion_run(
+            storage,
+            pipeline="p",
+            source="ibkr",
+            market_code="USA",
+        ) as ctx,
+    ):
         ctx.succeed_unit("paper:positions", 1)
         raise RuntimeError("clickhouse unavailable")
     finished = storage.finished[0]
@@ -113,8 +132,14 @@ def test_escaping_exception_marks_run_failed_and_reraises():
 
 def test_interrupt_marks_run_cancelled():
     storage = RecordingStorage()
-    with pytest.raises(KeyboardInterrupt), ingestion_run(
-        storage, pipeline="p", source="ibkr", market_code="USA",
+    with (
+        pytest.raises(KeyboardInterrupt),
+        ingestion_run(
+            storage,
+            pipeline="p",
+            source="ibkr",
+            market_code="USA",
+        ),
     ):
         raise KeyboardInterrupt
     assert storage.finished[0]["status"] == "cancelled"

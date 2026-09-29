@@ -34,16 +34,24 @@ def _loaded(mock_ib):
         make_portfolio_item(),
         make_portfolio_item(contract=make_contract(symbol="SPY", con_id=756733), position=-5.0),
     ]
-    mock_ib.accountValues.return_value = [make_account_value(), make_account_value(tag="Cushion-S",
-                                                                                  value="0.9")]
+    mock_ib.accountValues.return_value = [
+        make_account_value(),
+        make_account_value(tag="Cushion-S", value="0.9"),
+    ]
     mock_ib.reqExecutions.return_value = [make_fill()]
     mock_ib.openTrades.return_value = [make_trade()]
     return mock_ib
 
 
-@pytest.mark.parametrize("capture", [
-    capture_portfolio, capture_account_values, capture_executions, capture_open_orders,
-])
+@pytest.mark.parametrize(
+    "capture",
+    [
+        capture_portfolio,
+        capture_account_values,
+        capture_executions,
+        capture_open_orders,
+    ],
+)
 def test_capture_is_deterministic_and_replay_matches(mock_ib_paper, now_utc, capture):
     ib = _loaded(mock_ib_paper)
     first = capture(ib, fetched_at=now_utc)
@@ -83,13 +91,18 @@ def test_capture_serializes_real_ib_async_types(now_utc):
     assert data["position"] == 10.0
     assert data["account"] == "DU1"
     value = to_jsonable(ib_async.AccountValue("DU1", "NetLiquidation", "100", "USD", ""))
-    assert value == {"account": "DU1", "tag": "NetLiquidation", "value": "100",
-                     "currency": "USD", "modelCode": ""}
+    assert value == {
+        "account": "DU1",
+        "tag": "NetLiquidation",
+        "value": "100",
+        "currency": "USD",
+        "modelCode": "",
+    }
 
 
 def test_sentinels_and_non_finite_become_none():
     assert to_decimal(sys.float_info.max) is None  # IBKR UNSET_DOUBLE
-    assert to_decimal(str(2 ** 127 - 1)) is None  # IBKR UNSET_DECIMAL
+    assert to_decimal(str(2**127 - 1)) is None  # IBKR UNSET_DECIMAL
     assert to_decimal(math.nan) is None
     assert to_decimal("") is None
     assert to_decimal(True) is None
@@ -103,15 +116,23 @@ def test_nan_market_price_survives_archive_as_null(mock_ib_paper, now_utc):
     assert row.market_price is None
 
 
-@pytest.mark.parametrize("body,message", [
-    (b"not json", "not valid JSON"),
-    (b"[]", "JSON object"),
-    (b'{"schema":"ibkr.portfolio.v9","kind":"portfolio"}', "Unsupported"),
-    (b'{"schema":"ibkr.portfolio.v1","kind":"portfolio","mode":"demo","data":[]}', "mode"),
-    (b'{"schema":"ibkr.portfolio.v1","kind":"portfolio","mode":"paper","data":{}}', "list"),
-    ((b'{"schema":"ibkr.portfolio.v1","kind":"portfolio","mode":"paper","data":[],'
-      b'"fetched_at":"2026-09-19T20:30:00"}'), "UTC-aware"),
-])
+@pytest.mark.parametrize(
+    "body,message",
+    [
+        (b"not json", "not valid JSON"),
+        (b"[]", "JSON object"),
+        (b'{"schema":"ibkr.portfolio.v9","kind":"portfolio"}', "Unsupported"),
+        (b'{"schema":"ibkr.portfolio.v1","kind":"portfolio","mode":"demo","data":[]}', "mode"),
+        (b'{"schema":"ibkr.portfolio.v1","kind":"portfolio","mode":"paper","data":{}}', "list"),
+        (
+            (
+                b'{"schema":"ibkr.portfolio.v1","kind":"portfolio","mode":"paper","data":[],'
+                b'"fetched_at":"2026-09-19T20:30:00"}'
+            ),
+            "UTC-aware",
+        ),
+    ],
+)
 def test_decode_rejects_bad_payloads(body, message):
     with pytest.raises((IBKRCaptureError, ValueError), match=message):
         decode_capture(body)
@@ -138,8 +159,9 @@ def test_ledger_tags_stay_distinct_metrics(mock_ib_live, now_utc):
     """Real live payload shape: $LEDGER-* tags must not collapse into one metric."""
     mock_ib_live.accountValues.return_value = [
         make_account_value(account="U1", tag="$LEDGER-CashBalance", value="10", currency="USD"),
-        make_account_value(account="U1", tag="$LEDGER-NetLiquidationByCurrency", value="20",
-                           currency="USD"),
+        make_account_value(
+            account="U1", tag="$LEDGER-NetLiquidationByCurrency", value="20", currency="USD"
+        ),
         make_account_value(account="U1", tag="$LEDGER-CashBalance", value="30", currency="BASE"),
         make_account_value(account="U1", tag="NetLiquidation-S", value="40", currency="USD"),
         make_account_value(account="U1", tag="NetLiquidation", value="50", currency="USD"),

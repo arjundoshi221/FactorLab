@@ -28,15 +28,20 @@ SCRIPT_REF = re.compile(r"scripts/[\w/]+\.py")
 
 
 def _console_scripts() -> dict[str, str]:
-    return {ep.name: ep.value
-            for ep in importlib.metadata.entry_points(group="console_scripts")
-            if ep.name.startswith("factorlab-")}
+    return {
+        ep.name: ep.value
+        for ep in importlib.metadata.entry_points(group="console_scripts")
+        if ep.name.startswith("factorlab-")
+    }
 
 
 def _compose_entrypoints() -> list[tuple[str, str]]:
     services = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))["services"]
-    return sorted((name, svc["entrypoint"][0]) for name, svc in services.items()
-                  if svc.get("entrypoint") and str(svc["entrypoint"][0]).startswith("factorlab-"))
+    return sorted(
+        (name, svc["entrypoint"][0])
+        for name, svc in services.items()
+        if svc.get("entrypoint") and str(svc["entrypoint"][0]).startswith("factorlab-")
+    )
 
 
 def _referenced_scripts() -> list[str]:
@@ -49,8 +54,16 @@ def _referenced_scripts() -> list[str]:
 
 def test_every_factorlab_service_starts_a_component_entry_point():
     started = {name for name, _ in _compose_entrypoints()}
-    assert {"api", "bootstrap", "ingest-india", "ingest-us", "universe-us",
-            "ingest-political", "ibkr-snapshot", "cloudflare-secrets-agent"} <= started
+    assert {
+        "api",
+        "bootstrap",
+        "ingest-india",
+        "ingest-us",
+        "universe-us",
+        "ingest-political",
+        "ibkr-snapshot",
+        "cloudflare-secrets-agent",
+    } <= started
 
 
 @pytest.mark.parametrize(("service", "entrypoint"), _compose_entrypoints())
@@ -68,9 +81,12 @@ def test_referenced_script_forwards_to_importable_code(script):
     path = REPO / script
     assert path.is_file(), f"{script} is invoked by production but missing"
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    targets = [(node.module, alias.name) for node in tree.body
-               if isinstance(node, ast.ImportFrom) and node.module
-               and node.module.startswith("factorlab.") for alias in node.names]
+    targets = [
+        (node.module, alias.name)
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("factorlab.")
+        for alias in node.names
+    ]
     assert targets, f"{script} should forward to a factorlab module"
     for module, name in targets:
         assert callable(getattr(importlib.import_module(module), name))

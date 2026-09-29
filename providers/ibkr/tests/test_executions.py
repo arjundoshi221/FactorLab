@@ -24,8 +24,12 @@ def test_pull_executions_maps_fill(mock_ib_paper, now_utc):
     fill = make_fill(
         contract=make_contract(symbol="AAPL", con_id=265598),
         execution=make_execution(
-            exec_id="abc.001", side="BOT", shares=100, price=175.32,
-            time_=datetime(2026, 9, 19, 13, 45, tzinfo=UTC), last_liquidity=2,
+            exec_id="abc.001",
+            side="BOT",
+            shares=100,
+            price=175.32,
+            time_=datetime(2026, 9, 19, 13, 45, tzinfo=UTC),
+            last_liquidity=2,
         ),
         commission_report=make_commission_report(commission=1.05, realized_pnl=25.5),
     )

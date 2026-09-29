@@ -35,8 +35,9 @@ ISIN = "INE002A01018"
 
 
 def ref(kind: str, value: str, symbol: str = "RELIANCE") -> InstrumentRef:
-    return InstrumentRef(kind, value, "NSE", symbol, "IN", isin=ISIN if symbol == "RELIANCE"
-                         else None)
+    return InstrumentRef(
+        kind, value, "NSE", symbol, "IN", isin=ISIN if symbol == "RELIANCE" else None
+    )
 
 
 class FakeListings:
@@ -56,9 +57,15 @@ class FakeListings:
         return RawCapture(json.dumps(self.rows).encode(), unit.name, "http", NOW)
 
     def normalize(self, capture):
-        return [InstrumentRecord(ref=ref(f"{self.provider}_key", alias, symbol), name=symbol,
-                                 product_type="common", currency="INR")
-                for alias, symbol in json.loads(capture.body)]
+        return [
+            InstrumentRecord(
+                ref=ref(f"{self.provider}_key", alias, symbol),
+                name=symbol,
+                product_type="common",
+                currency="INR",
+            )
+            for alias, symbol in json.loads(capture.body)
+        ]
 
 
 class FakeBars:
@@ -66,21 +73,33 @@ class FakeBars:
 
     dataset = "market.bars"
 
-    def __init__(self, provider: str, script: dict[str, list] | None = None,
-                 instance: str | None = None) -> None:
+    def __init__(
+        self, provider: str, script: dict[str, list] | None = None, instance: str | None = None
+    ) -> None:
         self.provider = provider
         self.instance = instance or provider
         self.capabilities = Capabilities(
-            markets=frozenset({"IND"}), resolutions=frozenset({"1min"}),
-            alias_kind=f"{provider}_key", max_lookback=timedelta(days=5), max_batch=1)
+            markets=frozenset({"IND"}),
+            resolutions=frozenset({"1min"}),
+            alias_kind=f"{provider}_key",
+            max_lookback=timedelta(days=5),
+            max_batch=1,
+        )
         self.script = script or {}
         self.fetches: list[str] = []
 
     def plan(self, request: BarRequest):
-        return [FetchUnit(w.instrument.alias_value, f"{self.instance}:candles",
-                          params={"key": w.instrument.alias_value},
-                          instruments=(w.instrument,), start=w.start, end=w.end)
-                for w in request.series]
+        return [
+            FetchUnit(
+                w.instrument.alias_value,
+                f"{self.instance}:candles",
+                params={"key": w.instrument.alias_value},
+                instruments=(w.instrument,),
+                start=w.start,
+                end=w.end,
+            )
+            for w in request.series
+        ]
 
     def fetch(self, unit):
         self.fetches.append(unit.name)
@@ -91,9 +110,15 @@ class FakeBars:
                 raise outcome
         instrument = unit.instruments[0]
         return RawCapture(
-            json.dumps({"price": "10"}).encode(), unit.name, "http", NOW,
-            metadata={"alias_kind": instrument.alias_kind, "alias_value": instrument.alias_value,
-                      "symbol": instrument.trading_symbol},
+            json.dumps({"price": "10"}).encode(),
+            unit.name,
+            "http",
+            NOW,
+            metadata={
+                "alias_kind": instrument.alias_kind,
+                "alias_value": instrument.alias_value,
+                "symbol": instrument.trading_symbol,
+            },
         )
 
     def normalize(self, capture):
@@ -102,25 +127,44 @@ class FakeBars:
             raise NormalizationError("no price")
         meta = capture.metadata
         price = Decimal(body["price"])
-        return [BarRecord(ref(meta["alias_kind"], meta["alias_value"], meta["symbol"]), "1min",
-                          capture.fetched_at - timedelta(minutes=1), price, price, price, price,
-                          volume=1)]
+        return [
+            BarRecord(
+                ref(meta["alias_kind"], meta["alias_value"], meta["symbol"]),
+                "1min",
+                capture.fetched_at - timedelta(minutes=1),
+                price,
+                price,
+                price,
+                price,
+                volume=1,
+            )
+        ]
 
 
 def binding(provider: str, dataset: str = "market.bars", **kwargs) -> Binding:
     resolution = "1min" if dataset == "market.bars" else None
-    return Binding(dataset=dataset, market="IND", provider=provider, resolution=resolution,
-                   **kwargs)
+    return Binding(
+        dataset=dataset, market="IND", provider=provider, resolution=resolution, **kwargs
+    )
 
 
 def bars_request(*aliases: tuple[str, str]) -> BarRequest:
-    return BarRequest("IND", "1min", tuple(
-        SeriesWindow(ref(kind, value), NOW - timedelta(hours=1), NOW) for kind, value in aliases))
+    return BarRequest(
+        "IND",
+        "1min",
+        tuple(
+            SeriesWindow(ref(kind, value), NOW - timedelta(hours=1), NOW) for kind, value in aliases
+        ),
+    )
 
 
 def seed(sink: InMemorySink, provider: str = "up", rows=(("K1", "RELIANCE"),)) -> None:
-    run_binding(binding(provider, "ref.listings"), FakeListings(provider, list(rows)), sink,
-                ReferenceRequest("IND"))
+    run_binding(
+        binding(provider, "ref.listings"),
+        FakeListings(provider, list(rows)),
+        sink,
+        ReferenceRequest("IND"),
+    )
 
 
 def test_run_writes_with_lineage_and_archives_every_capture():
@@ -143,8 +187,9 @@ def test_two_providers_land_on_the_same_listing_with_their_own_source():
     seed(sink, "alt")  # alt resolves onto up's listing via ISIN; no new listing is minted
     assert len(sink.listings) == 1
     run_binding(binding("up"), FakeBars("up"), sink, bars_request(("up_key", "K1")))
-    run_binding(binding("alt", role="secondary"), FakeBars("alt"), sink,
-                bars_request(("alt_key", "K1")))
+    run_binding(
+        binding("alt", role="secondary"), FakeBars("alt"), sink, bars_request(("alt_key", "K1"))
+    )
     targets = {row.target_id for row in sink.rows["market.bars"]}
     sources = sorted(row.provenance.source for row in sink.rows["market.bars"])
     assert len(targets) == 1 and sources == ["alt", "up"]
@@ -152,8 +197,12 @@ def test_two_providers_land_on_the_same_listing_with_their_own_source():
 
 def test_shadow_reference_binding_cannot_mint():
     sink = InMemorySink()
-    summary = run_binding(binding("up", "ref.listings", role="shadow"),
-                          FakeListings("up", [("K9", "NEWCO")]), sink, ReferenceRequest("IND"))
+    summary = run_binding(
+        binding("up", "ref.listings", role="shadow"),
+        FakeListings("up", [("K9", "NEWCO")]),
+        sink,
+        ReferenceRequest("IND"),
+    )
     assert summary.rows_written == 0 and not sink.listings
     assert sink.unresolved and sink.unresolved[0][1] == "K9"
     assert summary.source == "up:shadow"
@@ -163,8 +212,9 @@ def test_shadow_bars_are_written_under_their_own_source():
     sink = InMemorySink()
     seed(sink)
     run_binding(binding("up"), FakeBars("up"), sink, bars_request(("up_key", "K1")))
-    summary = run_binding(binding("up", role="shadow"), FakeBars("up"), sink,
-                          bars_request(("up_key", "K1")))
+    summary = run_binding(
+        binding("up", role="shadow"), FakeBars("up"), sink, bars_request(("up_key", "K1"))
+    )
     assert summary.source == "up:shadow"
     assert sorted(r.provenance.source for r in sink.rows["market.bars"]) == ["up", "up:shadow"]
     assert [s for s, *_ in sink.archived][-1] == "up:shadow"
@@ -173,9 +223,12 @@ def test_shadow_bars_are_written_under_their_own_source():
 def test_secondary_reference_binding_only_attaches_aliases():
     sink = InMemorySink()
     seed(sink, "up")
-    summary = run_binding(binding("alt", "ref.listings", role="secondary"),
-                          FakeListings("alt", [("A1", "RELIANCE"), ("A9", "NEWCO")]), sink,
-                          ReferenceRequest("IND"))
+    summary = run_binding(
+        binding("alt", "ref.listings", role="secondary"),
+        FakeListings("alt", [("A1", "RELIANCE"), ("A9", "NEWCO")]),
+        sink,
+        ReferenceRequest("IND"),
+    )
     assert summary.rows_written == 1 and len(sink.listings) == 1
     assert ("alt_key", "A1") in sink.aliases and ("alt_key", "A9") not in sink.aliases
 
@@ -184,15 +237,22 @@ def test_unit_failures_are_isolated_and_classified():
     sink = InMemorySink()
     seed(sink, rows=[("K1", "RELIANCE"), ("K2", "TCS"), ("K3", "INFY"), ("K4", "HDFC")])
     sleeps: list[float] = []
-    source = FakeBars("up", script={
-        "K1": [RateLimited("slow", retry_after=7)],          # retried once, then succeeds
-        "K2": [TransientError("a"), TransientError("b")],     # two retries, then succeeds
-        "K3": [PermanentError("gone")],                       # no retry
-        "K4": [TransientError("a"), TransientError("b"), TransientError("c")],  # exhausted
-    })
-    summary = run_binding(binding("up"), source, sink, bars_request(
-        ("up_key", "K1"), ("up_key", "K2"), ("up_key", "K3"), ("up_key", "K4")),
-        sleep=sleeps.append)
+    source = FakeBars(
+        "up",
+        script={
+            "K1": [RateLimited("slow", retry_after=7)],  # retried once, then succeeds
+            "K2": [TransientError("a"), TransientError("b")],  # two retries, then succeeds
+            "K3": [PermanentError("gone")],  # no retry
+            "K4": [TransientError("a"), TransientError("b"), TransientError("c")],  # exhausted
+        },
+    )
+    summary = run_binding(
+        binding("up"),
+        source,
+        sink,
+        bars_request(("up_key", "K1"), ("up_key", "K2"), ("up_key", "K3"), ("up_key", "K4")),
+        sleep=sleeps.append,
+    )
     assert summary.status == "partial"
     assert {u.name for u in summary.failed_units} == {"K3", "K4"}
     assert sleeps == [7, 1.0, 2.0, 1.0, 2.0]
@@ -203,8 +263,9 @@ def test_auth_required_short_circuits_the_instance():
     sink = InMemorySink()
     seed(sink, rows=[("K1", "RELIANCE"), ("K2", "TCS")])
     source = FakeBars("up", script={"K1": [AuthRequired("token expired at 03:30 IST")]})
-    summary = run_binding(binding("up"), source, sink,
-                          bars_request(("up_key", "K1"), ("up_key", "K2")))
+    summary = run_binding(
+        binding("up"), source, sink, bars_request(("up_key", "K1"), ("up_key", "K2"))
+    )
     assert summary.status == "failed"
     assert source.fetches == ["K1"]
     assert "skipped after auth failure" in summary.failed_units[1].error
@@ -226,8 +287,9 @@ def test_normalization_failure_still_archives_the_capture():
 def test_foreign_source_channel_is_rejected():
     sink = InMemorySink()
     seed(sink)
-    summary = run_binding(binding("up"), FakeBars("up", instance="other"), sink,
-                          bars_request(("up_key", "K1")))
+    summary = run_binding(
+        binding("up"), FakeBars("up", instance="other"), sink, bars_request(("up_key", "K1"))
+    )
     assert summary.status == "failed" and "source_channel" in summary.failed_units[0].error
 
 
@@ -235,8 +297,7 @@ def test_mismatched_binding_and_disabled_binding_are_refused():
     with pytest.raises(ValueError):
         run_binding(binding("other"), FakeBars("up"), InMemorySink(), bars_request())
     with pytest.raises(ValueError):
-        run_binding(binding("up", role="disabled"), FakeBars("up"), InMemorySink(),
-                    bars_request())
+        run_binding(binding("up", role="disabled"), FakeBars("up"), InMemorySink(), bars_request())
 
 
 def test_bar_request_maps_universe_to_provider_aliases_and_watermarks():
@@ -246,10 +307,16 @@ def test_bar_request_maps_universe_to_provider_aliases_and_watermarks():
     run_binding(binding("up"), FakeBars("up"), sink, bars_request(("up_key", "K1")))
     source = FakeBars("up")
     ghost = __import__("uuid").uuid4()
-    request, unmapped = bar_request(binding("up"), source, [*listings, ghost],
-                                    reference=sink, checkpoints=sink, now=NOW + timedelta(hours=1))
+    request, unmapped = bar_request(
+        binding("up"),
+        source,
+        [*listings, ghost],
+        reference=sink,
+        checkpoints=sink,
+        now=NOW + timedelta(hours=1),
+    )
     starts = {w.instrument.alias_value: w.start for w in request.series}
-    assert starts["K1"] == NOW - timedelta(minutes=1)          # resumes at its watermark
+    assert starts["K1"] == NOW - timedelta(minutes=1)  # resumes at its watermark
     assert starts["K2"] == NOW + timedelta(hours=1) - timedelta(days=1)  # default lookback
     assert unmapped == (str(ghost),)
     summary = run_binding(binding("up"), source, sink, request, unmapped=unmapped)
@@ -266,8 +333,7 @@ def test_replay_renormalizes_archived_bytes_without_fetching():
     assert summary.status == "success" and summary.rows_written == 1
     assert source.fetches == []
     assert sink.rows["market.bars"][-1].provenance.raw_id == raw_id
-    assert replay(binding("alt"), FakeBars("alt"), sink, [sink.load_raw(raw_id)]).status == \
-        "failed"
+    assert replay(binding("alt"), FakeBars("alt"), sink, [sink.load_raw(raw_id)]).status == "failed"
 
 
 def test_write_without_run_is_refused():
@@ -277,6 +343,7 @@ def test_write_without_run_is_refused():
     import uuid
 
     from factorlab.ingest.provider import Provenance
+
     provenance = Provenance("up", "up:master", None, uuid.uuid4(), NOW, NOW)
     with pytest.raises(RuntimeError):
         sink.upsert_instruments(source.normalize(capture), provenance=provenance)

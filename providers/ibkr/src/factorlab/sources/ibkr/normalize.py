@@ -41,9 +41,13 @@ _LEGACY_EXEC_TIME_FMT = "%Y%m%d %H:%M:%S"
 # IBKR lastLiquidity: 0 = None, 1 = Added, 2 = Removed, 3 = Liquidity Routed Out, 4 = Auction
 _LIQUIDITY_MAP = {0: "", 1: "ADDED", 2: "REMOVED", 3: "ROUTED", 4: "AUCTION"}
 _SIDE_ALIASES: dict[str, Side] = {
-    "BOT": "BUY", "BUY": "BUY",
-    "SLD": "SELL", "SELL": "SELL",
-    "SSHORT": "SSHORT", "SS": "SSHORT", "SSHORTX": "SSHORT",
+    "BOT": "BUY",
+    "BUY": "BUY",
+    "SLD": "SELL",
+    "SELL": "SELL",
+    "SSHORT": "SSHORT",
+    "SS": "SSHORT",
+    "SSHORTX": "SSHORT",
 }
 
 
@@ -119,7 +123,9 @@ def normalize_exec_time(value: object) -> datetime:
         cleaned = value.strip()
         try:
             parsed = datetime.fromisoformat(cleaned)
-            return parsed.astimezone(UTC) if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+            return (
+                parsed.astimezone(UTC) if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+            )
         except ValueError:
             pass
         # Legacy wire form "YYYYMMDD  HH:MM:SS [TZ]"; ib_async 2.x reports UTC.
@@ -136,8 +142,9 @@ def liquidity_flag(code: object) -> str:
     return _LIQUIDITY_MAP.get(_optional_int(code) or 0, "")
 
 
-def normalize_positions(payload: CapturedPayload, *,
-                        country_code: str = DEFAULT_COUNTRY_CODE) -> list[PositionSnapshot]:
+def normalize_positions(
+    payload: CapturedPayload, *, country_code: str = DEFAULT_COUNTRY_CODE
+) -> list[PositionSnapshot]:
     """One row per open position; zero lots (closed positions IBKR still emits) are dropped."""
     rows: list[PositionSnapshot] = []
     for item in _records(payload, "portfolio"):
@@ -145,30 +152,35 @@ def normalize_positions(payload: CapturedPayload, *,
         if position is None or position == 0:
             continue
         contract = _mapping(item, "contract")
-        rows.append(PositionSnapshot(
-            snapshot_time=payload.fetched_at,
-            broker_code=BROKER_CODE,
-            account_id=_text(item.get("account")),
-            account_mode=payload.mode,
-            country_code=country_code,
-            product_type=product_type(contract.get("secType")),
-            vendor_id=_text(contract.get("conId")),
-            trading_symbol=_text(contract.get("symbol")),
-            currency=_text(contract.get("currency")),
-            position=position,
-            avg_cost=to_decimal(item.get("averageCost")),
-            market_price=to_decimal(item.get("marketPrice")),
-            market_value=to_decimal(item.get("marketValue")),
-            unrealized_pnl=to_decimal(item.get("unrealizedPNL")),
-            realized_pnl_ytd=to_decimal(item.get("realizedPNL")),
-            market_value_usd=None,  # portfolio() does not FX-normalize
-        ))
+        rows.append(
+            PositionSnapshot(
+                snapshot_time=payload.fetched_at,
+                broker_code=BROKER_CODE,
+                account_id=_text(item.get("account")),
+                account_mode=payload.mode,
+                country_code=country_code,
+                product_type=product_type(contract.get("secType")),
+                vendor_id=_text(contract.get("conId")),
+                trading_symbol=_text(contract.get("symbol")),
+                currency=_text(contract.get("currency")),
+                position=position,
+                avg_cost=to_decimal(item.get("averageCost")),
+                market_price=to_decimal(item.get("marketPrice")),
+                market_value=to_decimal(item.get("marketValue")),
+                unrealized_pnl=to_decimal(item.get("unrealizedPNL")),
+                realized_pnl_ytd=to_decimal(item.get("realizedPNL")),
+                market_value_usd=None,  # portfolio() does not FX-normalize
+            )
+        )
     return rows
 
 
-def normalize_account_state(payload: CapturedPayload, *,
-                            country_code: str = DEFAULT_COUNTRY_CODE,
-                            metrics: set[str] | None = None) -> list[AccountStateRow]:
+def normalize_account_state(
+    payload: CapturedPayload,
+    *,
+    country_code: str = DEFAULT_COUNTRY_CODE,
+    metrics: set[str] | None = None,
+) -> list[AccountStateRow]:
     """One row per (metric, segment, currency); ``metrics`` whitelists base tags.
 
     Segments come from a segment suffix (``-S``/``-C``/``-P``), which is
@@ -187,59 +199,65 @@ def normalize_account_state(payload: CapturedPayload, *,
             continue
         raw = value.get("value")
         number = to_decimal(raw)
-        rows.append(AccountStateRow(
-            snapshot_time=payload.fetched_at,
-            broker_code=BROKER_CODE,
-            account_id=_text(value.get("account")),
-            account_mode=payload.mode,
-            country_code=country_code,
-            metric=metric,
-            segment=segment,
-            currency=_text(value.get("currency")) or "NONE",
-            value_num=number,
-            value_str=None if number is not None else _text(raw),
-        ))
+        rows.append(
+            AccountStateRow(
+                snapshot_time=payload.fetched_at,
+                broker_code=BROKER_CODE,
+                account_id=_text(value.get("account")),
+                account_mode=payload.mode,
+                country_code=country_code,
+                metric=metric,
+                segment=segment,
+                currency=_text(value.get("currency")) or "NONE",
+                value_num=number,
+                value_str=None if number is not None else _text(raw),
+            )
+        )
     return rows
 
 
-def normalize_executions(payload: CapturedPayload, *,
-                         country_code: str = DEFAULT_COUNTRY_CODE) -> list[ExecutionRecord]:
+def normalize_executions(
+    payload: CapturedPayload, *, country_code: str = DEFAULT_COUNTRY_CODE
+) -> list[ExecutionRecord]:
     """One row per fill. Duplicates are kept; ``exec_id`` dedupes in storage."""
     rows: list[ExecutionRecord] = []
     for fill in _records(payload, "executions"):
         execution = _mapping(fill, "execution")
         contract = _mapping(fill, "contract")
         report = _mapping(fill, "commissionReport")
-        rows.append(ExecutionRecord(
-            exec_id=_text(execution.get("execId")),
-            broker_code=BROKER_CODE,
-            account_id=_text(execution.get("acctNumber")),
-            account_mode=payload.mode,
-            country_code=country_code,
-            order_id=_optional_int(execution.get("orderId")) or 0,
-            perm_id=_optional_int(execution.get("permId")) or 0,
-            placed_by_client=_optional_int(execution.get("clientId")),
-            order_ref=_optional_text(execution.get("orderRef")),
-            route_pref="",
-            product_type=product_type(contract.get("secType")),
-            vendor_id=_text(contract.get("conId")),
-            trading_symbol=_text(contract.get("symbol")),
-            currency=_text(contract.get("currency")),
-            exec_time=normalize_exec_time(execution.get("time")),
-            side=normalize_side(execution.get("side")),
-            quantity=to_decimal(execution.get("shares")) or Decimal(0),
-            price=to_decimal(execution.get("price")) or Decimal(0),
-            exchange=_text(execution.get("exchange")),
-            liquidity_flag=liquidity_flag(execution.get("lastLiquidity")),
-            commission=to_decimal(report.get("commission")),
-            commission_ccy=_text(report.get("currency")),
-            realized_pnl=to_decimal(report.get("realizedPNL")),
-        ))
+        rows.append(
+            ExecutionRecord(
+                exec_id=_text(execution.get("execId")),
+                broker_code=BROKER_CODE,
+                account_id=_text(execution.get("acctNumber")),
+                account_mode=payload.mode,
+                country_code=country_code,
+                order_id=_optional_int(execution.get("orderId")) or 0,
+                perm_id=_optional_int(execution.get("permId")) or 0,
+                placed_by_client=_optional_int(execution.get("clientId")),
+                order_ref=_optional_text(execution.get("orderRef")),
+                route_pref="",
+                product_type=product_type(contract.get("secType")),
+                vendor_id=_text(contract.get("conId")),
+                trading_symbol=_text(contract.get("symbol")),
+                currency=_text(contract.get("currency")),
+                exec_time=normalize_exec_time(execution.get("time")),
+                side=normalize_side(execution.get("side")),
+                quantity=to_decimal(execution.get("shares")) or Decimal(0),
+                price=to_decimal(execution.get("price")) or Decimal(0),
+                exchange=_text(execution.get("exchange")),
+                liquidity_flag=liquidity_flag(execution.get("lastLiquidity")),
+                commission=to_decimal(report.get("commission")),
+                commission_ccy=_text(report.get("currency")),
+                realized_pnl=to_decimal(report.get("realizedPNL")),
+            )
+        )
     return rows
 
 
-def normalize_open_orders(payload: CapturedPayload, *,
-                          country_code: str = DEFAULT_COUNTRY_CODE) -> list[OpenOrderSnapshot]:
+def normalize_open_orders(
+    payload: CapturedPayload, *, country_code: str = DEFAULT_COUNTRY_CODE
+) -> list[OpenOrderSnapshot]:
     """One row per working order, placed by any client (observe only)."""
     rows: list[OpenOrderSnapshot] = []
     for trade in _records(payload, "open_orders"):
@@ -249,30 +267,32 @@ def normalize_open_orders(payload: CapturedPayload, *,
         quantity = to_decimal(order.get("totalQuantity")) or Decimal(0)
         filled = to_decimal(status.get("filled")) or Decimal(0)
         remaining = to_decimal(status.get("remaining"))
-        rows.append(OpenOrderSnapshot(
-            snapshot_time=payload.fetched_at,
-            broker_code=BROKER_CODE,
-            account_id=_text(order.get("account")),
-            account_mode=payload.mode,
-            country_code=country_code,
-            perm_id=_optional_int(order.get("permId")) or 0,
-            order_id=_optional_int(order.get("orderId")) or 0,
-            placed_by_client=_optional_int(order.get("clientId")),
-            order_ref=_optional_text(order.get("orderRef")),
-            product_type=product_type(contract.get("secType")),
-            vendor_id=_text(contract.get("conId")),
-            trading_symbol=_text(contract.get("symbol")),
-            currency=_text(contract.get("currency")),
-            side=normalize_side(order.get("action")),
-            order_type=_text(order.get("orderType")).upper(),
-            time_in_force=_text(order.get("tif")).upper(),
-            quantity=quantity,
-            filled_quantity=filled,
-            remaining_quantity=remaining if remaining is not None else quantity - filled,
-            limit_price=to_decimal(order.get("lmtPrice")),
-            aux_price=to_decimal(order.get("auxPrice")),
-            status=_text(status.get("status")),
-        ))
+        rows.append(
+            OpenOrderSnapshot(
+                snapshot_time=payload.fetched_at,
+                broker_code=BROKER_CODE,
+                account_id=_text(order.get("account")),
+                account_mode=payload.mode,
+                country_code=country_code,
+                perm_id=_optional_int(order.get("permId")) or 0,
+                order_id=_optional_int(order.get("orderId")) or 0,
+                placed_by_client=_optional_int(order.get("clientId")),
+                order_ref=_optional_text(order.get("orderRef")),
+                product_type=product_type(contract.get("secType")),
+                vendor_id=_text(contract.get("conId")),
+                trading_symbol=_text(contract.get("symbol")),
+                currency=_text(contract.get("currency")),
+                side=normalize_side(order.get("action")),
+                order_type=_text(order.get("orderType")).upper(),
+                time_in_force=_text(order.get("tif")).upper(),
+                quantity=quantity,
+                filled_quantity=filled,
+                remaining_quantity=remaining if remaining is not None else quantity - filled,
+                limit_price=to_decimal(order.get("lmtPrice")),
+                aux_price=to_decimal(order.get("auxPrice")),
+                status=_text(status.get("status")),
+            )
+        )
     return rows
 
 

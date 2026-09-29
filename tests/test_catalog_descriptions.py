@@ -26,7 +26,11 @@ def test_checked_in_descriptions_match_the_generator():
 def test_every_v2_table_has_a_curated_summary():
     sql = "\n".join(path.read_text(encoding="utf-8") for path in v2_sql_dir().glob("wave_*.sql"))
     defined = set(re.findall(r"CREATE (?:TABLE|VIEW) IF NOT EXISTS ([a-z_]+\.[a-z0-9_]+)", sql))
-    curated = json.loads((ROOT / "components/api/src/factorlab/components/api/catalog_curated.json").read_text(encoding="utf-8"))
+    curated = json.loads(
+        (ROOT / "components/api/src/factorlab/components/api/catalog_curated.json").read_text(
+            encoding="utf-8"
+        )
+    )
     missing = sorted(defined - set(curated["tables"]))
     assert not missing, f"Add plain-language entries to catalog_curated.json: {missing}"
     assert {name.split(".", 1)[0] for name in defined} <= set(curated["namespaces"])

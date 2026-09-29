@@ -159,8 +159,9 @@ class SnapshotRequest:
 
 @runtime_checkable
 class BrokerSink(ProviderStorage, Protocol):
-    def write_snapshot(self, rows: Sequence[BrokerRecord], *,
-                       provenance: Provenance) -> WriteResult: ...
+    def write_snapshot(
+        self, rows: Sequence[BrokerRecord], *, provenance: Provenance
+    ) -> WriteResult: ...
 
 
 __all__ = [

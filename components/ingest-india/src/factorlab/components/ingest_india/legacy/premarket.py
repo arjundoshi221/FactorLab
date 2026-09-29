@@ -56,8 +56,12 @@ def main(argv: list[str] | None = None) -> None:
                 raw_id=raw_ids.get(exchange),
             )
             rows_written += len(instrument_lookup) + len(contract_lookup)
-            log.info("%s: synced %d equities and %d futures",
-                     exchange, len(instrument_lookup), len(contract_lookup))
+            log.info(
+                "%s: synced %d equities and %d futures",
+                exchange,
+                len(instrument_lookup),
+                len(contract_lookup),
+            )
 
             if exchange == "NSE":
                 counts = build_universes(

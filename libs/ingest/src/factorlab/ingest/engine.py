@@ -54,10 +54,18 @@ def _rows_written(result: WriteResult | int) -> tuple[int, int]:
 class DatasetProvider:
     """Adapts ``(binding, source, sink, units)`` to the ``Provider`` protocol."""
 
-    def __init__(self, binding: Binding, adapter: DatasetSource[Any, Any], sink: ProviderStorage,
-                 units: Sequence[FetchUnit], *, unmapped: Sequence[str] = (),
-                 retries: int = DEFAULT_RETRIES, max_sleep: float = MAX_SLEEP_SEC,
-                 sleep: Callable[[float], None] = time.sleep) -> None:
+    def __init__(
+        self,
+        binding: Binding,
+        adapter: DatasetSource[Any, Any],
+        sink: ProviderStorage,
+        units: Sequence[FetchUnit],
+        *,
+        unmapped: Sequence[str] = (),
+        retries: int = DEFAULT_RETRIES,
+        max_sleep: float = MAX_SLEEP_SEC,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         if adapter.provider != binding.provider or adapter.dataset != binding.dataset:
             raise ValueError(
                 f"source {adapter.provider}/{adapter.dataset} does not match binding "
@@ -83,8 +91,7 @@ class DatasetProvider:
         )
         # A shadow of a table without `source` in its key would overwrite the incumbent's
         # rows, so it fetches, archives and normalizes for real but only counts (07 §9.2).
-        self.counts_only = (binding.role == "shadow" and not spec.reference
-                            and not spec.source_keyed)
+        self.counts_only = binding.role == "shadow" and not spec.reference and not spec.source_keyed
         self.shadow_rows = 0
 
     def _channel_ok(self, channel: str) -> bool:
@@ -112,17 +119,23 @@ class DatasetProvider:
     def collect(self, ctx: RunContext) -> None:
         if self.unmapped:
             alias_kind = self.adapter.capabilities.alias_kind or "alias"
-            ctx.fail_unit(f"unmapped:{alias_kind}",
-                          f"{len(self.unmapped)} listing(s) have no {alias_kind} alias")
+            ctx.fail_unit(
+                f"unmapped:{alias_kind}",
+                f"{len(self.unmapped)} listing(s) have no {alias_kind} alias",
+            )
         auth_error: BaseException | None = None
         for unit in self.units:
             if auth_error is not None:
                 ctx.fail_unit(unit.name, AuthRequired(f"skipped after auth failure: {auth_error}"))
                 continue
             if not self._channel_ok(unit.source_channel):
-                ctx.fail_unit(unit.name, ValueError(
-                    f"source_channel {unit.source_channel!r} must start with "
-                    f"{self.binding.instance_name!r}"))
+                ctx.fail_unit(
+                    unit.name,
+                    ValueError(
+                        f"source_channel {unit.source_channel!r} must start with "
+                        f"{self.binding.instance_name!r}"
+                    ),
+                )
                 continue
             try:
                 capture = self._fetch(unit)
@@ -138,17 +151,20 @@ class DatasetProvider:
                 log.warning("[%s] unit %s failed", self.pipeline, unit.name, exc_info=True)
                 ctx.fail_unit(unit.name, exc)
 
-    def _write_unit(self, ctx: RunContext, name: str, channel: str, raw_id: UUID | None,
-                    capture: RawCapture) -> None:
+    def _write_unit(
+        self, ctx: RunContext, name: str, channel: str, raw_id: UUID | None, capture: RawCapture
+    ) -> None:
         rows = self.adapter.normalize(capture)
         if self.counts_only:
             self.shadow_rows += len(rows)
-            log.info("[%s] %s: shadow normalized %d row(s); not written", self.pipeline, name,
-                     len(rows))
+            log.info(
+                "[%s] %s: shadow normalized %d row(s); not written", self.pipeline, name, len(rows)
+            )
             ctx.succeed_unit(name, 0)
             return
-        provenance = ctx.provenance(source_channel=channel, raw_id=raw_id,
-                                    as_of_time=capture.fetched_at)
+        provenance = ctx.provenance(
+            source_channel=channel, raw_id=raw_id, as_of_time=capture.fetched_at
+        )
         result = self._write(rows, provenance=provenance, **self._write_kwargs)
         written, unresolved = _rows_written(result)
         self.unresolved += unresolved
@@ -161,8 +177,13 @@ class DatasetProvider:
 class ReplayProvider(DatasetProvider):
     """Re-normalizes archived captures and writes them without re-fetching (07 §11.4)."""
 
-    def __init__(self, binding: Binding, adapter: DatasetSource[Any, Any], sink: ProviderStorage,
-                 captures: Iterable[ArchivedCapture]) -> None:
+    def __init__(
+        self,
+        binding: Binding,
+        adapter: DatasetSource[Any, Any],
+        sink: ProviderStorage,
+        captures: Iterable[ArchivedCapture],
+    ) -> None:
         super().__init__(binding, adapter, sink, units=())
         self.captures = tuple(captures)
 
@@ -170,9 +191,13 @@ class ReplayProvider(DatasetProvider):
         for item in self.captures:
             name = f"replay:{item.raw_id}"
             if item.source not in (self.binding.provider, self.binding.source_name):
-                ctx.fail_unit(name, ValueError(
-                    f"capture {item.raw_id} belongs to {item.source!r}, not "
-                    f"{self.binding.provider!r}"))
+                ctx.fail_unit(
+                    name,
+                    ValueError(
+                        f"capture {item.raw_id} belongs to {item.source!r}, not "
+                        f"{self.binding.provider!r}"
+                    ),
+                )
                 continue
             try:
                 self._write_unit(ctx, name, item.source_channel, item.raw_id, item.capture)
@@ -182,14 +207,24 @@ class ReplayProvider(DatasetProvider):
 
 def _run_metadata(binding: Binding, extra: Mapping[str, Any] | None) -> dict[str, Any]:
     return {
-        "dataset": binding.dataset, "instance": binding.instance_name,
-        "role": binding.role, "resolution": binding.resolution or "", **dict(extra or {}),
+        "dataset": binding.dataset,
+        "instance": binding.instance_name,
+        "role": binding.role,
+        "resolution": binding.resolution or "",
+        **dict(extra or {}),
     }
 
 
-def run_binding(binding: Binding, adapter: DatasetSource[Any, Any], sink: ProviderStorage,
-                request: Any, *, unmapped: Sequence[str] = (),
-                metadata: Mapping[str, Any] | None = None, **kwargs: Any) -> RunSummary:
+def run_binding(
+    binding: Binding,
+    adapter: DatasetSource[Any, Any],
+    sink: ProviderStorage,
+    request: Any,
+    *,
+    unmapped: Sequence[str] = (),
+    metadata: Mapping[str, Any] | None = None,
+    **kwargs: Any,
+) -> RunSummary:
     """Plan ``request`` with ``adapter`` and run every unit into ``sink`` in one run."""
     if not binding.writes:
         raise ValueError(f"binding {binding.pipeline} is disabled")
@@ -197,8 +232,11 @@ def run_binding(binding: Binding, adapter: DatasetSource[Any, Any], sink: Provid
     provider = DatasetProvider(binding, adapter, sink, units, unmapped=unmapped, **kwargs)
     try:
         return run_provider(
-            provider, sink, universe=str(binding.params.get("universe", "")),
-            requested_series=len(units), metadata=_run_metadata(binding, metadata),
+            provider,
+            sink,
+            universe=str(binding.params.get("universe", "")),
+            requested_series=len(units),
+            metadata=_run_metadata(binding, metadata),
         )
     finally:
         close = getattr(adapter, "close", None)  # sources holding connections (e.g. IBKR)
@@ -206,12 +244,18 @@ def run_binding(binding: Binding, adapter: DatasetSource[Any, Any], sink: Provid
             close()
 
 
-def replay(binding: Binding, adapter: DatasetSource[Any, Any], sink: ProviderStorage,
-           captures: Iterable[ArchivedCapture]) -> RunSummary:
+def replay(
+    binding: Binding,
+    adapter: DatasetSource[Any, Any],
+    sink: ProviderStorage,
+    captures: Iterable[ArchivedCapture],
+) -> RunSummary:
     captures = tuple(captures)
     provider = ReplayProvider(binding, adapter, sink, captures)
     return run_provider(
-        provider, sink, requested_series=len(captures),
+        provider,
+        sink,
+        requested_series=len(captures),
         metadata=_run_metadata(binding, {"replay_of": [str(c.raw_id) for c in captures]}),
     )
 
@@ -229,17 +273,22 @@ def source_priority_rows(bindings: Iterable[Binding]) -> list[dict[str, Any]]:
     for binding in bindings:
         if not dataset(binding.dataset).source_keyed:
             continue
-        rows.append({
-            "dataset": binding.dataset,
-            "country_code": MARKET_COUNTRY.get(binding.market, binding.market),
-            "resolution": binding.resolution or "", "source": binding.source_name,
-            "priority": binding.priority, "role": binding.role,
-        })
+        rows.append(
+            {
+                "dataset": binding.dataset,
+                "country_code": MARKET_COUNTRY.get(binding.market, binding.market),
+                "resolution": binding.resolution or "",
+                "source": binding.source_name,
+                "priority": binding.priority,
+                "role": binding.role,
+            }
+        )
     return rows
 
 
-def reference_request(binding: Binding, listing_ids: Sequence[UUID] = (), *,
-                      reference: ReferenceReader | None = None) -> ReferenceRequest:
+def reference_request(
+    binding: Binding, listing_ids: Sequence[UUID] = (), *, reference: ReferenceReader | None = None
+) -> ReferenceRequest:
     """Master-file providers need only the market; per-symbol providers get canonical refs."""
     instruments: tuple = ()
     if listing_ids:
@@ -247,14 +296,21 @@ def reference_request(binding: Binding, listing_ids: Sequence[UUID] = (), *,
             raise ValueError("listing_ids need a ReferenceReader to describe them")
         refs = reference.natural_refs(listing_ids)
         instruments = tuple(refs[listing] for listing in listing_ids if listing in refs)
-    return ReferenceRequest(market=binding.market, params=dict(binding.params),
-                            instruments=instruments)
+    return ReferenceRequest(
+        market=binding.market, params=dict(binding.params), instruments=instruments
+    )
 
 
-def bar_request(binding: Binding, adapter: DatasetSource[Any, Any], listing_ids: Sequence[UUID],
-                *, reference: ReferenceReader, checkpoints: CheckpointStore, now: datetime,
-                default_lookback: timedelta = timedelta(days=1),
-                ) -> tuple[BarRequest, tuple[str, ...]]:
+def bar_request(
+    binding: Binding,
+    adapter: DatasetSource[Any, Any],
+    listing_ids: Sequence[UUID],
+    *,
+    reference: ReferenceReader,
+    checkpoints: CheckpointStore,
+    now: datetime,
+    default_lookback: timedelta = timedelta(days=1),
+) -> tuple[BarRequest, tuple[str, ...]]:
     """Canonical universe -> provider-aliased windows starting at each listing's watermark.
 
     Returns the request and the listing ids that have no alias of the source's
@@ -266,8 +322,16 @@ def bar_request(binding: Binding, adapter: DatasetSource[Any, Any], listing_ids:
     refs = reference.aliases_for(listing_ids, alias_kind=caps.alias_kind)
     unmapped = tuple(str(listing) for listing in listing_ids if listing not in refs)
     mapped = [listing for listing in listing_ids if listing in refs]
-    marks = checkpoints.watermarks(mapped, dataset=binding.dataset, source=binding.source_name,
-                                   resolution=binding.resolution) if mapped else {}
+    marks = (
+        checkpoints.watermarks(
+            mapped,
+            dataset=binding.dataset,
+            source=binding.source_name,
+            resolution=binding.resolution,
+        )
+        if mapped
+        else {}
+    )
     floor = now - caps.max_lookback if caps.max_lookback else None
     windows = []
     for listing in mapped:
@@ -276,8 +340,12 @@ def bar_request(binding: Binding, adapter: DatasetSource[Any, Any], listing_ids:
             start = floor
         if start < now:
             windows.append(SeriesWindow(refs[listing], start, now))
-    return BarRequest(market=binding.market, resolution=binding.resolution,
-                      series=tuple(windows), params=dict(binding.params)), unmapped
+    return BarRequest(
+        market=binding.market,
+        resolution=binding.resolution,
+        series=tuple(windows),
+        params=dict(binding.params),
+    ), unmapped
 
 
 __all__ = [

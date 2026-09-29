@@ -34,12 +34,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 LOG_ROOT = Path("/var/log/factorlab")
-SNAPSHOTS = (Path("/var/lib/factorlab/docker-images/snapshot.v2.json"),
-             Path("/var/lib/factorlab/docker-images/snapshot.json"))
+SNAPSHOTS = (
+    Path("/var/lib/factorlab/docker-images/snapshot.v2.json"),
+    Path("/var/lib/factorlab/docker-images/snapshot.json"),
+)
 MAX_WINDOW = timedelta(days=30)
 DEFAULT_LINES, MAX_LINES = 50, 200
 MAX_OUTPUT = 64 * 1024
-MAX_LINE = 64 * 1024          # longer lines are cut before parsing or matching
+MAX_LINE = 64 * 1024  # longer lines are cut before parsing or matching
 MAX_MESSAGE, MAX_EXCEPTION = 2_000, 12_000
 LEVELS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
 COMPONENT = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
@@ -48,14 +50,19 @@ RUN_ID = re.compile(r"^[A-Za-z0-9._:-]{1,80}$")
 RELATIVE = re.compile(r"^(\d{1,4})([mhd])$")
 # Log files: <service>.jsonl or <service>.log, plus logrotate's -YYYYMMDD-HH[.gz]
 # and the one-off -legacy.gz that prepare-host.sh migrates from the old cron log.
-LOG_FILE = re.compile(r"^(?P<service>[a-z0-9][a-z0-9._-]{0,60}?)\.(?P<ext>jsonl|log)"
-                      r"(?:-(?P<stamp>\d{8}-\d{2}|legacy))?(?P<gz>\.gz)?$")
+LOG_FILE = re.compile(
+    r"^(?P<service>[a-z0-9][a-z0-9._-]{0,60}?)\.(?P<ext>jsonl|log)"
+    r"(?:-(?P<stamp>\d{8}-\d{2}|legacy))?(?P<gz>\.gz)?$"
+)
 # Keep in step with factorlab.core.logging (tests/deploy/test_log_reader.py checks).
 SECRET_KEY = re.compile(r"(?i)pass(word)?|secret|token|api[_-]?key|authorization|cookie")
 SECRET_TEXT = re.compile(
     r"(?i)(bearer\s+|access_token=|refresh_token=|api_key=|apikey=|password=|token=)"
-    r"[^\s&\"',]+")
-UUIDISH = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.IGNORECASE)
+    r"[^\s&\"',]+"
+)
+UUIDISH = re.compile(
+    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.IGNORECASE
+)
 NUMBERISH = re.compile(r"\b\d+(\.\d+)?\b|\b0x[0-9a-f]+\b|\b[0-9a-f]{16,}\b", re.IGNORECASE)
 QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"")
 
@@ -97,6 +104,7 @@ def window(since: str, until: str | None, now: datetime) -> tuple[datetime, date
 
 # ── files ────────────────────────────────────────────────────────────────────
 
+
 def component_dirs(root: Path, component: str | None = None) -> list[Path]:
     if component is not None and not COMPONENT.match(component):
         raise UsageError(f"invalid component {component!r}")
@@ -125,8 +133,7 @@ def log_files(directory: Path, service: str | None = None) -> list[tuple[str, Pa
         if service is not None and match["service"] != service:
             continue
         # A live file sorts after its rotations; files of one service stay together.
-        stamp = {None: "99999999-99", "legacy": "00000000-00"}.get(match["stamp"],
-                                                                     match["stamp"])
+        stamp = {None: "99999999-99", "legacy": "00000000-00"}.get(match["stamp"], match["stamp"])
         entries.append(((match["service"], match["ext"], stamp), match["service"], path))
     return [(name, path) for _, name, path in sorted(entries)]
 
@@ -151,6 +158,7 @@ def _mtime(path: Path) -> datetime:
 
 
 # ── records ──────────────────────────────────────────────────────────────────
+
 
 def parse(line: str, component: str, service: str) -> dict:
     try:
@@ -197,8 +205,9 @@ def clean(record: dict, with_exception: bool) -> dict:
     return out
 
 
-def records(root: Path, *, component: str | None, service: str | None,
-            start: datetime, end: datetime) -> Iterator[dict]:
+def records(
+    root: Path, *, component: str | None, service: str | None, start: datetime, end: datetime
+) -> Iterator[dict]:
     """Records inside the window, oldest file first; untimed lines follow their file."""
     for directory in component_dirs(root, component):
         for name, path in log_files(directory, service):
@@ -214,14 +223,22 @@ def records(root: Path, *, component: str | None, service: str | None,
 
 # ── commands ─────────────────────────────────────────────────────────────────
 
+
 def list_logs(root: Path, snapshots: tuple[Path, ...] = SNAPSHOTS) -> Iterator[dict]:
     for directory in component_dirs(root):
         files = []
         for name, path in log_files(directory):
             stat = path.stat()
-            files.append({"service": name, "file": path.name, "bytes": stat.st_size,
-                          "modified": datetime.fromtimestamp(stat.st_mtime, timezone.utc)
-                          .isoformat(timespec="seconds")})
+            files.append(
+                {
+                    "service": name,
+                    "file": path.name,
+                    "bytes": stat.st_size,
+                    "modified": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(
+                        timespec="seconds"
+                    ),
+                }
+            )
         yield {"component": directory.name, "files": files}
     for snapshot in snapshots:
         try:
@@ -232,13 +249,20 @@ def list_logs(root: Path, snapshots: tuple[Path, ...] = SNAPSHOTS) -> Iterator[d
         for image in data.get("images", []):
             labels = image.get("labels") or {}
             for container in image.get("containers", []):
-                running.append({"service": container.get("service") or container.get("name"),
-                                "status": container.get("status"),
-                                "component": labels.get("component") or labels.get("title"),
-                                "version": labels.get("version"),
-                                "started_at": container.get("started_at")})
-        yield {"containers": sorted(running, key=lambda c: str(c["service"])),
-               "snapshot_at": data.get("snapshot_at"), "snapshot": snapshot.name}
+                running.append(
+                    {
+                        "service": container.get("service") or container.get("name"),
+                        "status": container.get("status"),
+                        "component": labels.get("component") or labels.get("title"),
+                        "version": labels.get("version"),
+                        "started_at": container.get("started_at"),
+                    }
+                )
+        yield {
+            "containers": sorted(running, key=lambda c: str(c["service"])),
+            "snapshot_at": data.get("snapshot_at"),
+            "snapshot": snapshot.name,
+        }
         break
 
 
@@ -258,8 +282,9 @@ def tail(root: Path, args: argparse.Namespace, now: datetime) -> tuple[list[dict
     needle = args.grep.lower() if args.grep else None
     kept: deque[dict] = deque(maxlen=_lines(args.lines))
     matched = 0
-    for record in records(root, component=args.component, service=args.service,
-                          start=start, end=end):
+    for record in records(
+        root, component=args.component, service=args.service, start=start, end=end
+    ):
         if LEVELS.get(str(record.get("level", "INFO")).upper(), 20) < level:
             continue
         if args.run_id and str(record.get("run_id", "")) != args.run_id:
@@ -272,8 +297,11 @@ def tail(root: Path, args: argparse.Namespace, now: datetime) -> tuple[list[dict
                 continue
         matched += 1
         kept.append(clean(record, args.exc))
-    return list(kept), {"since": start.isoformat(timespec="seconds"),
-                        "until": end.isoformat(timespec="seconds"), "matched": matched}
+    return list(kept), {
+        "since": start.isoformat(timespec="seconds"),
+        "until": end.isoformat(timespec="seconds"),
+        "matched": matched,
+    }
 
 
 def fingerprint(record: dict) -> str:
@@ -290,29 +318,44 @@ def errors(root: Path, args: argparse.Namespace, now: datetime) -> tuple[list[di
         if LEVELS.get(str(record.get("level", "INFO")).upper(), 20) < LEVELS["ERROR"]:
             continue
         total += 1
-        key = (record.get("component"), record.get("service"), record.get("logger"),
-               fingerprint(record))
+        key = (
+            record.get("component"),
+            record.get("service"),
+            record.get("logger"),
+            fingerprint(record),
+        )
         seen = record.get("ts")
         group = groups.get(key)
         if group is None:
             cleaned = clean(record, False)
             groups[key] = group = {
-                "component": key[0], "service": key[1], "logger": key[2],
-                "fingerprint": redact(key[3]), "count": 0, "first": seen, "last": seen,
-                "sample": cleaned.get("msg"), "exc_summary": cleaned.get("exc_summary"),
-                "run_id": cleaned.get("run_id")}
+                "component": key[0],
+                "service": key[1],
+                "logger": key[2],
+                "fingerprint": redact(key[3]),
+                "count": 0,
+                "first": seen,
+                "last": seen,
+                "sample": cleaned.get("msg"),
+                "exc_summary": cleaned.get("exc_summary"),
+                "run_id": cleaned.get("run_id"),
+            }
         group["count"] += 1
         group["last"] = seen or group["last"]
     ranked = sorted(groups.values(), key=lambda g: (-g["count"], str(g["last"])))
-    return ranked[:max(1, min(args.limit, 100))], {
-        "since": start.isoformat(timespec="seconds"), "errors": total, "groups": len(groups)}
+    return ranked[: max(1, min(args.limit, 100))], {
+        "since": start.isoformat(timespec="seconds"),
+        "errors": total,
+        "groups": len(groups),
+    }
 
 
 def run(root: Path, args: argparse.Namespace, now: datetime) -> tuple[list[dict], dict]:
     if not RUN_ID.match(args.run_id):
         raise UsageError("invalid --run-id")
-    args = argparse.Namespace(**vars(args), component=None, service=None, until=None,
-                              level=None, grep=None, regex=None)
+    args = argparse.Namespace(
+        **vars(args), component=None, service=None, until=None, level=None, grep=None, regex=None
+    )
     return tail(root, args, now)
 
 
@@ -321,8 +364,9 @@ def _lines(value: int) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    top = argparse.ArgumentParser(prog="factorlab-log-reader", add_help=True,
-                                  description=__doc__.split("\n\n")[0])
+    top = argparse.ArgumentParser(
+        prog="factorlab-log-reader", add_help=True, description=__doc__.split("\n\n")[0]
+    )
     commands = top.add_subparsers(dest="command", required=True)
     commands.add_parser("list")
     t = commands.add_parser("tail")
@@ -348,8 +392,12 @@ def parser() -> argparse.ArgumentParser:
     return top
 
 
-def execute(argv: list[str], root: Path = LOG_ROOT, now: datetime | None = None,
-            snapshots: tuple[Path, ...] = SNAPSHOTS) -> tuple[list[dict], dict]:
+def execute(
+    argv: list[str],
+    root: Path = LOG_ROOT,
+    now: datetime | None = None,
+    snapshots: tuple[Path, ...] = SNAPSHOTS,
+) -> tuple[list[dict], dict]:
     args = parser().parse_args(argv)
     now = now or _now()
     if args.command == "list":
@@ -370,8 +418,10 @@ def emit(items: list[dict], meta: dict, stream=sys.stdout) -> None:
             continue
         stream.write(line + "\n")
         written += len(line) + 1
-    stream.write(json.dumps({"_meta": {**meta, "returned": len(items) - truncated,
-                                       "truncated": truncated}}) + "\n")
+    stream.write(
+        json.dumps({"_meta": {**meta, "returned": len(items) - truncated, "truncated": truncated}})
+        + "\n"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

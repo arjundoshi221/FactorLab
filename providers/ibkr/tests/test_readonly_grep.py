@@ -48,7 +48,9 @@ def test_module_tree_exists():
     assert _iter_source_files(), "no .py files found under IBKR module — this test would false-pass"
 
 
-@pytest.mark.parametrize("path", _iter_source_files(), ids=lambda p: str(p.relative_to(MODULE_ROOT)))
+@pytest.mark.parametrize(
+    "path", _iter_source_files(), ids=lambda p: str(p.relative_to(MODULE_ROOT))
+)
 def test_no_forbidden_symbols(path: Path):
     text = path.read_text(encoding="utf-8")
     hits: list[str] = []
@@ -75,10 +77,19 @@ def test_scan_covers_every_module_file():
     files = [str(p.relative_to(MODULE_ROOT)) for p in _iter_source_files()]
     # Adapter must have grown all the files listed in the spec.
     expected = {
-        "__init__.py", "client.py", "shapes.py", "contracts.py",
-        "portfolio.py", "executions.py", "open_orders.py",
-        "historical.py", "pacing.py", "errors.py",
-        "capture.py", "normalize.py", "provider.py",
+        "__init__.py",
+        "client.py",
+        "shapes.py",
+        "contracts.py",
+        "portfolio.py",
+        "executions.py",
+        "open_orders.py",
+        "historical.py",
+        "pacing.py",
+        "errors.py",
+        "capture.py",
+        "normalize.py",
+        "provider.py",
     }
     missing = expected - set(files)
     assert not missing, f"IBKR module missing expected files: {missing}"

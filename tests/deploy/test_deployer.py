@@ -16,7 +16,9 @@ import pytest
 import yaml
 
 REPO = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location("factorlab_deploy", REPO / "deploy/host/factorlab_deploy.py")
+spec = importlib.util.spec_from_file_location(
+    "factorlab_deploy", REPO / "deploy/host/factorlab_deploy.py"
+)
 fd = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = fd
 spec.loader.exec_module(fd)
@@ -27,24 +29,42 @@ BAD = "ghcr.io/arjundoshi221/factorlab-api@sha256:" + "c" * 64
 MONOLITH = "ghcr.io/arjundoshi221/factorlab@sha256:" + "d" * 64
 
 FRAGMENT = {
-    "services": {"api": {
-        "image": "${FACTORLAB_API_IMAGE:-${FACTORLAB_IMAGE:-factorlab:latest}}",
-        "logging": {"driver": "json-file"},
-        "ports": ["127.0.0.1:8000:8000"],
-        "volumes": ["political_runtime:/run/secrets/app:ro",
-                    "/var/log/factorlab/api:/var/log/factorlab/api"],
-    }},
+    "services": {
+        "api": {
+            "image": "${FACTORLAB_API_IMAGE:-${FACTORLAB_IMAGE:-factorlab:latest}}",
+            "logging": {"driver": "json-file"},
+            "ports": ["127.0.0.1:8000:8000"],
+            "volumes": [
+                "political_runtime:/run/secrets/app:ro",
+                "/var/log/factorlab/api:/var/log/factorlab/api",
+            ],
+        }
+    },
 }
 
 
-def manifest(version: str, *, rollback: str = "auto", contract: int | None = None,
-             name: str = "api", services=None) -> dict:
-    platform = {"image_var": f"FACTORLAB_{name.upper().replace('-', '_')}_IMAGE",
-                "rollback": rollback, "user": "10001", "logs": f"/var/log/factorlab/{name}"}
+def manifest(
+    version: str,
+    *,
+    rollback: str = "auto",
+    contract: int | None = None,
+    name: str = "api",
+    services=None,
+) -> dict:
+    platform = {
+        "image_var": f"FACTORLAB_{name.upper().replace('-', '_')}_IMAGE",
+        "rollback": rollback,
+        "user": "10001",
+        "logs": f"/var/log/factorlab/{name}",
+    }
     if contract is not None:
         platform["data_contract"] = contract
-    return {"name": name, "version": version, "platform": platform,
-            "services": services or [{"name": "api", "mode": "daemon"}]}
+    return {
+        "name": name,
+        "version": version,
+        "platform": platform,
+        "services": services or [{"name": "api", "mode": "daemon"}],
+    }
 
 
 class FakeDocker:
@@ -58,8 +78,14 @@ class FakeDocker:
         self.prepare_host_rc = 0
 
     def add_image(self, ref: str, version: str, *, healthy: bool = True, component: str = "api"):
-        self.images[ref] = {"id": "sha256:" + ref[-64:], "healthy": healthy, "labels": {
-            "io.factorlab.component": component, "org.opencontainers.image.version": version}}
+        self.images[ref] = {
+            "id": "sha256:" + ref[-64:],
+            "healthy": healthy,
+            "labels": {
+                "io.factorlab.component": component,
+                "org.opencontainers.image.version": version,
+            },
+        }
 
     def __call__(self, cmd):
         self.calls.append(list(cmd))
@@ -77,10 +103,23 @@ class FakeDocker:
             return self._result(0, json.dumps(image["labels"]))
         if args[0] == "inspect":
             container = next(c for c in self.containers.values() if c["id"] == args[1])
-            return self._result(0, json.dumps([{
-                "Image": container["image_id"], "RestartCount": 0,
-                "Config": {"Labels": {"com.docker.compose.config-hash": container.get("hash", "")}},
-                "State": {"Status": container["status"], "Health": None}}]))
+            return self._result(
+                0,
+                json.dumps(
+                    [
+                        {
+                            "Image": container["image_id"],
+                            "RestartCount": 0,
+                            "Config": {
+                                "Labels": {
+                                    "com.docker.compose.config-hash": container.get("hash", "")
+                                }
+                            },
+                            "State": {"Status": container["status"], "Health": None},
+                        }
+                    ]
+                ),
+            )
         raise AssertionError(f"unexpected docker call {cmd}")
 
     @staticmethod
@@ -118,8 +157,11 @@ class FakeDocker:
         image = self.images[model["services"][name]["image"]]
         if verb == "up":
             self.recreated.append(name)
-            self.containers[name] = {"id": f"c-{name}-{len(self.recreated)}", "image_id": image["id"],
-                                     "status": "running" if image["healthy"] else "exited"}
+            self.containers[name] = {
+                "id": f"c-{name}-{len(self.recreated)}",
+                "image_id": image["id"],
+                "status": "running" if image["healthy"] else "exited",
+            }
             return self._result(0)
         if verb == "run":
             return self._result(0 if image["healthy"] else 1)
@@ -139,20 +181,36 @@ class FakeDocker:
     def _model(self, files, env):
         services = {}
         for path in files:
-            for name, service in (yaml.safe_load(path.read_text()) or {}).get("services", {}).items():
+            for name, service in (
+                (yaml.safe_load(path.read_text()) or {}).get("services", {}).items()
+            ):
                 ports = []
                 for port in service.get("ports", []):
                     parts = str(port).split(":")
-                    ports.append({"host_ip": parts[0] if len(parts) == 3 else "",
-                                  "published": parts[-2], "target": parts[-1]})
+                    ports.append(
+                        {
+                            "host_ip": parts[0] if len(parts) == 3 else "",
+                            "published": parts[-2],
+                            "target": parts[-1],
+                        }
+                    )
                 volumes = []
                 for volume in service.get("volumes", []):
                     source, target, *mode = str(volume).split(":")
-                    volumes.append({"type": "bind" if source.startswith("/") else "volume",
-                                    "source": source, "target": target,
-                                    "read_only": mode == ["ro"]})
-                services[name] = {**service, "image": self._resolve(service["image"], env),
-                                  "ports": ports, "volumes": volumes}
+                    volumes.append(
+                        {
+                            "type": "bind" if source.startswith("/") else "volume",
+                            "source": source,
+                            "target": target,
+                            "read_only": mode == ["ro"],
+                        }
+                    )
+                services[name] = {
+                    **service,
+                    "image": self._resolve(service["image"], env),
+                    "ports": ports,
+                    "volumes": volumes,
+                }
         return {"services": services}
 
 
@@ -176,11 +234,21 @@ def world(tmp_path):
     docker.add_image(OLD, "1.0.0")
     docker.add_image(NEW, "1.1.0")
     docker.add_image(BAD, "1.2.0", healthy=False)
-    docker.containers["api"] = {"id": "c-api-0", "image_id": docker.images[OLD]["id"],
-                                "status": "running"}
-    host = fd.Host(root=root, lock_path=tmp_path / "lock", run=docker, sleep=lambda s: None,
-                   chown=lambda *a: None, lock=lambda path: nullcontext(), stabilize_seconds=0,
-                   health_timeout=5)
+    docker.containers["api"] = {
+        "id": "c-api-0",
+        "image_id": docker.images[OLD]["id"],
+        "status": "running",
+    }
+    host = fd.Host(
+        root=root,
+        lock_path=tmp_path / "lock",
+        run=docker,
+        sleep=lambda s: None,
+        chown=lambda *a: None,
+        lock=lambda path: nullcontext(),
+        stabilize_seconds=0,
+        health_timeout=5,
+    )
     clock = iter(range(10_000))
     host.clock = lambda: next(clock)
     logs: list[str] = []
@@ -198,8 +266,11 @@ def _tgz(path: Path, files: dict[str, str]) -> Path:
 
 
 def bundle(tmp_path, component_manifest: dict, fragment: dict | None = None, extra=None) -> Path:
-    files = {"component.json": json.dumps(component_manifest),
-             "compose.yaml": yaml.safe_dump(fragment or FRAGMENT), **dict(extra or [])}
+    files = {
+        "component.json": json.dumps(component_manifest),
+        "compose.yaml": yaml.safe_dump(fragment or FRAGMENT),
+        **dict(extra or []),
+    }
     return _tgz(tmp_path / f"bundle-{component_manifest['version']}.tgz", files)
 
 
@@ -230,9 +301,11 @@ def test_unhealthy_auto_release_rolls_back_to_the_previous_image(world, tmp_path
 def test_writer_with_a_new_data_contract_stops_for_fix_forward(world, tmp_path):
     docker, deployer, root = world
     (root / "components/api/component.json").write_text(
-        json.dumps(manifest("1.0.0", rollback="writer", contract=1)))
-    outcome = deployer.deploy("api", "1.2.0", BAD,
-                              bundle(tmp_path, manifest("1.2.0", rollback="writer", contract=2)))
+        json.dumps(manifest("1.0.0", rollback="writer", contract=1))
+    )
+    outcome = deployer.deploy(
+        "api", "1.2.0", BAD, bundle(tmp_path, manifest("1.2.0", rollback="writer", contract=2))
+    )
     assert outcome.rollback == "fix-forward-required"
     assert docker.containers["api"]["status"] == "exited"
 
@@ -240,22 +313,30 @@ def test_writer_with_a_new_data_contract_stops_for_fix_forward(world, tmp_path):
 def test_writer_with_the_same_contract_rolls_back(world, tmp_path):
     _, deployer, root = world
     (root / "components/api/component.json").write_text(
-        json.dumps(manifest("1.0.0", rollback="writer", contract=1)))
-    outcome = deployer.deploy("api", "1.2.0", BAD,
-                              bundle(tmp_path, manifest("1.2.0", rollback="writer", contract=1)))
+        json.dumps(manifest("1.0.0", rollback="writer", contract=1))
+    )
+    outcome = deployer.deploy(
+        "api", "1.2.0", BAD, bundle(tmp_path, manifest("1.2.0", rollback="writer", contract=1))
+    )
     assert outcome.rollback == "rolled-back" and pin(root) == OLD
 
 
 def test_forward_only_component_is_not_rolled_back(world, tmp_path):
     _, deployer, _ = world
-    outcome = deployer.deploy("api", "1.2.0", BAD,
-                              bundle(tmp_path, manifest("1.2.0", rollback="forward-only")))
+    outcome = deployer.deploy(
+        "api", "1.2.0", BAD, bundle(tmp_path, manifest("1.2.0", rollback="forward-only"))
+    )
     assert outcome.rollback == "failed-forward-only"
 
 
-@pytest.mark.parametrize("image", ["ghcr.io/arjundoshi221/factorlab@sha256:" + "b" * 64,
-                                   "ghcr.io/someone-else/factorlab-api@sha256:" + "b" * 64,
-                                   "ghcr.io/arjundoshi221/factorlab-api:1.1.0"])
+@pytest.mark.parametrize(
+    "image",
+    [
+        "ghcr.io/arjundoshi221/factorlab@sha256:" + "b" * 64,
+        "ghcr.io/someone-else/factorlab-api@sha256:" + "b" * 64,
+        "ghcr.io/arjundoshi221/factorlab-api:1.1.0",
+    ],
+)
 def test_refuses_images_that_are_not_this_components_digest(world, tmp_path, image):
     _, deployer, root = world
     with pytest.raises(fd.DeployError, match="image must be"):
@@ -271,11 +352,14 @@ def test_refuses_a_label_mismatch_before_touching_production(world, tmp_path):
     assert pin(root) == OLD and docker.recreated == []
 
 
-@pytest.mark.parametrize(("change", "message"), [
-    ({"ports": ["8000:8000"]}, "beyond loopback"),
-    ({"volumes": ["/etc/passwd:/x"]}, "outside the allowed host paths"),
-    ({"privileged": True}, "may not set"),
-])
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"ports": ["8000:8000"]}, "beyond loopback"),
+        ({"volumes": ["/etc/passwd:/x"]}, "outside the allowed host paths"),
+        ({"privileged": True}, "may not set"),
+    ],
+)
 def test_refuses_fragments_that_break_platform_policy(world, tmp_path, change, message):
     docker, deployer, root = world
     fragment = {"services": {"api": {**FRAGMENT["services"]["api"], **change}}}
@@ -329,15 +413,18 @@ def test_seed_installs_missing_fragments_and_never_overwrites(world, tmp_path):
 
 
 def platform_bundle(tmp_path, version: str) -> Path:
-    return _tgz(tmp_path / f"platform-{version}.tgz", {
-        "deploy/compose.base.yml": "name: factorlab\nservices: {}\n",
-        "deploy/host/factorlab_deploy.py": "# host tool\n",
-        "deploy/scripts/prepare-host.sh": "#!/bin/sh\n",
-        "components/ingest-us/compose.yaml": yaml.safe_dump({"services": {}}),
-        "components/ingest-us/component.json": json.dumps(manifest("0.0.0", name="ingest-us")),
-        "components/api/compose.yaml": yaml.safe_dump({"services": {}}),
-        "components/api/component.json": json.dumps(manifest("0.0.0")),
-    })
+    return _tgz(
+        tmp_path / f"platform-{version}.tgz",
+        {
+            "deploy/compose.base.yml": "name: factorlab\nservices: {}\n",
+            "deploy/host/factorlab_deploy.py": "# host tool\n",
+            "deploy/scripts/prepare-host.sh": "#!/bin/sh\n",
+            "components/ingest-us/compose.yaml": yaml.safe_dump({"services": {}}),
+            "components/ingest-us/component.json": json.dumps(manifest("0.0.0", name="ingest-us")),
+            "components/api/compose.yaml": yaml.safe_dump({"services": {}}),
+            "components/api/component.json": json.dumps(manifest("0.0.0")),
+        },
+    )
 
 
 def test_platform_release_keeps_settings_seeds_components_and_recreates_nothing(world, tmp_path):
@@ -358,7 +445,9 @@ def test_platform_release_keeps_settings_seeds_components_and_recreates_nothing(
 
 def test_the_repositorys_platform_bundle_installs_and_seeds_the_monolith(world, tmp_path):
     docker, deployer, root = world
-    tool_spec = importlib.util.spec_from_file_location("components_tool", REPO / "tools/components.py")
+    tool_spec = importlib.util.spec_from_file_location(
+        "components_tool", REPO / "tools/components.py"
+    )
     tool = importlib.util.module_from_spec(tool_spec)
     sys.modules[tool_spec.name] = tool
     tool_spec.loader.exec_module(tool)
@@ -371,7 +460,8 @@ def test_the_repositorys_platform_bundle_installs_and_seeds_the_monolith(world, 
     assert pins["FACTORLAB_API_IMAGE"] == OLD  # already component-managed: untouched
     assert pins["FACTORLAB_INGEST_INDIA_IMAGE"] == MONOLITH
     assert {p.parent.name for p in (root / "components").glob("*/compose.yaml")} == {
-        c.name for c in tool.load_all()}
+        c.name for c in tool.load_all()
+    }
 
 
 def test_platform_release_restores_the_previous_bundle_when_prepare_host_fails(world, tmp_path):

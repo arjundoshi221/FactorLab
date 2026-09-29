@@ -79,7 +79,9 @@ class InstrumentRef:
         return bool(self.alias_value)
 
     def label(self) -> str:
-        return self.alias_value or f"{self.exchange_code or self.country_code}:{self.trading_symbol}"
+        return (
+            self.alias_value or f"{self.exchange_code or self.country_code}:{self.trading_symbol}"
+        )
 
 
 @dataclass(frozen=True, slots=True)

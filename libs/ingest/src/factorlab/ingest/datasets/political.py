@@ -143,26 +143,34 @@ LegislatorRow = LegislatorRecord | CommitteeRecord | MembershipRecord
 
 @runtime_checkable
 class LegislatorSink(ProviderStorage, Protocol):
-    def write_legislators(self, rows: Sequence[LegislatorRow], *, provenance: Provenance,
-                          mode: ReferenceMode = "authoritative") -> WriteResult: ...
+    def write_legislators(
+        self,
+        rows: Sequence[LegislatorRow],
+        *,
+        provenance: Provenance,
+        mode: ReferenceMode = "authoritative",
+    ) -> WriteResult: ...
 
 
 @runtime_checkable
 class PoliticalFilingSink(ProviderStorage, Protocol):
-    def write_political_filings(self, rows: Sequence[PoliticalFilingRecord], *,
-                                provenance: Provenance) -> WriteResult: ...
+    def write_political_filings(
+        self, rows: Sequence[PoliticalFilingRecord], *, provenance: Provenance
+    ) -> WriteResult: ...
 
 
 @runtime_checkable
 class PoliticalTradeSink(ProviderStorage, Protocol):
-    def write_political_trades(self, rows: Sequence[PoliticalTradeRecord], *,
-                               provenance: Provenance) -> WriteResult: ...
+    def write_political_trades(
+        self, rows: Sequence[PoliticalTradeRecord], *, provenance: Provenance
+    ) -> WriteResult: ...
 
 
 @runtime_checkable
 class PoliticalReader(Protocol):
-    def recent_filings(self, *, chamber: str, limit: int,
-                       country_code: str = "US") -> list[FilingRef]:
+    def recent_filings(
+        self, *, chamber: str, limit: int, country_code: str = "US"
+    ) -> list[FilingRef]:
         """Newest filings by ``filing_date`` (the documents a trades run should fetch)."""
         ...
 

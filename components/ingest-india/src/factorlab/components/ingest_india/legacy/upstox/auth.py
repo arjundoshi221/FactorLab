@@ -51,7 +51,10 @@ _REQUIRED_KEYS = {
 
 def _persistence_enabled() -> bool:
     return os.getenv("FACTORLAB_PERSIST_SECRETS", "true").lower() in {
-        "1", "true", "yes", "on",
+        "1",
+        "true",
+        "yes",
+        "on",
     }
 
 
@@ -65,9 +68,7 @@ def _load_credentials() -> dict[str, str]:
             missing.append(f"  {key} — {desc}")
         creds[key] = val
     if missing:
-        raise OSError(
-            "Missing Upstox credentials:\n" + "\n".join(missing)
-        )
+        raise OSError("Missing Upstox credentials:\n" + "\n".join(missing))
     return creds
 
 
@@ -124,11 +125,13 @@ def get_auth_url() -> str:
     ``redirect_uri`` with ``?code=xxx`` in the query string.
     """
     creds = _load_credentials()
-    params = urlencode({
-        "response_type": "code",
-        "client_id": creds["UPSTOX_API_KEY"],
-        "redirect_uri": creds["UPSTOX_REDIRECT_URL"],
-    })
+    params = urlencode(
+        {
+            "response_type": "code",
+            "client_id": creds["UPSTOX_API_KEY"],
+            "redirect_uri": creds["UPSTOX_REDIRECT_URL"],
+        }
+    )
     return f"{_AUTH_DIALOG_URL}?{params}"
 
 
@@ -169,9 +172,7 @@ def exchange_code(code: str) -> str:
         timeout=15,
     )
     if resp.status_code != 200:
-        raise RuntimeError(
-            f"Token exchange failed: HTTP {resp.status_code} — {resp.text[:300]}"
-        )
+        raise RuntimeError(f"Token exchange failed: HTTP {resp.status_code} — {resp.text[:300]}")
     data = resp.json()
     token = data.get("access_token")
     if not token:
@@ -194,9 +195,7 @@ def validate_token(token: str) -> dict:
     if resp.status_code == 401:
         raise RuntimeError("Token expired or invalid (HTTP 401)")
     if resp.status_code != 200:
-        raise RuntimeError(
-            f"Token validation failed: HTTP {resp.status_code} — {resp.text[:200]}"
-        )
+        raise RuntimeError(f"Token validation failed: HTTP {resp.status_code} — {resp.text[:200]}")
 
     data = resp.json()
     if data.get("status") != "success":

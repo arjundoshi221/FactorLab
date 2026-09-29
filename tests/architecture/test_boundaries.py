@@ -30,8 +30,19 @@ ALLOWLIST = Path(__file__).with_name("boundary_allowlist.txt")
 
 # Provider names as they appear in `source` columns, and vendor-only codes.
 PROVIDER_TOKENS = (
-    "upstox", "schwab", "eodhd", "ibkr", "house_clerk", "congress_legislators", "edgar",
-    "senate_efd", "senate_stock_watcher", "fec", "finnhub", "congress_gov", "lda",
+    "upstox",
+    "schwab",
+    "eodhd",
+    "ibkr",
+    "house_clerk",
+    "congress_legislators",
+    "edgar",
+    "senate_efd",
+    "senate_stock_watcher",
+    "fec",
+    "finnhub",
+    "congress_gov",
+    "lda",
     "usaspending",
 )
 VENDOR_LITERALS = frozenset({"NSE_EQ", "NSE_FO", "BSE_EQ", "BSE_FO", "NSE_INDEX"})
@@ -113,24 +124,31 @@ def violations() -> Counter[tuple[str, str, str]]:
                 if rel.startswith("sources/") and module.startswith("factorlab.storage"):
                     tokens.add(("R1", top))
                 if rel.startswith("storage/") and module.startswith(
-                        ("factorlab.sources.", "factorlab.components.")):
+                    ("factorlab.sources.", "factorlab.components.")
+                ):
                     tokens.add(("R2", top))
                 if rel.startswith(("ingest/", "orchestration/")) and module.startswith(
-                        ("factorlab.sources.", "factorlab.components.")):
+                    ("factorlab.sources.", "factorlab.components.")
+                ):
                     tokens.add(("R4", top))
-                if not rel.startswith("components/") and module.startswith(
-                        "factorlab.components."):
+                if not rel.startswith("components/") and module.startswith("factorlab.components."):
                     tokens.add(("R5", top))
-                if (rel.startswith("components/") and module.startswith("factorlab.components.")
-                        and module.split(".")[2] != rel.split("/")[1]):
+                if (
+                    rel.startswith("components/")
+                    and module.startswith("factorlab.components.")
+                    and module.split(".")[2] != rel.split("/")[1]
+                ):
                     tokens.add(("R6", top))
             for rule, token in tokens:
                 record(rule, path, token)
         if rel.startswith("storage/"):
             skip = _docstring_nodes(tree) | _exempt_constants(tree)
             for node in ast.walk(tree):
-                if (isinstance(node, ast.Constant) and isinstance(node.value, str)
-                        and id(node) not in skip):
+                if (
+                    isinstance(node, ast.Constant)
+                    and isinstance(node.value, str)
+                    and id(node) not in skip
+                ):
                     token = _provider_token(node.value)
                     if token:
                         record("R3", path, token)
@@ -139,16 +157,20 @@ def violations() -> Counter[tuple[str, str, str]]:
         if not path.exists():
             continue
         for statement in _imports(path, _parse(path)):
-            tokens = {".".join(module.split(".")[:3]) for module in statement
-                      if module.startswith("factorlab.sources.")}
+            tokens = {
+                ".".join(module.split(".")[:3])
+                for module in statement
+                if module.startswith("factorlab.sources.")
+            }
             for token in tokens:
                 record("R4", path, token)
     return found
 
 
 def _render(counter: Counter[tuple[str, str, str]]) -> str:
-    return "".join(f"{rule} {path} {token} {count}\n"
-                   for (rule, path, token), count in sorted(counter.items()))
+    return "".join(
+        f"{rule} {path} {token} {count}\n" for (rule, path, token), count in sorted(counter.items())
+    )
 
 
 def _load_allowlist() -> Counter[tuple[str, str, str]]:
@@ -183,9 +205,13 @@ def test_allowlist_only_shrinks():
 def test_new_ingestion_layers_are_clean():
     """The engine layer and the new sink package start, and must stay, violation-free."""
     current = violations()
-    dirty = [key for key in current
-             if key[1].startswith(("libs/ingest/", "libs/orchestration/",
-                                   "libs/storage/src/factorlab/storage/sinks/"))]
+    dirty = [
+        key
+        for key in current
+        if key[1].startswith(
+            ("libs/ingest/", "libs/orchestration/", "libs/storage/src/factorlab/storage/sinks/")
+        )
+    ]
     assert not dirty, dirty
 
 

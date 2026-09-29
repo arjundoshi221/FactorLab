@@ -81,10 +81,17 @@ def read_release(record: Path) -> dict:
 
 def read_release_history(root: Path, limit: int = RELEASE_HISTORY) -> list[dict]:
     try:
-        records = [path for path in (root / "releases").iterdir() if path.is_dir() and RELEASE_ID.match(path.name)]
+        records = [
+            path
+            for path in (root / "releases").iterdir()
+            if path.is_dir() and RELEASE_ID.match(path.name)
+        ]
     except FileNotFoundError:
         return []
-    return [read_release(path) for path in sorted(records, key=lambda path: path.name, reverse=True)[:limit]]
+    return [
+        read_release(path)
+        for path in sorted(records, key=lambda path: path.name, reverse=True)[:limit]
+    ]
 
 
 def image_labels(image: dict) -> dict[str, str]:
@@ -106,13 +113,15 @@ def _inventory(root: Path) -> tuple[dict, dict[str, str], list[dict]]:
         if not started or started.startswith("0001-"):
             started = None
         labels = (container.get("Config") or {}).get("Labels") or {}
-        containers_by_image.setdefault(container["Image"], []).append({
-            "name": container["Name"].lstrip("/"),
-            "status": container["State"]["Status"],
-            "started_at": started,
-            "service": labels.get("com.docker.compose.service"),
-            "image_ref": (container.get("Config") or {}).get("Image"),
-        })
+        containers_by_image.setdefault(container["Image"], []).append(
+            {
+                "name": container["Name"].lstrip("/"),
+                "status": container["State"]["Status"],
+                "started_at": started,
+                "service": labels.get("com.docker.compose.service"),
+                "image_ref": (container.get("Config") or {}).get("Image"),
+            }
+        )
 
     release_id, activated_at = read_current_release(root)
     try:
@@ -131,27 +140,38 @@ def _inventory(root: Path) -> tuple[dict, dict[str, str], list[dict]]:
             components[image["Id"]] = component
         version = str(raw_labels.get("org.opencontainers.image.version") or "")
         for container in containers_by_image.get(image["Id"], []):
-            flat.append({"service": container["service"], "container": container["name"],
-                         "status": container["status"], "started_at": container["started_at"],
-                         "image_id": image["Id"],
-                         "version": version if VERSION.match(version) else None})
+            flat.append(
+                {
+                    "service": container["service"],
+                    "container": container["name"],
+                    "status": container["status"],
+                    "started_at": container["started_at"],
+                    "image_id": image["Id"],
+                    "version": version if VERSION.match(version) else None,
+                }
+            )
         associated = sorted(containers_by_image.get(image["Id"], []), key=lambda item: item["name"])
-        images.append({
-            "id": image["Id"],
-            "tags": image.get("RepoTags") or [],
-            "digests": image.get("RepoDigests") or [],
-            "size_bytes": image["Size"],
-            "created_at": image["Created"],
-            "containers": associated,
-            "last_container_start_at": max(
-                (item["started_at"] for item in associated if item["started_at"]),
-                default=None,
-            ),
-            "release_activated_at": activated_at if image["Id"] == current_image_id else None,
-            "current_release": image["Id"] == current_image_id,
-            "platform": "/".join(part for part in (image.get("Os"), image.get("Architecture")) if part) or None,
-            "labels": image_labels(image),
-        })
+        images.append(
+            {
+                "id": image["Id"],
+                "tags": image.get("RepoTags") or [],
+                "digests": image.get("RepoDigests") or [],
+                "size_bytes": image["Size"],
+                "created_at": image["Created"],
+                "containers": associated,
+                "last_container_start_at": max(
+                    (item["started_at"] for item in associated if item["started_at"]),
+                    default=None,
+                ),
+                "release_activated_at": activated_at if image["Id"] == current_image_id else None,
+                "current_release": image["Id"] == current_image_id,
+                "platform": "/".join(
+                    part for part in (image.get("Os"), image.get("Architecture")) if part
+                )
+                or None,
+                "labels": image_labels(image),
+            }
+        )
     snapshot = {
         "snapshot_at": datetime.now(UTC).isoformat(),
         "release_id": release_id,
@@ -196,40 +216,67 @@ def deployed_components(root: Path, containers: list[dict]) -> list[dict]:
         name = manifest_path.parent.name
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8")[:65536])
-            services = [str(s["name"]) for s in manifest.get("services", [])
-                        if isinstance(s, dict) and "name" in s]
+            services = [
+                str(s["name"])
+                for s in manifest.get("services", [])
+                if isinstance(s, dict) and "name" in s
+            ]
             image_var = str((manifest.get("platform") or {}).get("image_var", ""))
         except (OSError, UnicodeDecodeError, ValueError, TypeError, KeyError):
             continue
         if not COMPONENT.match(name) or manifest.get("name") != name:
             continue
-        rows.append({
-            "component": name,
-            "version": read_version(root / "releases" / name / "current"),
-            "image": pins.get(image_var) if IMAGE_VAR.match(image_var) else None,
-            "services": [
-                {key: container[key] for key in
-                 ("service", "container", "status", "started_at", "version", "image_id")}
-                for container in sorted(containers, key=lambda c: c["container"])
-                if container["service"] in services],
-        })
+        rows.append(
+            {
+                "component": name,
+                "version": read_version(root / "releases" / name / "current"),
+                "image": pins.get(image_var) if IMAGE_VAR.match(image_var) else None,
+                "services": [
+                    {
+                        key: container[key]
+                        for key in (
+                            "service",
+                            "container",
+                            "status",
+                            "started_at",
+                            "version",
+                            "image_id",
+                        )
+                    }
+                    for container in sorted(containers, key=lambda c: c["container"])
+                    if container["service"] in services
+                ],
+            }
+        )
     return rows
 
 
 def collect_v2(root: Path = ROOT) -> dict:
     snapshot, components, containers = _inventory(root)
-    images = [{**image, "labels": {**image["labels"], **(
-        {"component": components[image["id"]]} if image["id"] in components else {})}}
-        for image in snapshot["images"]]
-    return {**snapshot, "schema": 2, "images": images,
-            "platform_version": read_version(root / "releases" / "platform" / "current"),
-            "components": deployed_components(root, containers)}
+    images = [
+        {
+            **image,
+            "labels": {
+                **image["labels"],
+                **({"component": components[image["id"]]} if image["id"] in components else {}),
+            },
+        }
+        for image in snapshot["images"]
+    ]
+    return {
+        **snapshot,
+        "schema": 2,
+        "images": images,
+        "platform_version": read_version(root / "releases" / "platform" / "current"),
+        "components": deployed_components(root, containers),
+    }
 
 
 def write_atomic(path: Path, snapshot: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
-                                     prefix=".snapshot-", delete=False) as temporary:
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=path.parent, prefix=".snapshot-", delete=False
+    ) as temporary:
         json.dump(snapshot, temporary, separators=(",", ":"))
         temporary.write("\n")
         temporary_path = Path(temporary.name)
@@ -240,8 +287,10 @@ def write_atomic(path: Path, snapshot: dict) -> None:
 def main() -> None:
     snapshot = collect_v2(ROOT)
     legacy = {key: snapshot[key] for key in ("snapshot_at", "release_id", "release", "releases")}
-    legacy["images"] = [{**image, "labels": {k: v for k, v in image["labels"].items()
-                                             if k in IMAGE_LABELS}} for image in snapshot["images"]]
+    legacy["images"] = [
+        {**image, "labels": {k: v for k, v in image["labels"].items() if k in IMAGE_LABELS}}
+        for image in snapshot["images"]
+    ]
     write_atomic(OUTPUT, legacy)
     write_atomic(OUTPUT_V2, snapshot)
 

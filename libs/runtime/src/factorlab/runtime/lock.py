@@ -54,10 +54,12 @@ def acquire_lock(
         log.warning("[lock] stealing stale lock (age=%.0fs): %s", age, path)
     try:
         path.write_text(
-            json.dumps({
-                "pid": os.getpid(),
-                "started_at": datetime.now(UTC).isoformat(),
-            }),
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "started_at": datetime.now(UTC).isoformat(),
+                }
+            ),
             encoding="utf-8",
         )
         yield

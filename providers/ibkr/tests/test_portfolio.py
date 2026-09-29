@@ -16,13 +16,21 @@ from factorlab.testkit.ibkr import (
 def test_snapshot_positions_maps_fields(mock_ib_paper, now_utc):
     aapl = make_portfolio_item(
         contract=make_contract(symbol="AAPL", con_id=265598),
-        position=100.0, avg_cost=150.0, market_price=175.5,
-        market_value=17550.0, unrealized_pnl=2550.0, realized_pnl=42.5,
+        position=100.0,
+        avg_cost=150.0,
+        market_price=175.5,
+        market_value=17550.0,
+        unrealized_pnl=2550.0,
+        realized_pnl=42.5,
     )
     spy = make_portfolio_item(
         contract=make_contract(symbol="SPY", con_id=756733, sec_type="STK", primary="ARCA"),
-        position=-1079.0, avg_cost=605.87, market_price=762.94,
-        market_value=-823212.26, unrealized_pnl=-169469.96, realized_pnl=0.0,
+        position=-1079.0,
+        avg_cost=605.87,
+        market_price=762.94,
+        market_value=-823212.26,
+        unrealized_pnl=-169469.96,
+        realized_pnl=0.0,
     )
     mock_ib_paper.portfolio.return_value = [aapl, spy]
 
@@ -84,6 +92,7 @@ def test_snapshot_positions_defaults_snapshot_time():
 
 def _one_position_ib():
     from unittest.mock import MagicMock
+
     ib = MagicMock()
     ib._factorlab_mode = "paper"
     ib.portfolio.return_value = [make_portfolio_item()]
@@ -127,7 +136,8 @@ def test_snapshot_account_state_metric_whitelist(mock_ib_paper, now_utc):
     mock_ib_paper.accountValues.return_value = vals
 
     rows = snapshot_account_state(
-        mock_ib_paper, snapshot_time=now_utc,
+        mock_ib_paper,
+        snapshot_time=now_utc,
         metrics={"NetLiquidation", "BuyingPower"},
     )
     metrics = {r.metric for r in rows}
@@ -136,5 +146,6 @@ def test_snapshot_account_state_metric_whitelist(mock_ib_paper, now_utc):
 
 def test_snapshot_positions_naive_time_rejected(mock_ib_paper):
     import pytest
+
     with pytest.raises(ValueError):
         snapshot_positions(mock_ib_paper, snapshot_time=datetime(2026, 9, 19))

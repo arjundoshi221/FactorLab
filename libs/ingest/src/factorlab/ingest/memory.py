@@ -99,14 +99,20 @@ class InMemorySink(NullProviderStorage):
         return known.country_code == ref.country_code
 
     def _natural_match(self, ref: InstrumentRef) -> UUID | None:
-        by_isin = [lid for lid, known in self.listings.items()
-                   if ref.isin and known.isin == ref.isin and self._in_scope(ref, known)]
+        by_isin = [
+            lid
+            for lid, known in self.listings.items()
+            if ref.isin and known.isin == ref.isin and self._in_scope(ref, known)
+        ]
         if len(by_isin) == 1:
             return by_isin[0]
         if len(by_isin) > 1:
             return None  # ambiguous: never guess
-        by_symbol = [lid for lid, known in self.listings.items()
-                     if self._in_scope(ref, known) and known.trading_symbol == ref.trading_symbol]
+        by_symbol = [
+            lid
+            for lid, known in self.listings.items()
+            if self._in_scope(ref, known) and known.trading_symbol == ref.trading_symbol
+        ]
         if len(by_symbol) != 1:
             return None
         known_isin = self.listings[by_symbol[0]].isin
@@ -122,13 +128,17 @@ class InMemorySink(NullProviderStorage):
     def _park(self, source: str, ref: InstrumentRef, reason: str) -> None:
         self.unresolved.append((source, ref.label(), reason))
 
-    def _store(self, table: str, record: Any, provenance: Provenance,
-               target: UUID | None) -> None:
+    def _store(self, table: str, record: Any, provenance: Provenance, target: UUID | None) -> None:
         self.rows.setdefault(table, []).append(StoredRow(record, provenance, target))
 
     # -- sinks -------------------------------------------------------------
-    def upsert_instruments(self, rows: Sequence[InstrumentRecord], *, provenance: Provenance,
-                           mode: ReferenceMode = "authoritative") -> WriteResult:
+    def upsert_instruments(
+        self,
+        rows: Sequence[InstrumentRecord],
+        *,
+        provenance: Provenance,
+        mode: ReferenceMode = "authoritative",
+    ) -> WriteResult:
         self._check_lineage(provenance)
         written = unresolved = resolved = 0
         for row in rows:
@@ -151,8 +161,13 @@ class InMemorySink(NullProviderStorage):
             written += 1
         return WriteResult(written, unresolved, resolved)
 
-    def upsert_contracts(self, rows: Sequence[ContractRecord], *, provenance: Provenance,
-                         mode: ReferenceMode = "authoritative") -> WriteResult:
+    def upsert_contracts(
+        self,
+        rows: Sequence[ContractRecord],
+        *,
+        provenance: Provenance,
+        mode: ReferenceMode = "authoritative",
+    ) -> WriteResult:
         self._check_lineage(provenance)
         written = unresolved = resolved = 0
         for row in rows:
@@ -163,15 +178,24 @@ class InMemorySink(NullProviderStorage):
                 continue
             contract = self.contract_aliases.get((row.ref.alias_kind, row.ref.alias_value))
             if contract is None:
-                contract = next((cid for cid, (lid, known) in self.contracts.items()
-                                 if lid == underlying and known.expiry == row.expiry
-                                 and known.right == row.right and known.strike == row.strike),
-                                None)
+                contract = next(
+                    (
+                        cid
+                        for cid, (lid, known) in self.contracts.items()
+                        if lid == underlying
+                        and known.expiry == row.expiry
+                        and known.right == row.right
+                        and known.strike == row.strike
+                    ),
+                    None,
+                )
             if contract is not None:
                 resolved += 1
             elif mode == "authoritative":
-                contract = uuid.uuid5(_MEMORY_NAMESPACE, f"contract:{underlying}:{row.expiry}:"
-                                                        f"{row.right}:{row.strike}")
+                contract = uuid.uuid5(
+                    _MEMORY_NAMESPACE,
+                    f"contract:{underlying}:{row.expiry}:{row.right}:{row.strike}",
+                )
             if contract is None:
                 self._park(provenance.source, row.ref, f"no contract ({mode} mode cannot mint)")
                 unresolved += 1
@@ -185,8 +209,13 @@ class InMemorySink(NullProviderStorage):
             written += 1
         return WriteResult(written, unresolved, resolved)
 
-    def write_constituents(self, rows: Sequence[ConstituentRecord], *, provenance: Provenance,
-                           mode: ReferenceMode = "authoritative") -> WriteResult:
+    def write_constituents(
+        self,
+        rows: Sequence[ConstituentRecord],
+        *,
+        provenance: Provenance,
+        mode: ReferenceMode = "authoritative",
+    ) -> WriteResult:
         self._check_lineage(provenance)
         written = unresolved = resolved = 0
         as_of = provenance.as_of_time.astimezone(UTC).date()
@@ -214,8 +243,9 @@ class InMemorySink(NullProviderStorage):
         return WriteResult(written, unresolved, resolved)
 
     # -- political -------------------------------------------------------------
-    def write_legislators(self, rows: Sequence[Any], *, provenance: Provenance,
-                          mode: ReferenceMode = "authoritative") -> WriteResult:
+    def write_legislators(
+        self, rows: Sequence[Any], *, provenance: Provenance, mode: ReferenceMode = "authoritative"
+    ) -> WriteResult:
         self._check_lineage(provenance)
         if mode != "authoritative":
             return WriteResult(0, 0, len(rows))
@@ -223,39 +253,50 @@ class InMemorySink(NullProviderStorage):
         for row in rows:
             if isinstance(row, LegislatorRecord):
                 entity = uuid.uuid5(_MEMORY_NAMESPACE, f"bioguide:{row.entity.alias_value}")
-                self.entity_aliases.setdefault(("bioguide", row.entity.alias_value),
-                                               set()).add(entity)
+                self.entity_aliases.setdefault(("bioguide", row.entity.alias_value), set()).add(
+                    entity
+                )
                 key = legislator_name_key(row.first_name, row.last_name)
                 if key:
                     self.entity_aliases.setdefault(("legislator_name", key), set()).add(entity)
             elif isinstance(row, CommitteeRecord):
                 self.committees.add(row.committee_code)
             elif isinstance(row, MembershipRecord):
-                if (row.committee_code not in self.committees
-                        or ("bioguide", row.legislator.alias_value) not in self.entity_aliases):
+                if (
+                    row.committee_code not in self.committees
+                    or ("bioguide", row.legislator.alias_value) not in self.entity_aliases
+                ):
                     parked += 1
                     continue
             self._store("ref.legislators", row, provenance, None)
             written += 1
         return WriteResult(written, parked, written)
 
-    def write_political_filings(self, rows: Sequence[PoliticalFilingRecord], *,
-                                provenance: Provenance) -> WriteResult:
+    def write_political_filings(
+        self, rows: Sequence[PoliticalFilingRecord], *, provenance: Provenance
+    ) -> WriteResult:
         self._check_lineage(provenance)
         unresolved = 0
         for row in rows:
-            targets = self.entity_aliases.get(("legislator_name", row.filer.alias_value),
-                                              set()) if row.filer else set()
+            targets = (
+                self.entity_aliases.get(("legislator_name", row.filer.alias_value), set())
+                if row.filer
+                else set()
+            )
             entity = next(iter(targets)) if len(targets) == 1 else None
             unresolved += int(row.filer is not None and entity is None)
             prior = self.filings.get((row.chamber, row.filing_id), {})
             self.filings[(row.chamber, row.filing_id)] = {
-                "record": row, "entity": entity, "trade_count": prior.get("trade_count", 0)}
+                "record": row,
+                "entity": entity,
+                "trade_count": prior.get("trade_count", 0),
+            }
             self._store("alt.political_filings", row, provenance, entity)
         return WriteResult(len(rows), unresolved, len(rows) - unresolved)
 
-    def write_political_trades(self, rows: Sequence[PoliticalTradeRecord], *,
-                               provenance: Provenance) -> WriteResult:
+    def write_political_trades(
+        self, rows: Sequence[PoliticalTradeRecord], *, provenance: Provenance
+    ) -> WriteResult:
         self._check_lineage(provenance)
         written = orphans = unmatched = 0
         for row in rows:
@@ -270,10 +311,14 @@ class InMemorySink(NullProviderStorage):
             written += 1
         return WriteResult(written, orphans, written - unmatched)
 
-    def recent_filings(self, *, chamber: str, limit: int,
-                       country_code: str = "US") -> list[FilingRef]:
-        found = [f["record"] for (c, _), f in self.filings.items()
-                 if c == chamber and f["record"].country_code == country_code]
+    def recent_filings(
+        self, *, chamber: str, limit: int, country_code: str = "US"
+    ) -> list[FilingRef]:
+        found = [
+            f["record"]
+            for (c, _), f in self.filings.items()
+            if c == chamber and f["record"].country_code == country_code
+        ]
         found.sort(key=lambda r: (r.filing_date, r.filing_id), reverse=True)
         return [FilingRef(r.filing_id, r.filing_year, r.filing_url) for r in found[:limit]]
 
@@ -281,13 +326,18 @@ class InMemorySink(NullProviderStorage):
         self._check_lineage(provenance)
         written = unresolved = 0
         for row in rows:
-            targets = self.entity_aliases.get((row.issuer.alias_kind, row.issuer.alias_value), set())
+            targets = self.entity_aliases.get(
+                (row.issuer.alias_kind, row.issuer.alias_value), set()
+            )
             target = next(iter(targets)) if len(targets) == 1 else None
             if target is None and row.issuer_hint is not None:
-                target = self.resolve_listing(row.issuer_hint)  # the listing stands in for its issuer
+                target = self.resolve_listing(
+                    row.issuer_hint
+                )  # the listing stands in for its issuer
                 if target is not None:
                     self.entity_aliases.setdefault(
-                        (row.issuer.alias_kind, row.issuer.alias_value), set()).add(target)
+                        (row.issuer.alias_kind, row.issuer.alias_value), set()
+                    ).add(target)
             if target is None:
                 unresolved += 1
                 continue
@@ -301,16 +351,26 @@ class InMemorySink(NullProviderStorage):
             self._store(f"broker.{type(row).__name__}", row, provenance, None)
         return WriteResult(len(rows), 0, len(rows))
 
-    def universe_members(self, universe_codes: Sequence[str], *,
-                         as_of: date | None = None) -> list[UUID]:
+    def universe_members(
+        self, universe_codes: Sequence[str], *, as_of: date | None = None
+    ) -> list[UUID]:
         day = as_of or datetime.now(UTC).date()
-        found = {lid for code in universe_codes
-                 for lid, (start, end) in self.memberships.get(code, {}).items()
-                 if start <= day and (end is None or end >= day)}
+        found = {
+            lid
+            for code in universe_codes
+            for lid, (start, end) in self.memberships.get(code, {}).items()
+            if start <= day and (end is None or end >= day)
+        }
         return sorted(found, key=str)
 
-    def _write_facts(self, table: str, rows: Sequence[Any], refs: Sequence[InstrumentRef],
-                     provenance: Provenance, resolve: Any) -> WriteResult:
+    def _write_facts(
+        self,
+        table: str,
+        rows: Sequence[Any],
+        refs: Sequence[InstrumentRef],
+        provenance: Provenance,
+        resolve: Any,
+    ) -> WriteResult:
         self._check_lineage(provenance)
         written = unresolved = 0
         for row, ref in zip(rows, refs, strict=True):
@@ -324,56 +384,83 @@ class InMemorySink(NullProviderStorage):
         return WriteResult(written, unresolved, written)
 
     def write_bars(self, rows: Sequence[BarRecord], *, provenance: Provenance) -> WriteResult:
-        return self._write_facts("market.bars", rows, [r.instrument for r in rows], provenance,
-                                 self.resolve_listing)
-
-    def write_contract_bars(self, rows: Sequence[ContractBarRecord], *,
-                            provenance: Provenance) -> WriteResult:
         return self._write_facts(
-            "market.futures_contract_bars", rows, [r.contract for r in rows], provenance,
+            "market.bars", rows, [r.instrument for r in rows], provenance, self.resolve_listing
+        )
+
+    def write_contract_bars(
+        self, rows: Sequence[ContractBarRecord], *, provenance: Provenance
+    ) -> WriteResult:
+        return self._write_facts(
+            "market.futures_contract_bars",
+            rows,
+            [r.contract for r in rows],
+            provenance,
             lambda ref: self.contract_aliases.get((ref.alias_kind, ref.alias_value)),
         )
 
     # -- read ports ----------------------------------------------------------
-    def aliases_for(self, listing_ids: Sequence[UUID], *,
-                    alias_kind: str) -> Mapping[UUID, InstrumentRef]:
+    def aliases_for(
+        self, listing_ids: Sequence[UUID], *, alias_kind: str
+    ) -> Mapping[UUID, InstrumentRef]:
         wanted = set(listing_ids)
         found: dict[UUID, InstrumentRef] = {}
         for (kind, value), target in self.aliases.items():
             if kind == alias_kind and target in wanted and target in self.listings:
                 known = self.listings[target]
                 found[target] = InstrumentRef(
-                    alias_kind=kind, alias_value=value, exchange_code=known.exchange_code,
-                    trading_symbol=known.trading_symbol, country_code=known.country_code,
+                    alias_kind=kind,
+                    alias_value=value,
+                    exchange_code=known.exchange_code,
+                    trading_symbol=known.trading_symbol,
+                    country_code=known.country_code,
                     isin=known.isin,
                 )
         return found
 
     def active_listings(self, exchange_code: str) -> list[UUID]:
-        return sorted((lid for lid, ref in self.listings.items()
-                       if ref.exchange_code == exchange_code), key=str)
+        return sorted(
+            (lid for lid, ref in self.listings.items() if ref.exchange_code == exchange_code),
+            key=str,
+        )
 
     def natural_refs(self, listing_ids: Sequence[UUID]) -> Mapping[UUID, InstrumentRef]:
-        return {lid: InstrumentRef("", "", known.exchange_code, known.trading_symbol,
-                                   known.country_code, isin=known.isin)
-                for lid, known in self.listings.items() if lid in set(listing_ids)}
+        return {
+            lid: InstrumentRef(
+                "",
+                "",
+                known.exchange_code,
+                known.trading_symbol,
+                known.country_code,
+                isin=known.isin,
+            )
+            for lid, known in self.listings.items()
+            if lid in set(listing_ids)
+        }
 
-    def watermarks(self, listing_ids: Sequence[UUID], *, dataset: str, source: str,
-                   resolution: str) -> Mapping[UUID, datetime]:
+    def watermarks(
+        self, listing_ids: Sequence[UUID], *, dataset: str, source: str, resolution: str
+    ) -> Mapping[UUID, datetime]:
         wanted = set(listing_ids)
         marks: dict[UUID, datetime] = {}
         for stored in self.rows.get(dataset, []):
             record = stored.record
-            if (stored.target_id in wanted and stored.provenance.source == source
-                    and record.resolution == resolution):
+            if (
+                stored.target_id in wanted
+                and stored.provenance.source == source
+                and record.resolution == resolution
+            ):
                 current = marks.get(stored.target_id)
                 if current is None or record.bar_time > current:
                     marks[stored.target_id] = record.bar_time
         return marks
 
     def count(self, table: str, *, source: str | None = None) -> int:
-        return sum(1 for row in self.rows.get(table, [])
-                   if source is None or row.provenance.source == source)
+        return sum(
+            1
+            for row in self.rows.get(table, [])
+            if source is None or row.provenance.source == source
+        )
 
 
 __all__ = ["InMemorySink", "StoredRow"]

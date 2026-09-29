@@ -52,14 +52,33 @@ def test_full_universe_activates_only_nearest_resolved_stock_futures(monkeypatch
     listing_id = uuid.uuid4()
     contract_id = uuid.uuid4()
     records = [
-        {"segment": "NSE_EQ", "instrument_type": "EQ", "instrument_key": "NSE_EQ|R",
-         "trading_symbol": "RELIANCE"},
-        {"segment": "NSE_FO", "instrument_type": "FUT", "instrument_key": "NSE_FO|LATE",
-         "underlying_symbol": "RELIANCE", "expiry": 20},
-        {"segment": "NSE_FO", "instrument_type": "FUT", "instrument_key": "NSE_FO|NEAR",
-         "underlying_symbol": "RELIANCE", "expiry": 10},
-        {"segment": "NSE_FO", "instrument_type": "FUT", "instrument_key": "NSE_FO|INDEX",
-         "underlying_symbol": "NIFTY", "expiry": 10},
+        {
+            "segment": "NSE_EQ",
+            "instrument_type": "EQ",
+            "instrument_key": "NSE_EQ|R",
+            "trading_symbol": "RELIANCE",
+        },
+        {
+            "segment": "NSE_FO",
+            "instrument_type": "FUT",
+            "instrument_key": "NSE_FO|LATE",
+            "underlying_symbol": "RELIANCE",
+            "expiry": 20,
+        },
+        {
+            "segment": "NSE_FO",
+            "instrument_type": "FUT",
+            "instrument_key": "NSE_FO|NEAR",
+            "underlying_symbol": "RELIANCE",
+            "expiry": 10,
+        },
+        {
+            "segment": "NSE_FO",
+            "instrument_type": "FUT",
+            "instrument_key": "NSE_FO|INDEX",
+            "underlying_symbol": "NIFTY",
+            "expiry": 10,
+        },
     ]
     monkeypatch.setattr(ingest, "load_or_download", lambda *args: records)
 
@@ -77,7 +96,8 @@ def test_full_universe_activates_only_nearest_resolved_stock_futures(monkeypatch
         def sync_expected_india_series(self, series, *, source, universe):
             assert (source, universe) == ("upstox", "full_nse_eq")
             assert {(item["symbol"], item["contract_id"]) for item in series} == {
-                ("RELIANCE", None), ("RELIANCE", contract_id)
+                ("RELIANCE", None),
+                ("RELIANCE", contract_id),
             }
             return len(series)
 
@@ -86,7 +106,8 @@ def test_full_universe_activates_only_nearest_resolved_stock_futures(monkeypatch
     )
     assert full_mode and expected_count == 2
     assert [(item.instrument_key, item.contract_id) for item in series] == [
-        ("NSE_EQ|R", None), ("NSE_FO|NEAR", contract_id)
+        ("NSE_EQ|R", None),
+        ("NSE_FO|NEAR", contract_id),
     ]
 
 
@@ -116,15 +137,19 @@ def test_full_equity_poll_batches_writes_and_counts_missing(monkeypatch):
         calls.append(keys)
         observed = frozenset(keys if len(keys) == 2 else [])
         candles = {
-            key: pd.DataFrame([{
-                "timestamp": pd.Timestamp("2026-09-10T04:00:00Z"),
-                "open": 1,
-                "high": 2,
-                "low": 1,
-                "close": 2,
-                "volume": 10,
-                "oi": 0,
-            }])
+            key: pd.DataFrame(
+                [
+                    {
+                        "timestamp": pd.Timestamp("2026-09-10T04:00:00Z"),
+                        "open": 1,
+                        "high": 2,
+                        "low": 1,
+                        "close": 2,
+                        "volume": 10,
+                        "oi": 0,
+                    }
+                ]
+            )
             for key in observed
         }
         return MarketQuoteOHLCBatch(candles, observed, f"raw-{len(calls)}")

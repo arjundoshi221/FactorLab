@@ -31,6 +31,7 @@ class OutlookBackend(Backend):
         # Defer pywin32 import to construction so non-Windows callers fail
         # gracefully via factorlab.runtime.notify._resolve_backend.
         import win32com.client  # type: ignore[import-not-found]
+
         self._win32com = win32com.client
         self._app = None  # lazily resolved per send
 
@@ -43,9 +44,7 @@ class OutlookBackend(Backend):
     def send(self, notification: Notification) -> bool:
         to = os.environ.get("FACTORLAB_NOTIFY_TO", "").strip()
         if not to:
-            log.warning(
-                "[notify:outlook] FACTORLAB_NOTIFY_TO not set -- cannot send"
-            )
+            log.warning("[notify:outlook] FACTORLAB_NOTIFY_TO not set -- cannot send")
             return False
         try:
             outlook = self._outlook()

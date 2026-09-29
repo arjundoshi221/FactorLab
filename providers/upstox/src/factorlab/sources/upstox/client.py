@@ -24,10 +24,15 @@ from factorlab.sources.upstox.settings import UpstoxSettings
 
 
 class UpstoxClient:
-    def __init__(self, settings: UpstoxSettings, *, session: requests.Session | None = None,
-                 limiter: SlidingWindowLimiter | None = None,
-                 clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-                 secret: Callable[[str, str], str | None] = get_secret) -> None:
+    def __init__(
+        self,
+        settings: UpstoxSettings,
+        *,
+        session: requests.Session | None = None,
+        limiter: SlidingWindowLimiter | None = None,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        secret: Callable[[str, str], str | None] = get_secret,
+    ) -> None:
         self.settings = settings
         self.session = session or requests.Session()
         self.limiter = limiter or SlidingWindowLimiter(settings.rate_limits.windows())
@@ -52,8 +57,14 @@ class UpstoxClient:
         except requests.RequestException as exc:
             raise TransientError(f"Upstox request failed: {type(exc).__name__}") from exc
 
-    def get(self, url: str, *, request_key: str, auth: bool = True,
-            metadata: Mapping[str, Any] | None = None) -> RawCapture:
+    def get(
+        self,
+        url: str,
+        *,
+        request_key: str,
+        auth: bool = True,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> RawCapture:
         response = self._request(url, auth=auth)
         used = self._token
         if response.status_code == 401 and auth and self._token_now() != used:
@@ -62,10 +73,14 @@ class UpstoxClient:
         status = response.status_code
         raise_for_status("Upstox", status, response.headers, request_key)
         return RawCapture(
-            body=response.content, request_key=request_key, transport="http",
-            fetched_at=self._clock(), source_url=url,
+            body=response.content,
+            request_key=request_key,
+            transport="http",
+            fetched_at=self._clock(),
+            source_url=url,
             content_type=response.headers.get("Content-Type", "application/json"),
-            status_code=status, headers=dict(response.headers),
+            status_code=status,
+            headers=dict(response.headers),
             metadata=dict(metadata or {}),
         )
 

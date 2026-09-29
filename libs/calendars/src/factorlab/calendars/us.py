@@ -25,8 +25,10 @@ def bounds(day: date):
     cal = calendar()
     if not cal.is_session(day.isoformat()):
         return None
-    return (cal.session_open(day.isoformat()).to_pydatetime(),
-            cal.session_close(day.isoformat()).to_pydatetime())
+    return (
+        cal.session_open(day.isoformat()).to_pydatetime(),
+        cal.session_close(day.isoformat()).to_pydatetime(),
+    )
 
 
 def latest_completed(now: datetime, *, grace_minutes: int = 30) -> date:

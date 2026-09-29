@@ -43,5 +43,6 @@ def snapshot_account_state(
 ) -> list[AccountStateRow]:
     """Return one ``AccountStateRow`` per (metric, segment, currency) tuple."""
     capture = capture_account_values(ib, fetched_at=snapshot_time)
-    return normalize_account_state(decode_capture(capture.body),
-                                   country_code=country_code, metrics=metrics)
+    return normalize_account_state(
+        decode_capture(capture.body), country_code=country_code, metrics=metrics
+    )

@@ -41,13 +41,15 @@ class Session:
 
 
 def _source(session, agent="FactorLab research@example.com"):
-    return EdgarCompanyFacts(EdgarSettings(), session=session, clock=lambda: NOW,
-                             secret=lambda name, default="": agent)
+    return EdgarCompanyFacts(
+        EdgarSettings(), session=session, clock=lambda: NOW, secret=lambda name, default="": agent
+    )
 
 
 def _facts():
     return {n: c for n, c, _ in kit.cases("edgar", "fundamentals.filings")}[
-        "aapl_companyfacts"].body
+        "aapl_companyfacts"
+    ].body
 
 
 def test_unit_mapping():
@@ -60,18 +62,27 @@ def test_unit_mapping():
 def test_missing_user_agent_is_auth_required():
     with pytest.raises(AuthRequired):
         _source(Session(b"{}"), agent="").fetch(
-            _source(Session(b"{}")).plan(CompanyRequest("USA", (CompanyRef("320193"),)))[0])
+            _source(Session(b"{}")).plan(CompanyRequest("USA", (CompanyRef("320193"),)))[0]
+        )
 
 
 def test_fundamentals_learn_the_cik_alias_then_resolve_by_it():
     db = FakeClickHouse(exchanges={"XNAS": ("XNAS", "US", "USD")})
     sinks = ClickHouseSinks(V2USStorage(db))
     with ingestion_run(sinks, pipeline="seed", source="eodhd", market_code="USA") as ctx:
-        sinks.upsert_instruments([InstrumentRecord(
-            ref=InstrumentRef("eodhd_symbol", "AAPL.US", "XNAS", "AAPL", "US",
-                              isin="US0378331005"),
-            name="Apple Inc.", product_type="common", currency="USD")],
-            provenance=ctx.provenance(source_channel="eodhd:seed", raw_id=None, as_of_time=NOW))
+        sinks.upsert_instruments(
+            [
+                InstrumentRecord(
+                    ref=InstrumentRef(
+                        "eodhd_symbol", "AAPL.US", "XNAS", "AAPL", "US", isin="US0378331005"
+                    ),
+                    name="Apple Inc.",
+                    product_type="common",
+                    currency="USD",
+                )
+            ],
+            provenance=ctx.provenance(source_channel="eodhd:seed", raw_id=None, as_of_time=NOW),
+        )
         ctx.succeed_unit("seed", 1)
     session = Session(_facts())
     request = CompanyRequest("USA", (CompanyRef("320193", "AAPL"),))
@@ -82,33 +93,45 @@ def test_fundamentals_learn_the_cik_alias_then_resolve_by_it():
     [entity] = [e["entity_id"] for e in db.rows("ref.entities")]
     cik_alias = [a for a in db.rows("ref.identifier_aliases") if a["alias_kind"] == "cik"]
     assert [(a["alias_value"], a["target_id"], a["confidence"]) for a in cik_alias] == [
-        ("0000320193", entity, "medium")]
+        ("0000320193", entity, "medium")
+    ]
 
     filings = {f["accession_number"]: f for f in db.rows("fundamentals.filings")}
     ten_q = filings["0000320193-26-000071"]
     assert ten_q["filing_id"] == filing_id("sec", "0000320193-26-000071")
     assert (ten_q["period_type"], ten_q["fiscal_period"], ten_q["period_end"]) == (
-        "quarterly", "Q3", date(2026, 6, 27))
+        "quarterly",
+        "Q3",
+        date(2026, 6, 27),
+    )
     assert filings["0000320193-26-000080"]["is_amendment"] is True
-    eps = next(i for i in db.rows("fundamentals.line_items")
-           if i["tag"] == "us-gaap:EarningsPerShareDiluted")
+    eps = next(
+        i
+        for i in db.rows("fundamentals.line_items")
+        if i["tag"] == "us-gaap:EarningsPerShareDiluted"
+    )
     assert (eps["unit"], eps["currency_code"], eps["period_type"]) == (
-        "usd_per_share", "USD", "duration")
+        "usd_per_share",
+        "USD",
+        "duration",
+    )
     assets = next(i for i in db.rows("fundamentals.line_items") if i["tag"] == "us-gaap:Assets")
     assert (assets["period_type"], assets["context_ref"]) == ("point", "CY2026Q2I")
     assert all(i["entity_id"] == entity for i in db.rows("fundamentals.line_items"))
 
     # Second run without a ticker hint resolves through the learned alias.
-    again = run_binding(BINDING, _source(Session(_facts())), sinks,
-                        CompanyRequest("USA", (CompanyRef("320193"),)))
+    again = run_binding(
+        BINDING, _source(Session(_facts())), sinks, CompanyRequest("USA", (CompanyRef("320193"),))
+    )
     assert (again.status, again.rows_written) == ("success", 8)
 
 
 def test_unknown_issuer_is_parked():
     db = FakeClickHouse()
     sinks = ClickHouseSinks(V2USStorage(db))
-    summary = run_binding(BINDING, _source(Session(_facts())), sinks,
-                          CompanyRequest("USA", (CompanyRef("320193"),)))
+    summary = run_binding(
+        BINDING, _source(Session(_facts())), sinks, CompanyRequest("USA", (CompanyRef("320193"),))
+    )
     assert summary.rows_written == 0
     assert db.rows("fundamentals.filings") == []
     assert any(r["alias_value"] == "0000320193" for r in db.log["meta.unresolved_entities"])

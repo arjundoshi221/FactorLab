@@ -55,13 +55,15 @@ def conformance_tests(provider: str) -> dict[str, Callable[..., Any]]:
     def test_every_source_has_fixtures(key: tuple[str, str], cls: type) -> None:
         _, dataset_id = key
         assert kit.cases(provider, dataset_id), (
-            f"add captures under {kit.fixtures_dir(provider) / dataset_id}")
+            f"add captures under {kit.fixtures_dir(provider) / dataset_id}"
+        )
         if DATASETS[dataset_id].request_type is not None:
             assert kit.requests(provider, dataset_id), f"add {dataset_id}/requests.json"
 
     @pytest.mark.parametrize(("key", "cls"), sources, ids=ids)
     def test_normalize_matches_fixtures_offline_and_deterministically(
-            key: tuple[str, str], cls: type, offline: None) -> None:
+        key: tuple[str, str], cls: type, offline: None
+    ) -> None:
         _, dataset_id = key
         source = _source(provider, dataset_id, cls)
         spec = DATASETS[dataset_id]
@@ -69,7 +71,8 @@ def conformance_tests(provider: str) -> dict[str, Callable[..., Any]]:
             first = list(source.normalize(capture))
             assert kit.jsonable(first) == kit.jsonable(list(source.normalize(capture))), name
             assert expected is not None, (
-                f"{name}: run `python -m factorlab.testkit.conformance regen {provider}`")
+                f"{name}: run `python -m factorlab.testkit.conformance regen {provider}`"
+            )
             assert kit.jsonable(first) == expected, f"{name}: normalize output changed"
             for record in first:
                 assert isinstance(record, spec.record_types), name
@@ -99,7 +102,6 @@ def conformance_tests(provider: str) -> dict[str, Callable[..., Any]]:
     return {
         "offline": offline,
         "test_every_source_has_fixtures": test_every_source_has_fixtures,
-        "test_normalize_matches_fixtures_offline_and_deterministically":
-            test_normalize_matches_fixtures_offline_and_deterministically,
+        "test_normalize_matches_fixtures_offline_and_deterministically": test_normalize_matches_fixtures_offline_and_deterministically,
         "test_plan_honours_capabilities": test_plan_honours_capabilities,
     }

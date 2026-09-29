@@ -28,8 +28,7 @@ PAT = re.compile(
     re.IGNORECASE,
 )
 
-REDACTED_MARKERS = ("REDACTED", "<your_", "<YOUR_", "your-key-here",
-                    "xxx", "XXX", "...", "***")
+REDACTED_MARKERS = ("REDACTED", "<your_", "<YOUR_", "your-key-here", "xxx", "XXX", "...", "***")
 
 
 def is_safe(value: str) -> bool:
@@ -59,16 +58,13 @@ def main() -> int:
     for p in sys.argv[1:]:
         for ln, line in scan(Path(p)):
             if not blocked:
-                print("ERROR: pre-commit blocked plaintext-secret patterns:",
-                      file=sys.stderr)
+                print("ERROR: pre-commit blocked plaintext-secret patterns:", file=sys.stderr)
             blocked = True
             print(f"  {p}:{ln}: {line}", file=sys.stderr)
     if blocked:
         print(file=sys.stderr)
-        print("If this is a false positive (test fixture, documentation example),",
-              file=sys.stderr)
-        print("replace the value with REDACTED, <your_key_here>, or similar.",
-              file=sys.stderr)
+        print("If this is a false positive (test fixture, documentation example),", file=sys.stderr)
+        print("replace the value with REDACTED, <your_key_here>, or similar.", file=sys.stderr)
         return 1
     return 0
 

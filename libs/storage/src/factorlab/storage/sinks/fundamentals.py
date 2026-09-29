@@ -46,8 +46,9 @@ class FundamentalsSinkMixin:
 
     client: Any
 
-    def _issuers(self, rows: Sequence[FundamentalsRow],
-                 provenance: Provenance) -> dict[EntityRef, UUID]:
+    def _issuers(
+        self, rows: Sequence[FundamentalsRow], provenance: Provenance
+    ) -> dict[EntityRef, UUID]:
         issuers = {row.issuer: row.issuer_hint for row in rows}
         by_alias: dict[EntityRef, UUID] = {}
         for kind in {ref.alias_kind for ref in issuers}:
@@ -58,8 +59,9 @@ class FundamentalsSinkMixin:
                 "AND valid_to IS NULL AND alias_value IN {values:Array(String)}",
                 parameters={"kind": kind, "values": values},
             ).result_rows:
-                by_alias[next(r for r in issuers if r.alias_kind == kind
-                              and r.alias_value == value)] = target
+                by_alias[
+                    next(r for r in issuers if r.alias_kind == kind and r.alias_value == value)
+                ] = target
         hints = {ref: hint for ref, hint in issuers.items() if ref not in by_alias and hint}
         listings = IdentityResolver(self.client).listings(hints.values())
         for ref, hint in hints.items():
@@ -68,13 +70,20 @@ class FundamentalsSinkMixin:
                 continue
             by_alias[ref] = identity.entity_id
             self.references.attach_alias(  # type: ignore[attr-defined]
-                target_kind="entity", target_id=identity.entity_id, alias_kind=ref.alias_kind,
-                alias_value=ref.alias_value, scope_country=hint.country_code,
-                scope_exchange=None, source=provenance.source, confidence="medium")
+                target_kind="entity",
+                target_id=identity.entity_id,
+                alias_kind=ref.alias_kind,
+                alias_value=ref.alias_value,
+                scope_country=hint.country_code,
+                scope_exchange=None,
+                source=provenance.source,
+                confidence="medium",
+            )
         return by_alias
 
-    def write_fundamentals(self, rows: Sequence[FundamentalsRow], *,
-                           provenance: Provenance) -> WriteResult:
+    def write_fundamentals(
+        self, rows: Sequence[FundamentalsRow], *, provenance: Provenance
+    ) -> WriteResult:
         self._check_lineage(provenance)  # type: ignore[attr-defined]
         entities = self._issuers(rows, provenance)
         now = datetime.now(UTC)
@@ -86,37 +95,64 @@ class FundamentalsSinkMixin:
                 continue
             regulator = REGULATOR.get(row.issuer.alias_kind, row.issuer.alias_kind)
             fid = filing_id(regulator, row.accession_number)
-            base = {"filing_id": fid, "entity_id": entity, "source": provenance.source,
-                    "raw_id": provenance.raw_id, "as_of_time": provenance.as_of_time,
-                    "ingested_at": now, "version": _version(now)}
+            base = {
+                "filing_id": fid,
+                "entity_id": entity,
+                "source": provenance.source,
+                "raw_id": provenance.raw_id,
+                "as_of_time": provenance.as_of_time,
+                "ingested_at": now,
+                "version": _version(now),
+            }
             if isinstance(row, FundamentalFilingRecord):
                 # Company facts carry only the filing date; acceptance time is unknown.
                 filed_at = datetime.combine(row.filing_date, time(0), tzinfo=UTC)
-                filings.append({
-                    **base, "form_type": row.form_type, "filing_date": row.filing_date,
-                    "period_end": row.period_end, "period_type": row.period_type,
-                    "fiscal_year": row.fiscal_year, "fiscal_period": row.fiscal_period,
-                    "filed_at": filed_at, "accepted_at": filed_at,
-                    "accession_number": row.accession_number, "amends_filing_id": None,
-                    "original_filing_id": fid, "amendment_seq": 0, "is_amended": False,
-                    "is_amendment": row.is_amendment, "filing_url": row.filing_url,
-                })
+                filings.append(
+                    {
+                        **base,
+                        "form_type": row.form_type,
+                        "filing_date": row.filing_date,
+                        "period_end": row.period_end,
+                        "period_type": row.period_type,
+                        "fiscal_year": row.fiscal_year,
+                        "fiscal_period": row.fiscal_period,
+                        "filed_at": filed_at,
+                        "accepted_at": filed_at,
+                        "accession_number": row.accession_number,
+                        "amends_filing_id": None,
+                        "original_filing_id": fid,
+                        "amendment_seq": 0,
+                        "is_amended": False,
+                        "is_amendment": row.is_amendment,
+                        "filing_url": row.filing_url,
+                    }
+                )
             elif isinstance(row, LineItemRecord):
                 unit, currency = unit_class(row.unit)
-                items.append({
-                    **base, "tag": f"{row.taxonomy}:{row.tag}", "tag_standard": row.taxonomy,
-                    "statement": "unclassified", "period_end": row.period_end,
-                    "period_start": row.period_start,
-                    "period_type": "duration" if row.period_start else "point",
-                    "value": _decimal(Decimal(row.value), 4), "currency_code": currency,
-                    "unit": unit, "context_ref": row.frame or "",
-                    "dimensions": json.dumps({"xbrl_unit": row.unit}, sort_keys=True),
-                })
+                items.append(
+                    {
+                        **base,
+                        "tag": f"{row.taxonomy}:{row.tag}",
+                        "tag_standard": row.taxonomy,
+                        "statement": "unclassified",
+                        "period_end": row.period_end,
+                        "period_start": row.period_start,
+                        "period_type": "duration" if row.period_start else "point",
+                        "value": _decimal(Decimal(row.value), 4),
+                        "currency_code": currency,
+                        "unit": unit,
+                        "context_ref": row.frame or "",
+                        "dimensions": json.dumps({"xbrl_unit": row.unit}, sort_keys=True),
+                    }
+                )
         self._insert("fundamentals.filings", filings)  # type: ignore[attr-defined]
         self._insert("fundamentals.line_items", items)  # type: ignore[attr-defined]
         if unresolved:
-            self._park_entities(provenance, unresolved,  # type: ignore[attr-defined]
-                                "issuer has no entity: add a cik alias or a ticker hint")
+            self._park_entities(
+                provenance,
+                unresolved,  # type: ignore[attr-defined]
+                "issuer has no entity: add a cik alias or a ticker hint",
+            )
         written = len(filings) + len(items)
         return WriteResult(written, len(unresolved), written)
 

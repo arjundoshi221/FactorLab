@@ -21,6 +21,8 @@ def test_bootstrap_runs_readiness_then_the_storage_policy_check(monkeypatch):
 
 def test_migrate_forwards_its_arguments(monkeypatch):
     seen = {}
-    monkeypatch.setattr("factorlab.schema.migrate.main", lambda argv: seen.setdefault("argv", argv) and 0)
+    monkeypatch.setattr(
+        "factorlab.schema.migrate.main", lambda argv: seen.setdefault("argv", argv) and 0
+    )
     cli.main(["migrate", "plan", "--through-wave", "9"])
     assert seen["argv"] == ["plan", "--through-wave", "9"]

@@ -22,9 +22,9 @@ class Severity(str, Enum):
 
 # Severity → (label color, row accent color) for the HTML banner.
 _SEV_PALETTE = {
-    Severity.INFO:  ("#0b5cad", "#dbeafe"),
-    Severity.WARN:  ("#8a5a00", "#fef3c7"),
-    Severity.FAIL:  ("#a40e1f", "#fee2e2"),
+    Severity.INFO: ("#0b5cad", "#dbeafe"),
+    Severity.WARN: ("#8a5a00", "#fef3c7"),
+    Severity.FAIL: ("#a40e1f", "#fee2e2"),
     Severity.FATAL: ("#7a0011", "#fecaca"),
 }
 
@@ -49,6 +49,7 @@ class Notification:
     ``occurred_at`` is set automatically at construction (UTC).
     ``host`` is filled with the local machine name if not provided.
     """
+
     subject: str
     body: str
     severity: Severity
@@ -68,7 +69,8 @@ class Notification:
             object.__setattr__(self, "occurred_at", datetime.now(UTC))
         if self.host is None:
             object.__setattr__(
-                self, "host",
+                self,
+                "host",
                 os.environ.get("COMPUTERNAME") or socket.gethostname() or "unknown",
             )
 
@@ -87,15 +89,15 @@ class Notification:
     def _meta_rows(self) -> list[tuple[str, str]]:
         """Ordered (label, value) pairs for the metadata table."""
         return [
-            ("Severity",  self.severity.value.upper()),
-            ("Source",    self.source),
-            ("Script",    self.script or "—"),
+            ("Severity", self.severity.value.upper()),
+            ("Source", self.source),
+            ("Script", self.script or "—"),
             ("Frequency", self.frequency or "—"),
-            ("Vendor",    self.vendor or "—"),
-            ("Domain",    self.domain or "—"),
-            ("Country",   self.country or "—"),
-            ("Host",      self.host or "—"),
-            ("Occurred",  self.occurred_at.isoformat()),
+            ("Vendor", self.vendor or "—"),
+            ("Domain", self.domain or "—"),
+            ("Country", self.country or "—"),
+            ("Host", self.host or "—"),
+            ("Occurred", self.occurred_at.isoformat()),
         ]
 
     def html_body(self) -> str:
@@ -239,8 +241,7 @@ class DedupeRing:
         now = time.monotonic()
         # GC
         if self._seen:
-            self._seen = {k: t for k, t in self._seen.items()
-                          if now - t < self._window}
+            self._seen = {k: t for k, t in self._seen.items() if now - t < self._window}
         if key in self._seen:
             return True
         self._seen[key] = now

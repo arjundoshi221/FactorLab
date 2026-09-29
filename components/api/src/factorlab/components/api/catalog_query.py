@@ -37,7 +37,9 @@ WINDOW_THRESHOLD_ROWS = 200_000
 JSON_CELL_CHARS = 500
 CSV_CELL_CHARS = 4_096
 
-TypeClass = Literal["text", "enum", "number", "decimal", "integer", "datetime", "date", "uuid", "bool", "complex"]
+TypeClass = Literal[
+    "text", "enum", "number", "decimal", "integer", "datetime", "date", "uuid", "bool", "complex"
+]
 QueryKind = Literal["rows", "csv", "stats", "activity", "markets"]
 
 # raw.archive holds full vendor HTTP responses. Only these metadata columns are ever selected;
@@ -221,10 +223,18 @@ def type_class(clickhouse_type: str) -> TypeClass:
 
 def friendly_type(clickhouse_type: str) -> str:
     return {
-        "text": "Text", "enum": "Category", "integer": "Whole number", "number": "Number",
-        "decimal": "Decimal number", "datetime": "Timestamp (UTC)", "date": "Date", "uuid": "ID",
+        "text": "Text",
+        "enum": "Category",
+        "integer": "Whole number",
+        "number": "Number",
+        "decimal": "Decimal number",
+        "datetime": "Timestamp (UTC)",
+        "date": "Date",
+        "uuid": "ID",
         "bool": "Yes / no",
-    }.get(type_class(clickhouse_type), "List" if "Array(" in clickhouse_type else "Structured value")
+    }.get(
+        type_class(clickhouse_type), "List" if "Array(" in clickhouse_type else "Structured value"
+    )
 
 
 def validate_table_name(name: str) -> str:
@@ -243,7 +253,11 @@ def env_flag(name: str, default: bool = True) -> bool:
 def preview_denied(table: str) -> bool:
     """Return whether FACTORLAB_CATALOG_PREVIEW_DENY blocks rows for ``table``."""
 
-    patterns = [item.strip() for item in os.getenv("FACTORLAB_CATALOG_PREVIEW_DENY", "").split(",") if item.strip()]
+    patterns = [
+        item.strip()
+        for item in os.getenv("FACTORLAB_CATALOG_PREVIEW_DENY", "").split(",")
+        if item.strip()
+    ]
     for pattern in patterns:
         if pattern.endswith(".*") and table.startswith(pattern[:-1]):
             return True
@@ -266,7 +280,9 @@ def ensure_preview_allowed(table: TableInfo, *, csv: bool = False) -> None:
     if csv and not env_flag("FACTORLAB_CATALOG_CSV"):
         raise CatalogForbidden("CSV downloads are disabled on this hub.")
     if table.is_view:
-        raise CatalogForbidden("Views describe queries over other tables; preview the underlying tables instead.")
+        raise CatalogForbidden(
+            "Views describe queries over other tables; preview the underlying tables instead."
+        )
     if preview_denied(table.name):
         raise CatalogForbidden("Row previews are disabled for this table.")
 
@@ -278,7 +294,9 @@ def visible_columns(table: TableInfo) -> list[tuple[str, str]]:
         present = {column.name for column in table.columns}
         return [(name, expression) for name, expression in RAW_ARCHIVE_COLUMNS if name in present]
     hidden = HIDDEN_COLUMNS.get(table.name, frozenset())
-    return [(column.name, f"`{column.name}`") for column in table.columns if column.name not in hidden]
+    return [
+        (column.name, f"`{column.name}`") for column in table.columns if column.name not in hidden
+    ]
 
 
 def hidden_columns(table: TableInfo) -> list[str]:
@@ -340,7 +358,9 @@ def max_window_width(table: str) -> timedelta:
     return timedelta(days=31) if table.startswith(("market.", "raw.")) else timedelta(days=366)
 
 
-def resolve_window(table: TableInfo, start: datetime | None, end: datetime | None, *, now: datetime) -> Window | None:
+def resolve_window(
+    table: TableInfo, start: datetime | None, end: datetime | None, *, now: datetime
+) -> Window | None:
     if not table.windowed:
         # Small tables are previewed whole, but an explicit range still narrows them.
         if table.time_column is None or (start is None and end is None):
@@ -378,7 +398,11 @@ def query_settings(kind: QueryKind, *, max_rows: int) -> dict[str, Any]:
         "result_overflow_mode": "break",
         "max_result_bytes": 25_000_000 if kind == "csv" else 8_000_000,
         # Whole-table scans (per-market totals, activity charts) read one or two narrow columns.
-        "max_rows_to_read": 500_000_000 if kind == "markets" else 200_000_000 if kind == "activity" else 50_000_000,
+        "max_rows_to_read": 500_000_000
+        if kind == "markets"
+        else 200_000_000
+        if kind == "activity"
+        else 50_000_000,
         "max_bytes_to_read": 4_000_000_000,
         "read_overflow_mode": "throw",
         "max_memory_usage": 1_000_000_000,
@@ -401,7 +425,9 @@ def _filter_sql(table: TableInfo, item: Filter, parameters: _Parameters) -> str:
     kind = column.type_class
     if item.operator not in OPERATORS[kind]:
         allowed = ", ".join(sorted(OPERATORS[kind]))
-        raise CatalogError(f"Operator {item.operator!r} is not available for {column.name}; use one of {allowed}.")
+        raise CatalogError(
+            f"Operator {item.operator!r} is not available for {column.name}; use one of {allowed}."
+        )
     reference = f"`{column.name}`"
     if item.operator == "null":
         return f"isNull({reference})"
@@ -419,7 +445,9 @@ def _filter_sql(table: TableInfo, item: Filter, parameters: _Parameters) -> str:
         if item.operator == "in":
             values = [part.strip() for part in value.split(",") if part.strip()]
             if not values or len(values) > MAX_IN_VALUES:
-                raise CatalogError(f"The 'in' operator takes 1 to {MAX_IN_VALUES} comma-separated values.")
+                raise CatalogError(
+                    f"The 'in' operator takes 1 to {MAX_IN_VALUES} comma-separated values."
+                )
             return f"{subject} IN {parameters.add(values, 'Array(String)')}"
         return f"{subject} {_COMPARATORS[item.operator]} {parameters.add(value, 'String')}"
     if kind == "integer":
@@ -463,7 +491,9 @@ def _filter_sql(table: TableInfo, item: Filter, parameters: _Parameters) -> str:
     raise CatalogError(f"{column.name} cannot be filtered by value.")
 
 
-def _where(table: TableInfo, window: Window | None, filters: Iterable[Filter], parameters: _Parameters) -> str:
+def _where(
+    table: TableInfo, window: Window | None, filters: Iterable[Filter], parameters: _Parameters
+) -> str:
     clauses: list[str] = []
     if window is not None and table.time_column:
         reference = f"`{table.time_column}`"
@@ -494,13 +524,21 @@ def country_of(filters: Iterable[Filter]) -> str | None:
     """The market a request is scoped to, when it filters country_code to one value."""
 
     for item in filters:
-        if item.column == "country_code" and item.operator == "eq" and COUNTRY_CODE.fullmatch(item.value.strip()):
+        if (
+            item.column == "country_code"
+            and item.operator == "eq"
+            and COUNTRY_CODE.fullmatch(item.value.strip())
+        ):
             return item.value.strip()
     return None
 
 
 def build_rows_query(
-    table: TableInfo, request: RowsRequest, *, now: datetime, kind: Literal["rows", "csv"] = "rows",
+    table: TableInfo,
+    request: RowsRequest,
+    *,
+    now: datetime,
+    kind: Literal["rows", "csv"] = "rows",
 ) -> BuiltQuery:
     """Build the bounded SELECT for a preview page or CSV export."""
 
@@ -522,7 +560,8 @@ def build_rows_query(
         order = f"ORDER BY `{sort}` {'DESC' if request.descending else 'ASC'}"
     final = table.uses_final
     select = ", ".join(
-        expression if expression == f"`{name}`" else f"{expression} AS `{name}`" for name, expression in columns
+        expression if expression == f"`{name}`" else f"{expression} AS `{name}`"
+        for name, expression in columns
     )
     sql = (
         f"SELECT {select} FROM {table.name}{' FINAL' if final else ''} {where} {order} "
@@ -530,7 +569,9 @@ def build_rows_query(
     )
     notes: list[str] = []
     if table.name == "raw.archive":
-        notes.append("Payload bodies, response headers, and metadata are hidden; URLs omit query strings.")
+        notes.append(
+            "Payload bodies, response headers, and metadata are hidden; URLs omit query strings."
+        )
     if final:
         notes.append("Shows the latest version of each row.")
     return BuiltQuery(
@@ -544,7 +585,9 @@ def build_rows_query(
     )
 
 
-def build_stats_query(table: TableInfo, *, now: datetime, filters: tuple[Filter, ...] = ()) -> BuiltQuery:
+def build_stats_query(
+    table: TableInfo, *, now: datetime, filters: tuple[Filter, ...] = ()
+) -> BuiltQuery:
     """Summarize each visible column over the most recent sample of stored rows."""
 
     window = resolve_window(table, None, None, now=now)
@@ -553,7 +596,8 @@ def build_stats_query(table: TableInfo, *, now: datetime, filters: tuple[Filter,
     columns = visible_columns(table)
     order = f"ORDER BY `{table.time_column}` DESC" if table.time_column else ""
     inner = ", ".join(
-        expression if expression == f"`{name}`" else f"{expression} AS `{name}`" for name, expression in columns
+        expression if expression == f"`{name}`" else f"{expression} AS `{name}`"
+        for name, expression in columns
     )
     aggregates = ["count() AS `__rows`"]
     for name, _ in columns:
@@ -585,7 +629,11 @@ def build_stats_query(table: TableInfo, *, now: datetime, filters: tuple[Filter,
 
 
 def build_activity_query(
-    table: TableInfo, grain: Literal["day", "month"], *, now: datetime, filters: tuple[Filter, ...] = (),
+    table: TableInfo,
+    grain: Literal["day", "month"],
+    *,
+    now: datetime,
+    filters: tuple[Filter, ...] = (),
 ) -> BuiltQuery:
     if not table.time_column:
         raise CatalogError("This table has no time column to chart.")
@@ -648,7 +696,9 @@ def cell_value(value: Any, *, column: str, table: str, limit: int) -> tuple[Any,
     if isinstance(value, bytes):
         text = value.decode("utf-8", errors="replace")
     elif isinstance(value, (list, tuple, dict, set)):
-        text = json.dumps(list(value) if isinstance(value, set) else value, default=str, ensure_ascii=False)
+        text = json.dumps(
+            list(value) if isinstance(value, set) else value, default=str, ensure_ascii=False
+        )
     else:
         text = str(value)
     if table == "raw.archive" and column in {"source_url", "request_key"}:
@@ -656,7 +706,9 @@ def cell_value(value: Any, *, column: str, table: str, limit: int) -> tuple[Any,
     return scrub_text(text, limit=limit)
 
 
-def clean_row(row: Iterable[Any], columns: list[str], *, table: str, limit: int) -> tuple[list[Any], int]:
+def clean_row(
+    row: Iterable[Any], columns: list[str], *, table: str, limit: int
+) -> tuple[list[Any], int]:
     values: list[Any] = []
     truncated = 0
     for column, value in zip(columns, row, strict=False):
@@ -672,7 +724,9 @@ def translate_database_error(exc: Exception) -> CatalogError:
     message = str(exc)
     code = re.search(r"Code:\s*(\d+)", message)
     if code and code.group(1) in _CLICKHOUSE_LIMIT_CODES:
-        return CatalogTooExpensive("This query is too large. Narrow the date range or add a filter.")
+        return CatalogTooExpensive(
+            "This query is too large. Narrow the date range or add a filter."
+        )
     error = CatalogError("The data store could not run this preview. Try again shortly.")
     error.status_code = 502
     return error
@@ -696,10 +750,15 @@ def describe_request(request: RowsRequest, window: Window | None) -> Mapping[str
     """Summarize a CSV export for response headers."""
 
     summary = {
-        "X-FactorLab-Filters": "; ".join(f"{item.column} {item.operator} {item.value}" for item in request.filters)
+        "X-FactorLab-Filters": "; ".join(
+            f"{item.column} {item.operator} {item.value}" for item in request.filters
+        )
         or "none",
         "X-FactorLab-Row-Cap": str(csv_max_rows()),
     }
     if window is not None:
         summary["X-FactorLab-Window"] = f"{window.start.isoformat()}/{window.end.isoformat()}"
-    return {key: value.encode("ascii", "replace").decode("ascii")[:500] for key, value in summary.items()}
+    return {
+        key: value.encode("ascii", "replace").decode("ascii")[:500]
+        for key, value in summary.items()
+    }

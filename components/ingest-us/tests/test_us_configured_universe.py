@@ -31,8 +31,14 @@ def config(**changes):
 
 
 def master(code, *, exchange="NASDAQ", kind="Common Stock", currency="USD"):
-    return {"Code": code, "Name": code, "Exchange": exchange, "Type": kind,
-            "Currency": currency, "Isin": None}
+    return {
+        "Code": code,
+        "Name": code,
+        "Exchange": exchange,
+        "Type": kind,
+        "Currency": currency,
+        "Isin": None,
+    }
 
 
 def test_config_normalizes_extras_and_rejects_invalid_shapes():
@@ -50,7 +56,10 @@ def test_config_normalizes_extras_and_rejects_invalid_shapes():
 def test_multiple_indexes_and_extras_form_sorted_deduplicated_union():
     client = Mock()
     client.get_exchange_symbols.return_value = [
-        master("AAPL"), master("MSFT"), master("BRK-B", exchange="NYSE")]
+        master("AAPL"),
+        master("MSFT"),
+        master("BRK-B", exchange="NYSE"),
+    ]
     client.get_index_components.side_effect = [
         {"0": {"Code": "AAPL.US"}, "1": {"Code": "BRK-B"}},
         [{"Code": "MSFT"}],
@@ -71,10 +80,15 @@ def test_minimum_constituents_and_malformed_components_are_rejected():
 def test_non_us_non_common_and_non_usd_symbols_cannot_resolve():
     client = Mock()
     client.get_exchange_symbols.return_value = [
-        master("AAPL"), master("SHOP", currency="CAD"),
-        master("SPY", kind="ETF"), master("OTC", exchange="PINK")]
+        master("AAPL"),
+        master("SHOP", currency="CAD"),
+        master("SPY", kind="ETF"),
+        master("OTC", exchange="PINK"),
+    ]
     client.get_index_components.side_effect = [
-        [{"Code": "AAPL"}, {"Code": "SHOP"}], [{"Code": "SPY"}]]
+        [{"Code": "AAPL"}, {"Code": "SHOP"}],
+        [{"Code": "SPY"}],
+    ]
     with pytest.raises(ValueError, match="not active USD US common stocks"):
         resolve_universe(config(extra_symbols=[]), client)
 
@@ -89,13 +103,16 @@ def test_failed_refresh_preserves_expected_series_and_reports_unhealthy(monkeypa
         last_exchange_raw_id="master-raw",
     )
     with pytest.raises(RuntimeError):
-        runner.sync_once(config(indexes=[{"symbol": "FIRST.INDX",
-                                         "minimum_constituents": 1}],
-                                extra_symbols=[]), storage, client)
+        runner.sync_once(
+            config(indexes=[{"symbol": "FIRST.INDX", "minimum_constituents": 1}], extra_symbols=[]),
+            storage,
+            client,
+        )
     storage.sync_reference_master.assert_not_called()
     storage.sync_expected_series.assert_not_called()
     storage.source_status.assert_called_with(
-        "error", "Universe refresh failed: unauthorized", source="universe")
+        "error", "Universe refresh failed: unauthorized", source="universe"
+    )
 
 
 def test_success_syncs_full_reference_master_and_only_publishes_union(monkeypatch):
@@ -110,14 +127,21 @@ def test_success_syncs_full_reference_master_and_only_publishes_union(monkeypatc
         last_exchange_raw_id="master-raw",
     )
     result = runner.sync_once(
-        config(indexes=[{"symbol": "FIRST.INDX", "minimum_constituents": 1}],
-               extra_symbols=["AAPL"]), storage, client)
+        config(
+            indexes=[{"symbol": "FIRST.INDX", "minimum_constituents": 1}], extra_symbols=["AAPL"]
+        ),
+        storage,
+        client,
+    )
     assert [item["symbol"] for item in result] == ["AAPL", "MSFT"]
     assert len(storage.sync_reference_master.call_args.args[0]) == 3
     published = storage.sync_expected_series.call_args.args[0]
     assert [item["symbol"] for item in published] == ["AAPL", "MSFT"]
     assert storage.sync_expected_series.call_args.kwargs == {
-        "source": "eodhd", "universe": "us_configured", "resolution": "daily"}
+        "source": "eodhd",
+        "universe": "us_configured",
+        "resolution": "daily",
+    }
 
 
 def test_expected_series_activates_additions_and_deactivates_removals():
@@ -131,12 +155,20 @@ def test_expected_series_activates_additions_and_deactivates_removals():
         ],
     )
     storage = V2USStorage(client)
-    storage.sync_expected_series([
-        {"instrument_id": retained, "symbol": "AAPL", "provider_symbol": "AAPL.US"},
-        {"instrument_id": added, "symbol": "MSFT", "provider_symbol": "MSFT.US"},
-    ], source="eodhd", universe="us_configured", resolution="daily")
+    storage.sync_expected_series(
+        [
+            {"instrument_id": retained, "symbol": "AAPL", "provider_symbol": "AAPL.US"},
+            {"instrument_id": added, "symbol": "MSFT", "provider_symbol": "MSFT.US"},
+        ],
+        source="eodhd",
+        universe="us_configured",
+        resolution="daily",
+    )
     inserted = client.insert.call_args.args[1]
     columns = client.insert.call_args.kwargs["column_names"]
     rows = [dict(zip(columns, values, strict=True)) for values in inserted]
     assert {(row["symbol"], row["active"]) for row in rows} == {
-        ("OLD", False), ("AAPL", True), ("MSFT", True)}
+        ("OLD", False),
+        ("AAPL", True),
+        ("MSFT", True),
+    }

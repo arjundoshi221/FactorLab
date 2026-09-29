@@ -14,9 +14,15 @@ from factorlab.core.logging import bind, configure_logging, log_context, redact
 
 @pytest.fixture(autouse=True)
 def _restore_root_logger(monkeypatch):
-    for name in ("FACTORLAB_COMPONENT", "FACTORLAB_SERVICE", "FACTORLAB_LOG_DIR",
-                 "FACTORLAB_LOG_LEVEL", "FACTORLAB_LOG_FORMAT", "FACTORLAB_VERSION",
-                 "FACTORLAB_COMMIT"):
+    for name in (
+        "FACTORLAB_COMPONENT",
+        "FACTORLAB_SERVICE",
+        "FACTORLAB_LOG_DIR",
+        "FACTORLAB_LOG_LEVEL",
+        "FACTORLAB_LOG_FORMAT",
+        "FACTORLAB_VERSION",
+        "FACTORLAB_COMMIT",
+    ):
         monkeypatch.delenv(name, raising=False)
     root = logging.getLogger()
     handlers, level = list(root.handlers), root.level
@@ -86,8 +92,9 @@ def test_secrets_are_redacted_in_messages_extras_and_tracebacks():
 
 def test_file_sink_writes_jsonl_and_survives_rotation(tmp_path):
     out = io.StringIO()
-    configure_logging(component="ingest-us", service="ingest-us", log_dir=tmp_path,
-                      stream=out, fmt="json")
+    configure_logging(
+        component="ingest-us", service="ingest-us", log_dir=tmp_path, stream=out, fmt="json"
+    )
     log = logging.getLogger("t")
     log.info("before rotation")
     current = tmp_path / "ingest-us.jsonl"
@@ -96,7 +103,7 @@ def test_file_sink_writes_jsonl_and_survives_rotation(tmp_path):
         if isinstance(handler, logging.FileHandler) and handler.stream:
             handler.stream.close()
             handler.stream = None
-    current.rename(rotated)                        # what logrotate does
+    current.rename(rotated)  # what logrotate does
     log.info("after rotation")
     assert json.loads(rotated.read_text(encoding="utf-8"))["msg"] == "before rotation"
     assert json.loads(current.read_text(encoding="utf-8"))["msg"] == "after rotation"

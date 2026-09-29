@@ -148,10 +148,22 @@ def _quality_result(
         return expected_data_points, coverage, quality_issues, "not_expected", reason
 
     if expected_points_per_series == 0:
-        return expected_data_points, coverage, quality_issues, "not_expected", "Collection is not due yet."
+        return (
+            expected_data_points,
+            coverage,
+            quality_issues,
+            "not_expected",
+            "Collection is not due yet.",
+        )
 
     if data_points == 0:
-        return expected_data_points, 0.0, quality_issues, "missing", "No expected candles were found."
+        return (
+            expected_data_points,
+            0.0,
+            quality_issues,
+            "missing",
+            "No expected candles were found.",
+        )
 
     if coverage is not None and coverage < 99:
         missing = max(expected_data_points - data_points, 0)
@@ -163,7 +175,13 @@ def _quality_result(
             f"{missing} expected one-minute candle(s) are missing.",
         )
 
-    return expected_data_points, coverage, quality_issues, "healthy", "Coverage and value checks passed."
+    return (
+        expected_data_points,
+        coverage,
+        quality_issues,
+        "healthy",
+        "Coverage and value checks passed.",
+    )
 
 
 class IndiaHubRepository:
@@ -195,12 +213,10 @@ class IndiaHubRepository:
             "all": "",
             "collecting": "AND ifNull(expected.expected_series, 0) > 0",
             "historical": (
-                "AND ifNull(expected.expected_series, 0) = 0 "
-                "AND ifNull(history.data_points, 0) > 0"
+                "AND ifNull(expected.expected_series, 0) = 0 AND ifNull(history.data_points, 0) > 0"
             ),
             "not_configured": (
-                "AND ifNull(expected.expected_series, 0) = 0 "
-                "AND ifNull(history.data_points, 0) = 0"
+                "AND ifNull(expected.expected_series, 0) = 0 AND ifNull(history.data_points, 0) = 0"
             ),
         }[scope]
         parameters: dict[str, Any] = {
@@ -414,7 +430,9 @@ class IndiaHubRepository:
             now=now,
         )
         if not page.items:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Instrument not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Instrument not found"
+            )
         return page.items[0]
 
     def list_instrument_days(
@@ -476,9 +494,7 @@ class IndiaHubRepository:
             FROM latest
             LEFT JOIN versions USING (trading_date)
             ORDER BY trading_date DESC
-            """.replace("__BARS__", INDIA_BARS_SQL).replace(
-                "__VERSIONS__", INDIA_BAR_VERSIONS_SQL
-            ),
+            """.replace("__BARS__", INDIA_BARS_SQL).replace("__VERSIONS__", INDIA_BAR_VERSIONS_SQL),
             parameters=parameters,
         )
         observed = {row["trading_date"]: row for row in _rows(result)}

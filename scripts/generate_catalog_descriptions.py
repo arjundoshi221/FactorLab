@@ -20,21 +20,45 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DESIGN_DOC = ROOT / "docs" / "architecture" / "06-schema-rehau.md"
-SQL_DIRECTORY = ROOT / "libs" / "schema" / "src" / "factorlab" / "schema" / "sql" / "clickhouse" / "v2"
-OUTPUT = (ROOT / "components" / "api" / "src" / "factorlab" / "components" / "api"
-          / "catalog_descriptions.json")
+SQL_DIRECTORY = (
+    ROOT / "libs" / "schema" / "src" / "factorlab" / "schema" / "sql" / "clickhouse" / "v2"
+)
+OUTPUT = (
+    ROOT
+    / "components"
+    / "api"
+    / "src"
+    / "factorlab"
+    / "components"
+    / "api"
+    / "catalog_descriptions.json"
+)
 MAX_DESCRIPTION = 600
 
 TABLE_REFERENCE = re.compile(r"`([a-z_]+\.[a-z0-9_]+)`")
-CREATE_TABLE = re.compile(r"^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-z_]+\.[a-z0-9_]+)", re.IGNORECASE)
+CREATE_TABLE = re.compile(
+    r"^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-z_]+\.[a-z0-9_]+)", re.IGNORECASE
+)
 COLUMN_LINE = re.compile(r"^\s+([a-z_][a-z0-9_]*)\s+([A-Z][^-]*?)(?:,)?\s*(?:--\s?(.*))?$")
 CONTINUATION = re.compile(r"^\s+--\s{2,}(.*)$")
-REVISION_NOISE = re.compile(r"\s*\((?=[^()]*(?:\brev\s*\d|\bFix\b|\bF\d+\b|§))[^()]*\)", re.IGNORECASE)
+REVISION_NOISE = re.compile(
+    r"\s*\((?=[^()]*(?:\brev\s*\d|\bFix\b|\bF\d+\b|§))[^()]*\)", re.IGNORECASE
+)
 INLINE_REVISION = re.compile(
     r"(?i)(?:\b(?:added|renamed|removed|changed|moved)\s+)?(?:in\s+)?\brev\s*\d+(?:\s+per\s+F\d+)?\s*(?:—|;|:)?\s*"
     r"|\bper\s+F\d+\b\s*(?:—)?\s*|\(Fix\s+F\d+[^)]*\)"
 )
-NOT_COLUMNS = {"index", "projection", "constraint", "primary", "order", "partition", "engine", "settings", "ttl"}
+NOT_COLUMNS = {
+    "index",
+    "projection",
+    "constraint",
+    "primary",
+    "order",
+    "partition",
+    "engine",
+    "settings",
+    "ttl",
+}
 
 
 def clean(text: str) -> str:
@@ -78,7 +102,9 @@ def table_descriptions(markdown: str) -> dict[str, str]:
                 break
             index += 1
             stripped = current.strip()
-            if stripped.startswith(("|", "- ", "* ", "> ", "---")) or re.match(r"\d+\.\s", stripped):
+            if stripped.startswith(("|", "- ", "* ", "> ", "---")) or re.match(
+                r"\d+\.\s", stripped
+            ):
                 if paragraph:
                     break
                 continue
@@ -112,7 +138,9 @@ def column_descriptions(sql: str) -> dict[str, dict[str, str]]:
             continue
         continuation = CONTINUATION.match(line)
         if continuation and column is not None:
-            tables[table][column] = f"{tables[table].get(column, '')} {continuation.group(1)}".strip()
+            tables[table][column] = (
+                f"{tables[table].get(column, '')} {continuation.group(1)}".strip()
+            )
             continue
         match = COLUMN_LINE.match(line)
         if match and match.group(1) not in NOT_COLUMNS:
@@ -150,13 +178,17 @@ def render() -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--check", action="store_true", help="exit 1 when the checked-in JSON is stale")
+    parser.add_argument(
+        "--check", action="store_true", help="exit 1 when the checked-in JSON is stale"
+    )
     arguments = parser.parse_args()
     content = render()
     if arguments.check:
         current = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
         if current != content:
-            print(f"{OUTPUT.relative_to(ROOT)} is stale; run {Path(__file__).name}", file=sys.stderr)
+            print(
+                f"{OUTPUT.relative_to(ROOT)} is stale; run {Path(__file__).name}", file=sys.stderr
+            )
             return 1
         return 0
     OUTPUT.write_text(content, encoding="utf-8", newline="\n")

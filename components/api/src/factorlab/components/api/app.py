@@ -114,12 +114,23 @@ async def _log_requests(request: Request, call_next):  # type: ignore[no-untyped
             route = getattr(request.scope.get("route"), "path", request.url.path)
             level = logging.DEBUG if route in _QUIET_PATHS and status < 400 else logging.INFO
             _access_log.log(
-                level, "%s %s %d", request.method, route, status,
-                extra={"method": request.method, "route": route, "status": status,
-                       "duration_ms": round((time.perf_counter() - started) * 1000, 1)},
+                level,
+                "%s %s %d",
+                request.method,
+                route,
+                status,
+                extra={
+                    "method": request.method,
+                    "route": route,
+                    "status": status,
+                    "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                },
             )
 
-app.include_router(us_router, prefix="/api/v1/us", tags=["us"], dependencies=[Depends(require_api_key)])
+
+app.include_router(
+    us_router, prefix="/api/v1/us", tags=["us"], dependencies=[Depends(require_api_key)]
+)
 app.include_router(us_router, prefix="/hub/api/v1/us", tags=["hub-us"])
 
 
@@ -218,12 +229,19 @@ def _catalog_call(call):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=503, detail="The data catalog is temporarily unavailable") from exc
+        raise HTTPException(
+            status_code=503, detail="The data catalog is temporarily unavailable"
+        ) from exc
 
 
 def _rows_request(
-    request: Request, sort: str | None, direction: str, limit: int, offset: int,
-    start: str | None, end: str | None,
+    request: Request,
+    sort: str | None,
+    direction: str,
+    limit: int,
+    offset: int,
+    start: str | None,
+    end: str | None,
 ) -> RowsRequest:
     return RowsRequest(
         filters=parse_filters(request.query_params.multi_items()),
@@ -252,7 +270,11 @@ def get_catalog_pipelines(
     return _catalog_call(service.pipelines)
 
 
-@app.get("/hub/api/v1/catalog/pipelines/{pipeline_id}/runs", response_model=PipelineRunsPage, tags=["hub-catalog"])
+@app.get(
+    "/hub/api/v1/catalog/pipelines/{pipeline_id}/runs",
+    response_model=PipelineRunsPage,
+    tags=["hub-catalog"],
+)
 def get_catalog_pipeline_runs(
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     pipeline_id: Annotated[str, Path(pattern=r"^[a-z0-9_]+$", max_length=64)],
@@ -262,12 +284,17 @@ def get_catalog_pipeline_runs(
 ) -> PipelineRunsPage:
     """Recent runs of one pipeline, newest first."""
 
-    return _catalog_call(lambda: service.pipeline_runs(pipeline_id, status=status, limit=limit, offset=offset))
+    return _catalog_call(
+        lambda: service.pipeline_runs(pipeline_id, status=status, limit=limit, offset=offset)
+    )
 
 
-@app.get("/hub/api/v1/catalog/tables/{name}", response_model=CatalogTableDetail, tags=["hub-catalog"])
+@app.get(
+    "/hub/api/v1/catalog/tables/{name}", response_model=CatalogTableDetail, tags=["hub-catalog"]
+)
 def get_catalog_table(
-    service: Annotated[CatalogService, Depends(get_catalog_service)], name: CatalogTableName,
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    name: CatalogTableName,
 ) -> CatalogTableDetail:
     """One table's description, columns, keys, relationships, writers, and preview policy."""
 
@@ -289,7 +316,9 @@ def get_catalog_rows(
     """A bounded, filtered page of rows; filters are ``f.<column>=<operator>:<value>``."""
 
     return _catalog_call(
-        lambda: service.rows(name, _rows_request(request, sort, direction, limit, offset, start, end))
+        lambda: service.rows(
+            name, _rows_request(request, sort, direction, limit, offset, start, end)
+        )
     )
 
 
@@ -311,13 +340,18 @@ def get_catalog_rows_csv(
     return StreamingResponse(
         body,
         media_type="text/csv; charset=utf-8",
-        headers={**headers, "Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store"},
+        headers={
+            **headers,
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
     )
 
 
 @app.get("/hub/api/v1/catalog/tables/{name}/stats", response_model=TableStats, tags=["hub-catalog"])
 def get_catalog_stats(
-    service: Annotated[CatalogService, Depends(get_catalog_service)], name: CatalogTableName,
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+    name: CatalogTableName,
     country: Annotated[str | None, Query(pattern=r"^[A-Z]{2}$")] = None,
 ) -> TableStats:
     """Null share, approximate distinct values, and ranges over the latest sample of rows."""
@@ -325,7 +359,9 @@ def get_catalog_stats(
     return _catalog_call(lambda: service.stats(name, country))
 
 
-@app.get("/hub/api/v1/catalog/tables/{name}/activity", response_model=TableActivity, tags=["hub-catalog"])
+@app.get(
+    "/hub/api/v1/catalog/tables/{name}/activity", response_model=TableActivity, tags=["hub-catalog"]
+)
 def get_catalog_activity(
     service: Annotated[CatalogService, Depends(get_catalog_service)],
     name: CatalogTableName,
@@ -459,7 +495,9 @@ def list_hub_india_instrument_days(
     start = date_from or default_india_history_range(end)[0]
     _validate_date_range(start, end)
     if (end - start).days > 120:
-        raise HTTPException(status_code=422, detail="India instrument history cannot exceed 120 days")
+        raise HTTPException(
+            status_code=422, detail="India instrument history cannot exceed 120 days"
+        )
     return repository.list_instrument_days(
         listing_id,
         date_from=start,

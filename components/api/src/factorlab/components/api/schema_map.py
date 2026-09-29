@@ -26,9 +26,7 @@ class SchemaMapResult(Protocol):
 
 
 class SchemaMapClient(Protocol):
-    def query(
-        self, query: str, parameters: dict[str, Any] | None = None
-    ) -> SchemaMapResult: ...
+    def query(self, query: str, parameters: dict[str, Any] | None = None) -> SchemaMapResult: ...
 
 
 class SchemaColumn(BaseModel):
@@ -98,6 +96,7 @@ class SchemaMapResponse(BaseModel):
 def _rows(result: SchemaMapResult) -> list[dict[str, Any]]:
     return [dict(zip(result.column_names, row, strict=True)) for row in result.result_rows]
 
+
 V2_DATABASES: tuple[str, ...] = (
     "ref",
     "market",
@@ -163,9 +162,17 @@ V2_FK_TARGETS: dict[str, tuple[str, str]] = {
 # Links that join almost every table to the same few targets. The explorer hides them by
 # default so the business relationships stay readable.
 LINEAGE_COLUMNS = frozenset({"raw_id", "ingest_run_id", "computation_id"})
-LOOKUP_COLUMNS = frozenset({
-    "country_code", "currency_code", "amount_currency", "base_currency", "exchange_code", "source", "source_id",
-})
+LOOKUP_COLUMNS = frozenset(
+    {
+        "country_code",
+        "currency_code",
+        "amount_currency",
+        "base_currency",
+        "exchange_code",
+        "source",
+        "source_id",
+    }
+)
 
 
 def relationship_category(column: str) -> RelationshipCategory:
@@ -339,7 +346,6 @@ def _planned_v2_tables() -> tuple[SchemaTable, ...]:
     return tuple(sorted(tables, key=lambda table: table.name))
 
 
-
 def _describe(table: SchemaTable) -> SchemaTable:
     """Attach plain-language titles and descriptions to one table and its columns."""
 
@@ -357,7 +363,9 @@ def _describe(table: SchemaTable) -> SchemaTable:
 class SchemaMapRepository:
     """Read live v2 schema metadata across every v2 database."""
 
-    def __init__(self, client: SchemaMapClient, *, databases: tuple[str, ...] = V2_DATABASES) -> None:
+    def __init__(
+        self, client: SchemaMapClient, *, databases: tuple[str, ...] = V2_DATABASES
+    ) -> None:
         self.client = client
         self.databases = databases
 
@@ -376,21 +384,25 @@ class SchemaMapRepository:
                 table_name = str(column["table"])
                 if table_name not in columns_by_table:
                     continue
-                columns_by_table[table_name].append(SchemaColumn(
-                    name=str(column["name"]),
-                    type=str(column["type"]),
-                    position=int(column["position"]),
-                    nullable="Nullable(" in str(column["type"]),
-                    default_kind=str(column["default_kind"] or "") or None,
-                    default_expression=str(column["default_expression"] or "") or None,
-                    in_primary_key=bool(column["is_in_primary_key"]),
-                    in_sorting_key=bool(column["is_in_sorting_key"]),
-                    in_partition_key=bool(column["is_in_partition_key"]),
-                ))
+                columns_by_table[table_name].append(
+                    SchemaColumn(
+                        name=str(column["name"]),
+                        type=str(column["type"]),
+                        position=int(column["position"]),
+                        nullable="Nullable(" in str(column["type"]),
+                        default_kind=str(column["default_kind"] or "") or None,
+                        default_expression=str(column["default_expression"] or "") or None,
+                        in_primary_key=bool(column["is_in_primary_key"]),
+                        in_sorting_key=bool(column["is_in_sorting_key"]),
+                        in_partition_key=bool(column["is_in_partition_key"]),
+                    )
+                )
             for table in tables:
                 table.columns = sorted(columns_by_table[table.name], key=lambda item: item.position)
         tables = [_describe(table) for table in tables]
-        column_lookup = {(table.name, column.name): column for table in tables for column in table.columns}
+        column_lookup = {
+            (table.name, column.name): column for table in tables for column in table.columns
+        }
 
         fingerprint_payload = [
             (table.name, table.engine, [(column.name, column.type) for column in table.columns])
@@ -413,11 +425,15 @@ class SchemaMapRepository:
                 optional=column_lookup[(source_table, source_column)].nullable,
                 category=relationship_category(source_column),
             )
-            for source_table, source_column, target_table, target_column in self._v2_relationships(column_lookup)
+            for source_table, source_column, target_table, target_column in self._v2_relationships(
+                column_lookup
+            )
         ]
         present = {table.namespace for table in tables}
         areas = [
-            SchemaArea(id=database, title=namespace_text(database)[0], summary=namespace_text(database)[1])
+            SchemaArea(
+                id=database, title=namespace_text(database)[0], summary=namespace_text(database)[1]
+            )
             for database in self.databases
             if database in present
         ]
@@ -503,7 +519,10 @@ class SchemaMapService:
     """Share one schema read between the deploy gate, the explorer, and repeated page loads."""
 
     def __init__(
-        self, repository: SchemaMapRepository, *, ttl_seconds: float = 60.0,
+        self,
+        repository: SchemaMapRepository,
+        *,
+        ttl_seconds: float = 60.0,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.repository = repository

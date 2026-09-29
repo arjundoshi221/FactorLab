@@ -15,10 +15,12 @@ class UpstoxSession(requests.Session):
     def __init__(self, token: str):
         super().__init__()
         self._access_token = token
-        self.headers.update({
-            "Accept": "application/json",
-            "Authorization": f"Bearer {token}",
-        })
+        self.headers.update(
+            {
+                "Accept": "application/json",
+                "Authorization": f"Bearer {token}",
+            }
+        )
 
     def _reload_token(self) -> bool:
         latest = (get_secret("UPSTOX_ACCESS_TOKEN", "") or "").strip()

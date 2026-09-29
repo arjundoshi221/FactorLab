@@ -62,6 +62,7 @@ class MarketWindow:
         """Return the lazily-resolved ``exchange_calendars`` instance."""
         if self._cal is None:
             import exchange_calendars as xcals
+
             self._cal = xcals.get_calendar(self.calendar_key)
         return self._cal
 
@@ -98,9 +99,7 @@ class MarketWindow:
                 open_dt = self.open_dt(day)
                 if open_dt > after:
                     return open_dt
-        raise RuntimeError(
-            f"no trading session within 30 days on {self.calendar_key}"
-        )
+        raise RuntimeError(f"no trading session within 30 days on {self.calendar_key}")
 
 
 __all__ = ["MarketWindow"]

@@ -33,8 +33,9 @@ def manifests():
     return components.load_all()
 
 
-@pytest.mark.parametrize("name", [p.parent.name for p in
-                                  sorted((REPO / "components").glob("*/component.yaml"))])
+@pytest.mark.parametrize(
+    "name", [p.parent.name for p in sorted((REPO / "components").glob("*/component.yaml"))]
+)
 def test_every_component_bundle_passes_the_deployers_validation(tmp_path, manifests, name):
     out = tmp_path / f"{name}.tgz"
     version = components.build_bundle(name, out, manifests)
@@ -42,7 +43,10 @@ def test_every_component_bundle_passes_the_deployers_validation(tmp_path, manife
     staged.mkdir()
     fd.extract_bundle(out, staged)
     release = fd.load_release(name, version, IMAGE.format(name), staged)
-    assert release.manifest["platform"]["image_var"] == f"FACTORLAB_{name.upper().replace('-', '_')}_IMAGE"
+    assert (
+        release.manifest["platform"]["image_var"]
+        == f"FACTORLAB_{name.upper().replace('-', '_')}_IMAGE"
+    )
     assert [s["name"] for s in release.services]
 
 
@@ -58,23 +62,33 @@ def test_platform_bundle_is_reproducible_executable_lf_and_complete(tmp_path, ma
     assert first.read_bytes() == second.read_bytes()
     with tarfile.open(first) as archive:
         members = {m.name: m for m in archive.getmembers()}
-        for required in ("deploy/compose.base.yml", "deploy/host/factorlab_deploy.py",
-                         "deploy/scripts/prepare-host.sh", "deploy/scripts/deploy-component.sh",
-                         "deploy/scripts/deploy-platform.sh", "deploy/scripts/factorlab-compose",
-                         "deploy/host/factorlab_log_reader.py", "deploy/ssh/60-factorlab-logs.conf"):
+        for required in (
+            "deploy/compose.base.yml",
+            "deploy/host/factorlab_deploy.py",
+            "deploy/scripts/prepare-host.sh",
+            "deploy/scripts/deploy-component.sh",
+            "deploy/scripts/deploy-platform.sh",
+            "deploy/scripts/factorlab-compose",
+            "deploy/host/factorlab_log_reader.py",
+            "deploy/ssh/60-factorlab-logs.conf",
+        ):
             assert required in members, required
         for name in ("deploy/scripts/deploy-component.sh", "deploy/host/factorlab_deploy.py"):
             assert members[name].mode == 0o755
         assert members["deploy/compose.base.yml"].mode == 0o644
         assert not [n for n in members if "__pycache__" in n or n.endswith("production.env")]
         for name in members:
-            if name.endswith((".sh", ".yml", ".yaml")) or name == "deploy/scripts/factorlab-compose":
+            if (
+                name.endswith((".sh", ".yml", ".yaml"))
+                or name == "deploy/scripts/factorlab-compose"
+            ):
                 assert b"\r\n" not in archive.extractfile(name).read(), name
         seeded = {n.split("/")[1] for n in members if n.startswith("components/")}
         assert seeded == {c.name for c in manifests}
         api = json.loads(archive.extractfile("components/api/component.json").read())
         assert api["version"] == components.version_of(
-            next(c for c in manifests if c.name == "api"))
+            next(c for c in manifests if c.name == "api")
+        )
 
 
 def test_platform_version_is_declared(manifests):
@@ -85,28 +99,41 @@ BASH = shutil.which("bash")
 
 
 @pytest.mark.skipif(BASH is None, reason="bash is not installed")
-@pytest.mark.parametrize("script", ["deploy-component.sh", "deploy-platform.sh",
-                                    "factorlab-compose", "deploy-release.sh",
-                                    "rollback-release.sh"])
+@pytest.mark.parametrize(
+    "script",
+    [
+        "deploy-component.sh",
+        "deploy-platform.sh",
+        "factorlab-compose",
+        "deploy-release.sh",
+        "rollback-release.sh",
+    ],
+)
 def test_host_scripts_parse(script):
     source = (REPO / "deploy" / "scripts" / script).read_bytes().replace(b"\r\n", b"\n")
-    result = subprocess.run([BASH, "-n"], input=source, capture_output=True,
-                            check=False)
+    result = subprocess.run([BASH, "-n"], input=source, capture_output=True, check=False)
     assert result.returncode == 0, result.stderr.decode()
 
 
 @pytest.mark.skipif(BASH is None, reason="bash is not installed")
-@pytest.mark.parametrize(("argv", "expected"), [
-    ([], "usage:"),
-    (["api", "1.0.0"], "usage:"),
-    (["rollback"], "usage:"),
-    (["rollback", "api", "1.0.0", "extra"], "usage:"),
-])
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        ([], "usage:"),
+        (["api", "1.0.0"], "usage:"),
+        (["rollback"], "usage:"),
+        (["rollback", "api", "1.0.0", "extra"], "usage:"),
+    ],
+)
 def test_deploy_component_wrapper_rejects_bad_arguments(argv, expected):
     script = REPO / "deploy" / "scripts" / "deploy-component.sh"
     source = script.read_bytes().replace(b"\r\n", b"\n").decode()
-    result = subprocess.run([BASH, "-c", source, "deploy-component.sh", *argv],
-                            capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        [BASH, "-c", source, "deploy-component.sh", *argv],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert result.returncode == 2 and expected in result.stderr
 
 

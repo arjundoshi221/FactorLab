@@ -15,15 +15,23 @@ DAILY = {"dataset": "market.bars", "market": "USA", "resolution": "daily"}
 
 
 def test_rows_cover_only_source_keyed_datasets_and_keep_shadow_sources_apart():
-    file = BindingsFile.model_validate({"version": 1, "bindings": [
-        {**DAILY, "provider": "schwab", "role": "primary", "priority": 10},
-        {**DAILY, "provider": "eodhd", "role": "secondary", "priority": 20},
-        {**DAILY, "provider": "ibkr", "role": "shadow", "priority": 5},
-        {"dataset": "ref.listings", "market": "USA", "provider": "eodhd"},
-    ]})
+    file = BindingsFile.model_validate(
+        {
+            "version": 1,
+            "bindings": [
+                {**DAILY, "provider": "schwab", "role": "primary", "priority": 10},
+                {**DAILY, "provider": "eodhd", "role": "secondary", "priority": 20},
+                {**DAILY, "provider": "ibkr", "role": "shadow", "priority": 5},
+                {"dataset": "ref.listings", "market": "USA", "provider": "eodhd"},
+            ],
+        }
+    )
     rows = source_priority_rows(file.bindings)
     assert [(r["source"], r["priority"], r["role"]) for r in rows] == [
-        ("schwab", 10, "primary"), ("eodhd", 20, "secondary"), ("ibkr:shadow", 5, "shadow")]
+        ("schwab", 10, "primary"),
+        ("eodhd", 20, "secondary"),
+        ("ibkr:shadow", 5, "shadow"),
+    ]
     assert {r["country_code"] for r in rows} == {"US"}
 
     db = FakeClickHouse()
@@ -36,10 +44,18 @@ def test_readable_bindings_need_distinct_priorities(tmp_path):
     import yaml
 
     path = tmp_path / "b.yaml"
-    path.write_text(yaml.safe_dump({"version": 1, "bindings": [
-        {**DAILY, "provider": "schwab", "role": "primary", "priority": 10},
-        {**DAILY, "provider": "eodhd", "role": "secondary", "priority": 10},
-    ]}), encoding="utf-8")
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "bindings": [
+                    {**DAILY, "provider": "schwab", "role": "primary", "priority": 10},
+                    {**DAILY, "provider": "eodhd", "role": "secondary", "priority": 10},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     with pytest.raises(BindingError):
         load_bindings(path)
 

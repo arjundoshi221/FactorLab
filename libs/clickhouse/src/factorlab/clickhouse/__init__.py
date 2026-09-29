@@ -9,5 +9,4 @@ from factorlab.clickhouse.results import rows
 from factorlab.clickhouse.settings import ClickHouseSettings
 from factorlab.clickhouse.values import decoded_text, version
 
-__all__ = ["ClickHouse", "ClickHouseSettings", "decoded_text", "open_ssh_tunnel", "rows",
-           "version"]
+__all__ = ["ClickHouse", "ClickHouseSettings", "decoded_text", "open_ssh_tunnel", "rows", "version"]

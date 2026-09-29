@@ -130,10 +130,9 @@ INDIA_BARS_SQL = """
     WHERE f.country_code = 'IN' AND f.resolution = '1min'
 """
 
-INDIA_BAR_VERSIONS_SQL = (
-    INDIA_BARS_SQL.replace("market.bars AS b FINAL", "market.bars AS b")
-    .replace("market.futures_contract_bars AS f FINAL", "market.futures_contract_bars AS f")
-)
+INDIA_BAR_VERSIONS_SQL = INDIA_BARS_SQL.replace(
+    "market.bars AS b FINAL", "market.bars AS b"
+).replace("market.futures_contract_bars AS f FINAL", "market.futures_contract_bars AS f")
 
 
 class IndiaCandlesRepository:
@@ -194,7 +193,7 @@ class IndiaCandlesRepository:
                 listing_id, contract_id, symbol, country_code, bar_time,
                 open, high, low, close, volume, oi, source, as_of_time, ingested_at
             FROM ({INDIA_BARS_SQL}) AS bars
-            WHERE {' AND '.join(conditions)}
+            WHERE {" AND ".join(conditions)}
             ORDER BY bar_time DESC, symbol DESC, listing_id DESC,
                      ifNull(contract_id, toUUID('00000000-0000-0000-0000-000000000000')) DESC,
                      source DESC
@@ -241,8 +240,7 @@ class IndiaCandlesRepository:
         if cursor:
             cursor_symbol, cursor_listing = decode_instrument_cursor(cursor)
             conditions.append(
-                "(l.trading_symbol, l.listing_id) > "
-                "({cursor_symbol:String}, {cursor_listing:UUID})"
+                "(l.trading_symbol, l.listing_id) > ({cursor_symbol:String}, {cursor_listing:UUID})"
             )
             parameters.update(
                 cursor_symbol=cursor_symbol,
@@ -267,7 +265,7 @@ class IndiaCandlesRepository:
                 WHERE target_kind = 'listing' AND alias_kind = 'upstox_instrument_key'
                 GROUP BY target_id
             ) AS a ON a.target_id = l.listing_id
-            WHERE {' AND '.join(conditions)}
+            WHERE {" AND ".join(conditions)}
             ORDER BY l.trading_symbol ASC, l.listing_id ASC
             LIMIT {{fetch_limit:UInt16}}
             """,
@@ -310,7 +308,7 @@ class IndiaCandlesRepository:
                 maxOrNull(bar_time) AS last_bar_time,
                 maxOrNull(as_of_time) AS data_as_of
             FROM ({INDIA_BARS_SQL}) AS bars
-            WHERE {' AND '.join(conditions)}
+            WHERE {" AND ".join(conditions)}
             """,
             parameters=parameters,
         )
@@ -342,7 +340,7 @@ class IndiaCandlesRepository:
                 max(bar_time) AS last_bar_time,
                 max(as_of_time) AS data_as_of
             FROM ({INDIA_BARS_SQL}) AS bars
-            WHERE {' AND '.join(conditions)}
+            WHERE {" AND ".join(conditions)}
             GROUP BY trading_date
             ORDER BY trading_date DESC
             LIMIT {{limit:UInt16}}
@@ -407,7 +405,9 @@ def decode_cursor(cursor: str) -> dict[str, Any]:
             "cursor_time": cursor_time,
             "cursor_symbol": str(payload["symbol"]),
             "cursor_listing": UUID(payload["listing_id"]),
-            "cursor_contract": UUID(payload["contract_id"]) if payload["contract_id"] else UUID(int=0),
+            "cursor_contract": UUID(payload["contract_id"])
+            if payload["contract_id"]
+            else UUID(int=0),
             "cursor_source": str(payload["source"]),
         }
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:

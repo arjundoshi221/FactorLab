@@ -36,18 +36,35 @@ OPEN_ORDERS_TABLE = "broker.open_orders_snapshot"
 
 # Identity columns present in each table's Wave 7 DDL (only positions carry entity_id).
 _IDENTITY_COLUMNS: dict[str, tuple[str, ...]] = {
-    POSITIONS_TABLE: ("listing_id", "security_id", "contract_id", "entity_id",
-                      "resolution_confidence"),
+    POSITIONS_TABLE: (
+        "listing_id",
+        "security_id",
+        "contract_id",
+        "entity_id",
+        "resolution_confidence",
+    ),
     EXECUTIONS_TABLE: ("listing_id", "security_id", "contract_id", "resolution_confidence"),
     OPEN_ORDERS_TABLE: ("listing_id", "security_id", "contract_id", "resolution_confidence"),
 }
 
 # Decimal scale per column, from the Wave 7 DDL.
 _SCALES = {
-    "position": 6, "avg_cost": 6, "market_price": 6, "market_value": 6,
-    "unrealized_pnl": 6, "realized_pnl_ytd": 6, "market_value_usd": 6,
-    "value_num": 6, "quantity": 6, "price": 6, "commission": 6, "realized_pnl": 6,
-    "filled_quantity": 6, "remaining_quantity": 6, "limit_price": 6, "aux_price": 6,
+    "position": 6,
+    "avg_cost": 6,
+    "market_price": 6,
+    "market_value": 6,
+    "unrealized_pnl": 6,
+    "realized_pnl_ytd": 6,
+    "market_value_usd": 6,
+    "value_num": 6,
+    "quantity": 6,
+    "price": 6,
+    "commission": 6,
+    "realized_pnl": 6,
+    "filled_quantity": 6,
+    "remaining_quantity": 6,
+    "limit_price": 6,
+    "aux_price": 6,
 }
 
 
@@ -81,23 +98,32 @@ class V2BrokerStorage(V2USStorage):
         if self._active_run_id is None or provenance.ingest_run_id != self._active_run_id:
             raise RuntimeError("broker writes require provenance from the active ingestion run")
 
-    def _write(self, table: str, rows: Sequence[Any], provenance: Provenance,
-               extra: Callable[[Any], Mapping[str, Any]]) -> int:
+    def _write(
+        self,
+        table: str,
+        rows: Sequence[Any],
+        provenance: Provenance,
+        extra: Callable[[Any], Mapping[str, Any]],
+    ) -> int:
         if not rows:
             return 0
         self._check_lineage(provenance)
         lineage = provenance.columns()
         now = datetime.now(UTC)
-        self._insert_dicts(table, [
-            {**_fact_columns(row), **extra(row), **lineage, "version": _version(now)}
-            for row in rows
-        ])
+        self._insert_dicts(
+            table,
+            [
+                {**_fact_columns(row), **extra(row), **lineage, "version": _version(now)}
+                for row in rows
+            ],
+        )
         return len(rows)
 
     # -- identity -------------------------------------------------------------
 
-    def resolve_vendor_ids(self, broker_code: str, vendor_ids: Iterable[str], *,
-                           raw_id: uuid.UUID | None) -> dict[str, Identity]:
+    def resolve_vendor_ids(
+        self, broker_code: str, vendor_ids: Iterable[str], *, raw_id: uuid.UUID | None
+    ) -> dict[str, Identity]:
         """Resolve broker instrument ids through approved aliases (read-only)."""
         alias_kind = BROKER_ALIAS_KIND[broker_code]
         values = sorted({value for value in vendor_ids if value})
@@ -133,28 +159,43 @@ class V2BrokerStorage(V2USStorage):
             alias = aliases.get(value)
             if alias is None:
                 resolved[value] = UNRESOLVED
-                self._identity_status(source=broker_code, alias_kind=alias_kind,
-                                      alias_value=value, raw_id=raw_id,
-                                      reason=f"no active {alias_kind} alias")
+                self._identity_status(
+                    source=broker_code,
+                    alias_kind=alias_kind,
+                    alias_value=value,
+                    raw_id=raw_id,
+                    reason=f"no active {alias_kind} alias",
+                )
                 continue
             target_kind, target_id, confidence = alias
             if target_kind == "listing":
                 security_id, entity_id = listings.get(target_id, (None, None))
-                identity = Identity(listing_id=target_id, security_id=security_id,
-                                    entity_id=entity_id, resolution_confidence=confidence)
+                identity = Identity(
+                    listing_id=target_id,
+                    security_id=security_id,
+                    entity_id=entity_id,
+                    resolution_confidence=confidence,
+                )
             else:
                 identity = Identity(contract_id=target_id, resolution_confidence=confidence)
             resolved[value] = identity
-            self._identity_status(source=broker_code, alias_kind=alias_kind, alias_value=value,
-                                  raw_id=raw_id, target_kind=target_kind, target_id=target_id)
+            self._identity_status(
+                source=broker_code,
+                alias_kind=alias_kind,
+                alias_value=value,
+                raw_id=raw_id,
+                target_kind=target_kind,
+                target_id=target_id,
+            )
         return resolved
 
     def _identities(self, rows: Sequence[Any], provenance: Provenance) -> dict[str, Identity]:
         if not rows:
             return {}
         broker_code = rows[0].broker_code
-        return self.resolve_vendor_ids(broker_code, (row.vendor_id for row in rows),
-                                       raw_id=provenance.raw_id)
+        return self.resolve_vendor_ids(
+            broker_code, (row.vendor_id for row in rows), raw_id=provenance.raw_id
+        )
 
     # -- enrichment -----------------------------------------------------------
 
@@ -185,33 +226,55 @@ class V2BrokerStorage(V2USStorage):
 
     def write_positions(self, rows: Sequence[Any], *, provenance: Provenance) -> int:
         identities = self._identities(rows, provenance)
-        return self._write(POSITIONS_TABLE, rows, provenance, lambda row: {
-            **identities.get(row.vendor_id, UNRESOLVED).columns(POSITIONS_TABLE),
-            # Not reported by portfolio(); populated once FX/margin pullers exist.
-            "fx_rate_to_base": None, "fx_rate_source_time": None,
-            "initial_margin_contribution": None, "maintenance_margin_contribution": None,
-        })
+        return self._write(
+            POSITIONS_TABLE,
+            rows,
+            provenance,
+            lambda row: {
+                **identities.get(row.vendor_id, UNRESOLVED).columns(POSITIONS_TABLE),
+                # Not reported by portfolio(); populated once FX/margin pullers exist.
+                "fx_rate_to_base": None,
+                "fx_rate_source_time": None,
+                "initial_margin_contribution": None,
+                "maintenance_margin_contribution": None,
+            },
+        )
 
     def write_account_state(self, rows: Sequence[Any], *, provenance: Provenance) -> int:
         canonical = self.canonical_metrics(rows[0].broker_code) if rows else {}
-        return self._write(ACCOUNT_STATE_TABLE, rows, provenance, lambda row: {
-            "metric_canonical": canonical.get(row.metric, ""),
-        })
+        return self._write(
+            ACCOUNT_STATE_TABLE,
+            rows,
+            provenance,
+            lambda row: {
+                "metric_canonical": canonical.get(row.metric, ""),
+            },
+        )
 
     def write_executions(self, rows: Sequence[Any], *, provenance: Provenance) -> int:
         identities = self._identities(rows, provenance)
         methods = self.execution_methods() if rows else {}
-        return self._write(EXECUTIONS_TABLE, rows, provenance, lambda row: {
-            **identities.get(row.vendor_id, UNRESOLVED).columns(EXECUTIONS_TABLE),
-            "execution_method_id": self.execution_method_for(row.placed_by_client, methods),
-            "strategy_id": None,  # populated by the trade engine
-        })
+        return self._write(
+            EXECUTIONS_TABLE,
+            rows,
+            provenance,
+            lambda row: {
+                **identities.get(row.vendor_id, UNRESOLVED).columns(EXECUTIONS_TABLE),
+                "execution_method_id": self.execution_method_for(row.placed_by_client, methods),
+                "strategy_id": None,  # populated by the trade engine
+            },
+        )
 
     def write_open_orders(self, rows: Sequence[Any], *, provenance: Provenance) -> int:
         identities = self._identities(rows, provenance)
         methods = self.execution_methods() if rows else {}
-        return self._write(OPEN_ORDERS_TABLE, rows, provenance, lambda row: {
-            **identities.get(row.vendor_id, UNRESOLVED).columns(OPEN_ORDERS_TABLE),
-            "execution_method_id": self.execution_method_for(row.placed_by_client, methods),
-            "strategy_id": None,
-        })
+        return self._write(
+            OPEN_ORDERS_TABLE,
+            rows,
+            provenance,
+            lambda row: {
+                **identities.get(row.vendor_id, UNRESOLVED).columns(OPEN_ORDERS_TABLE),
+                "execution_method_id": self.execution_method_for(row.placed_by_client, methods),
+                "strategy_id": None,
+            },
+        )

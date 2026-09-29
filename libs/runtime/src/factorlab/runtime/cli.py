@@ -39,7 +39,9 @@ def dispatch(prog: str, commands: Mapping[str, Command], argv: Sequence[str] | N
     name, rest = args[0], args[1:]
     command = commands.get(name)
     if command is None:
-        print(f"{prog}: unknown command {name!r}; choose from {', '.join(commands)}", file=sys.stderr)
+        print(
+            f"{prog}: unknown command {name!r}; choose from {', '.join(commands)}", file=sys.stderr
+        )
         return 2
     result = command.run(rest)
     return int(result or 0)

@@ -124,8 +124,9 @@ class BarSink(ProviderStorage, Protocol):
 
 @runtime_checkable
 class ContractBarSink(ProviderStorage, Protocol):
-    def write_contract_bars(self, rows: Sequence[ContractBarRecord], *,
-                            provenance: Provenance) -> WriteResult: ...
+    def write_contract_bars(
+        self, rows: Sequence[ContractBarRecord], *, provenance: Provenance
+    ) -> WriteResult: ...
 
 
 __all__ = [

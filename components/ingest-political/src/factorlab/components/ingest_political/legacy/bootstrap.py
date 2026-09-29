@@ -86,8 +86,12 @@ def _run_ingestion(args, base_storage, storage) -> tuple[int, int]:
         snapshot_date=datetime.now(UTC).date(),
         congress_number=args.congress,
     )
-    log.info("Synced %d legislators, %d committees/subcommittees, and %d memberships",
-             len(legislator_lookup), len(committee_lookup), membership_count)
+    log.info(
+        "Synced %d legislators, %d committees/subcommittees, and %d memberships",
+        len(legislator_lookup),
+        len(committee_lookup),
+        membership_count,
+    )
     rows_written = len(legislator_lookup) + len(committee_lookup) + membership_count
 
     filings, filing_raw_id = fetch_house_filing_index(args.year, base_storage)
@@ -98,11 +102,13 @@ def _run_ingestion(args, base_storage, storage) -> tuple[int, int]:
         name_resolver=name_resolver,
     )
     resolved_count = sum(
-        resolve_filing_bioguide(filing, name_resolver) is not None
-        for filing in filings
+        resolve_filing_bioguide(filing, name_resolver) is not None for filing in filings
     )
-    log.info("Synced %d House PTR filing-index rows (%d legislator matches)",
-             filing_count, resolved_count)
+    log.info(
+        "Synced %d House PTR filing-index rows (%d legislator matches)",
+        filing_count,
+        resolved_count,
+    )
     rows_written += filing_count
 
     if args.ptr_limit <= 0:
@@ -113,7 +119,7 @@ def _run_ingestion(args, base_storage, storage) -> tuple[int, int]:
         filings,
         key=lambda filing: filing["filing_date"],
         reverse=True,
-    )[:args.ptr_limit]
+    )[: args.ptr_limit]
     for filing in selected:
         trades, ptr_raw_id = fetch_and_parse_ptr(filing, base_storage)
         trade_count += storage.write_trades(
