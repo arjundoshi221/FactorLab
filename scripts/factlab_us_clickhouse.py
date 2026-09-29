@@ -31,6 +31,20 @@ stop = threading.Event()
 FULL_UNIVERSE = "us_listed_equities"
 MINUTE_UNIVERSE = "us_liquid_250"
 MINUTE_TIER_SIZE = 250
+# Live sweeps start on a fixed cadence measured from the previous sweep's start.
+LIVE_INTERVAL = timedelta(seconds=int(os.environ.get("US_LIVE_INTERVAL_SECONDS", "300")))
+RETRY_BASE = timedelta(minutes=15)
+RETRY_CAP = timedelta(hours=24)
+
+
+def retry_delay(attempts):
+    """Exponential recovery backoff: 15m, 30m, 1h, ... capped at 24h."""
+    return min(RETRY_BASE * 2 ** min(attempts, 7), RETRY_CAP)
+
+
+def schedule_retry(retry_at, attempts, key, now):
+    retry_at[key] = now + retry_delay(attempts.get(key, 0))
+    attempts[key] = attempts.get(key, 0) + 1
 
 
 def universe(name):
@@ -161,7 +175,8 @@ def select_minute_tier(storage, client, items):
 
 
 def run_full(args, storage):
-    schwab = MarketClient(storage)
+    schwab = MarketClient(storage, min_interval=float(
+        os.environ.get("SCHWAB_MIN_REQUEST_INTERVAL_SECONDS", "1.0")))
     safe_source_status(
         storage, "schwab", "ready" if token_ready() else "auth_required",
         "Schwab token available" if token_ready() else
@@ -178,6 +193,8 @@ def run_full(args, storage):
     next_membership_poll = datetime.min.replace(tzinfo=UTC)
     retry_at = {}
     minute_retry_at = {}
+    retry_attempts = {}
+    minute_retry_attempts = {}
     while not stop.is_set():
         now = datetime.now(UTC)
         local_day = now.astimezone(NY).date()
@@ -194,6 +211,10 @@ def run_full(args, storage):
                 retry_at = {key: value for key, value in retry_at.items() if key in new_ids}
                 minute_retry_at = {key: value for key, value in minute_retry_at.items()
                                    if key in new_ids}
+                retry_attempts = {key: value for key, value in retry_attempts.items()
+                                  if key in new_ids}
+                minute_retry_attempts = {key: value for key, value
+                                         in minute_retry_attempts.items() if key in new_ids}
                 minute_items = [item for item in minute_items if item[2] in new_ids]
                 minute_pending = [item for item in minute_pending if item[2] in new_ids]
                 if removed:
@@ -250,26 +271,41 @@ def run_full(args, storage):
         session = bounds(local_day)
         live_window = session and session[0] + timedelta(minutes=5) <= now <= session[1] + timedelta(minutes=5)
         if args.daemon and live_window and minute_items and now >= next_live:
+            sweep_started = datetime.now(UTC)
+            next_live = sweep_started + LIVE_INTERVAL
+            ok = failed = 0
             for item in minute_items:
                 if stop.is_set():
                     break
                 try:
                     collect(storage, schwab, item, "1min", now=datetime.now(UTC), live=True)
+                    ok += 1
+                except AuthRequired:
+                    # Token rolled over mid-sweep; retry the whole tier shortly instead of
+                    # failing every remaining symbol.
+                    log.warning("Live sweep paused at %s: Schwab token unavailable", item[0])
+                    next_live = datetime.now(UTC) + timedelta(seconds=60)
+                    failed += 1
+                    break
                 except Exception as exc:  # noqa: BLE001 - continue other live symbols
                     log.error("Live %s failed: %s", item[0], type(exc).__name__)
-            next_live = datetime.now(UTC) + timedelta(seconds=300)
+                    failed += 1
+            log.info("Live sweep: %d/%d ok, %d failed in %.0fs", ok, len(minute_items), failed,
+                     (datetime.now(UTC) - sweep_started).total_seconds())
         if token_ready(now) and minute_pending:
             item = minute_pending.pop(0)
             retry_key = item[2]
             if now >= minute_retry_at.get(retry_key, datetime.min.replace(tzinfo=UTC)):
                 try:
                     complete = collect(storage, schwab, item, "1min", now=now)
-                    if not complete:
-                        minute_retry_at[retry_key] = now + timedelta(minutes=15)
+                    if complete:
+                        minute_retry_attempts.pop(retry_key, None)
+                    else:
+                        schedule_retry(minute_retry_at, minute_retry_attempts, retry_key, now)
                         minute_pending.append(item)
                 except Exception as exc:  # noqa: BLE001 - retry one failed recovery later
                     log.error("Minute recovery %s failed: %s", item[0], type(exc).__name__)
-                    minute_retry_at[retry_key] = now + timedelta(minutes=15)
+                    schedule_retry(minute_retry_at, minute_retry_attempts, retry_key, now)
                     minute_pending.append(item)
             else:
                 minute_pending.append(item)
@@ -281,9 +317,10 @@ def run_full(args, storage):
                                   item["instrument_id"])
                     collect(storage, schwab, daily_item, "daily", now=now,
                             universe_name=item.get("universe", FULL_UNIVERSE))
+                    retry_attempts.pop(item["instrument_id"], None)
                 except Exception as exc:  # noqa: BLE001 - retry one failed daily recovery later
                     log.error("Daily recovery %s failed: %s", item["symbol"], type(exc).__name__)
-                    retry_at[item["instrument_id"]] = now + timedelta(minutes=15)
+                    schedule_retry(retry_at, retry_attempts, item["instrument_id"], now)
                     pending.append(item)
             else:
                 pending.append(item)

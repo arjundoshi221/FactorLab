@@ -132,6 +132,20 @@ client = auth.client_from_token_file(
 - 500-stock 20yr daily backfill: ~500 requests = ~4 minutes (1 req per stock, returns full history)
 - `schwab-py` does NOT auto-retry on 429 — implement backoff yourself
 
+### Production collector budget (`ingest-us`)
+Measured 2026-09-25 on the VPS: peak 63 req/min, zero 429s. `ingest-us` is the only
+steady consumer; `universe-us` adds about 11 `/quotes` calls a day.
+
+| Env var | Default | Effect |
+|---------|---------|--------|
+| `SCHWAB_MIN_REQUEST_INTERVAL_SECONDS` | `1.0` | Pacing floor per request (1.0 = at most 60/min) |
+| `US_LIVE_INTERVAL_SECONDS` | `300` | 1-min tier sweep cadence, measured from sweep start |
+
+With the defaults, the 250-symbol tier refreshes about every 5 minutes. Next step once
+`Schwab ... HTTP 429` warnings stay absent: `0.6` / `180` (at most 100 req/min, ~3-minute refresh if ClickHouse writes keep
+up), which leaves ≥20 req/min headroom under the 120/min app limit. Failed daily and minute
+recoveries back off 15m → 30m → … → 24h per symbol instead of retrying every 15 minutes.
+
 ### Price history data retention
 | Frequency | Max lookback |
 |-----------|-------------|

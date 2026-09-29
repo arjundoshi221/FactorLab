@@ -77,7 +77,9 @@ const UPSTOX_TOKEN_URL = "https://api.upstox.com/v2/login/authorization/token";
 const UPSTOX_PROFILE_URL = "https://api.upstox.com/v2/user/profile";
 const SCHWAB_AUTHORIZE_URL = "https://api.schwabapi.com/v1/oauth/authorize";
 const SCHWAB_TOKEN_URL = "https://api.schwabapi.com/v1/oauth/token";
-const SCHWAB_REFRESH_WINDOW_MS = 60_000;
+// Refresh well before expiry: the VPS secrets agent polls every 60s, so a 60s window
+// let collectors hold an expired token between polls.
+const SCHWAB_REFRESH_WINDOW_MS = 5 * 60_000;
 
 function base64Encode(bytes: Uint8Array): string {
   let binary = "";

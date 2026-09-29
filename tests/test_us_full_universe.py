@@ -129,3 +129,14 @@ def test_liquid_tier_targets_configured_count_when_below_cap(monkeypatch):
     result = runner.select_minute_tier(storage, client, items)
     assert len(result) == 2
     storage.liquid_candidates.assert_called_once_with(limit=152)
+
+
+def test_recovery_backoff_doubles_to_daily_cap():
+    minutes = [runner.retry_delay(n).total_seconds() / 60 for n in range(9)]
+    assert minutes == [15, 30, 60, 120, 240, 480, 960, 1440, 1440]
+    now = runner.datetime(2026, 9, 25, 16, tzinfo=runner.UTC)
+    retry_at, attempts = {}, {}
+    runner.schedule_retry(retry_at, attempts, "id", now)
+    runner.schedule_retry(retry_at, attempts, "id", now)
+    assert attempts == {"id": 2}
+    assert retry_at["id"] == now + runner.timedelta(minutes=30)

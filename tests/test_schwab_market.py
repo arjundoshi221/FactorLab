@@ -130,3 +130,25 @@ def test_reference_requires_exact_symbol_and_handles_berkshire():
     assert client.instrument("BRK/B")[0]["symbol"] == "BRK/B"
     with pytest.raises(ValueError):
         client.instrument("BRK-B")
+
+
+@pytest.mark.parametrize("min_interval", [1.0, 0.6])
+def test_pacing_floor_is_configurable(monkeypatch, min_interval):
+    monkeypatch.setattr(market, "token_ready", lambda: True)
+    session, sleep = Mock(), Mock()
+    session.get.return_value = response(200)
+    client = market.MarketClient(Mock(), session=session, sleep=sleep, clock=lambda: 100.0,
+                                 min_interval=min_interval)
+    client.get("/pricehistory", {})
+    client.get("/pricehistory", {})
+    assert sleep.call_args_list[-1].args == (min_interval,)
+
+
+def test_throttle_is_logged(monkeypatch, caplog):
+    monkeypatch.setattr(market, "token_ready", lambda: True)
+    session = Mock()
+    session.get.side_effect = [response(429, headers={"Retry-After": "3"}), response(200)]
+    with caplog.at_level("WARNING", logger=market.__name__):
+        market.MarketClient(Mock(), session=session, sleep=lambda _: None).get(
+            "/pricehistory", {"symbol": "AAPL"})
+    assert "HTTP 429 (attempt 1/5, Retry-After=3); retrying in 3.0s" in caplog.text

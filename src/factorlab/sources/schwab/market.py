@@ -1,6 +1,7 @@
 """Read-only Schwab market data, regular-session normalization, and bounded retries."""
 from __future__ import annotations
 
+import logging
 import math
 import time
 from datetime import UTC, datetime, timedelta
@@ -18,6 +19,7 @@ from factorlab.shared.runtime.us_calendar import (  # calendar helpers re-export
 )
 from factorlab.sources.schwab.client import get_session
 
+log = logging.getLogger(__name__)
 BASE_URL = "https://api.schwabapi.com/marketdata/v1"
 
 
@@ -38,8 +40,10 @@ class AuthRequired(RuntimeError):
 
 
 class MarketClient:
-    def __init__(self, storage, *, session=None, sleep=time.sleep, clock=time.monotonic):
+    def __init__(self, storage, *, session=None, sleep=time.sleep, clock=time.monotonic,
+                 min_interval=1.0):
         self.storage = storage
+        self.min_interval = min_interval
         self.session = session
         self.sleep = sleep
         self.clock = clock
@@ -51,13 +55,15 @@ class MarketClient:
                 raise AuthRequired("Schwab reauthentication required")
             if self.session is None:
                 self.session = get_session()
-            self.sleep(max(0, 1 - (self.clock() - self.last_request)))
+            self.sleep(max(0, self.min_interval - (self.clock() - self.last_request)))
             self.last_request = self.clock()
             try:
                 response = self.session.get(BASE_URL + endpoint, params=params, timeout=30)
             except (requests.Timeout, requests.ConnectionError) as exc:
                 if attempt == 4:
                     raise RuntimeError("Schwab network request failed after five attempts") from exc
+                log.warning("Schwab %s %s (attempt %d/5); retrying in %ds",
+                            endpoint, type(exc).__name__, attempt + 1, 2 ** attempt)
                 self.sleep(2 ** attempt)
                 continue
             raw_id = self.storage.archive_http_response(
@@ -80,6 +86,8 @@ class MarketClient:
                             delay = max(delay, (parsedate_to_datetime(retry) - datetime.now(UTC)).total_seconds())
                         except (ValueError, TypeError):
                             pass
+                log.warning("Schwab %s HTTP %d (attempt %d/5, Retry-After=%s); retrying in %.1fs",
+                            endpoint, response.status_code, attempt + 1, retry or "-", delay)
                 self.sleep(delay)
                 continue
             if not response.ok:
