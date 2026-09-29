@@ -12,6 +12,8 @@ N3  Legacy production paths (``*/legacy/``) may only shrink until each provider'
 N4  Direct environment reads (``os.getenv`` / ``os.environ``) outside
     ``factorlab.core`` may only shrink: new configuration goes through typed
     settings.
+N5  Every member's package ships a ``py.typed`` marker (PEP 561), so type checkers
+    read it as typed code, both inside the workspace and when it is installed.
 
 Regenerate the ratchet files after a real reduction with::
 
@@ -143,3 +145,16 @@ if __name__ == "__main__":
         encoding="utf-8",
     )
     sys.stdout.write(f"wrote {LEGACY_BUDGET.name} and {ENV_ALLOWLIST.name}\n")
+
+
+def test_every_member_package_is_marked_typed():
+    missing = []
+    for root in package_roots():
+        for namespace in NAMESPACES:
+            base = root / namespace if namespace else root
+            if not base.is_dir():
+                continue
+            for package in base.iterdir():
+                if (package / "__init__.py").exists() and not (package / "py.typed").exists():
+                    missing.append(_rel(package))
+    assert not missing, f"add an empty py.typed (N5): {sorted(missing)}"

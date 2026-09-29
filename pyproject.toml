@@ -19,10 +19,11 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=4.1",
     "ruff>=0.6",
-    "httpx>=0.27",          # FastAPI TestClient
+    "httpx2>=2.0",          # FastAPI/Starlette TestClient (the successor of httpx)
     "python-dotenv>=1.0",   # scripts/read_clickhouse.py reads .env
     "packaging>=24",        # tools/verify_image.py evaluates dependency markers
     "pyyaml>=6.0",          # tools/components.py reads component.yaml
+    "basedpyright>=1.30",   # type checking: strict on libs/, baseline elsewhere
 ]
 research = [
     "duckdb>=1.0",
@@ -72,6 +73,23 @@ factorlab-component-schema-migrator = { workspace = true }
 testpaths = ["libs", "providers", "components", "tests"]
 addopts = ["--import-mode=importlib"]
 norecursedirs = ["node_modules", "dist", ".venv", ".tmp", "src"]
+
+[tool.basedpyright]
+# `uv run basedpyright` in CI. Libraries are strict; everything else is standard.
+# Errors that existed when this was introduced are recorded in
+# .basedpyright/baseline.json and shrink as code is fixed; any new error fails CI.
+# After fixing old ones: `uv run basedpyright --writebaseline`.
+pythonVersion = "3.12"
+pythonPlatform = "Linux"   # production; keeps Windows and CI results identical
+include = ["libs", "providers", "components", "tools", "tests", "scripts", "deploy"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.venv", ".tmp", "components/web", "cloudflare"]
+typeCheckingMode = "standard"
+strict = ["libs/*/src"]
+reportMissingTypeStubs = false
+executionEnvironments = [
+    { root = "deploy", pythonVersion = "3.10" },   # host tools run on the VPS's python3
+    { root = "." },
+]
 
 [tool.ruff]
 line-length = 100

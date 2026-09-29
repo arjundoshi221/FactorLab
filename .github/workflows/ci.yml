@@ -33,6 +33,8 @@ jobs:
         run: uv run --frozen ruff check .
       - name: Formatting (ruff format)
         run: uv run --frozen ruff format --check .
+      - name: Types (basedpyright; no new errors beyond .basedpyright/baseline.json)
+        run: uv run --frozen basedpyright
       - name: Component manifests and the generated compose file are current
         run: |
           uv run --frozen python tools/components.py check
