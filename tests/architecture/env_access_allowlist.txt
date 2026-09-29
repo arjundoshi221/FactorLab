@@ -1,0 +1,16 @@
+# Direct os.getenv/os.environ reads outside factorlab.core; shrink-only (N4).
+src/factorlab/components/api/app.py 1
+src/factorlab/components/api/catalog_query.py 3
+src/factorlab/components/api/docker_images.py 1
+src/factorlab/components/api/hub.py 2
+src/factorlab/components/ingest_broker/snapshot.py 2
+src/factorlab/components/ingest_india/legacy/upstox/auth.py 3
+src/factorlab/components/ingest_us/legacy/daemon.py 3
+src/factorlab/components/secrets_agent/agent.py 4
+src/factorlab/runtime/notify/__init__.py 1
+src/factorlab/runtime/notify/_backend.py 1
+src/factorlab/runtime/notify/outlook.py 1
+src/factorlab/runtime/notify/smtp.py 5
+src/factorlab/runtime/notify/telegram.py 2
+src/factorlab/runtime/notify/webhook.py 2
+src/factorlab/schema/migrate.py 11
