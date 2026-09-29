@@ -1,7 +1,7 @@
 name: Release worker
 
 # Validate and build a Cloudflare Worker release. Deploying stays manual
-# (`npm run deploy` with the operator's local, untracked wrangler.toml): the real
+# (`npx wrangler deploy` with the operator's local, untracked wrangler.toml): the real
 # configuration carries account identifiers and the Access audience, and CI holds
 # no Cloudflare credential that could redeploy the auth worker.
 on:

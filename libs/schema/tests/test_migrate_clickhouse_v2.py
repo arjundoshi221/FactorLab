@@ -262,3 +262,12 @@ def test_deferred_manifest_is_machine_readable():
     assert "fundamentals.snapshots_pit_eom" in names
     assert "market.bars_adjusted" in names
     assert "legacy_table_deletion" in names
+
+
+def test_every_wave_on_disk_is_selectable(capsys):
+    newest = max(m.wave for m in migration.discover_migrations())
+    assert newest >= 10
+    assert migration.main(["plan", "--through-wave", str(newest)]) == 0
+    assert f"wave_{newest:02d}_" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        migration.main(["plan", "--through-wave", str(newest + 1)])

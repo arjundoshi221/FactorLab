@@ -125,7 +125,7 @@ writes the version and prepends a `CHANGELOG.md` section. The tag starts
 To re-run a tag whose transfer failed, dispatch the workflow manually; this reuses
 the published image. `component-rollback.yml` (manual) returns a component to its
 previous release or to any version the host has recorded. Worker tags are validated
-and bundled; the deploy stays manual (`npm run deploy` with the local
+and bundled; the deploy stays manual (`npx wrangler deploy` with the local
 `wrangler.toml`).
 
 The host side is
@@ -361,7 +361,9 @@ sudo sh /opt/factorlab/deploy/scripts/install-political-cron.sh
 
 The installer requires the VPS timezone to be UTC. It schedules the job daily
 at 02:15 UTC, prevents overlapping runs with `flock`, and appends output to
-`/var/lib/factorlab/logs/political-cron.log`. It also normalizes the dedicated
+`/var/log/factorlab/ingest-political/cron.log` (rotated with the other component logs;
+`prepare-host.sh` migrated the old `/var/lib/factorlab/logs/political-cron.log`). It also
+normalizes the dedicated
 lock file to root ownership, which safely replaces stale locks created by older
 user-crontab deployments.
 
@@ -369,7 +371,7 @@ Run and inspect it without waiting for cron:
 
 ```bash
 sudo sh /opt/factorlab/deploy/scripts/run-political-ingest.sh
-sudo tail -n 100 /var/lib/factorlab/logs/political-cron.log
+sudo tail -n 100 /var/log/factorlab/ingest-political/cron.log
 ```
 
 ## IBKR broker mirror (optional)

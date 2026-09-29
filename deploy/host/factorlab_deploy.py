@@ -583,6 +583,18 @@ class Deployer:
         record = releases / to
         if not (record / "bundle" / "component.json").exists():
             raise DeployError(f"no recorded bundle for {component} {to}")
+        target = json.loads((record / "bundle" / "component.json").read_text("utf-8"))
+        current = (self.installed_manifest(component) or {}).get("platform") or {}
+        platform = target.get("platform") or {}
+        if current.get("rollback") == "forward-only" or platform.get("rollback") == "forward-only":
+            raise DeployError(f"{component} is forward-only; fix forward with a new release")
+        if current.get("rollback") == "writer" and current.get("data_contract") != platform.get(
+            "data_contract"
+        ):
+            raise DeployError(
+                f"{component} {to} writes data contract {platform.get('data_contract')}, the "
+                f"running release {current.get('data_contract')}; fix forward instead"
+            )
         image = json.loads((record / "release.json").read_text("utf-8"))["image"]
         with tempfile.TemporaryDirectory() as work:
             bundle = Path(work) / "bundle.tgz"

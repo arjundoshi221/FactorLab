@@ -163,6 +163,7 @@ def _provider_tuple(component: Component) -> list[str] | None:
 def problems(components: list[Component]) -> list[str]:
     found: list[str] = []
     seen_services: dict[str, str] = {}
+    seen_providers: dict[str, str] = {}
     for c in components:
         where = f"components/{c.name}/component.yaml"
         if not NAME.match(c.name) or not c.root.is_dir():
@@ -186,6 +187,13 @@ def problems(components: list[Component]) -> list[str]:
                     f"{where}: service {service.name} also belongs to {seen_services[service.name]}"
                 )
             seen_services[service.name] = c.name
+        for provider in c.providers:
+            if provider in seen_providers:
+                found.append(
+                    f"{where}: provider {provider} also ships in {seen_providers[provider]}"
+                    " (each provider belongs to exactly one component)"
+                )
+            seen_providers[provider] = c.name
         if c.kind != "python":
             continue
         pyproject = c.root / "pyproject.toml"

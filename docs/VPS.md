@@ -83,7 +83,7 @@ data, India and US collection observability, and political collection observabil
 /var/lib/factorlab/clickhouse          curated ClickHouse data
 /mnt/factorlab-data/clickhouse-raw     raw HTTP archive
 /var/lib/factorlab/app-data            application caches and downloaded data
-/var/lib/factorlab/logs                ingestion logs
+/var/log/factorlab/<component>        component logs (rotated; docs/operations/log-access.md)
 /etc/factorlab/identity                Cloudflare Access bootstrap identity
 ```
 
@@ -276,7 +276,7 @@ sudo sh /opt/factorlab/deploy/scripts/install-political-cron.sh
 ```
 
 It runs at 02:15 UTC, uses a non-blocking `flock` lock to prevent overlaps, and
-writes to `/var/lib/factorlab/logs/political-cron.log`. The installer refuses
+writes to `/var/log/factorlab/ingest-political/cron.log`. The installer refuses
 to install on a host whose timezone is not UTC.
 
 ## Observe and troubleshoot

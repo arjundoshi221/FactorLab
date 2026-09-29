@@ -396,6 +396,28 @@ def test_rollback_redeploys_the_previous_version(world, tmp_path):
     assert pin(root) == OLD
 
 
+@pytest.mark.parametrize(
+    ("first", "second", "allowed"),
+    [
+        ({"rollback": "writer", "contract": 1}, {"rollback": "writer", "contract": 1}, True),
+        ({"rollback": "writer", "contract": 1}, {"rollback": "writer", "contract": 2}, False),
+        ({"rollback": "forward-only"}, {"rollback": "forward-only"}, False),
+    ],
+)
+def test_rollback_respects_the_rollback_class(world, tmp_path, first, second, allowed):
+    _, deployer, root = world
+    (root / "releases/api/current").unlink()
+    (root / "state/images.env").write_text("")
+    deployer.deploy("api", "1.0.0", OLD, bundle(tmp_path, manifest("1.0.0", **first)))
+    deployer.deploy("api", "1.1.0", NEW, bundle(tmp_path, manifest("1.1.0", **second)))
+    if allowed:
+        assert deployer.rollback("api").version == "1.0.0"
+    else:
+        with pytest.raises(fd.DeployError, match="fix forward"):
+            deployer.rollback("api")
+        assert pin(root) == NEW
+
+
 def test_seed_installs_missing_fragments_and_never_overwrites(world, tmp_path):
     _, deployer, root = world
     platform = tmp_path / "platform"

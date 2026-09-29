@@ -30,3 +30,11 @@ def test_a_provider_mismatch_is_reported():
     [ingest_us] = [c for c in components.load_all() if c.name == "ingest-us"]
     broken = ingest_us.model_copy(update={"providers": ["schwab"]})
     assert any("providers" in issue for issue in components.problems([broken]))
+
+
+def test_a_provider_shipped_by_two_components_is_reported():
+    everything = components.load_all()
+    [india] = [c for c in everything if c.name == "ingest-india"]
+    others = [c for c in everything if c.name != "ingest-india"]
+    doubled = india.model_copy(update={"providers": [*india.providers, "schwab"]})
+    assert any("also ships in" in issue for issue in components.problems([*others, doubled]))

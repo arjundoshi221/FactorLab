@@ -510,22 +510,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="legacy ClickHouse database (default: factorlab)",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+    # Every wave that has a migration file; a new wave is selectable as soon as it lands.
+    waves = sorted({migration.wave for migration in discover_migrations()})
 
     plan = subparsers.add_parser("plan", help="show ordered migrations without connecting")
     plan.add_argument("--phase", choices=PHASES)
-    plan.add_argument("--through-wave", type=int, choices=range(10), default=8)
+    plan.add_argument("--through-wave", type=int, choices=waves, default=8)
 
     subparsers.add_parser("status", help="show journal status and checksum drift")
 
     apply = subparsers.add_parser("apply", help="apply one phase")
     apply.add_argument("--phase", required=True, choices=PHASES)
-    apply.add_argument("--through-wave", required=True, type=int, choices=range(10))
+    apply.add_argument("--through-wave", required=True, type=int, choices=waves)
     apply.add_argument("--yes", action="store_true", help="confirm ClickHouse mutations")
     apply.add_argument("--dry-run", action="store_true", help="print selection without connecting")
     apply.add_argument("--lock-timeout", type=int, default=3600)
 
     validate = subparsers.add_parser("validate", help="run preflight and data-quality gates")
-    validate.add_argument("--through-wave", required=True, type=int, choices=range(10))
+    validate.add_argument("--through-wave", required=True, type=int, choices=waves)
     return parser
 
 
