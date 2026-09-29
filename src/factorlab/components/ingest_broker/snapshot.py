@@ -32,6 +32,7 @@ from typing import Any
 
 from factorlab.calendars.us import NY, next_scheduled_run
 from factorlab.core import paths
+from factorlab.core.logging import configure_logging
 from factorlab.ingest.provider import RunSummary, run_provider
 from factorlab.runtime import (
     ExitCode,
@@ -199,13 +200,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    logging.basicConfig(level=getattr(logging, args.log_level.upper()),
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    if not os.getenv("FACTORLAB_SECRETS_DIR"):
-        from dotenv import find_dotenv, load_dotenv
-
-        load_dotenv(find_dotenv(usecwd=True))  # local development only
-
+    configure_logging(component="ingest-broker", service="ibkr-snapshot", level=args.log_level)
     config = SnapshotConfig(
         modes=args.modes, client_id=args.client_id,
         executions_lookback=timedelta(hours=args.executions_lookback_hours),

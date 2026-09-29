@@ -37,4 +37,4 @@ LABEL org.opencontainers.image.title="FactorLab" \
       org.opencontainers.image.revision=$FACTORLAB_COMMIT
 
 # Every Compose service supplies its own command; the default serves the API.
-CMD ["uvicorn", "factorlab.components.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "factorlab.components.api"]

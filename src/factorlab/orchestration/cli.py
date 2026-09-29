@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from factorlab.core.logging import configure_logging
 from factorlab.ingest.bindings import (
     Binding,
     BindingsFile,
@@ -323,8 +324,7 @@ def main(argv: list[str] | None = None, *, providers: Sequence[str],
         if name == "replay":
             sub.add_argument("--raw-id", action="append", required=True)
     args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
-                        format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    configure_logging(level="DEBUG" if args.verbose else None)
     handler = {"validate": cmd_validate, "run": cmd_run, "daemon": cmd_daemon,
                "replay": cmd_replay,
                "sync-priorities": cmd_sync_priorities}[args.command]

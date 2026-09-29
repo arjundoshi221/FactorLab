@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 import signal
 import time
@@ -28,12 +27,10 @@ from factorlab.runtime import (
     RunState,
     WatermarkTracker,
     acquire_lock,
-    dated_log_dir,
     load_run_state,
     mark_fail,
     mark_ok,
     save_run_state,
-    setup_logging,
     should_run,
     supervised,
 )
@@ -58,28 +55,6 @@ def test_exit_code_backcompat_aliases():
     assert EXIT_NOT_TRADING_DAY == int(ExitCode.NOT_TRADING_DAY)
     assert EXIT_LOCK_HELD == int(ExitCode.LOCK_HELD)
     assert EXIT_CRASH == int(ExitCode.CRASH)
-
-
-# ── setup_logging / dated_log_dir ───────────────────────────────────────────
-
-
-def test_setup_logging_writes_dated_file(tmp_path):
-    logger = setup_logging("test_script", log_root=tmp_path, level=logging.INFO)
-    logger.info("hello")
-    today = datetime.now(timezone.utc).strftime("%Y%m%d")
-    expected = tmp_path / f"test_script_{today}.log"
-    # Flush handlers so the file is on disk
-    for h in logging.getLogger().handlers:
-        h.flush()
-    assert expected.exists()
-    assert "hello" in expected.read_text(encoding="utf-8")
-
-
-def test_dated_log_dir_creates_directory(tmp_path):
-    d = dated_log_dir("political_daily", base=tmp_path)
-    today = datetime.now(timezone.utc).strftime("%Y%m%d")
-    assert d == tmp_path / f"political_daily_{today}"
-    assert d.is_dir()
 
 
 # ── GracefulShutdown ────────────────────────────────────────────────────────

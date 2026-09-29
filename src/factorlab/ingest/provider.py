@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 from typing import Any, ClassVar, Literal, Protocol, runtime_checkable
 from uuid import UUID
 
+from factorlab.core.logging import log_context
 from factorlab.ingest.security import redact_error
 
 log = logging.getLogger(__name__)
@@ -229,7 +230,8 @@ def ingestion_run(
     )
     ctx = RunContext(storage, handle, source=source, pipeline=pipeline)
     try:
-        yield ctx
+        with log_context(run_id=str(handle.run_id), pipeline=pipeline, source=source):
+            yield ctx
     except BaseException as exc:
         status: RunStatus = "cancelled" if isinstance(exc, KeyboardInterrupt | SystemExit) else "failed"
         storage.finish_ingestion_run(

@@ -22,11 +22,11 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from factorlab.calendars.us import NY, bounds
 from factorlab.ingest.datasets import BarRecord, InstrumentRecord, InstrumentRef
 from factorlab.ingest.errors import NormalizationError
 from factorlab.ingest.identifiers import isin_from_cusip
 from factorlab.ingest.provider import RawCapture
-from factorlab.calendars.us import NY, bounds
 from factorlab.sources.schwab.settings import ALIAS_KIND
 
 log = logging.getLogger(__name__)

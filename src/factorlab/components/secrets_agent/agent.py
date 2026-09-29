@@ -16,6 +16,8 @@ from typing import Any
 
 import requests
 
+from factorlab.core.logging import configure_logging
+
 log = logging.getLogger("factorlab.cloudflare_secrets_agent")
 
 CLICKHOUSE_DIR = Path("/run/secrets/clickhouse")
@@ -228,7 +230,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging(component="secrets-agent", service="cloudflare-secrets-agent")
 
     url = os.environ.get("CLOUDFLARE_SECRETS_URL", "").strip()
     client_id_path = os.environ.get(

@@ -35,6 +35,7 @@ from factorlab.components.ingest_india.legacy.upstox.instruments import (
 )
 from factorlab.components.ingest_india.legacy.upstox.universes import load_universe
 from factorlab.core import paths
+from factorlab.core.logging import configure_logging
 from factorlab.storage.v2_india import V2IndiaStorage as ClickHouseStorage
 
 PROJECT_ROOT = paths.home()
@@ -54,7 +55,6 @@ MARKET_OPEN_UTC = datetime_time(3, 45)
 MARKET_CLOSE_UTC = datetime_time(10, 2)
 
 log = logging.getLogger("factorlab.upstox.clickhouse")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 _shutdown = False
 
 
@@ -466,6 +466,7 @@ def recover_historical(
 
 
 def main() -> int:
+    configure_logging(component="ingest-india", service="ingest-india")
     parser = argparse.ArgumentParser(description="Upstox ClickHouse 1-minute poller")
     parser.add_argument("--universe", default="demo")
     parser.add_argument("--daemon", action="store_true")

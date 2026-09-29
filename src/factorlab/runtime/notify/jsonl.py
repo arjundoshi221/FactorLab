@@ -16,8 +16,8 @@ import json
 import logging
 from pathlib import Path
 
-from factorlab.runtime.notify._backend import Backend, Notification
 from factorlab.core.paths import log_dir
+from factorlab.runtime.notify._backend import Backend, Notification
 
 log = logging.getLogger(__name__)
 

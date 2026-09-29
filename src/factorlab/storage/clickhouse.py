@@ -18,6 +18,7 @@ import pandas as pd
 from factorlab.clickhouse import ClickHouse, rows
 from factorlab.clickhouse.values import decoded_text as _decoded_text
 from factorlab.clickhouse.values import version as _version
+from factorlab.core.logging import bind, unbind
 
 _NO_CONTRACT_ID = uuid.UUID(int=0)
 
@@ -66,6 +67,8 @@ class ClickHouseStorage(ClickHouse):
             metadata=dict(metadata or {}),
         )
         self._write_ingestion_run(handle, status="running")
+        # Log lines emitted until the run finishes carry its id (meta.ingestion_runs.run_id).
+        bind(run_id=str(handle.run_id), pipeline=pipeline, source=source)
         return handle
 
     def finish_ingestion_run(
@@ -91,6 +94,7 @@ class ClickHouseStorage(ClickHouse):
             rows_written=rows_written,
             error=error,
         )
+        unbind("run_id", "pipeline", "source")
 
     def _write_ingestion_run(
         self,

@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import time
 from datetime import datetime
 
 from factorlab.clickhouse import ClickHouse
+from factorlab.core.logging import configure_logging
+
+log = logging.getLogger(__name__)
 
 
 def _count(client, table: str, since: datetime) -> int:
@@ -42,6 +46,7 @@ def universe_ready(client, since: datetime) -> bool:
 
 
 def main() -> None:
+    configure_logging(component="schema-migrator", service="verify-writes")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--since", type=datetime.fromisoformat, required=True)
     parser.add_argument("--wait-seconds", type=int, default=0)
@@ -57,11 +62,12 @@ def main() -> None:
             counts = fresh_lineage(storage.client, args.since)
             ready = not args.require_universe_ready or universe_ready(storage.client, args.since)
             if any(counts.values()) and ready:
-                print(f"Fresh v2 raw-to-curated write verified: {counts}; universe_ready={ready}")
+                log.info("Fresh v2 raw-to-curated write verified: %s; universe_ready=%s",
+                         counts, ready)
                 return
             now = time.monotonic()
             if now - last_report >= 60:
-                print(f"Waiting for v2 writes: lineage={counts}, universe_ready={ready}", flush=True)
+                log.info("Waiting for v2 writes: lineage=%s, universe_ready=%s", counts, ready)
                 last_report = now
             if now >= deadline:
                 raise RuntimeError(

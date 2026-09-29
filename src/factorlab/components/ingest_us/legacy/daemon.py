@@ -22,6 +22,7 @@ from factorlab.components.ingest_us.legacy.schwab.market import (
     token_ready,
 )
 from factorlab.core import paths
+from factorlab.core.logging import configure_logging
 from factorlab.storage.v2_us import V2USStorage as USStorage
 
 log = logging.getLogger("factorlab.schwab")
@@ -427,7 +428,7 @@ def main():
     parser.add_argument("--daemon", action="store_true")
     parser.add_argument("--backfill", action="store_true", help="Explicit one-shot history/recovery (default)")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging(component="ingest-us", service="ingest-us")
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
     lock_path = Path(os.getenv("US_INGEST_LOCK", "/app/data/us-ingest.lock"))

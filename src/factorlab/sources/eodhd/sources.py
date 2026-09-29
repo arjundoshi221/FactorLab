@@ -15,6 +15,7 @@ from datetime import timedelta
 from typing import Any, ClassVar
 from urllib.parse import quote
 
+from factorlab.calendars.us import NY, is_session
 from factorlab.ingest.datasets import (
     BarRecord,
     BarRequest,
@@ -25,7 +26,6 @@ from factorlab.ingest.datasets import (
     ReferenceRequest,
 )
 from factorlab.ingest.provider import RawCapture
-from factorlab.calendars.us import NY, is_session
 from factorlab.sources.eodhd.client import EodhdClient
 from factorlab.sources.eodhd.normalize import (
     normalize_bulk,

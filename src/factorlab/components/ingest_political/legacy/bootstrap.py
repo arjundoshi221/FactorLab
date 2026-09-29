@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from datetime import UTC, datetime
 
 from factorlab.components.ingest_political.legacy.house_clerk import (
@@ -10,6 +11,7 @@ from factorlab.components.ingest_political.legacy.house_clerk import (
     fetch_house_filing_index,
 )
 from factorlab.components.ingest_political.legacy.references import fetch_reference_snapshot
+from factorlab.core.logging import configure_logging
 from factorlab.storage.political_names import (
     build_name_resolver,
     resolve_filing_bioguide,
@@ -19,8 +21,11 @@ from factorlab.storage.v2_political import (
 )
 from factorlab.storage.v2_us import V2USStorage as ClickHouseStorage
 
+log = logging.getLogger(__name__)
+
 
 def main() -> None:
+    configure_logging(component="ingest-political", service="ingest-political")
     parser = argparse.ArgumentParser(
         description="Ingest public congressional references and House PTRs"
     )
@@ -81,11 +86,8 @@ def _run_ingestion(args, base_storage, storage) -> tuple[int, int]:
         snapshot_date=datetime.now(UTC).date(),
         congress_number=args.congress,
     )
-    print(
-        f"Synced {len(legislator_lookup)} legislators, "
-        f"{len(committee_lookup)} committees/subcommittees, "
-        f"and {membership_count} memberships"
-    )
+    log.info("Synced %d legislators, %d committees/subcommittees, and %d memberships",
+             len(legislator_lookup), len(committee_lookup), membership_count)
     rows_written = len(legislator_lookup) + len(committee_lookup) + membership_count
 
     filings, filing_raw_id = fetch_house_filing_index(args.year, base_storage)
@@ -99,10 +101,8 @@ def _run_ingestion(args, base_storage, storage) -> tuple[int, int]:
         resolve_filing_bioguide(filing, name_resolver) is not None
         for filing in filings
     )
-    print(
-        f"Synced {filing_count} House PTR filing-index rows "
-        f"({resolved_count} legislator matches)"
-    )
+    log.info("Synced %d House PTR filing-index rows (%d legislator matches)",
+             filing_count, resolved_count)
     rows_written += filing_count
 
     if args.ptr_limit <= 0:
@@ -122,10 +122,8 @@ def _run_ingestion(args, base_storage, storage) -> tuple[int, int]:
             raw_id=ptr_raw_id,
             bioguide_id=resolve_filing_bioguide(filing, name_resolver),
         )
-        print(
-            f"PTR {filing['filing_id']}: parsed {len(trades)} transactions"
-        )
-    print(f"Parsed and stored {trade_count} House transactions")
+        log.info("PTR %s: parsed %d transactions", filing["filing_id"], len(trades))
+    log.info("Parsed and stored %d House transactions", trade_count)
     return 4 + len(selected), rows_written + trade_count
 
 

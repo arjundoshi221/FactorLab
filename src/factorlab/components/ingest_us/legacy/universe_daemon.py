@@ -13,6 +13,7 @@ from factorlab.components.ingest_us.legacy.eodhd.configured_universe import (
     resolve_universe as legacy_resolve,
 )
 from factorlab.components.ingest_us.legacy.universe import create_resolver, load_config
+from factorlab.core.logging import configure_logging
 from factorlab.storage.v2_us import V2USStorage as USStorage
 
 log = logging.getLogger("factorlab.us-universe")
@@ -111,7 +112,7 @@ def main() -> int:
     mode.add_argument("--once", action="store_true", help="Resolve and publish once, then exit")
     mode.add_argument("--daemon", action="store_true", help="Refresh continuously")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging(component="ingest-us", service="universe-us")
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
     try:

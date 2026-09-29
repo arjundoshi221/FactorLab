@@ -169,10 +169,10 @@ class Notification:
             )
 
         footer = (
-            f"<p style='color:#8c959f;font-size:10px;font-family:Segoe UI,Arial,sans-serif;"
-            f"margin-top:18px;border-top:1px solid #d0d7de;padding-top:8px;'>"
-            f"FactorLab automated alert · audit: logs/notify.jsonl"
-            f"</p>"
+            "<p style='color:#8c959f;font-size:10px;font-family:Segoe UI,Arial,sans-serif;"
+            "margin-top:18px;border-top:1px solid #d0d7de;padding-top:8px;'>"
+            "FactorLab automated alert · audit: logs/notify.jsonl"
+            "</p>"
         )
 
         return (

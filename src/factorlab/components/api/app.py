@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import time
 from datetime import UTC, date, datetime
 from functools import lru_cache
 from pathlib import Path as FileSystemPath
@@ -84,12 +86,38 @@ from factorlab.components.api.schema_map import (
 )
 from factorlab.components.api.us import router as us_router
 from factorlab.core import paths
+from factorlab.core.logging import log_context
 
 app = FastAPI(
     title="FactorLab API",
     version="0.1.0",
     description="Private read API for FactorLab research data.",
 )
+
+_access_log = logging.getLogger("factorlab.api.access")
+# Probes poll these; log them at DEBUG so INFO shows real traffic.
+_QUIET_PATHS = frozenset({"/health"})
+
+
+@app.middleware("http")
+async def _log_requests(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """One structured line per request; ``request_id`` is Cloudflare's ray id."""
+    started = time.perf_counter()
+    ray = request.headers.get("cf-ray")
+    status = 500
+    with log_context(request_id=ray):
+        try:
+            response = await call_next(request)
+            status = response.status_code
+            return response
+        finally:
+            route = getattr(request.scope.get("route"), "path", request.url.path)
+            level = logging.DEBUG if route in _QUIET_PATHS and status < 400 else logging.INFO
+            _access_log.log(
+                level, "%s %s %d", request.method, route, status,
+                extra={"method": request.method, "route": route, "status": status,
+                       "duration_ms": round((time.perf_counter() - started) * 1000, 1)},
+            )
 
 app.include_router(us_router, prefix="/api/v1/us", tags=["us"], dependencies=[Depends(require_api_key)])
 app.include_router(us_router, prefix="/hub/api/v1/us", tags=["hub-us"])

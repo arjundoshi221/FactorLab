@@ -17,9 +17,9 @@ from typing import TYPE_CHECKING, Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from factorlab.core.paths import config_dir
 from factorlab.ingest.datasets import DATASETS
 from factorlab.ingest.datasets.reference import ReferenceMode
-from factorlab.core.paths import config_dir
 
 if TYPE_CHECKING:
     from factorlab.ingest.registry import Registry

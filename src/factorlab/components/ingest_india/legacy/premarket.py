@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import argparse
+import logging
 
 from factorlab.components.ingest_india.legacy.upstox.instruments import refresh_all
 from factorlab.components.ingest_india.legacy.upstox.universes import build_universes
 from factorlab.core import paths
+from factorlab.core.logging import configure_logging
 from factorlab.storage.v2_india import V2IndiaStorage as ClickHouseStorage
 
 PROJECT_ROOT = paths.home()
 
+log = logging.getLogger(__name__)
+
 
 def main() -> None:
+    configure_logging(component="ingest-india", service="ingest-india-premarket")
     parser = argparse.ArgumentParser(description="Refresh Upstox reference data into ClickHouse")
     parser.add_argument("--exchange", action="append", default=["NSE"])
     args = parser.parse_args()
@@ -51,17 +56,15 @@ def main() -> None:
                 raw_id=raw_ids.get(exchange),
             )
             rows_written += len(instrument_lookup) + len(contract_lookup)
-            print(
-                f"{exchange}: synced {len(instrument_lookup)} equities and "
-                f"{len(contract_lookup)} futures"
-            )
+            log.info("%s: synced %d equities and %d futures",
+                     exchange, len(instrument_lookup), len(contract_lookup))
 
             if exchange == "NSE":
                 counts = build_universes(
                     instruments,
                     PROJECT_ROOT / "data" / "in" / "universes",
                 )
-                print(f"NSE universes: {counts}")
+                log.info("NSE universes: %s", counts)
         successful = len(result)
         storage.finish_ingestion_run(
             run,

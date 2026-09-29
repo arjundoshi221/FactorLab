@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+
 from factorlab.clickhouse import ClickHouse
+from factorlab.core.logging import configure_logging
 
 REQUIRED_TABLES = {
     "raw.archive",
@@ -24,6 +27,8 @@ REQUIRED_TABLES = {
     "meta.source_status",
     "meta.hub_schema_layouts",
 }
+
+log = logging.getLogger(__name__)
 
 
 def check_v2_readiness(client: object) -> None:
@@ -56,9 +61,10 @@ def check_v2_readiness(client: object) -> None:
 
 
 def main() -> None:
+    configure_logging(component="schema-migrator", service="bootstrap")
     storage = ClickHouse.from_environment()
     check_v2_readiness(storage.client)
-    print("ClickHouse v2 schema is ready.")
+    log.info("ClickHouse v2 schema is ready.")
 
 
 if __name__ == "__main__":
