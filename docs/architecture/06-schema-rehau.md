@@ -4453,4 +4453,3 @@ reviewed, no action per finding`.
 **F25** — reviewed, partially superseded. `research.owned_listings` now has a DDL sketch under §11.14 per F13; `research.listing_continuous_returns` remains a Wave 2 deferral, DDL to be authored when the migration wave builds.
 
 ---
-

@@ -2,7 +2,7 @@
 
 All raw vendor dumps, state checkpoints, log files, and token files MUST be
 resolved through this module. Hardcoded ``data/<source>/raw`` literals are
-forbidden in source / scripts (enforced by ``scripts/_check_paths_in_code.py``).
+forbidden in source / scripts (enforced by the ``tools/hooks/check_paths_in_code.py`` pre-commit hook).
 
 Every default hangs off FactorLab's *home* (:func:`discover_home`):
 ``FACTORLAB_HOME`` when set (images set ``/app``), otherwise the checkout that

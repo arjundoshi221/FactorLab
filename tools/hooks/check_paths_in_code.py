@@ -1,6 +1,6 @@
 """Pre-commit lint: refuse hardcoded raw-data paths in source / scripts.
 
-Complements ``_check_no_data_paths.py`` (which blocks staging files under
+Complements ``check_no_data_paths.py`` (which blocks staging files under
 ``data/`` / ``logs/``). This one scans the **content** of staged Python files
 and refuses any new hardcoded ``data/.../raw`` or ``data/<vendor>/`` literal
 that should instead go through ``factorlab.core.paths``.
@@ -39,9 +39,9 @@ BANNED_PATTERNS = [
 # lint script, the migration script, and tests that exercise the mapping).
 ALLOWED_FILES = {
     "libs/core/src/factorlab/core/paths.py",
-    "scripts/_shared/_check_paths_in_code.py",
-    "scripts/_shared/_check_no_data_paths.py",
-    "tests/shared/test_paths.py",
+    "tools/hooks/check_paths_in_code.py",
+    "tools/hooks/check_no_data_paths.py",
+    "libs/core/tests/test_paths.py",
 }
 POLICED_PREFIXES = ("libs/", "providers/", "components/", "scripts/")
 

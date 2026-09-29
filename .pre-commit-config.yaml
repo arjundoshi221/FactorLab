@@ -1,9 +1,12 @@
-# pre-commit hooks: install once with
-#   pip install pre-commit && pre-commit install
-# Hooks then run automatically on every `git commit`.
+# pre-commit hooks. Install once per clone:
+#   uv run pre-commit install --install-hooks
+#   uv run pre-commit install --hook-type pre-push      # the type check runs before push
+# Run everything by hand:
+#   uv run pre-commit run --all-files
 #
-# To run manually across the whole repo:
-#   pre-commit run --all-files
+# The project's own tools run through `uv run --frozen`, so their versions come from
+# uv.lock and match CI exactly. CI (.github/workflows/ci.yml) runs the same checks and
+# more; these hooks catch problems before a commit leaves the machine.
 
 repos:
   # ── Standard hygiene ──────────────────────────────────────────────────────
@@ -16,8 +19,18 @@ repos:
       - id: check-merge-conflict
       - id: check-yaml
       - id: check-json
+      - id: check-toml
+      # Byte-exact files are never touched by the fixers: migration SQL is checksummed by
+      # the migration journal, recorded provider captures are compared byte for byte, and
+      # tools write the generated build output and the type-check baseline.
       - id: end-of-file-fixer
+        exclude: &byte_exact ^(libs/schema/src/factorlab/schema/sql/|.*/fixtures/|components/web/dist/|\.basedpyright/)
       - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]   # two trailing spaces are a Markdown line break
+        exclude: *byte_exact
+      - id: mixed-line-ending
+        args: [--fix=lf]
+        exclude: *byte_exact
 
   # ── gitleaks: scan staged content for known secret patterns ──────────────
   - repo: https://github.com/gitleaks/gitleaks
@@ -25,19 +38,61 @@ repos:
     hooks:
       - id: gitleaks
 
-  # ── Project-specific local hooks ─────────────────────────────────────────
+  # ── Project checks (versions from uv.lock) ───────────────────────────────
   - repo: local
     hooks:
+      - id: ruff-check
+        name: ruff check (rule set in pyproject.toml)
+        entry: uv run --frozen ruff check --fix --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --frozen ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+      - id: uv-lock
+        name: uv.lock matches every pyproject.toml
+        entry: uv lock --check
+        language: system
+        files: (^|/)(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+
+      - id: component-manifests
+        name: component manifests and the generated compose file are current
+        entry: bash -c 'uv run --frozen python tools/components.py check && uv run --frozen python tools/components.py render-compose --check'
+        language: system
+        files: ^(components/|deploy/|libs/|providers/|tools/components\.py)
+        pass_filenames: false
+
+      - id: schema-checksums
+        name: ClickHouse v2 migrations are forward-only
+        entry: uv run --frozen python tools/schema_checksums.py check
+        language: system
+        files: ^libs/schema/src/factorlab/schema/sql/
+        pass_filenames: false
+
+      - id: architecture
+        name: architecture rules (boundaries, namespaces, ratchets)
+        entry: uv run --frozen pytest -q -p no:cacheprovider tests/architecture
+        language: system
+        types: [python]
+        pass_filenames: false
+
       - id: no-data-or-logs
         name: Block data/ and logs/ paths from being committed
-        entry: python scripts/_shared/_check_no_data_paths.py
+        entry: uv run --frozen python tools/hooks/check_no_data_paths.py
         language: system
         pass_filenames: true
         stages: [pre-commit]
 
       - id: no-plaintext-secrets
         name: Block plaintext api_key / token query strings
-        entry: python scripts/_shared/_check_no_plaintext_secrets.py
+        entry: uv run --frozen python tools/hooks/check_no_plaintext_secrets.py
         language: system
         pass_filenames: true
         stages: [pre-commit]
@@ -45,8 +100,16 @@ repos:
 
       - id: no-hardcoded-raw-paths
         name: Block hardcoded data/<source>/raw literals in product code and scripts/
-        entry: python scripts/_shared/_check_paths_in_code.py
+        entry: uv run --frozen python tools/hooks/check_paths_in_code.py
         language: system
         pass_filenames: true
         stages: [pre-commit]
         types: [python]
+
+      - id: basedpyright
+        name: basedpyright (no new type errors beyond the baseline)
+        entry: uv run --frozen basedpyright
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]

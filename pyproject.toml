@@ -24,6 +24,7 @@ dev = [
     "packaging>=24",        # tools/verify_image.py evaluates dependency markers
     "pyyaml>=6.0",          # tools/components.py reads component.yaml
     "basedpyright>=1.30",   # type checking: strict on libs/, baseline elsewhere
+    "pre-commit>=4.0",
 ]
 research = [
     "duckdb>=1.0",
