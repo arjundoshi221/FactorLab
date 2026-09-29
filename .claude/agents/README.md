@@ -1,6 +1,6 @@
 # FactorLab Team Agents
 
-These are the six Claude Code sub-agents committed to the repo so **Arjun** and **Jai** get the same behavior. They are auto-discovered by Claude Code from `.claude/agents/team/*.md`.
+These are the six Claude Code sub-agents committed to the repo so **Arjun** and **Jai** get the same behavior. They are auto-discovered by Claude Code from `.claude/agents/*.md`.
 
 The rest of `.claude/` is personal / machine-local and gitignored. Only this folder is committed (see `.gitignore` — the `.claude/*` block).
 
@@ -10,12 +10,12 @@ Every agent enforces this. There is no exception, no "we'll add tests later," no
 
 - **Every new function** → at least one pytest test covering the interesting path + one failure case
 - **Every bug fix** → a regression test that fails before the fix and passes after (`bug-hunter` writes it first)
-- **Every migration** → a test in [`tests/migrations/`](../../tests/migrations/) that applies to a scratch schema and asserts shape
-- **Every non-trivial query** → a fixture-seeded test in [`tests/queries/`](../../tests/queries/)
+- **Every migration** → a new wave recorded in `checksums.lock` plus tests in [`libs/schema/tests/`](../../libs/schema/tests/) (and a sink conformance test in `libs/storage/tests/` when a table changes)
+- **Every non-trivial query** → a test against the fake ClickHouse in `factorlab.testkit` (see [`libs/storage/tests/`](../../libs/storage/tests/))
 - **Every feature spec's acceptance criterion** → phrased as a pytest assertion, not prose
 - **Every sprint deliverable's "definition of done"** → the pytest node ID that must pass
 
-Run the suite: `"C:/Users/arjd2/.conda/envs/factorlab/python.exe" -m pytest tests/ -x`
+Run the suite: `uv run pytest` (focused: `uv run pytest <member>`).
 
 No PR merges with red CI. No sprint item flips to "done" without green tests. Missing tests is a **blocking** review comment.
 
@@ -27,7 +27,7 @@ No PR merges with red CI. No sprint item flips to "done" without green tests. Mi
 | [`sprint`](sprint.md) | PM + sprint runner | Roadmap, 2-week sprints, definition-of-done, blockers, status | Feature intake, bug triage, schema decisions |
 | [`bug-hunter`](bug-hunter.md) | Bug investigator | Repro, RCA, severity, regression detection, **blast-radius analysis**, failing-test-first | Writing the fix, merging PRs |
 | [`developer`](developer.md) | Code reviewer + clean-code writer | Diff reviews, readability, dead-code deletion, reusable-when-real, matching existing patterns | Deciding what to build, DB migrations, triage |
-| [`dba`](dba.md) | Database lead | Schema, migrations, indexes, query correctness, backup verification, canonical views | Cloud infra, app code calling the DB, secrets |
+| [`clickhouse-steward`](clickhouse-steward.md) | ClickHouse v2 steward | Schema waves (forward-only), checksums.lock, table design, query correctness, source priorities, read-only production checks | Cloud infra, app code calling the DB, secrets |
 | [`docs`](docs.md) | Documentation lead + design coherence | Doc taxonomy, currency, cross-linking, ADRs, blocking silent architectural drift | Writing feature/schema/sprint content (that's the owning agent's) |
 
 ## How they hand off
@@ -35,7 +35,7 @@ No PR merges with red CI. No sprint item flips to "done" without green tests. Mi
 ```
 new ask       →  product    →  sprint  →  developer (write)  →  developer (review)  →  docs (currency check)  →  merge
 new bug       →  bug-hunter →  sprint  →  developer (fix, with failing test + blast-radius map)  →  docs (patterns.md if recurring)
-schema change →  dba (design)  →  docs (ADR if pivot)  →  sprint (schedule)  →  dba (migration)  →  developer (Python)  →  docs (schema doc)
+schema change →  clickhouse-steward (design)  →  docs (ADR if pivot)  →  sprint (schedule)  →  clickhouse-steward (migration)  →  developer (Python)  →  docs (schema doc)
 code review   →  developer  (before any non-trivial merge)  →  docs (blocks if public behavior changed but docs didn't)
 ```
 
@@ -43,7 +43,7 @@ code review   →  developer  (before any non-trivial merge)  →  docs (blocks 
 - **`sprint`** decides what goes in the current 2-week window and tracks blockers.
 - **`bug-hunter`** turns "it's broken" into "here's the failing test + root cause + fix location + blast radius"; hands to `developer` to fix.
 - **`developer`** reviews every non-trivial diff before merge and writes new code that's clean, readable, and reusable *only where reuse is real*.
-- **`dba`** reviews *every* SQL and migration touching FactorLab schemas before merge. Enforces canonical views.
+- **`clickhouse-steward`** reviews *every* SQL and migration touching FactorLab schemas before merge. Enforces canonical views.
 - **`docs`** reads across all the docs, blocks silent architectural drift (missing ADRs, stale docs, broken links), and loops in the owning agent when their docs need updating — never quietly rewrites someone else's docs.
 
 ## Invoking them
@@ -51,18 +51,18 @@ code review   →  developer  (before any non-trivial merge)  →  docs (blocks 
 In a Claude Code session, either:
 
 - Let Claude pick the right agent based on the request, or
-- Ask explicitly: *"Use the `dba` agent to review this migration"* / *"Have `bug-hunter` triage issue #42"*
+- Ask explicitly: *"Use the `clickhouse-steward` agent to review this migration"* / *"Have `bug-hunter` triage issue #42"*
 
 For long-running or independent work, they can be spawned in parallel via the `Task` tool.
 
 ## Where each agent writes
 
-- `product` → `docs/product/features/` + `docs/product/_backlog.md`
-- `sprint` → `docs/sprints/` (one file per 2-week sprint)
+- `product` → `docs/features/F-NNN-<slug>.md` (index generated by `tools/check_docs.py --write`)
+- `sprint` → `docs/sprints/YYYY-Sxx.md` (planned list generated from the features' `sprint:`)
 - `bug-hunter` → `docs/quality/bugs/` + `docs/quality/_triage.md` + `docs/quality/patterns.md`
 - `developer` → `docs/engineering/` (`style.md`, `patterns.md`, `review-log.md`, `refactor-candidates.md`)
-- `dba` → `docs/architecture/06-schema-*.md`, `docs/database/`, `docs/data-sources/`
-- `docs` → `docs/README.md` (index), `docs/architecture/adr/` (ADR series), `docs/_conventions.md`, `docs/_link-check.md`; reads across all of `docs/`
+- `clickhouse-steward` → `docs/architecture/06-schema-rehau.md`, `libs/schema/` (waves, checksums.lock), `docs/data-sources/`
+- `docs` → `docs/README.md` (index), `docs/decisions/` (ADRs), member `CONTEXT.md` files; `tools/check_docs.py` enforces structure and links
 
 If any of those directories don't exist yet, the agent creates them on first use.
 

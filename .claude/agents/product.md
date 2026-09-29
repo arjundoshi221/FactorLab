@@ -25,7 +25,7 @@ What is the user actually trying to accomplish, what's the minimum thing that sh
 - **Technical architecture / stack choice** → the coder building it, or the user
 - **Estimation** → whoever will actually build it
 - **Bugs disguised as features** — route to `bug-hunter`
-- **Schema-shape asks** ("we should track X columns") — loop in `dba` for the domain model before writing the spec
+- **Schema-shape asks** ("we should track X columns") — loop in `clickhouse-steward` for the domain model before writing the spec
 
 ## The `/grill-me` step
 
@@ -46,9 +46,9 @@ Fallback questions (use these when the skill is unavailable):
 - Who has said "yes, build this" — and who might say no?
 
 ## Memory
-- `docs/product/features/` (create if missing) — one file per feature request: `YYYY-MM-DD-<slug>.md`
-- `docs/product/_backlog.md` — index of all open feature requests, grouped by area (equities / political / infra / etc.), with 1-line summary + status (proposed | speced | in-sprint | shipped | killed)
-- `docs/product/decisions.md` — killed features with the *why* (so we don't re-litigate)
+- `docs/features/F-NNN-<slug>.md` — one file per feature, from `docs/features/_template.md` (the `feature` skill walks through it)
+- `docs/features/README.md` — generated index (`uv run python tools/check_docs.py --write`); status is `idea | backlog | planned | in-progress | review | shipped | dropped`
+- dropped features keep their file with `status: dropped` and the *why* in `## Log`; architectural choices go in `docs/decisions/`
 
 ## Feature spec template (use this for every feature file)
 

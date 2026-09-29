@@ -1,6 +1,8 @@
 # Ingestion Provider Abstraction
 
-> Status: `[beta]` — every phase P1–P8 is built and tested; every provider is bound as `shadow`. Production daemons still run the legacy paths until each cutover (§15.2). Decision record in [developments/011](../decisions/0011-provider-abstraction.md).
+> Paths below follow the uv workspace layout ([ADR-0012](../decisions/0012-uv-workspace-monorepo.md), [08-repository-layout.md](08-repository-layout.md)).
+
+> Status: `[beta]` — every phase P1–P8 is built and tested; every provider is bound as `shadow`. Production daemons still run the legacy paths until each cutover (§15.2). Decision record: [ADR-0011](../decisions/0011-provider-abstraction.md).
 > Last verified: 2026-09-24
 
 This document is the contract between three layers:
@@ -98,7 +100,7 @@ As a result, you cannot replace Upstox, add a second US bars vendor, or run a sh
 ### 3.2 Package layout
 
 ```text
-src/factorlab/shared/ingest/
+libs/ingest/src/factorlab/ingest/
   provider.py              existing: RawCapture, Provenance, RunContext, ingestion_run, run_provider
   errors.py                NEW: provider error taxonomy (§6.3)
   registry.py              NEW: register_source / source_for (§9.1)
@@ -116,8 +118,8 @@ src/factorlab/shared/ingest/
     political.py           Legislator/Committee/Membership/Filing/Trade records + sinks
     broker.py              PositionSnapshot, AccountStateRow, ExecutionRecord, OpenOrderSnapshot + sink
     fundamentals.py        FilingRecord, LineItemRecord + sink
-src/factorlab/storage/sinks/     ClickHouse v2 implementations of every Sink/port
-src/factorlab/sources/<provider>/
+libs/storage/src/factorlab/storage/sinks/     ClickHouse v2 implementations of every Sink/port
+providers/<provider>/src/factorlab/sources/<provider>/
   __init__.py              register_source(...) calls only
   settings.py              typed settings model for configs/sources/<provider>.yaml
   client.py                session, auth, rate limiter
@@ -538,10 +540,13 @@ Each recipe lists **every** file that changes. If a change needs more than this,
 
 ### 12.1 Add a provider for an existing dataset
 
-1. `src/factorlab/sources/<p>/`: `__init__.py` (register), `settings.py`, `client.py`, `<dataset>.py`, `normalize.py`.
+`uv run python tools/scaffold.py new-provider <p> --dataset <id> --market <ISO3> --component <c> --bind`
+creates and wires steps 1, 2, 3 and 5; step 4 is recorded by hand.
+
+1. `providers/<p>/providers/<p>/src/factorlab/sources/<p>/`: `__init__.py` (register), `settings.py`, `client.py`, `<dataset>.py`, `normalize.py` (scaffolded as `sources.py`).
 2. `configs/sources/<p>.yaml`.
-3. `src/factorlab/sources/__init__.py`: add `<p>` to the provider tuple.
-4. `tests/fixtures/providers/<p>/<dataset>/*`: recorded captures, plus the expected records.
+3. `components/<c>/src/factorlab/components/<c>/providers.py`: add `<p>` to `PROVIDERS`, plus the component's dependency and manifest `providers:` list.
+4. `providers/<p>/tests/fixtures/<dataset>/*`: recorded captures, plus the expected records.
 5. `configs/ingestion/bindings.yaml`: a new binding with `role: shadow`.
 6. Secrets registered in the Cloudflare Secrets Store (05) under the provider's prefix.
 7. If the provider brings a new alias kind, add it to `KNOWN_ALIAS_KINDS` (§8.4).
@@ -573,7 +578,7 @@ Rows get `source=<p>` and `source_channel=<name>:<endpoint>`. Two non-shadow ins
 
 ### 13.1 Source conformance (`tests/contracts/test_source_conformance.py`)
 
-This file is parametrised over `registry.registered()`. Each registered `(provider, dataset)` must have fixtures in `tests/fixtures/providers/<p>/<dataset>/`: `*.capture.json` (a serialised `RawCapture`) and `*.expected.json`. The suite asserts:
+This file is parametrised over `registry.registered()`. Each registered `(provider, dataset)` must have fixtures in `providers/<p>/tests/fixtures/<dataset>/`: `*.capture.json` (a serialised `RawCapture`) and `*.expected.json`. The suite asserts:
 
 - `normalize(capture)` equals the expected records, and is deterministic (called twice).
 - `normalize` runs with the network disabled (socket patched) and without `get_secret`.
@@ -605,8 +610,8 @@ Before a binding is promoted from `shadow`, a parity check compares one full ses
 
 `tests/architecture/test_boundaries.py` uses only stdlib `ast`, so it adds no new dependency.
 
-1. **Import scan.** Parse every module under `src/factorlab/` and scripts under `scripts/`, then assert R1, R2 and R4.
-2. **Literal scan.** Assert that no string literal under `src/factorlab/storage/` equals a registered provider name (R3), with `KNOWN_ALIAS_KINDS` as the only exemption.
+1. **Import scan.** Parse every module under `libs/`, `providers/` and `components/` (each member's `src/factorlab/`) and scripts under `scripts/`, then assert R1, R2 and R4–R8.
+2. **Literal scan.** Assert that no string literal under `libs/storage/src/factorlab/storage/` equals a registered provider name (R3), with `KNOWN_ALIAS_KINDS` as the only exemption.
 3. **Allowlist.** `tests/architecture/boundary_allowlist.txt` lists today's violations (for example the `source="upstox"` defaults in `storage/v2_india.py`). The test fails if a violation appears that is not listed, **and** if a listed violation no longer exists, so the list can only shrink. Every migration phase removes its entries. P8's exit criterion is an empty file.
 
 ---
@@ -635,13 +640,13 @@ What exists:
 
 | Piece | Where |
 |---|---|
-| Records, requests, sink protocols, catalogue | `src/factorlab/shared/ingest/datasets/` (`common.py`, `market.py`, `reference.py`, `ports.py`, `__init__.py`) |
-| Registry, bindings, engine, errors, limiter, in-memory sink | `src/factorlab/shared/ingest/{registry,bindings,engine,errors,ratelimit,memory}.py` |
-| ClickHouse sinks, identity resolver, market calendar | `src/factorlab/storage/sinks/{clickhouse,identity,calendar}.py` |
-| Upstox adapter | `src/factorlab/sources/upstox/{settings,client,normalize,sources}.py` |
-| EODHD adapter | `src/factorlab/sources/eodhd/{settings,client,normalize,sources}.py` (listings; daily bars in `history` and `bulk` modes) |
-| Schwab adapter | `src/factorlab/sources/schwab/{settings,transport,normalize,sources}.py` (per-symbol listings; daily + 1min bars). `client.py` / `market.py` are the untouched legacy path |
-| GitHub CSV adapter | `src/factorlab/sources/github_csv/` (`ref.universe_membership` from index CSVs; config `configs/sources/github_csv.yaml`) |
+| Records, requests, sink protocols, catalogue | `libs/ingest/src/factorlab/ingest/datasets/` (`common.py`, `market.py`, `reference.py`, `ports.py`, `__init__.py`) |
+| Registry, bindings, engine, errors, limiter, in-memory sink | `libs/ingest/src/factorlab/ingest/{registry,bindings,engine,errors,ratelimit,memory}.py` |
+| ClickHouse sinks, identity resolver, market calendar | `libs/storage/src/factorlab/storage/sinks/{clickhouse,identity,calendar}.py` |
+| Upstox adapter | `providers/upstox/src/factorlab/sources/upstox/{settings,client,normalize,sources}.py` |
+| EODHD adapter | `providers/eodhd/src/factorlab/sources/eodhd/{settings,client,normalize,sources}.py` (listings; daily bars in `history` and `bulk` modes) |
+| Schwab adapter | `providers/schwab/src/factorlab/sources/schwab/{settings,transport,normalize,sources}.py` (per-symbol listings; daily + 1min bars). `client.py` / `market.py` are the untouched legacy path |
+| GitHub CSV adapter | `providers/github-csv/src/factorlab/sources/github_csv/` (`ref.universe_membership` from index CSVs; config `configs/sources/github_csv.yaml`) |
 | Universe snapshots | `shared/ingest/datasets/universe.py`, `shared/ingest/universe_snapshot.py`; `EodhdUniverse` in `sources/eodhd/sources.py` |
 | Shared helpers | `shared/ingest/transport.py` (HTTP status → taxonomy), `shared/ingest/identifiers.py` (CUSIP → ISIN), `errors.QuotaExhausted` |
 | Bindings | `configs/ingestion/bindings.yaml` (all IND and USA bindings are `shadow`, with target roles noted) |
@@ -708,6 +713,9 @@ Each cutover is a bindings change plus a Compose command change; no code changes
 5. After a week on the engine, delete the legacy module(s) for that provider (§15.3) and shrink `tests/architecture/boundary_allowlist.txt`.
 
 ## 15.3 Legacy retirement (awaiting owner confirmation)
+
+> Done 2026-09-29: the files below were deleted in the platform-v3 restructure
+> ([ADR-0012](../decisions/0012-uv-workspace-monorepo.md)); tag `archive/pre-restructure` keeps them.
 
 Static import closure of every production entrypoint (Compose services, cron, the API) shows these tracked files are **not reachable from production** and are superseded by ClickHouse paths. They are *not* deleted yet because `docs/operations/windows-task-scheduler.md` lists them as hand-registered Task Scheduler jobs (its 2026-06-16 state says none were scheduled); confirm nothing still runs them, then delete in one commit:
 

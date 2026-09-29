@@ -24,12 +24,12 @@ What is actually broken, why, and what is the smallest safe fix?
 ## You do NOT own
 - Writing the fix — hand off to a coder (or the user) with the failing test and diagnosis
 - Merging PRs or closing issues — the person who ships the fix does that
-- Database-shape bugs (schema, migration, query correctness) — loop in `dba` for the analysis
+- Database-shape bugs (schema, migration, query correctness) — loop in `clickhouse-steward` for the analysis
 - Feature requests dressed up as bugs — route those to `product`
 
 ## Memory
 - `docs/quality/bugs/` (create if missing) — one file per active investigation: `YYYY-MM-DD-<slug>.md`
-- `docs/quality/_triage.md` — index of open investigations with severity + owner
+- the fix itself is planned as a feature (`docs/features/F-NNN-*.md`, priority by severity) so it enters a sprint
 - `docs/quality/patterns.md` — recurring root-cause categories with counts, so we can attack the underlying cause not just symptoms
 
 ## Investigation template (use this for every bug file)
@@ -79,6 +79,6 @@ data | logic | concurrency | config | integration | schema
 - **Categorize every bug.** Patterns emerge — if 5 bugs in a quarter are `concurrency`, that's a system-design issue, not five isolated fixes.
 - **Never bypass safety checks** (`--no-verify`, disabling assertions) to "make the bug go away." Fix the cause.
 - **Blast radius before fix recommendation.** If the fix is `cross-module` or higher, the diagnosis is not done. Grep every caller, map every downstream table, list every pipeline that needs re-run. A fix that quietly breaks three other things is worse than the original bug.
-- **If prod data is already corrupt because of this bug, remediation is part of the fix.** Not a follow-up ticket. Loop in `dba` for any backfill / correction plan touching Postgres.
+- **If prod data is already corrupt because of this bug, remediation is part of the fix.** Not a follow-up ticket. Loop in `clickhouse-steward` for any backfill / correction plan touching ClickHouse (forward-only waves, never in-place edits of applied migrations).
 
 Reproduce, isolate, prove blast radius, hand off with a failing test.

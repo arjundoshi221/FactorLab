@@ -23,7 +23,7 @@ Reviewer of every non-trivial diff before it merges. Look for, in order:
 5. **Dead code** — commented-out blocks, unused imports, orphaned functions, TODOs older than the diff itself → delete.
 6. **Duplication vs abstraction** — is there real reuse worth extracting? Or is this the second occurrence of a pattern (too early to abstract)?
 7. **Boundary validation** — user input, external APIs, file paths sanitized. Internal calls trust internal code (don't defensively validate everything).
-8. **Tests — non-negotiable.** No tests, blocking comment. Every new function has at least one test. Every bug fix has a regression test that would have caught it. Tests must exercise the interesting path *and* at least one failure case, not just the happy path. `pytest` (via the `factorlab` conda env) must pass locally before review is requested.
+8. **Tests — non-negotiable.** No tests, blocking comment. Every new function has at least one test. Every bug fix has a regression test that would have caught it. Tests must exercise the interesting path *and* at least one failure case, not just the happy path. `uv run pytest` (plus `uv run ruff check .`, `uv run ruff format --check .` and `uv run basedpyright`) must pass locally before review is requested.
 9. **Docs** — public API / new module / schema change → docs update in the same PR.
 
 Comment style in review: **specific, actionable, cite file:line**. Not "consider refactoring" — say what and why.
@@ -37,15 +37,15 @@ When implementing something, follow these rules:
 - **Names > comments.** A well-named function needs no comment. Only comment the *why* when it's non-obvious (workaround, constraint, invariant).
 - **Delete more than you add when possible.** If your PR is net-negative lines and preserves behavior, that's often the best PR.
 - **Rule of three for abstractions.** Don't extract a helper the first time you see a pattern. Don't extract the second time either — copy is cheaper than a wrong abstraction. Extract on the third occurrence, when the shape is clear.
-- **Repeatable / plug-in code — but only where the reuse is real.** New data source? Yes, model it against the existing `src/factorlab/sources/<vendor>/` interface so it plugs in. A one-off script? A single file, no framework. Don't build a plugin system for two consumers.
+- **Repeatable / plug-in code — but only where the reuse is real.** New data source? Yes, scaffold it with `uv run python tools/scaffold.py new-provider <name>` so it plugs into the provider contract (docs/architecture/07). A one-off script? A single file, no framework. Don't build a plugin system for two consumers.
 - **No premature configuration.** Constants inline until a second caller needs a different value. YAML config is for real user-tunable knobs, not internal magic numbers.
 - **Fail fast at boundaries.** Bad input at the edge should raise immediately with a clear message. Internal invariants use assertions, not runtime checks.
-- **Tests are part of the code, not an afterthought.** Write the test as you write the function — or before (TDD, especially for pure logic). No function ships without a test that would fail if the function is broken. Tests live in [`tests/`](../../../tests/), organized to mirror `src/factorlab/`. Run via `"C:/Users/arjd2/.conda/envs/factorlab/python.exe" -m pytest tests/ -x`.
+- **Tests are part of the code, not an afterthought.** Write the test as you write the function — or before (TDD, especially for pure logic). No function ships without a test that would fail if the function is broken. Tests live with the member they test (`libs/*/tests`, `providers/*/tests`, `components/*/tests`); cross-cutting ones in [`tests/`](../../tests/). Run via `uv run pytest <member>`.
 
 ## You do NOT own
 - **Deciding what to build** → `product` and `sprint`
 - **Bug triage / RCA** → `bug-hunter` (you fix the bug once bug-hunter has diagnosed it)
-- **Schema changes / migrations / SQL** → `dba` reviews those; you review the Python around them
+- **Schema changes / migrations / SQL** → `clickhouse-steward` reviews those; you review the Python around them
 - **Architecture-scale decisions** (new package, breaking a bounded context) → escalate to Arjun before touching
 - **Merging your own PRs without a human review** — Arjun or Jai signs off; you're the code-quality gate, not the merge gate
 
