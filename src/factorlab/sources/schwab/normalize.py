@@ -32,6 +32,9 @@ from factorlab.sources.schwab.settings import ALIAS_KIND
 log = logging.getLogger(__name__)
 
 COUNTRY = "US"
+# Epoch arithmetic, not datetime.fromtimestamp, which rejects pre-1970 (negative)
+# timestamps on Windows; Schwab daily history can start before 1970.
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _PRODUCT = {"EQUITY": "common", "ETF": "etf"}
 
 
@@ -118,7 +121,7 @@ def normalize_pricehistory(capture: RawCapture) -> list[BarRecord]:
         if not isinstance(candle, Mapping) or "datetime" not in candle:
             continue
         try:
-            stamp = datetime.fromtimestamp(int(candle["datetime"]) / 1000, UTC)
+            stamp = _EPOCH + timedelta(milliseconds=int(candle["datetime"]))
         except (TypeError, ValueError, OverflowError) as exc:
             raise NormalizationError(f"{capture.request_key}: bad candle time") from exc
         day = stamp.astimezone(NY).date()

@@ -21,6 +21,9 @@ from factorlab.sources.schwab.client import get_session
 
 log = logging.getLogger(__name__)
 BASE_URL = "https://api.schwabapi.com/marketdata/v1"
+# Epoch arithmetic, not datetime.fromtimestamp: the latter rejects pre-1970 (negative)
+# timestamps on Windows, and Schwab daily history can start before 1970.
+EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def token_ready(now: datetime | None = None) -> bool:
@@ -122,7 +125,7 @@ def normalize(records, resolution, *, now):
     first_session = calendar().first_session.date()
     last_session = calendar().last_session.date()
     for record in records:
-        stamp = datetime.fromtimestamp(record["datetime"] / 1000, UTC)
+        stamp = EPOCH + timedelta(milliseconds=record["datetime"])
         day = stamp.astimezone(NY).date()
         if not first_session <= day <= last_session:
             continue
