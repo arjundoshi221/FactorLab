@@ -1,6 +1,6 @@
 # Ingestion Provider Abstraction
 
-> Status: `[beta]` — every phase P1–P8 is built and tested; every provider is bound as `shadow`. Production daemons still run the legacy paths until each cutover (§15.2). Decision record in [developments/011](../developments/011-provider-abstraction.md).
+> Status: `[beta]` — every phase P1–P8 is built and tested; every provider is bound as `shadow`. Production daemons still run the legacy paths until each cutover (§15.2). Decision record in [developments/011](../decisions/0011-provider-abstraction.md).
 > Last verified: 2026-09-24
 
 This document is the contract between three layers:
@@ -617,7 +617,7 @@ Storage and schema changes wait until the ClickHouse v2 table cutover is done (g
 
 | Phase | Work | Exit criterion |
 |---|---|---|
-| **P0 Spec** ✅ | This doc; [ADR 011](../developments/011-provider-abstraction.md); index updates | Accepted |
+| **P0 Spec** ✅ | This doc; [ADR 011](../decisions/0011-provider-abstraction.md); index updates | Accepted |
 | **P1 Foundation** ✅ | `datasets/`, `registry.py`, `bindings.py`, `engine.py`, `errors.py`, `memory.py`; conformance kits; boundary test with the full allowlist. `provider.py` unchanged. | All existing tests green; the new suites pass against fake sources |
 | **P2 DB-service sinks** ✅ | `storage/sinks/*` over the v2 writers; natural-key identity resolver (§8); `ReferenceReader` and `CheckpointStore` ports | Sink conformance green; storage allowlist entries shrink |
 | **P3 Upstox** 🟡 adapter built and bound as shadow; cutover pending | `countries/in_/equities/upstox/*` → `sources/upstox/` (instruments, contracts, 1min bars including the batch-quote path, futures bars); segment filters move out of `V2IndiaStorage`; `factlab_india_clickhouse_5min.py` and `…_premarket.py` wrap the engine | One NSE session in shadow parity with the old path, then cut over; the old Upstox Postgres scripts deleted |
@@ -723,7 +723,7 @@ Kept on purpose: `storage/db.py`, `storage/schemas/*` and `countries/us/politica
 ### Not doing
 
 - **Plugin auto-discovery** (entry points, filesystem scanning). Providers are listed explicitly (§9.1).
-- **Streaming and websocket abstraction.** Upstox 1min polling and the Schwab REST tier fit the `plan → fetch` model. Schwab streaming ([developments/002](../developments/002-live-us-market-data.md)) will get its own contract when it lands.
+- **Streaming and websocket abstraction.** Upstox 1min polling and the Schwab REST tier fit the `plan → fetch` model. Schwab streaming ([developments/002](../decisions/0002-live-us-market-data.md)) will get its own contract when it lands.
 - **Porting the legacy-only political sources** (FEC, LDA, Senate eFD, Senate Stock Watcher, Congress.gov, USAspending, Finnhub contracts). They are deprecated where they stand. Each gets a port through §12.1 when research needs it.
 - **Data-quality-aware vendor selection.** Priority is static config (06 §17, F2). Quality-aware selection belongs downstream.
 - **Changing existing canonical IDs** (§8.2).

@@ -546,7 +546,7 @@ scripts/us/ibkr/
 └── us_ibkr_validation_sample.py     # cross-check N tickers vs Schwab/EODHD
 ```
 
-Naming per [`docs/developments/008-script-naming-india-historical.md`](../developments/008-script-naming-india-historical.md).
+Naming per [`docs/developments/008-script-naming-india-historical.md`](../decisions/0008-script-naming-india-historical.md).
 
 ---
 

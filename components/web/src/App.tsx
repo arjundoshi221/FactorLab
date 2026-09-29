@@ -12,6 +12,9 @@ import { formatBytes, formatCompact, formatDate, formatTime } from "./shared/for
 import { DataHome } from "./pages/catalog/DataHome";
 import { Pipelines } from "./pages/catalog/Pipelines";
 import { WEB_VERSION } from "./shared/build";
+import roadmapCards from "./roadmap.generated.json";
+
+interface RoadmapCard { id: string; version: string; title: string; state: string; copy: string }
 
 const SchemaExplorer = lazy(async () => {
   const module = await import("./pages/schema/SchemaExplorer");
@@ -404,13 +407,8 @@ function Dashboard() {
   );
 }
 
-const roadmap = [
-  { version: "V1", title: "Data health", state: "Now", copy: "Table inventory, coverage dates, and schedule-aware freshness." },
-  { version: "V2", title: "Data explorer", state: "Next", copy: "Filter and query datasets without writing ClickHouse SQL." },
-  { version: "V3", title: "Pipeline operations", state: "Planned", copy: "Live run monitoring, failure diagnosis, and alert delivery." },
-  { version: "V4", title: "Live markets", state: "Planned", copy: "Option chains, live market data, and research visualizations." },
-  { version: "V5", title: "Backtesting", state: "Planned", copy: "Reproducible strategy experiments on point-in-time data." },
-];
+/** Generated from docs/features (features with a `roadmap:` block) by tools/check_docs.py --write. */
+const roadmap: RoadmapCard[] = roadmapCards;
 
 function Roadmap() {
   return (

@@ -1,0 +1,37 @@
+[
+  {
+    "id": "F-001",
+    "version": "V1",
+    "title": "Data health",
+    "state": "Now",
+    "copy": "Table inventory, coverage dates, and schedule-aware freshness."
+  },
+  {
+    "id": "F-002",
+    "version": "V2",
+    "title": "Data explorer",
+    "state": "Next",
+    "copy": "Filter and query datasets without writing ClickHouse SQL."
+  },
+  {
+    "id": "F-003",
+    "version": "V3",
+    "title": "Pipeline operations",
+    "state": "Planned",
+    "copy": "Live run monitoring, failure diagnosis, and alert delivery."
+  },
+  {
+    "id": "F-004",
+    "version": "V4",
+    "title": "Live markets",
+    "state": "Planned",
+    "copy": "Option chains, live market data, and research visualizations."
+  },
+  {
+    "id": "F-005",
+    "version": "V5",
+    "title": "Backtesting",
+    "state": "Planned",
+    "copy": "Reproducible strategy experiments on point-in-time data."
+  }
+]
