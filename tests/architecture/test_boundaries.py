@@ -7,6 +7,10 @@ R4  the engine layer (factorlab.ingest, factorlab.orchestration) and engine-driv
     scripts never import a concrete provider or a component
 R5  libraries (everything outside factorlab.components) never import a component
 R6  components never import each other (each ships as its own image)
+R7  libraries follow the layer order: each imports only the libraries below it
+    (``LIBRARY_LAYERS``); testkit is dev-only and exempt
+R8  providers import only core, calendars and ingest (never another provider, a
+    component, or a database, dataframe or web stack), so a provider installs light
 
 Today's violations live in ``boundary_allowlist.txt`` as ``rule path token count``.
 The list is a ratchet: a violation that is not listed fails, and so does a
@@ -50,6 +54,20 @@ VENDOR_LITERALS = frozenset({"NSE_EQ", "NSE_FO", "BSE_EQ", "BSE_FO", "NSE_INDEX"
 EXEMPT_ASSIGNMENTS = frozenset({"KNOWN_ALIAS_KINDS"})
 # Scripts that run through the engine; they may not import providers (R4).
 ENGINE_SCRIPTS = ("scripts/factlab_ingest.py",)
+# R7: what each library may import, bottom to top.
+LIBRARY_LAYERS = {
+    "core": set(),
+    "calendars": {"core"},
+    "clickhouse": {"core"},
+    "runtime": {"core"},
+    "ingest": {"core", "calendars"},
+    "schema": {"core", "clickhouse"},
+    "storage": {"core", "calendars", "clickhouse", "ingest"},
+    "orchestration": {"core", "calendars", "clickhouse", "runtime", "ingest", "storage", "schema"},
+}
+# R8: what a provider may import from the workspace, and third-party stacks it may not.
+PROVIDER_LIBRARIES = {"core", "calendars", "ingest"}
+PROVIDER_FORBIDDEN_PACKAGES = ("pandas", "clickhouse_connect", "sqlalchemy", "fastapi")
 
 
 def _imports(path: Path, tree: ast.AST) -> list[set[str]]:
@@ -139,6 +157,29 @@ def violations() -> Counter[tuple[str, str, str]]:
                     and module.split(".")[2] != rel.split("/")[1]
                 ):
                     tokens.add(("R6", top))
+                parts = module.split(".")
+                owner = rel.split("/")[0]
+                if (
+                    owner in LIBRARY_LAYERS
+                    and parts[0] == "factorlab"
+                    and len(parts) > 1
+                    and parts[1] not in {owner, "sources", "components"}
+                    and parts[1] not in LIBRARY_LAYERS[owner]
+                ):
+                    tokens.add(("R7", ".".join(parts[:2])))
+                if owner == "sources":
+                    provider = rel.split("/")[1]
+                    if parts[0] == "factorlab" and len(parts) > 2 and parts[1] == "sources":
+                        if parts[2] != provider:
+                            tokens.add(("R8", top))
+                    elif (
+                        parts[0] == "factorlab"
+                        and len(parts) > 1
+                        and parts[1] not in PROVIDER_LIBRARIES | {"storage"}  # storage is R1
+                    ):
+                        tokens.add(("R8", ".".join(parts[:2])))
+                    elif parts[0] in PROVIDER_FORBIDDEN_PACKAGES:
+                        tokens.add(("R8", parts[0]))
             for rule, token in tokens:
                 record(rule, path, token)
         if rel.startswith("storage/"):
