@@ -156,6 +156,12 @@ finally:
 
 
 def restore(root: Path) -> None:
+    for backup, target in (
+        (root / "production.env.before", test.DEPLOY / "production.env"),
+        (root / "logrotate-before", Path("/etc/logrotate.d/factorlab")),
+    ):
+        if backup.exists():
+            shutil.copy2(backup, target)
     shutil.copy2(root / "before.json", test.DEPLOY / "compose.production.yml")
     if (root / "registry-before.yaml").exists():
         shutil.copy2(root / "registry-before.yaml", REGISTRY)

@@ -226,6 +226,14 @@ Open questions:
 
 ## Log
 
+- 2026-09-30: deployed the owner-authorized VPS branch trial from `60afea8` after
+  fixing lost initial DNS heartbeats and adding completed-work progress reporting.
+  Wave 11 is applied; monitor/API/web, runtime secrets, sender configuration and
+  log rotation are installed. Health, received heartbeats, public monitoring assets,
+  API filters and existing API/ClickHouse preservation passed. Political awaits its
+  next scheduled run; normal releases and remaining production acceptance exercises
+  are still pending. See the [rollout record](../operations/service-monitoring.md).
+
 - 2026-09-30: implemented runtime sender/lifecycle hooks, production daemon waits,
   monitor receiver and state machine, bounded queues and JSONL replay, wave 11,
   registry/platform/secret wiring, monitoring API and hub page. Local ClickHouse 25.3

@@ -91,3 +91,28 @@ the web Monitoring test. Local Docker verification on ClickHouse 25.3 has exerci
 wave 11 DDL, the restricted user, UDP errors, deliberate stops, notification delivery
 with ClickHouse stopped, spool persistence and recovery replay. Production kill/stop
 and release checks remain part of rollout.
+
+## September 30 VPS branch trial
+
+The owner authorized extending the existing trial while the normal release prerequisites
+remain pending. Runtime images were built from tracked commit `60afea8`, version
+`0.0.0-test.monitoring`, and applied under
+`/opt/factorlab/deployment-tests/20260930-60afea8/` at approximately 14:40 UTC.
+Wave 11 succeeded on the first attempt; that attempt restored previous images after
+missing startup/progress heartbeats. A DNS-race regression test and completed-work
+heartbeat hooks fixed the failure before the successful retry.
+
+The runner verified the monitor, API, India, US, universe and IBKR receiving heartbeats;
+all six were up at completion. API, web, monitor and secrets agent were healthy, and
+the primary API and ClickHouse identities stayed unchanged. Public `/monitoring`, its
+JavaScript bundle, both monitoring APIs, the new version and service/type filtering
+passed HTTP checks. Political remains unknown until its next scheduled job. IBKR
+can become late/down during the existing long Gateway snapshot operations; these
+are reported by the monitor rather than hidden by background heartbeats.
+
+`production.env` now enables `FACTORLAB_MONITOR_ADDR=monitor:9125`, and the monitor's
+JSONL log rotation was added without replacing other operator rules. Their private
+backups live beside the pinned rollback model; `monitor_test.py restore` restores
+them when present. Alert delivery remains the local JSONL backend. Normal immutable
+releases, Cloudflare Access setup and production crash/stop acceptance exercises
+remain pending.
