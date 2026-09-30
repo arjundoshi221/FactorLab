@@ -109,4 +109,4 @@ still runs production until the rollout completes).
 - `/india/instruments/<id>` expects a UUID; `/data/tables/<name>` must match
   `^[a-z_]+\.[a-z0-9_]+$`, as on the API side.
 
-**UDP service monitoring:** `/monitoring` polls the monitoring API every 15 seconds, shows status tiles, ages, uptime, restart counts and filterable event history. A stale watcher status shows the monitor offline banner.
+**UDP service monitoring:** The primary navigation has a visible Monitoring tab at `/monitoring`. It polls the monitoring API every 15 seconds, shows status tiles, ages, uptime, restart counts and filterable event history. A stale watcher status shows the monitor offline banner.

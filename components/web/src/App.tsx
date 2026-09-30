@@ -96,7 +96,6 @@ const statusFilters: Record<StatusFilter, { label: string; matches: (status: Hub
 const numberFormatter = new Intl.NumberFormat("en-IN");
 
 const operationsLinks = [
-  { href: "/monitoring", label: "Monitoring", active: (path: string) => path === "/monitoring" },
   { href: "/", label: "Dashboard", active: (path: string) => path === "/" },
   { href: "/india", label: "India markets", active: (path: string) => path.startsWith("/india") },
   { href: "/us", label: "US markets", active: (path: string) => path === "/us" },
@@ -122,6 +121,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <a className={path === "/data" || path.startsWith("/data/tables") ? "active" : ""} href="/data">Data catalog</a>
           <a className={path.startsWith("/schema") ? "active" : ""} href="/schema">Schema</a>
           <a className={path === "/data/pipelines" ? "active" : ""} href="/data/pipelines">Pipelines</a>
+          <a className={path === "/monitoring" ? "active" : ""} href="/monitoring">Monitoring</a>
           <details className={`nav-menu${inOperations ? " is-active" : ""}`}>
             <summary>Operations</summary>
             <div className="nav-menu__panel">
