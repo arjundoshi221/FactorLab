@@ -535,3 +535,20 @@ Docker's `unless-stopped` restart policy.
   the Cloudflare Tunnel behind Access (`deploy/README.md`, "Edge access"); do
   not reopen public TCP port `8000` or run a public reverse proxy.
 - Rotate Cloudflare VPS service token before expiry.
+
+## UDP monitoring branch trial — 2026-09-30 14:40 UTC
+
+Owner-authorized monitoring deployment extended the current VPS branch trial.
+Images use tracked source `60afea8`, version `0.0.0-test.monitoring`; rollback
+configuration is private under `/opt/factorlab/deployment-tests/20260930-60afea8/`.
+Wave 11 is applied. Monitor, candidate API, web, secrets agent and heartbeat senders
+are installed; monitoring uses backend UDP with no host port. The primary API and
+ClickHouse identities were preserved. `/monitoring`, its assets and filtered
+monitoring API reads passed public HTTP verification.
+
+All six daemon/monitor heartbeats were up at rollout completion. Political awaits
+its next scheduled run. Existing IBKR snapshot stalls can make that service late
+or down even while the container runs. Sender configuration is persisted in
+`production.env`, and monitor JSONL rotation is installed. Alerts use local JSONL.
+Normal release bootstrap and Cloudflare Access remain pending. Details:
+[service monitoring](operations/service-monitoring.md).
