@@ -166,6 +166,12 @@ class Host:
         pins = images or self.images_env
         if pins.exists():
             env_files += ["--env-file", str(pins)]
+        legacy = self.platform / "compose.production.yml"
+        files = self.compose_files(override)
+        if images is None and not override and not pins.exists() and legacy.is_file():
+            # prepare-host installs the operator command before platform bootstrap.
+            # Until pins exist, the installed monolith/branch-test model is authoritative.
+            files = ["-f", str(legacy)]
         return [
             "compose",
             "--project-name",
@@ -173,7 +179,7 @@ class Host:
             "--project-directory",
             str(self.platform),
             *env_files,
-            *self.compose_files(override),
+            *files,
             *self.profiles(),
             *args,
         ]

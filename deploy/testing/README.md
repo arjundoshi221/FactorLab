@@ -78,3 +78,35 @@ sudo python3 /opt/factorlab/deployment-tests/20260930-d599402/ingestion_test.py 
 This restores deployment configuration and code, not database contents. No
 schema migrations or data deletion are part of this workflow. Collector code
 under component `legacy/` directories remains in use and cannot yet be removed.
+
+## Remaining components and non-root operation
+
+On September 30 the owner also requested deployment of the remaining components.
+Build `secrets-agent`, `schema-migrator`, `api`, and `web` from the same archived
+source and install [component_test.py](component_test.py) beside the ingestion
+runner. It supports `apply <test-id>` and `verify <test-id>`.
+
+The runner saves `remaining-before.json`, runtime ownership metadata, and primary
+API/ClickHouse identities. It stops writers during the secret renderer transition,
+hands runtime data and logs to their image UIDs, installs the agent, checks schema
+readiness without migrations, and starts collectors as UID 10001. It runs web at
+`127.0.0.1:8080` and `api-candidate` at `127.0.0.1:18000`. The primary API stays on
+8000 to serve the existing hub until Cloudflare Tunnel/Access routing is ready.
+
+`rollback-check <test-id>` tests restoration on these private ports: the API
+candidate returns to the preceding monolith image and web returns to a separately
+built previous test version (`factorlab-test-web:20260930-previous`, build argument
+`VERSION=0.0.0-test.previous`). It then restores both current images and rechecks
+production reads. This is a live image/configuration restoration check, not a
+test of registry-backed component release history or the Actions rollback workflow.
+
+Host tools and timers can be installed before platform image-pin bootstrap.
+`factorlab-compose` uses the existing live Compose model until `state/images.env`
+exists. Keep that bootstrap pending while the public API still needs its old UI
+and test images are local, unpublished image IDs. The political cron continues
+using the live model, with its output moved to the managed log directory.
+
+The earlier ingestion-only restore runner is for the original root trial. After
+the remaining rollout, use the private `remaining-before.json` and ownership
+record when restoring this stage; do not use the old ingestion-only `verify`
+as proof of secret-agent identity, because the agent has intentionally changed.

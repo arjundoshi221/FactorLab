@@ -8,9 +8,15 @@ if ! mountpoint -q /mnt/factorlab-data; then
     exit 1
 fi
 
+# Create runtime identities before install resolves numeric owners on a fresh host.
+getent group factorlab-logs >/dev/null || sudo groupadd --system --gid 10002 factorlab-logs
+getent group factorlab >/dev/null || sudo groupadd --system --gid 10001 factorlab
+id factorlab >/dev/null 2>&1 || sudo useradd --system --uid 10001 --gid factorlab \
+    --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin factorlab
+
 sudo install -d -m 0750 -o 101 -g 101 /var/lib/factorlab/clickhouse
 sudo install -d -m 0750 -o 101 -g 101 /mnt/factorlab-data/clickhouse-raw
-sudo install -d -m 0750 -o 1000 -g 1000 /var/lib/factorlab/app-data
+sudo install -d -m 0750 -o 10001 -g 10001 /var/lib/factorlab/app-data
 sudo install -d -m 0750 -o 1000 -g 1000 /var/lib/factorlab/uptime-kuma
 sudo install -d -m 0750 -o 1000 -g 1000 /var/lib/factorlab/portainer
 sudo install -d -m 0755 -o root -g root /var/lib/factorlab/docker-images
@@ -18,16 +24,18 @@ sudo install -d -m 0700 -o root -g root /etc/factorlab/identity
 
 # Component containers run as UID 10001 (factorlab); log files are group-readable by
 # factorlab-logs (GID 10002), the only group the restricted log-reader account joins.
-getent group factorlab-logs >/dev/null || sudo groupadd --system --gid 10002 factorlab-logs
-getent group factorlab >/dev/null || sudo groupadd --system --gid 10001 factorlab
-id factorlab >/dev/null 2>&1 || sudo useradd --system --uid 10001 --gid factorlab \
-    --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin factorlab
-
 # One directory per component (keep in step with components/*/component.yaml; tested).
 FACTORLAB_COMPONENTS="api web secrets-agent schema-migrator ingest-india ingest-us ingest-political ingest-broker"
+component_uid() {
+    case "$1" in
+        web) printf '101\n' ;;
+        secrets-agent) printf '0\n' ;;
+        *) printf '10001\n' ;;
+    esac
+}
 sudo install -d -m 0750 -o root -g factorlab-logs /var/log/factorlab
 for component in $FACTORLAB_COMPONENTS; do
-    sudo install -d -m 2750 -o factorlab -g factorlab-logs "/var/log/factorlab/$component"
+    sudo install -d -m 2750 -o "$(component_uid "$component")" -g factorlab-logs "/var/log/factorlab/$component"
 done
 # The political cron log used to grow forever under /var/lib/factorlab/logs.
 legacy_log=/var/lib/factorlab/logs/political-cron.log

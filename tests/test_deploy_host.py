@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO = Path(__file__).resolve().parents[1]
@@ -62,7 +65,38 @@ def test_only_nginx_logs_are_rotated_in_place():
     for paths, body in _logrotate_stanzas():
         web = any(p.startswith("/var/log/factorlab/web/") for p in paths)
         assert ("copytruncate" in body) == web
-        assert ("create 0640 factorlab factorlab-logs" in body) == (not web)
+        agent = any(p.startswith("/var/log/factorlab/secrets-agent/") for p in paths)
+        assert ("create 0640 factorlab factorlab-logs" in body) == (not web and not agent)
+        assert ("create 0640 root factorlab-logs" in body) == agent
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash is not installed")
+def test_host_log_owners_match_component_runtime_users():
+    text = PREPARE_HOST.read_text(encoding="utf-8")
+    function = re.search(r"^component_uid\(\) \{.*?^\}", text, re.MULTILINE | re.DOTALL)
+    assert function
+    for manifest in (REPO / "components").glob("*/component.yaml"):
+        data = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+        result = subprocess.run(
+            [
+                shutil.which("bash"),
+                "-c",
+                function.group() + '\ncomponent_uid "$1"',
+                "test",
+                data["name"],
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert result.stdout.strip() == str(data["platform"]["user"]), data["name"]
+
+
+def test_host_data_directory_is_writable_by_ingestion_user():
+    text = PREPARE_HOST.read_text(encoding="utf-8")
+    india = yaml.safe_load((REPO / "components/ingest-india/component.yaml").read_text("utf-8"))
+    uid = india["platform"]["user"]
+    assert f"-o {uid} -g {uid} /var/lib/factorlab/app-data" in text
 
 
 def test_the_log_reader_account_is_provisioned_safely():

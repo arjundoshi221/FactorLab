@@ -108,3 +108,42 @@ root-owned secret files. Non-root compatibility and the per-component host
 deployer are not validated by this test. No production migrations, data deletion,
 release tags or changes to `main` were performed. See
 [the test runbook](../../deploy/testing/README.md) for restore commands.
+
+## Remaining component deployment — approximately 12:43 UTC
+
+- Built `secrets-agent`, `schema-migrator`, `api`, and `web` from the same tracked
+  source archive. Installed the new secrets agent in production; it is healthy
+  and renders 0444 secret files into existing per-consumer tmpfs volumes.
+- Removed ingestion root overrides. India, US, universe and IBKR processes run
+  as UID 10001. Runtime data and logs are owned by the matching container users.
+  India activated 2,892 series and passed authentication after restart; US universe
+  and recovery writes continued under the non-root user.
+- The new schema-migrator bootstrap checked the production v2 schema and raw
+  storage policy as UID 10001, exiting zero. No migrations were applied.
+- Web runs healthy as UID 101 on `127.0.0.1:8080`; API candidate runs healthy as
+  UID 10001 on `127.0.0.1:18000`. Twelve HTTP checks passed across health, UI routes,
+  version, overview, catalog, image inventory and all three market dashboards.
+- Exercised private API restoration to the preceding monolith image and web
+  restoration to a separately built previous test version. Restored current
+  images and repeated component health and production-read checks successfully.
+  The registry-backed deployer/Actions rollback path remains untested live.
+- Primary API and ClickHouse container identities and start times stayed unchanged.
+  Public hub routing still targets the primary monolith API; its bundled UI is
+  needed until protected tunnel routing can split the new API and web services.
+- Installed the host deployer/operator commands, restricted log reader, log
+  rotation, Docker image inventory and image retention timers. Verified the
+  operator Compose model, timer activity and workstation restricted log access.
+  Kept component image-pin bootstrap inactive; test images remain local image IDs.
+- Fixed host provisioning to create runtime identities before resolving directory
+  owners, assign runtime data to UID 10001, nginx logs to UID 101 and secrets-agent
+  logs to root. Secret-agent log rotation now recreates root-owned files, required
+  because the agent drops all capabilities. The operator command uses the existing
+  live model before pin bootstrap. Focused regression checks cover these changes.
+- Non-root political test completed at 13:02 UTC and stored one parsed transaction;
+  the updated cron uses the new political image and managed log directory.
+
+Cloudflare account access is still needed to configure the tunnel, Access policy,
+DNS and routing. No tunnel token was installed, and the browser connection attempt
+was blocked by its Node runtime version. Public cutover, formal component release
+bootstrap and IBKR end-to-end writes remain pending. Concurrent monitoring work in
+the checkout was preserved; no monitoring service was deployed in this task.

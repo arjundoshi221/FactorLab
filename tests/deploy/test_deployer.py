@@ -15,6 +15,22 @@ from pathlib import Path
 import pytest
 import yaml
 
+
+def test_operator_compose_uses_live_model_until_platform_bootstrap(tmp_path):
+    host = fd.Host(root=tmp_path)
+    host.platform.mkdir()
+    legacy = host.platform / "compose.production.yml"
+    legacy.write_text("services: {}\n")
+    args = host.compose_args("ps")
+    assert str(legacy) in args
+    assert str(host.platform / "compose.base.yml") not in args
+    host.images_env.parent.mkdir()
+    host.images_env.write_text("FACTORLAB_API_IMAGE=example\n")
+    args = host.compose_args("ps")
+    assert str(host.platform / "compose.base.yml") in args
+    assert str(legacy) not in args
+
+
 REPO = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location(
     "factorlab_deploy", REPO / "deploy/host/factorlab_deploy.py"

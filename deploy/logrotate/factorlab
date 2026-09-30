@@ -14,7 +14,6 @@
 /var/log/factorlab/ingest-political/*.jsonl /var/log/factorlab/ingest-political/*.log
 /var/log/factorlab/ingest-us/*.jsonl
 /var/log/factorlab/schema-migrator/*.jsonl
-/var/log/factorlab/secrets-agent/*.jsonl
 {
     daily
     maxsize 256M
@@ -27,6 +26,22 @@
     missingok
     notifempty
     create 0640 factorlab factorlab-logs
+}
+
+# The secrets agent runs as root with every capability dropped. It must own its
+# replacement log file to append after rotation.
+/var/log/factorlab/secrets-agent/*.jsonl {
+    daily
+    maxsize 256M
+    rotate 45
+    maxage 30
+    dateext
+    dateformat -%Y%m%d-%H
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root factorlab-logs
 }
 
 # web: nginx (uid 101) keeps its files open and has no signal path from the host, so
