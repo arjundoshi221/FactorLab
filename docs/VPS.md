@@ -536,7 +536,7 @@ Docker's `unless-stopped` restart policy.
   not reopen public TCP port `8000` or run a public reverse proxy.
 - Rotate Cloudflare VPS service token before expiry.
 
-## UDP monitoring branch trial — 2026-09-30 14:40 UTC
+## UDP monitoring branch trial â€” 2026-09-30 14:40 UTC
 
 Owner-authorized monitoring deployment extended the current VPS branch trial.
 Images use tracked source `60afea8`, version `0.0.0-test.monitoring`; rollback
@@ -552,3 +552,14 @@ or down even while the container runs. Sender configuration is persisted in
 `production.env`, and monitor JSONL rotation is installed. Alerts use local JSONL.
 Normal release bootstrap and Cloudflare Access remain pending. Details:
 [service monitoring](operations/service-monitoring.md).
+
+## Monitoring navigation update — 2026-09-30 17:00 UTC
+
+Deployed only the web service from tracked commit `379c377`, version
+`0.0.0-test.monitoring-nav`. Monitoring is a visible primary navigation tab.
+Thirteen UI tests and the production build passed; origin health, image, version,
+navigation assets and monitoring API verification passed. All other running
+container identities stayed unchanged. Root-only rollback models are under
+`/opt/factorlab/deployment-tests/20260930-379c377/`. Public requests now redirect
+to Cloudflare Access sign-in; the authenticated public UI was not browser-verified.
+The legacy bundled UI on loopback port 8000 still exists; the updated web is 8080.

@@ -1,6 +1,6 @@
 # Service monitoring
 
-F-035 adds a UDP monitor on the private backend network. The hub Operations menu links
+F-035 adds a UDP monitor on the private backend network. The hub primary navigation links
 to `/monitoring`; its API reads ClickHouse independently of the monitor process.
 
 ## Rollout
@@ -116,3 +116,11 @@ backups live beside the pinned rollback model; `monitor_test.py restore` restore
 them when present. Alert delivery remains the local JSONL backend. Normal immutable
 releases, Cloudflare Access setup and production crash/stop acceptance exercises
 remain pending.
+
+At 17:00 UTC, a web-only follow-up deployed tracked commit `379c377`, version
+`0.0.0-test.monitoring-nav`, making Monitoring a visible primary navigation tab.
+Thirteen navigation/page tests and the production build passed. The origin version,
+served navigation bundle, web health and monitoring API passed verification; every
+other running container remained unchanged. Rollback files are root-only under
+`/opt/factorlab/deployment-tests/20260930-379c377/`. Public HTTP requests now reach
+Cloudflare Access sign-in, so public page verification requires an authenticated session.

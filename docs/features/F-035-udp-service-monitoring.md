@@ -171,7 +171,7 @@ web (edge) ──► api /hub/api/v1/monitoring/* ──► ClickHouse
   - `GET /hub/api/v1/monitoring/services`: status joined with the registry.
   - `GET /hub/api/v1/monitoring/events?service_id=&type=&since=&limit=`
 - **Web:** `components/web/src/pages/Monitoring.tsx` and a test, linked from
-  `operationsLinks` in `App.tsx`. It polls every 15 s and shows:
+  primary navigation in `App.tsx`. It polls every 15 s and shows:
   - a status grid, one tile per service coloured by status, with last-seen age, uptime
     and restarts;
   - a filterable events table;
@@ -225,6 +225,10 @@ Open questions:
 - Does the protocol choice deserve its own ADR once the design is accepted?
 
 ## Log
+
+- 2026-09-30: deployed web-only follow-up `379c377` at 17:00 UTC to make
+  Monitoring a visible top-level navigation tab. Thirteen UI tests, build and
+  origin image/version/navigation checks passed; other containers were unchanged.
 
 - 2026-09-30: deployed the owner-authorized VPS branch trial from `60afea8` after
   fixing lost initial DNS heartbeats and adding completed-work progress reporting.
