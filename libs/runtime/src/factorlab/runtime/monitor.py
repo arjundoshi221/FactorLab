@@ -102,10 +102,14 @@ class MonitorClient:
         self._target: tuple[str, int] | None = None
         self._lock = _PACKET_LOCK
         self._host = socket.gethostname()
+        self._enabled = False
+        self._pending_heartbeat: State | None = None
+        self._next_tick = 0.0
         try:
             settings = MonitorSettings()
             self.id = self.id or settings.service
             if settings.monitor_addr:
+                self._enabled = True
                 threading.Thread(
                     target=self._resolve, args=(settings.monitor_addr,), daemon=True
                 ).start()
@@ -132,6 +136,8 @@ class MonitorClient:
                     sock.setblocking(False)
                     self._socket = sock
                 self._target = (str(target[0]), int(target[1]))
+                if self._pending_heartbeat is not None:
+                    self.heartbeat(self._pending_heartbeat)
             except Exception:  # noqa: BLE001 - retry DNS off the caller thread
                 pass
             time.sleep(30)
@@ -177,12 +183,26 @@ class MonitorClient:
             pass
 
     def heartbeat(self, state: State = "running") -> None:
+        if self._enabled and self._target is None:
+            # Retain just the latest heartbeat while initial DNS runs off-thread.
+            self._pending_heartbeat = state
+        if self._target is not None:
+            self._pending_heartbeat = None
         self._send(
             "hb",
             state=state,
             interval_s=self.interval_s,
             uptime_s=int(time.monotonic() - self.started),
         )
+
+    def tick(self) -> None:
+        """Rate-limited progress from completed work, never from a timer thread."""
+        if not self._enabled:
+            return
+        now = time.monotonic()
+        if now >= self._next_tick:
+            self.heartbeat()
+            self._next_tick = now + self.interval_s
 
     def warn(self, error_type: str, message: str, *, fingerprint: str = "", **ctx: Any) -> None:
         self._send(

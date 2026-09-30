@@ -199,12 +199,14 @@ class RunContext:
         )
 
     def succeed_unit(self, name: str, rows_written: int) -> None:
+        monitor_client().tick()
         self._units.append(UnitOutcome(name=name, rows_written=int(rows_written)))
 
     def fail_unit(self, name: str, error: BaseException | str, *, rows_written: int = 0) -> None:
         message = _safe_error(error)
         kind = classify(error) if isinstance(error, BaseException) else "other"
         client = monitor_client()
+        client.tick()
         report = (
             client.warn if kind in ("rate_limited", "transient", "normalization") else client.error
         )

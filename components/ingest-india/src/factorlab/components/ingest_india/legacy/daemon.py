@@ -33,11 +33,11 @@ from factorlab.components.ingest_india.legacy.upstox.instruments import (
     load_or_download,
 )
 from factorlab.components.ingest_india.legacy.upstox.universes import load_universe
+from factorlab.components.ingest_india.monitoring import MonitoredIndiaStorage as ClickHouseStorage
 from factorlab.components.ingest_india.monitoring import sleep
 from factorlab.core import paths
 from factorlab.core.logging import configure_logging
 from factorlab.runtime.signals import GracefulShutdown
-from factorlab.storage.v2_india import V2IndiaStorage as ClickHouseStorage
 
 PROJECT_ROOT = paths.home()
 

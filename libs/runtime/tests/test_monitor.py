@@ -1,10 +1,37 @@
 import json
 import socket
+import threading
+import time
 from pathlib import Path
 
 import pytest
 
 from factorlab.runtime.monitor import MAX_PACKET, MonitorClient, decode_packet
+
+
+def test_starting_heartbeat_survives_initial_dns_resolution(monkeypatch):
+    class StopResolver(Exception):
+        pass
+
+    def stop(_seconds):
+        raise StopResolver
+
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+        receiver.bind(("127.0.0.1", 0))
+        receiver.settimeout(0.2)
+        address = f"127.0.0.1:{receiver.getsockname()[1]}"
+        monkeypatch.setenv("FACTORLAB_MONITOR_ADDR", address)
+        monkeypatch.setattr(threading.Thread, "start", lambda self: None)
+        client = MonitorClient("starting-test")
+        client.heartbeat("starting")
+        monkeypatch.setattr(time, "sleep", stop)
+        try:
+            with pytest.raises(StopResolver):
+                client._resolve(address)
+            assert decode_packet(receiver.recv(2048))["state"] == "starting"
+        finally:
+            if client._socket is not None:
+                client._socket.close()
 
 
 @pytest.mark.parametrize("name", ["hb", "warn", "err"])

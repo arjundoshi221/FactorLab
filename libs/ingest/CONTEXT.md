@@ -108,4 +108,4 @@ their previous tags; the library version is not tagged.
 - Adding a dataset means a `DatasetSpec` here plus a sink in storage; the engine
   itself never needs a provider import (R4; `test_new_ingestion_layers_are_clean`).
 
-**UDP service monitoring:** `RunContext.fail_unit` reports redacted failures through runtime monitoring, using classify() codes; transient/rate/normalization failures warn, other failures error. Runtime is now a declared dependency and allowed lower library layer.
+**UDP service monitoring:** `RunContext.fail_unit` reports redacted failures through runtime monitoring, using classify() codes; transient/rate/normalization failures warn, other failures error. Both successful and failed units tick rate-limited progress heartbeats. Runtime is now a declared dependency and allowed lower library layer.

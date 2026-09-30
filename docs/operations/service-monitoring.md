@@ -22,6 +22,9 @@ The political job uses the new image on its next scheduled invocation. Resolved
 configuration backups stay root-only under `/opt/factorlab/deployment-tests/<test-id>`.
 Failed startup or heartbeat verification restores preceding images; the additive
 schema migration remains applied. `restore` uses the same pinned rollback model.
+Verification requires current monitor, API, India, US and universe heartbeats, and
+receipt from IBKR. Existing Gateway snapshot stalls can legitimately mark IBKR down
+while its process remains running; the rollout does not hide these operational errors.
 
 The platform installs generated `deploy/monitor-services.yaml` as
 `/etc/factorlab/monitor-services.yaml`. Monitor and API mount this registry read-only.

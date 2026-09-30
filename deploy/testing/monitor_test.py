@@ -264,8 +264,11 @@ def verify(root: Path) -> None:
         (root / "services-result.json").write_text(json.dumps(result, indent=2))
         services = {row["service_id"]: row for row in result["services"]}
         expected = {"monitor", "api", "ingest-india", "ingest-us", "universe-us", "ibkr-snapshot"}
-        if not result["monitor_offline"] and all(
-            services.get(name, {}).get("status") in ("up", "stopped") for name in expected
+        current = expected - {"ibkr-snapshot"}
+        if (
+            not result["monitor_offline"]
+            and services.get("ibkr-snapshot", {}).get("last_seen_at") is not None
+            and all(services.get(name, {}).get("status") == "up" for name in current)
         ):
             print("Monitor, API/UI, current images and heartbeat receipt verified", flush=True)
             print(
