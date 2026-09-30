@@ -105,6 +105,13 @@ uv run pytest tests/deploy tests/test_deploy_host.py
 
 ## Release and rollback
 
+Owner-authorized ingestion tests before merging use the separate branch workflow in
+[testing/README.md](testing/README.md) and [testing/ingestion_test.py](testing/ingestion_test.py).
+It replaces only ingestion services, saves the preceding host model and running image
+IDs, and verifies unchanged API, ClickHouse and secret-agent identities. Its root user
+override bridges the currently installed agent's root-only secret files; it does not
+complete the per-component platform rollout.
+
 `.\deploy\release.ps1 -Component platform [-Bump ...] [-DryRun]` bumps `version:` in
 [component.yaml](component.yaml), pushes `platform/vX.Y.Z`;
 [component-release.yml](../.github/workflows/component-release.yml) runs the tests and

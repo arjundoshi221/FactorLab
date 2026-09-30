@@ -6,6 +6,11 @@ Secret values are rendered only into Docker tmpfs volumes.
 
 ## Automated production releases
 
+For an explicitly requested production ingestion test before merging, see
+[testing/README.md](testing/README.md). This separate branch workflow keeps `main`
+intact and records the preceding image pins and host configuration. Normal releases
+continue through the helper below.
+
 Production releases are initiated only from a clean, synchronized `main`:
 
 ```powershell
