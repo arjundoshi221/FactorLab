@@ -4,12 +4,8 @@
 
 ## Purpose
 
-`deploy/` is the `platform` release unit ([component.yaml](component.yaml)). It owns what no
-single component does: the Compose base (networks, tmpfs secret volumes, ClickHouse, the
-optional IB Gateways, ops tools), the root-run host deployer that installs component
-releases, host provisioning, log rotation and the restricted log-reader account. It ships
-no image; a platform release installs files on the host and recreates no services. The
-operator runbook is [README.md](README.md).
+`deploy/` is the `platform` release unit ([component.yaml](component.yaml)); it ships host files and recreates no services.
+Owns Compose base (networks, tmpfs secrets, ClickHouse, optional IB Gateways, ops tools), the root-run component deployer, provisioning, log rotation and restricted log reader. Operator runbook: [README.md](README.md).
 
 ## Owns and does not own
 
@@ -146,3 +142,5 @@ until the rollout completes.
 - `prepare-host.sh` removes the sshd drop-in if `sshd -t` rejects it; keep the component list
   in it and in `logrotate/factorlab` in step with `components/*` (tested).
 - Edit fragments, then `render-compose`; CI fails when `compose.production.yml` is stale.
+
+**UDP service monitoring:** `monitor_runtime` is a separate tmpfs secret volume. Component manifests accept monitor deadlines and optional wall-clock active windows (timezone, ISO weekdays, start/end HH:MM). render-compose also generates monitor-services.yaml; mount it into monitor and api. Enable senders with FACTORLAB_MONITOR_ADDR=monitor:9125 only after schema and monitor releases. UDP 9125 remains on backend with no published host port.

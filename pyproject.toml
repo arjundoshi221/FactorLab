@@ -66,6 +66,7 @@ factorlab-component-ingest-political = { workspace = true }
 factorlab-component-ingest-broker = { workspace = true }
 factorlab-component-secrets-agent = { workspace = true }
 factorlab-component-schema-migrator = { workspace = true }
+factorlab-component-monitor = { workspace = true }
 
 [tool.pytest.ini_options]
 # Tests live with the member they test (libs/*/tests, providers/*/tests,

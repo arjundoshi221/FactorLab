@@ -1,10 +1,10 @@
 """Top-level wrapper for long-running script entrypoints.
 
 Standardises:
-  - heartbeat init (so canary jobs can detect hangs)
+  - file heartbeat initialization and UDP lifecycle reporting
   - exception capture → ExitCode.CRASH (no stack-trace tossed at the user;
     the message + traceback go to the logger)
-  - optional ``on_crash`` callback (Phase 4 wires ``notify(severity='fatal')``)
+  - optional ``on_crash`` callback, alongside UDP crash reporting
 
 Use it from every script's ``__main__`` block::
 
@@ -19,6 +19,7 @@ from collections.abc import Callable
 
 from factorlab.runtime.exit_codes import ExitCode
 from factorlab.runtime.heartbeat import Heartbeat
+from factorlab.runtime.monitor import monitor_client
 
 
 def supervised(
@@ -37,6 +38,8 @@ def supervised(
       if provided, and returns :data:`ExitCode.CRASH`.
     """
     log = logging.getLogger(name)
+    monitor = monitor_client(name)
+    monitor.heartbeat("starting")
 
     if enable_heartbeat:
         try:
@@ -45,11 +48,15 @@ def supervised(
             log.warning("heartbeat init failed for %s: %s", name, e)
 
     try:
-        return int(main())
+        result = int(main())
+        monitor.heartbeat("stopping")
+        return result
     except (SystemExit, KeyboardInterrupt):
+        monitor.heartbeat("stopping")
         raise
     except Exception as exc:
         log.exception("Unexpected error in %s: %s", name, exc)
+        monitor.error("crash", str(exc), severity="fatal")
         if on_crash:
             try:
                 on_crash(exc)

@@ -123,3 +123,5 @@ tags ([release.yml](../../.github/workflows/release.yml), `deploy-release.sh`).
   on `FACTORLAB_API_KEY` being rendered there.
 - New tables need catalog descriptions, or `tests/test_catalog_descriptions.py` fails
   (`python scripts/generate_catalog_descriptions.py`).
+
+**UDP service monitoring:** `/hub/api/v1/monitoring/services` joins latest ClickHouse statuses with the mounted service registry; `/events` supports service/type/since/limit filters. The API marks monitor offline after 15 seconds without a status update. Its lifespan sends heartbeats and a deliberate stop. No monitor daemon connection is needed for reads.

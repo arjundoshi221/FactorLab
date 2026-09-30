@@ -64,4 +64,7 @@ def test_wave_10_is_discovered_after_the_applied_waves():
     names = [m.migration_id for m in migration.discover_migrations() if m.wave == 10]
     assert names == ["wave_10_schema_source_priorities", "wave_10_views_source_priorities"]
     schema = [m for m in migration.discover_migrations() if m.phase == "schema"]
-    assert schema[-2:] == [m for m in schema if m.wave == 10]
+    assert [m.wave for m in schema] == sorted(m.wave for m in schema)
+    assert all(
+        m.wave >= 10 for m in schema[schema.index(next(m for m in schema if m.wave == 10)) :]
+    )

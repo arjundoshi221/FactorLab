@@ -21,6 +21,7 @@ services:
       CLICKHOUSE_USERNAME: factorlab
       FACTORLAB_PERSIST_SECRETS: "false"
       FACTORLAB_SECRETS_DIR: /run/secrets/app
+      FACTORLAB_MONITOR_ADDR: ${FACTORLAB_MONITOR_ADDR:-}
       FACTORLAB_COMPONENT: api
       FACTORLAB_SERVICE: api
       FACTORLAB_LOG_DIR: /var/log/factorlab/api
@@ -32,6 +33,7 @@ services:
       bootstrap:
         condition: service_completed_successfully
     volumes:
+      - ${FACTORLAB_MONITOR_REGISTRY:-/etc/factorlab/monitor-services.yaml}:/app/monitor-services.yaml:ro
       - political_runtime:/run/secrets/app:ro
       - /var/lib/factorlab/docker-images:/run/docker-images:ro
       - /var/log/factorlab/api:/var/log/factorlab/api

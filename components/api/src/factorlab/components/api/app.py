@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, date, datetime
 from functools import lru_cache
 from pathlib import Path as FileSystemPath
@@ -64,6 +66,7 @@ from factorlab.components.api.india_observability import (
     IndiaObservabilityRepository,
     IndiaSourceStatusPage,
 )
+from factorlab.components.api.monitoring import router as monitoring_router
 from factorlab.components.api.political import PoliticalTradesPage, PoliticalTradesRepository
 from factorlab.components.api.political_observability import (
     PoliticalAnomaliesPage,
@@ -87,8 +90,31 @@ from factorlab.components.api.schema_map import (
 from factorlab.components.api.us import router as us_router
 from factorlab.core import paths
 from factorlab.core.logging import log_context
+from factorlab.runtime.monitor import monitor_client
+
+
+@asynccontextmanager
+async def lifespan(app):
+    client = monitor_client("api")
+    client.heartbeat("starting")
+
+    async def heartbeat():
+        while True:
+            client.heartbeat()
+            await asyncio.sleep(client.interval_s)
+
+    task = asyncio.create_task(heartbeat())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        client.heartbeat("stopping")
+
 
 app = FastAPI(
+    lifespan=lifespan,
     title="FactorLab API",
     version="0.1.0",
     description="Private read API for FactorLab research data.",
@@ -132,6 +158,7 @@ app.include_router(
     us_router, prefix="/api/v1/us", tags=["us"], dependencies=[Depends(require_api_key)]
 )
 app.include_router(us_router, prefix="/hub/api/v1/us", tags=["hub-us"])
+app.include_router(monitoring_router, prefix="/hub/api/v1/monitoring", tags=["hub-monitoring"])
 
 
 @app.get("/hub/api/v1/docker-images", response_model=DockerImagesResponse, tags=["hub"])
@@ -1369,6 +1396,11 @@ def hub_roadmap() -> FileResponse:
 
 @app.get("/docker-images", include_in_schema=False)
 def hub_docker_images() -> FileResponse:
+    return _hub_index()
+
+
+@app.get("/monitoring", include_in_schema=False)
+def hub_monitoring() -> FileResponse:
     return _hub_index()
 
 

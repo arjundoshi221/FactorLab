@@ -21,6 +21,7 @@ services:
       CLICKHOUSE_USERNAME: factorlab
       FACTORLAB_PERSIST_SECRETS: "false"
       FACTORLAB_SECRETS_DIR: /run/secrets/app
+      FACTORLAB_MONITOR_ADDR: ${FACTORLAB_MONITOR_ADDR:-}
       FACTORLAB_COMPONENT: ingest-political
       FACTORLAB_SERVICE: ingest-political
       FACTORLAB_LOG_DIR: /var/log/factorlab/ingest-political

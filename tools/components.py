@@ -57,6 +57,44 @@ PLATFORM_MANIFEST = REPO / "deploy" / "component.yaml"
 EXECUTABLE_DIRS = ("deploy/scripts/", "deploy/host/")
 
 
+class ActiveWindow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    timezone: str
+    days: list[int] = Field(default_factory=lambda: [1, 2, 3, 4, 5])
+    start: str
+    end: str
+
+    @model_validator(mode="after")
+    def validate_window(self):
+        from zoneinfo import ZoneInfo
+
+        try:
+            ZoneInfo(self.timezone)
+        except KeyError as exc:
+            raise ValueError("unknown active-window timezone") from exc
+        if not self.days or any(d not in range(1, 8) for d in self.days):
+            raise ValueError("days must be ISO weekdays 1..7")
+        for value in (self.start, self.end):
+            if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+                raise ValueError("window times must be HH:MM")
+        if self.start == self.end:
+            raise ValueError("window start and end must differ")
+        return self
+
+
+class Monitoring(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    interval_s: float | None = Field(default=None, gt=0, le=86400)
+    max_silence_s: float | None = Field(default=None, gt=0)
+    active_window: ActiveWindow | None = None
+
+    @model_validator(mode="after")
+    def deadline(self):
+        if self.interval_s is None and self.max_silence_s is None:
+            raise ValueError("monitor requires interval_s or max_silence_s")
+        return self
+
+
 class Service(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -65,6 +103,7 @@ class Service(BaseModel):
     mode: Literal["daemon", "run-on-deploy", "scheduled"] = "daemon"
     profile: str | None = None
     schedule: str | None = None
+    monitor: Monitoring | None = None
 
 
 class Health(BaseModel):
@@ -273,6 +312,19 @@ def render_compose(components: list[Component]) -> str:
     )
 
 
+def render_monitor_services(components: list[Component]) -> str:
+    return yaml.safe_dump(
+        {
+            s.name: s.monitor.model_dump(exclude_none=True)
+            | ({"profile": s.profile} if s.profile else {})
+            for c in components
+            for s in c.services
+            if s.monitor is not None
+        },
+        sort_keys=True,
+    )
+
+
 def version_of(component: Component) -> str:
     """The component's version as declared in its source tree."""
     if component.kind == "static":
@@ -386,7 +438,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if command == "render-compose":
         text = render_compose(components)
+        registry = REPO / "deploy" / "monitor-services.yaml"
+        registry_text = render_monitor_services(components)
         if "--check" in args:
+            if not registry.exists() or registry.read_text(encoding="utf-8") != registry_text:
+                print("deploy/monitor-services.yaml is stale; run render-compose", file=sys.stderr)
+                return 1
             current = (
                 RENDERED_COMPOSE.read_text(encoding="utf-8") if RENDERED_COMPOSE.exists() else ""
             )
@@ -399,6 +456,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{RENDERED_COMPOSE.relative_to(REPO)} is current")
             return 0
         RENDERED_COMPOSE.write_text(text, encoding="utf-8")
+        registry.write_text(registry_text, encoding="utf-8")
         print(f"wrote {RENDERED_COMPOSE.relative_to(REPO)}")
         return 0
     if command == "version" and len(args) == 2:

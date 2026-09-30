@@ -41,3 +41,8 @@ own `wave_NN_schema_<suffix>.sql`.
   `python scripts/factlab_ingest.py sync-priorities` to load priorities from
   `configs/ingestion/bindings.yaml`. Until a provider is `primary`/`secondary`,
   `market.bars_best` returns no rows for it.
+
+- **Wave 11** (`*_service_monitoring`, F-035): `meta.service_events` and
+  `meta.service_status`. Events retain heartbeats for 14 days and other events for
+  180 days; the current status uses ReplacingMergeTree(version). Install this pending
+  wave before the monitor release. The secrets agent owns the restricted XML user.

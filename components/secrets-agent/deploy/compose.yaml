@@ -28,6 +28,7 @@ services:
       - india_runtime:/run/secrets/india
       - us_runtime:/run/secrets/us
       - political_runtime:/run/secrets/political
+      - monitor_runtime:/run/secrets/monitor
       - ibkr_paper_runtime:/run/secrets/ibkr-paper
       - ibkr_live_runtime:/run/secrets/ibkr-live
       - ibkr_client_runtime:/run/secrets/ibkr-client

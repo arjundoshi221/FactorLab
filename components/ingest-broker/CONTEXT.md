@@ -108,3 +108,5 @@ production until the rollout completes.
   component must never place orders.
 - [`component-rollback.yml`](../../.github/workflows/component-rollback.yml) does not check
   `data_contract`; never roll back across a contract bump.
+
+**UDP service monitoring:** The manifest declares expected liveness. Set FACTORLAB_MONITOR_ADDR=monitor:9125 after the monitor rollout; empty disables sending. The process reports crashes and deliberate stops, and daemon waits report idle liveness through runtime helpers.

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import signal
 import time
 import uuid
 from dataclasses import dataclass
@@ -34,8 +33,10 @@ from factorlab.components.ingest_india.legacy.upstox.instruments import (
     load_or_download,
 )
 from factorlab.components.ingest_india.legacy.upstox.universes import load_universe
+from factorlab.components.ingest_india.monitoring import sleep
 from factorlab.core import paths
 from factorlab.core.logging import configure_logging
+from factorlab.runtime.signals import GracefulShutdown
 from factorlab.storage.v2_india import V2IndiaStorage as ClickHouseStorage
 
 PROJECT_ROOT = paths.home()
@@ -55,18 +56,8 @@ MARKET_OPEN_UTC = datetime_time(3, 45)
 MARKET_CLOSE_UTC = datetime_time(10, 2)
 
 log = logging.getLogger("factorlab.upstox.clickhouse")
-_shutdown = False
-
-
-def _handle_shutdown(signum, frame) -> None:
-    del frame
-    global _shutdown
-    log.info("Received signal %s; stopping after the current batch", signum)
-    _shutdown = True
-
-
-signal.signal(signal.SIGINT, _handle_shutdown)
-signal.signal(signal.SIGTERM, _handle_shutdown)
+shutdown = GracefulShutdown(log)
+shutdown.install()
 
 
 @dataclass(frozen=True)
@@ -231,7 +222,7 @@ def poll_once(
     failed = 0
     rows_written = 0
     for item in series:
-        if _shutdown:
+        if shutdown.triggered:
             break
         if item.contract_id is not None and not include_futures:
             continue
@@ -274,7 +265,7 @@ def poll_full_equity_once(
     key_batches = instrument_key_batches(list(by_key), batch_size=batch_size)
 
     for index, keys in enumerate(key_batches, start=1):
-        if _shutdown:
+        if shutdown.triggered:
             failed += sum(len(batch) for batch in key_batches[index - 1 :])
             break
         try:
@@ -410,7 +401,7 @@ def recover_historical(
     consecutive_systemic_failures = 0
 
     for index, (item, windows) in enumerate(plans):
-        if _shutdown:
+        if shutdown.triggered:
             failed += len(plans) - index
             errors.append("shutdown requested")
             break
@@ -504,7 +495,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     configured_for = datetime.now(IST).date()
 
-    while not _shutdown:
+    while not shutdown.triggered:
         try:
             token = ensure_token(interactive=False)
             session = get_session(token)
@@ -517,7 +508,7 @@ def main(argv: list[str] | None = None) -> int:
                 "Retrying authentication in %d seconds",
                 TOKEN_RETRY_SECONDS,
             )
-            time.sleep(TOKEN_RETRY_SECONDS)
+            sleep(TOKEN_RETRY_SECONDS)
     else:
         return 0
 
@@ -527,7 +518,7 @@ def main(argv: list[str] | None = None) -> int:
     recovery_completed_for: date | None = None
     next_recovery_attempt = 0.0
 
-    while not _shutdown:
+    while not shutdown.triggered:
         now = datetime.now(UTC)
         recovery_date = now.astimezone(IST).date()
         if recovery_date != configured_for:
@@ -569,17 +560,17 @@ def main(argv: list[str] | None = None) -> int:
         if not args.once and len(calendar.sessions_in_range(today, today)) == 0:
             if not args.daemon:
                 return 10
-            time.sleep(3600)
+            sleep(3600)
             continue
 
         if not args.once and now.time() < MARKET_OPEN_UTC:
             open_at = datetime.combine(now.date(), MARKET_OPEN_UTC, tzinfo=UTC)
-            time.sleep(max((open_at - now).total_seconds(), 1))
+            sleep(max((open_at - now).total_seconds(), 1))
             continue
         if not args.once and now.time() > MARKET_CLOSE_UTC:
             if not args.daemon:
                 return 0
-            time.sleep(
+            sleep(
                 max(
                     (
                         datetime.combine(
@@ -622,7 +613,7 @@ def main(argv: list[str] | None = None) -> int:
                     limiter,
                     batch_size=args.quote_batch_size,
                 )
-                if include_futures and not _shutdown:
+                if include_futures and not shutdown.triggered:
                     future_successful, future_failed, future_rows = poll_once(
                         session,
                         future_series,
@@ -664,9 +655,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.once:
             return 0
         if full_equity_mode:
-            time.sleep(seconds_until_next_quote_sweep())
+            sleep(seconds_until_next_quote_sweep())
         else:
-            time.sleep(POLL_INTERVAL_SECONDS)
+            sleep(POLL_INTERVAL_SECONDS)
 
     return 0
 

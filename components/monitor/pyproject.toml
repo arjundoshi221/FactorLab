@@ -1,0 +1,27 @@
+[project]
+name = "factorlab-component-monitor"
+version = "0.1.0"
+description = "UDP service liveness and error monitoring"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "factorlab-core",
+    "factorlab-runtime",
+    "factorlab-clickhouse",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+factorlab-monitor = "factorlab.components.monitor.cli:main"
+
+[tool.uv.sources]
+factorlab-core = { workspace = true }
+factorlab-runtime = { workspace = true }
+factorlab-clickhouse = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# factorlab is a namespace: only this member's own package ships.
+packages = ["src/factorlab"]

@@ -95,6 +95,10 @@ Never released alone. Components whose closure includes it
 
 ## Pitfalls
 
+The daemon also ticks heartbeat during intentional waits and reports a deliberate stop.
+UDP sending is enabled only by FACTORLAB_MONITOR_ADDR; the service id comes from
+FACTORLAB_SERVICE when a component runs it.
+
 - The compose services in the component manifests run the legacy daemons, not
   `engine daemon`; all bindings are `shadow` until each provider's cutover (doc 07 §15.2).
 - `replay` has no `--dry-run` and always opens ClickHouse.

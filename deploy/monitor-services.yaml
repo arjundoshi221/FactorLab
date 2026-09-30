@@ -1,0 +1,15 @@
+api:
+  interval_s: 30.0
+ibkr-snapshot:
+  interval_s: 30.0
+  profile: ibkr
+ingest-india:
+  interval_s: 30.0
+ingest-political:
+  max_silence_s: 93600.0
+ingest-us:
+  interval_s: 30.0
+monitor:
+  interval_s: 5.0
+universe-us:
+  interval_s: 30.0

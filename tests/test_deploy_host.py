@@ -72,6 +72,8 @@ def test_only_nginx_logs_are_rotated_in_place():
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash is not installed")
 def test_host_log_owners_match_component_runtime_users():
+    bash = shutil.which("bash")
+    assert bash is not None
     text = PREPARE_HOST.read_text(encoding="utf-8")
     function = re.search(r"^component_uid\(\) \{.*?^\}", text, re.MULTILINE | re.DOTALL)
     assert function
@@ -79,7 +81,7 @@ def test_host_log_owners_match_component_runtime_users():
         data = yaml.safe_load(manifest.read_text(encoding="utf-8"))
         result = subprocess.run(
             [
-                shutil.which("bash"),
+                bash,
                 "-c",
                 function.group() + '\ncomponent_uid "$1"',
                 "test",

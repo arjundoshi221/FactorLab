@@ -5,6 +5,7 @@ description = "FastAPI read API and hub backend."
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "factorlab-core",
+    "factorlab-runtime",
     "factorlab-clickhouse",
     "factorlab-schema",
     "factorlab-calendars",
@@ -22,6 +23,7 @@ factorlab-api = "factorlab.components.api.__main__:main"
 
 [tool.uv.sources]
 factorlab-core = { workspace = true }
+factorlab-runtime = { workspace = true }
 factorlab-clickhouse = { workspace = true }
 factorlab-schema = { workspace = true }
 factorlab-calendars = { workspace = true }

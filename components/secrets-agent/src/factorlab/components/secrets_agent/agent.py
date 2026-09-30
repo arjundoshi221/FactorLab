@@ -24,6 +24,7 @@ CLICKHOUSE_DIR = Path("/run/secrets/clickhouse")
 INDIA_DIR = Path("/run/secrets/india")
 US_DIR = Path("/run/secrets/us")
 POLITICAL_DIR = Path("/run/secrets/political")
+MONITOR_DIR = Path("/run/secrets/monitor")
 TOKEN_FILE = INDIA_DIR / "UPSTOX_ACCESS_TOKEN"
 TOKEN_EXPIRY_FILE = INDIA_DIR / "UPSTOX_ACCESS_TOKEN.expires_at"
 SCHWAB_TOKEN_FILE = US_DIR / "SCHWAB_ACCESS_TOKEN"
@@ -84,6 +85,16 @@ def _clickhouse_users_xml(password_hash: str) -> str:
       <quota>default</quota>
       <access_management>1</access_management>
     </factorlab>
+    <monitor>
+      <password_sha256_hex>{normalized}</password_sha256_hex>
+      <networks><ip>::/0</ip></networks>
+      <profile>default</profile>
+      <quota>default</quota>
+      <grants>
+        <query>GRANT SELECT, INSERT ON meta.service_events</query>
+        <query>GRANT SELECT, INSERT ON meta.service_status</query>
+      </grants>
+    </monitor>
   </users>
 </clickhouse>
 """
@@ -111,6 +122,8 @@ def _render_bundle(payload: dict[str, Any]) -> str:
     _atomic_write(
         CLICKHOUSE_DIR / "runtime-users.xml", _clickhouse_users_xml(clickhouse_hash), 0o444
     )
+    if MONITOR_DIR.is_dir():
+        _atomic_write(MONITOR_DIR / "CLICKHOUSE_PASSWORD", clickhouse_password)
     for directory in (INDIA_DIR, US_DIR, POLITICAL_DIR):
         _atomic_write(directory / "CLICKHOUSE_PASSWORD", clickhouse_password)
     eodhd_api_key = secrets.get("EODHD_API_KEY")

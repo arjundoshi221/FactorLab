@@ -1,0 +1,1 @@
+{"v":1,"type":"err","id":"ingest-india","inst":"a41e0000-0000-4000-8000-000000000000","seq":90,"ts":1790000000000,"host":"ingest-india","error_type":"auth","severity":"error","message":"Upstox token rejected (401)","context":{"provider":"upstox"},"fingerprint":"upstox-auth"}

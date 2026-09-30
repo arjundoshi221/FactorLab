@@ -6,7 +6,6 @@ import argparse
 import logging
 import signal
 import sys
-import threading
 from datetime import UTC, datetime, timedelta
 
 from factorlab.components.ingest_us.legacy.eodhd.configured_universe import (
@@ -14,10 +13,11 @@ from factorlab.components.ingest_us.legacy.eodhd.configured_universe import (
 )
 from factorlab.components.ingest_us.legacy.universe import create_resolver, load_config
 from factorlab.core.logging import configure_logging
+from factorlab.runtime.monitor import MonitoredEvent
 from factorlab.storage.v2_us import V2USStorage as USStorage
 
 log = logging.getLogger("factorlab.us-universe")
-stop = threading.Event()
+stop = MonitoredEvent()
 MINIMUM_MASTER_SIZE = 2_000
 RETRY_MINUTES = 15
 

@@ -124,6 +124,9 @@ volumes:
       type: tmpfs
       device: tmpfs
       o: size=2m,mode=0755
+  monitor_runtime:
+    driver: local
+    driver_opts: *tmpfs-options
   india_runtime:
     driver: local
     driver_opts: *tmpfs-options

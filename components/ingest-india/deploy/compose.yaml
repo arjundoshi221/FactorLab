@@ -20,6 +20,7 @@ services:
       CLICKHOUSE_USERNAME: factorlab
       FACTORLAB_PERSIST_SECRETS: "false"
       FACTORLAB_SECRETS_DIR: /run/secrets/app
+      FACTORLAB_MONITOR_ADDR: ${FACTORLAB_MONITOR_ADDR:-}
       FACTORLAB_COMPONENT: ingest-india
       FACTORLAB_SERVICE: ingest-india
       FACTORLAB_LOG_DIR: /var/log/factorlab/ingest-india

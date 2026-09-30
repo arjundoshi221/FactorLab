@@ -1,0 +1,24 @@
+# Deployable component manifest (validated by tools/components.py; see
+# docs/architecture/08-repository-layout.md).
+schema: 1
+name: monitor
+kind: python
+package: factorlab-component-monitor
+summary: UDP service liveness and error monitoring
+image: ghcr.io/arjundoshi221/factorlab-monitor
+dockerfile: components/monitor/Dockerfile
+entrypoint: factorlab-monitor
+providers: []
+secrets: [CLICKHOUSE_PASSWORD]
+services:
+  - name: monitor
+    command: []
+    monitor: {interval_s: 5}
+    mode: daemon
+health: {kind: http, url: "http://127.0.0.1:9126/healthz"}
+platform:
+  image_var: FACTORLAB_MONITOR_IMAGE
+  rollback: writer
+  data_contract: 1
+  user: "10001"
+  logs: /var/log/factorlab/monitor

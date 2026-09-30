@@ -9,6 +9,7 @@ Implementations load only when their command runs.
 from __future__ import annotations
 
 from factorlab.runtime.cli import Command, dispatch
+from factorlab.runtime.supervised import supervised
 
 
 def _daemon(argv: list[str]) -> int | None:
@@ -38,7 +39,11 @@ COMMANDS = {
 
 
 def main(argv: list[str] | None = None) -> int:
-    return dispatch("factorlab-ingest-us", COMMANDS, argv)
+    return supervised(
+        lambda: dispatch("factorlab-ingest-us", COMMANDS, argv),
+        name="ingest-us",
+        enable_heartbeat=False,
+    )
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ providers: [house_clerk, congress_legislators]
 secrets: [CLICKHOUSE_PASSWORD]
 services:
   - name: ingest-political
+    monitor: {max_silence_s: 93600}
     command: ["bootstrap", "--ptr-limit", "${POLITICAL_PTR_LIMIT:-20}"]
     mode: scheduled
     schedule: "15 2 * * *"

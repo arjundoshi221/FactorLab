@@ -22,6 +22,7 @@ services:
       CLICKHOUSE_USERNAME: factorlab
       FACTORLAB_PERSIST_SECRETS: "false"
       FACTORLAB_SECRETS_DIR: /run/secrets/app
+      FACTORLAB_MONITOR_ADDR: ${FACTORLAB_MONITOR_ADDR:-}
       FACTORLAB_COMPONENT: ingest-us
       FACTORLAB_SERVICE: universe-us
       FACTORLAB_LOG_DIR: /var/log/factorlab/ingest-us
@@ -51,6 +52,7 @@ services:
       CLICKHOUSE_USERNAME: factorlab
       FACTORLAB_PERSIST_SECRETS: "false"
       FACTORLAB_SECRETS_DIR: /run/secrets/app
+      FACTORLAB_MONITOR_ADDR: ${FACTORLAB_MONITOR_ADDR:-}
       FACTORLAB_COMPONENT: ingest-us
       FACTORLAB_SERVICE: ingest-us
       FACTORLAB_LOG_DIR: /var/log/factorlab/ingest-us

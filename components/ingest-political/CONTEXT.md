@@ -109,3 +109,5 @@ Bump `data_contract` when written data changes. The legacy monolith path (`relea
   `failed` and exits non-zero, after earlier steps have already written their rows.
 - [`component-rollback.yml`](../../.github/workflows/component-rollback.yml) does not check
   `data_contract`; never roll back across a contract bump.
+
+**UDP service monitoring:** The manifest declares expected liveness. Set FACTORLAB_MONITOR_ADDR=monitor:9125 after the monitor rollout; empty disables sending. The process reports crashes and deliberate stops, and daemon waits report idle liveness through runtime helpers.

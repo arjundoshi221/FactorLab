@@ -14,6 +14,7 @@
 /var/log/factorlab/ingest-political/*.jsonl /var/log/factorlab/ingest-political/*.log
 /var/log/factorlab/ingest-us/*.jsonl
 /var/log/factorlab/schema-migrator/*.jsonl
+/var/log/factorlab/monitor/*.jsonl
 {
     daily
     maxsize 256M

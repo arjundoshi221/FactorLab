@@ -5,6 +5,7 @@ import { IndiaMarkets } from "./pages/IndiaMarkets";
 import { IndiaInstrumentDetail } from "./pages/IndiaInstrumentDetail";
 import { PoliticalData } from "./pages/PoliticalData";
 import { USMarkets } from "./pages/USMarkets";
+import { Monitoring } from "./pages/Monitoring";
 import { DockerImages } from "./pages/DockerImages";
 
 import { StatusPill, type HubStatus } from "./components/ui";
@@ -95,6 +96,7 @@ const statusFilters: Record<StatusFilter, { label: string; matches: (status: Hub
 const numberFormatter = new Intl.NumberFormat("en-IN");
 
 const operationsLinks = [
+  { href: "/monitoring", label: "Monitoring", active: (path: string) => path === "/monitoring" },
   { href: "/", label: "Dashboard", active: (path: string) => path === "/" },
   { href: "/india", label: "India markets", active: (path: string) => path.startsWith("/india") },
   { href: "/us", label: "US markets", active: (path: string) => path === "/us" },
@@ -469,7 +471,7 @@ export function App() {
   }
   return (
     <Shell>
-      {path === "/roadmap" ? <Roadmap /> : path === "/docker-images" ? <DockerImages /> : indiaInstrumentMatch ? <IndiaInstrumentDetail listingId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
+      {path === "/monitoring" ? <Monitoring /> : path === "/roadmap" ? <Roadmap /> : path === "/docker-images" ? <DockerImages /> : indiaInstrumentMatch ? <IndiaInstrumentDetail listingId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
     </Shell>
   );
 }

@@ -7,7 +7,6 @@ import logging
 import os
 import signal
 import sys
-import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -24,10 +23,11 @@ from factorlab.components.ingest_us.legacy.schwab.market import (
 )
 from factorlab.core import paths
 from factorlab.core.logging import configure_logging
+from factorlab.runtime.monitor import MonitoredEvent
 from factorlab.storage.v2_us import V2USStorage as USStorage
 
 log = logging.getLogger("factorlab.schwab")
-stop = threading.Event()
+stop = MonitoredEvent()
 FULL_UNIVERSE = "us_listed_equities"
 MINUTE_UNIVERSE = "us_liquid_250"
 MINUTE_TIER_SIZE = 250

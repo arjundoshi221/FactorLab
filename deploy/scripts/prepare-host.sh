@@ -25,7 +25,7 @@ sudo install -d -m 0700 -o root -g root /etc/factorlab/identity
 # Component containers run as UID 10001 (factorlab); log files are group-readable by
 # factorlab-logs (GID 10002), the only group the restricted log-reader account joins.
 # One directory per component (keep in step with components/*/component.yaml; tested).
-FACTORLAB_COMPONENTS="api web secrets-agent schema-migrator ingest-india ingest-us ingest-political ingest-broker"
+FACTORLAB_COMPONENTS="api web secrets-agent schema-migrator ingest-india ingest-us ingest-political ingest-broker monitor"
 component_uid() {
     case "$1" in
         web) printf '101\n' ;;
@@ -61,6 +61,7 @@ if [ ! -f /etc/factorlab/us-universe.yaml ]; then
     sudo install -D -m 0644 "$script_dir/../us-universe.yaml" /etc/factorlab/us-universe.yaml
 fi
 # Operator entry point to the live compose model (base + fragments + pins + profiles).
+sudo install -D -m 0644 "$script_dir/../monitor-services.yaml" /etc/factorlab/monitor-services.yaml
 sudo install -m 0755 "$script_dir/factorlab-compose" /usr/local/bin/factorlab-compose
 
 # Restricted log-reader account (tools/read_logs.py): sshd runs only factorlab-log-reader

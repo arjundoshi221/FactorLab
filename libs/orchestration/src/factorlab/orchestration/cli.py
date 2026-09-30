@@ -290,6 +290,7 @@ def cmd_daemon(args: argparse.Namespace) -> int:
     --universe nifty500 --interval-seconds 60 --sessions-only``.
     """
     from factorlab.runtime import GracefulShutdown, Heartbeat
+    from factorlab.runtime.monitor import monitor_client
 
     heartbeat = Heartbeat(f"ingest-{args.dataset}-{args.market}".replace(".", "-"))
     with GracefulShutdown(log) as shutdown:
@@ -312,7 +313,9 @@ def cmd_daemon(args: argparse.Namespace) -> int:
             heartbeat.tick()
             deadline = started + timedelta(seconds=args.interval_seconds)
             while not shutdown.triggered and datetime.now(UTC) < deadline:
+                heartbeat.tick()
                 shutdown_sleep(min(1.0, (deadline - datetime.now(UTC)).total_seconds()))
+    monitor_client().heartbeat("stopping")
     return int(ExitCode.OK)
 
 

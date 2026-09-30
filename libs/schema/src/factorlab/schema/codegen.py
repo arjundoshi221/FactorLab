@@ -35,6 +35,8 @@ DEFERRED_TABLES = {"fundamentals.snapshots_pit_eom"}
 # so each goes to its own forward wave file: wave_NN_schema_<suffix>.sql.
 FORWARD_TABLES: dict[str, tuple[int, str]] = {
     "ref.source_priorities": (10, "source_priorities"),
+    "meta.service_events": (11, "service_monitoring"),
+    "meta.service_status": (11, "service_monitoring"),
 }
 
 NULLABLE_SORT_KEY_TABLES = {

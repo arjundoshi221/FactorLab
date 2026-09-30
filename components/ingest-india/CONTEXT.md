@@ -112,3 +112,5 @@ only if the contract is unchanged, otherwise stops `ingest-india` and reports
   `stop_grace_period` in the fragment (Docker default 10 s).
 - Pipeline and `source` strings are frozen: renaming one orphans history in `meta.*` and
   breaks hub filters.
+
+**UDP service monitoring:** The manifest declares expected liveness. Set FACTORLAB_MONITOR_ADDR=monitor:9125 after the monitor rollout; empty disables sending. The process reports crashes and deliberate stops, and daemon waits report idle liveness through runtime helpers.

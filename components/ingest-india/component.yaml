@@ -12,6 +12,7 @@ providers: [upstox]
 secrets: [CLICKHOUSE_PASSWORD, UPSTOX_ACCESS_TOKEN]
 services:
   - name: ingest-india
+    monitor: {interval_s: 30}
     command: ["daemon", "--universe", "${UPSTOX_UNIVERSE:-full_nse_eq}", "--daemon"]
     mode: daemon
 health: {kind: running}

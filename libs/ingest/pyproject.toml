@@ -5,12 +5,14 @@ description = "Provider-agnostic ingestion SDK: contracts, datasets, registry, b
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "factorlab-core",
+    "factorlab-runtime",
     "pydantic>=2.5",
     "pyyaml>=6.0",
 ]
 
 [tool.uv.sources]
 factorlab-core = { workspace = true }
+factorlab-runtime = { workspace = true }
 
 [build-system]
 requires = ["hatchling>=1.25"]

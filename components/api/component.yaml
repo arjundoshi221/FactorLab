@@ -12,6 +12,7 @@ providers: []
 secrets: [CLICKHOUSE_PASSWORD, FACTORLAB_API_KEY]
 services:
   - name: api
+    monitor: {interval_s: 30}
     command: []
     mode: daemon
 health: {kind: http, url: http://127.0.0.1:8000/health}

@@ -60,7 +60,7 @@ LIBRARY_LAYERS = {
     "calendars": {"core"},
     "clickhouse": {"core"},
     "runtime": {"core"},
-    "ingest": {"core", "calendars"},
+    "ingest": {"core", "calendars", "runtime"},
     "schema": {"core", "clickhouse"},
     "storage": {"core", "calendars", "clickhouse", "ingest"},
     "orchestration": {"core", "calendars", "clickhouse", "runtime", "ingest", "storage", "schema"},

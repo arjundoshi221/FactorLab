@@ -142,7 +142,7 @@ def test_new_provider_wires_its_component_and_starts_as_shadow(root):
 def test_new_lib_gets_its_layer(root):
     assert run(root, "new-lib", "features", "--depends-on", "ingest") == 0
     text = (root / "tests/architecture/test_boundaries.py").read_text(encoding="utf-8")
-    assert '"features": {"calendars", "core", "ingest"},' in text
+    assert '"features": {"calendars", "core", "ingest", "runtime"},' in text
     _compiles(root / "libs" / "features")
 
 

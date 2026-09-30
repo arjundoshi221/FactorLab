@@ -12,6 +12,7 @@ providers: [ibkr]
 secrets: [CLICKHOUSE_PASSWORD, IBKR_CLIENT_ID]
 services:
   - name: ibkr-snapshot
+    monitor: {interval_s: 30}
     command: ["snapshot", "--daemon", "--run-on-start", "--modes", "${IBKR_SNAPSHOT_MODES:-paper,live}"]
     mode: daemon
     profile: ibkr

@@ -8,7 +8,7 @@ The contract layer between providers (`providers/*`, packages `factorlab.sources
 and the DB service (`factorlab-storage`). Providers implement datasets defined here;
 sinks implement the protocols defined here; the engine joins them without knowing
 either side. Design: [07-ingestion-provider-abstraction.md](../../docs/architecture/07-ingestion-provider-abstraction.md).
-Layer: `LIBRARY_LAYERS["ingest"] = {"core", "calendars"}`
+Layer: `LIBRARY_LAYERS["ingest"] = {"core", "calendars", "runtime"}`
 ([test_boundaries.py](../../tests/architecture/test_boundaries.py)); today it imports only core.
 
 ## Owns and does not own
@@ -107,3 +107,5 @@ their previous tags; the library version is not tagged.
 - `CONFIGS_DIR` / `BINDINGS_PATH` are resolved at import; set env vars first.
 - Adding a dataset means a `DatasetSpec` here plus a sink in storage; the engine
   itself never needs a provider import (R4; `test_new_ingestion_layers_are_clean`).
+
+**UDP service monitoring:** `RunContext.fail_unit` reports redacted failures through runtime monitoring, using classify() codes; transient/rate/normalization failures warn, other failures error. Runtime is now a declared dependency and allowed lower library layer.

@@ -13,6 +13,8 @@
     "risk": {"title": "Risk", "summary": "Risk budgets set by the risk function. Reserved; no data is collected yet."}
   },
   "tables": {
+    "meta.service_events": {"summary": "Service heartbeats, warnings, errors and liveness transitions received by the UDP monitor."},
+    "meta.service_status": {"summary": "Latest service liveness, restart and error summary reported by the UDP monitor."},
     "book.attribution": {"title": "Trade attribution", "summary": "Reserved for linking each execution to the trade idea it belongs to. No data is collected yet."},
     "book.strategies": {"title": "Strategies", "summary": "Reserved for the trading strategies run through broker accounts. No data is collected yet."},
     "book.themes": {"title": "Investment themes", "summary": "Reserved for the themes portfolio managers invest behind. No data is collected yet."},

@@ -113,3 +113,5 @@ user-requested operation; a release never runs DDL.
   (`tools/schema_checksums.py add`), and mark it `applied` after the production run.
 - A succeeded `backfill` migration is re-run on each apply (catch-up); schema and rbac
   are skipped once succeeded.
+
+**UDP service monitoring:** Wave 11 adds `meta.service_events` (14-day heartbeat / 180-day event retention) and `meta.service_status` (latest version wins), generated from the schema design. The migration remains pending until an explicitly requested production operation.

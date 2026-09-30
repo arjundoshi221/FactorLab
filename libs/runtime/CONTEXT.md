@@ -102,3 +102,5 @@ previous tags; the library version is not tagged.
   and only the health probe notices.
 - `supervised` re-raises `SystemExit`/`KeyboardInterrupt`; it only converts other
   exceptions to `CRASH`.
+
+**UDP service monitoring:** UDP monitoring uses `MonitorClient` and `FACTORLAB_MONITOR_ADDR` (empty disables it). Heartbeat ticks send every 30 seconds; supervised reports crashes and deliberate stops. DNS resolves off the calling thread; send errors are swallowed. Golden v1 datagrams live in tests/fixtures/monitor.

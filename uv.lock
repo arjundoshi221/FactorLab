@@ -16,6 +16,7 @@ members = [
     "factorlab-component-ingest-india",
     "factorlab-component-ingest-political",
     "factorlab-component-ingest-us",
+    "factorlab-component-monitor",
     "factorlab-component-schema-migrator",
     "factorlab-component-secrets-agent",
     "factorlab-core",
@@ -620,6 +621,7 @@ dependencies = [
     { name = "factorlab-calendars" },
     { name = "factorlab-clickhouse" },
     { name = "factorlab-core" },
+    { name = "factorlab-runtime" },
     { name = "factorlab-schema" },
     { name = "fastapi" },
     { name = "pandas" },
@@ -635,6 +637,7 @@ requires-dist = [
     { name = "factorlab-calendars", editable = "libs/calendars" },
     { name = "factorlab-clickhouse", editable = "libs/clickhouse" },
     { name = "factorlab-core", editable = "libs/core" },
+    { name = "factorlab-runtime", editable = "libs/runtime" },
     { name = "factorlab-schema", editable = "libs/schema" },
     { name = "fastapi", specifier = ">=0.111" },
     { name = "pandas", specifier = ">=2.1" },
@@ -773,6 +776,25 @@ requires-dist = [
 ]
 
 [[package]]
+name = "factorlab-component-monitor"
+version = "0.1.0"
+source = { editable = "components/monitor" }
+dependencies = [
+    { name = "factorlab-clickhouse" },
+    { name = "factorlab-core" },
+    { name = "factorlab-runtime" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "factorlab-clickhouse", editable = "libs/clickhouse" },
+    { name = "factorlab-core", editable = "libs/core" },
+    { name = "factorlab-runtime", editable = "libs/runtime" },
+    { name = "pyyaml", specifier = ">=6.0" },
+]
+
+[[package]]
 name = "factorlab-component-schema-migrator"
 version = "0.1.0"
 source = { editable = "components/schema-migrator" }
@@ -825,6 +847,7 @@ version = "0.1.0"
 source = { editable = "libs/ingest" }
 dependencies = [
     { name = "factorlab-core" },
+    { name = "factorlab-runtime" },
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
@@ -832,6 +855,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "factorlab-core", editable = "libs/core" },
+    { name = "factorlab-runtime", editable = "libs/runtime" },
     { name = "pydantic", specifier = ">=2.5" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]

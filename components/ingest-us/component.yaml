@@ -12,9 +12,11 @@ providers: [schwab, eodhd, github_csv, edgar]
 secrets: [CLICKHOUSE_PASSWORD, SCHWAB_ACCESS_TOKEN, EODHD_API_KEY]
 services:
   - name: universe-us
+    monitor: {interval_s: 30}
     command: ["universe", "--config", "/app/config/us-universe.yaml", "--daemon"]
     mode: daemon
   - name: ingest-us
+    monitor: {interval_s: 30}
     command: ["daemon", "--universe", "us_listed_equities", "--daemon"]
     mode: daemon
 health: {kind: running}

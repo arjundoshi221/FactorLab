@@ -29,7 +29,9 @@ from typing import Any, ClassVar, Literal, Protocol, runtime_checkable
 from uuid import UUID
 
 from factorlab.core.logging import log_context
+from factorlab.ingest.errors import classify
 from factorlab.ingest.security import redact_error
+from factorlab.runtime.monitor import monitor_client
 
 log = logging.getLogger(__name__)
 
@@ -201,6 +203,12 @@ class RunContext:
 
     def fail_unit(self, name: str, error: BaseException | str, *, rows_written: int = 0) -> None:
         message = _safe_error(error)
+        kind = classify(error) if isinstance(error, BaseException) else "other"
+        client = monitor_client()
+        report = (
+            client.warn if kind in ("rate_limited", "transient", "normalization") else client.error
+        )
+        report(kind, message, pipeline=self.pipeline, unit=name)
         log.warning("[%s] unit %s failed: %s", self.source, name, message)
         self._units.append(UnitOutcome(name=name, rows_written=int(rows_written), error=message))
 
