@@ -112,13 +112,11 @@ IDs, and verifies unchanged API, ClickHouse and secret-agent identities. Its roo
 override bridges the currently installed agent's root-only secret files; it does not
 complete the per-component platform rollout.
 
-The remaining branch-test rollout is [testing/component_test.py](testing/component_test.py):
-it installs the new secret renderer, removes ingestion root overrides, checks schema
-readiness, and runs web and an API candidate on loopback. The primary hub API stays
-in place until protected edge routing is available. Before image pins are bootstrapped,
-the operator Compose command uses the installed `compose.production.yml`; afterwards it
-uses component fragments and pins. Host runtime data is owned by UID 10001; log directories
-follow each image's UID (web 101, secrets agent 0, other components 10001).
+The remaining rollout uses [testing/component_test.py](testing/component_test.py): non-root
+ingestion, schema checks, and loopback API/web tests; primary hub routing waits for Access.
+Before pin bootstrap, the operator command uses `compose.production.yml`; afterwards it
+uses fragments and pins. Runtime data UID is 10001; log UIDs match the images (web 101,
+secrets agent 0, others 10001).
 
 `.\deploy\release.ps1 -Component platform [-Bump ...] [-DryRun]` bumps `version:` in
 [component.yaml](component.yaml), pushes `platform/vX.Y.Z`;
@@ -148,7 +146,3 @@ until the rollout completes.
 - `prepare-host.sh` removes the sshd drop-in if `sshd -t` rejects it; keep the component list
   in it and in `logrotate/factorlab` in step with `components/*` (tested).
 - Edit fragments, then `render-compose`; CI fails when `compose.production.yml` is stale.
-
-## UDP service monitoring
-
-`monitor_runtime` is a separate tmpfs secret volume. Component manifests accept monitor deadlines and optional wall-clock active windows (timezone, ISO weekdays, start/end HH:MM). render-compose also generates monitor-services.yaml; mount it into monitor and api. Enable senders with FACTORLAB_MONITOR_ADDR=monitor:9125 only after schema and monitor releases. UDP 9125 remains on backend with no published host port.
