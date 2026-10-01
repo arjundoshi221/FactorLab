@@ -1,6 +1,7 @@
 """Stage complete index snapshots until Schwab validates the entire union."""
 
 from collections.abc import Iterable, Sequence
+from dataclasses import replace
 from typing import Any
 
 from factorlab.components.ingest_us.constituent_csv import ConstituentCsvUniverseResolver
@@ -12,6 +13,7 @@ from factorlab.ingest.bindings import Binding, load_provider_settings
 from factorlab.ingest.datasets import (
     ConstituentRecord,
     InstrumentRecord,
+    InstrumentRef,
     ReferenceRequest,
     WriteResult,
 )
@@ -51,8 +53,19 @@ class RosterSink(ClickHouseSinks):
         self.listings.extend(rows)
         return result
 
-    def publish(self) -> None:
-        for rows, provenance in self.snapshots:
+    def publish(self, references: Sequence[InstrumentRef]) -> None:
+        by_symbol = {ref.trading_symbol: ref for ref in references}
+        snapshots = [
+            (
+                tuple(
+                    replace(row, instrument=by_symbol[row.instrument.trading_symbol])
+                    for row in rows
+                ),
+                provenance,
+            )
+            for rows, provenance in self.snapshots
+        ]
+        for rows, provenance in snapshots:
             result = super().write_constituents(rows, provenance=provenance)
             if result.unresolved:
                 raise ValueError("validated index has unresolved canonical listings")

@@ -104,7 +104,7 @@ def sync_once(
                         ),
                     )
                 )
-                sink.publish()
+                sink.publish(refs)
                 series = [
                     {
                         "instrument_id": identities[ref].listing_id,

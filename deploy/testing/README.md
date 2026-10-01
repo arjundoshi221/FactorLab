@@ -10,6 +10,12 @@ from tracked source commit `d59940263ca008d5ac09462eb1e36a039236e7d6`, using the
 component Dockerfiles and frozen workspace lock. No `.env` or untracked files
 were included in the source archive. `main` was not changed.
 
+When extracting with Python's tar `data` filter under umask 077, restore tracked
+source directory modes to 0755 before building. Keep the enclosing test directory
+0700 and runtime backups 0600. Otherwise Docker copies nested config directories
+as root-only and UID 10001 cannot load bindings. Validate each built image with
+`engine validate` as its default user, in addition to command imports.
+
 ## Host layout
 
 The private, root-owned test directory is

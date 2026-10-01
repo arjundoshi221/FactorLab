@@ -133,6 +133,13 @@ def test_failed_fetch_preserves_checkpoint_and_requests_overlap(monkeypatch):
 @pytest.mark.parametrize("validated", [False, True])
 def test_roster_publication_requires_every_configured_listing(monkeypatch, validated):
     storage, client, db, _, _, _, _ = setup(monkeypatch, include_msft=validated)
+    alternate_id = uuid4()
+    if validated:
+        # Production contains old alternate listings with the same bare ticker.
+        # Membership must use the exact alias validated through Schwab.
+        original = db.rows("ref.listings")[0]
+        alternate = {**original, "listing_id": alternate_id, "exchange_code": "OLD"}
+        db.insert("ref.listings", [list(alternate.values())], list(alternate))
     cfg = UniverseConfig.model_validate(
         {
             "version": 2,
@@ -175,6 +182,7 @@ def test_roster_publication_requires_every_configured_listing(monkeypatch, valid
         assert {row["universe_id"] for row in memberships} == {"test", "configured"}
         raw_ids = {r["raw_id"] for r in db.rows("raw.archive")}
         assert all(row["raw_id"] in raw_ids for row in memberships)
+        assert all(row["listing_id"] != alternate_id for row in memberships)
         assert db.rows("meta.ingestion_runs")[-1]["status"] == "success"
     else:
         with pytest.raises(ValueError, match="full configured"):

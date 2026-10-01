@@ -153,6 +153,7 @@ def plan(root: Path, test_id: str) -> None:
         image = f"factorlab-test-{unit}:{test_id}"
         for command in subcommands:
             run("docker", "run", "--rm", "--network", "none", image, command, "--help")
+        run("docker", "run", "--rm", "--network", "none", image, "engine", "validate")
         print(f"smoke imports passed: {unit}", flush=True)
     verify_protected(protected)
     (root / "plan-ready").touch(mode=0o600)

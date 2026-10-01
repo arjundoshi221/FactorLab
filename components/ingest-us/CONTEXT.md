@@ -2,6 +2,9 @@
 
 > US universe resolution and Schwab daily / 1-minute bars into ClickHouse v2 (two services, one image).
 
+Staged membership snapshots publish with the exact Schwab aliases validated for
+the configured union. Bare ticker lookup can be ambiguous in existing references.
+
 ## Purpose
 
 `ingest-us` resolves the configured US equity universe (`universe-us`) and collects prices
