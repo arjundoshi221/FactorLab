@@ -6,7 +6,7 @@
 
 This is a provider member with a single source, `GithubCsvUniverse` ([sources.py](src/factorlab/sources/github_csv/sources.py)). It turns an index CSV of bare tickers into a complete membership snapshot for market `USA`.
 Importing `factorlab.sources.github_csv` registers it ([`__init__.py`](src/factorlab/sources/github_csv/__init__.py)).
-The binding is `shadow`. At the P4 cutover it replaces the legacy `universe/github_csv.py` plus Schwab validation.
+The default membership binding is primary. Configured US jobs validate the complete union before publishing.
 
 ## Owns and does not own
 
@@ -36,9 +36,9 @@ There are no secrets and no auth. `CsvIndex` is `extra="forbid"`.
 ## Data
 
 - `source` is `github_csv`, or `github_csv:shadow` while shadow. `source_channel` is `<instance>:csv`. Unit names are `universe:<code>`.
-- Binding in [bindings.yaml](../../configs/ingestion/bindings.yaml): `{dataset: ref.universe_membership, market: USA, provider: github_csv, role: shadow, priority: 10}  # -> primary`
+- Binding in [bindings.yaml](../../configs/ingestion/bindings.yaml): `{dataset: ref.universe_membership, market: USA, provider: github_csv, role: primary, priority: 10}`
 - The YAML's `sp500.url` is `https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv`.
-- Records are `ConstituentRecord(code, InstrumentRef("", "", "", symbol, country))`, which carry no provider alias. The dataset writes `ref.universes` and `ref.universe_membership`, but `ref.*` gets no writes while shadow.
+- Records are `ConstituentRecord(code, InstrumentRef("", "", "", symbol, country))`, which carry no provider alias. Authoritative snapshots write canonical membership after complete validation.
 
 ## Dependencies and contracts
 
@@ -61,7 +61,7 @@ There are no secrets and no auth. `CsvIndex` is `extra="forbid"`.
 ## Release and rollback
 
 - A provider is never released alone. It ships inside the `ingest-us` image ([component.yaml](../../components/ingest-us/component.yaml) `providers: [schwab, eodhd, github_csv, edgar]`, [providers.py](../../components/ingest-us/src/factorlab/components/ingest_us/providers.py)). Rollback class is `writer`.
-- Production is still `ingest-us universe` through [legacy/universe/github_csv.py](../../components/ingest-us/src/factorlab/components/ingest_us/legacy/universe/github_csv.py). That job reads the mounted `us-universe.yaml`, not this provider's config.
+- Production collection uses the maintained component scheduler and these dataset sources through the shared engine.
 - Bindings and `configs/sources` changes are config, not code. `configs/` is baked into the image, so they ship with an `ingest-us` image. Cutover follows 07 §15.2.
 
 ## Pitfalls

@@ -1,5 +1,7 @@
 # factorlab-testkit
 
+The political filing reader fake also applies an optional year before limiting rows.
+
 > Dev-only test support: the provider source-conformance suite and its fixture helpers, a stateful fake ClickHouse for sink tests, and IBKR fakes.
 
 ## Purpose
@@ -86,6 +88,7 @@ A change here only affects CI and local test runs; roll back with a normal rever
 
 - Regenerating expectations with `regen` hides normalization regressions unless the
   diff is reviewed record by record.
+- The unused `dump_capture` helper was removed; fixture loading and `regen` remain.
 - Adding a query to a sink needs a matching branch in `FakeClickHouse`, or the sink
   conformance suite fails with an unexpected-query error.
 - Do not import testkit from product code: it pulls `pytest` and would break images

@@ -12,8 +12,8 @@ expected-series inventory and fills history gaps. It is a writer component (imag
 ## Owns and does not own
 
 - Owns: the `factorlab-ingest-india` CLI ([cli.py](src/factorlab/components/ingest_india/cli.py)),
-  the production daemon and premarket job under [legacy/](src/factorlab/components/ingest_india/legacy/)
-  (Upstox auth, candles, instruments, universes), and which providers the image ships
+  [collector](src/factorlab/components/ingest_india/collector.py) and
+  [premarket job](src/factorlab/components/ingest_india/premarket.py), plus the shipped providers
   ([providers.py](src/factorlab/components/ingest_india/providers.py): `upstox`).
 - Does not own: the Upstox daily login and token storage (the Cloudflare Workers
   [upstox-auth-worker](../../cloudflare/upstox-auth-worker/) and
@@ -47,8 +47,7 @@ expected-series inventory and fills history gaps. It is a writer component (imag
 
 ## Data
 
-- Writes `raw.archive` (`source` = `upstox_market_quote_ohlc_v3`, `upstox_intraday_candles`,
-  `upstox_historical_candles`, `upstox_instruments`; `source_channel` is the same string),
+- Writes `raw.archive` (`source` = `upstox`; endpoint in `source_channel`),
   `market.bars`,
   `market.futures_contract_bars`, `ref.listings` / `ref.securities` / `ref.contracts` /
   `ref.identifier_aliases`, `meta.expected_series` (source `upstox`),
@@ -67,7 +66,7 @@ expected-series inventory and fills history gaps. It is a writer component (imag
 - Contracts: the v2 write shape behind `data_contract: 1`; the pipeline and `source`
   strings above (the API and hub filter on them); the token file names the agent renders.
 - Market window (UTC): open 03:45, sweeps until 10:02 (2-minute grace after the 09:59
-  candle); equities every 300 s, futures every 600 s, recovery retry 900 s.
+  candle); full-universe quotes every minute plus five seconds, named-universe equities every 300 s, futures every 600 s, recovery retry 900 s.
 
 ## Observability
 
@@ -113,4 +112,9 @@ only if the contract is unchanged, otherwise stops `ingest-india` and reports
 - Pipeline and `source` strings are frozen: renaming one orphans history in `meta.*` and
   breaks hub filters.
 
-**UDP service monitoring:** The manifest declares expected liveness. Set FACTORLAB_MONITOR_ADDR=monitor:9125 after the monitor rollout; empty disables sending. The process reports crashes and deliberate stops, and daemon waits report idle liveness through runtime helpers. MonitoredIndiaStorage reports progress after each instrument in the long startup reference sync; blocked work still stops heartbeat delivery.
+**UDP service monitoring:** The manifest declares expected liveness. Set FACTORLAB_MONITOR_ADDR=monitor:9125 after the monitor rollout; empty disables sending. The process reports crashes and deliberate stops, and daemon waits report idle liveness through runtime helpers. IndiaSink reports progress after each completed reference batch in the long startup reference sync; blocked work still stops heartbeat delivery.
+
+Primary Upstox bindings drive the shared engine. Full-universe mode preserves
+the existing absence of automatic historical recovery; named universes recover
+inclusively from their last stored session. Missing requested quote instruments
+fail the unit while retaining valid finalized bars.

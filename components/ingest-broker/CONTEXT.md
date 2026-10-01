@@ -49,6 +49,10 @@ component (image `ghcr.io/arjundoshi221/factorlab-ingest-broker`, manifest
 
 No IBKR credentials reach this container; Gateway logins go only to the Gateway volumes.
 
+Production override (2026-09-30): `IBKR_SNAPSHOT_TIMES` contains all 24 hourly
+slots (`00:00,01:00,...,23:00`). Snapshots run at the top of every New York hour
+on XNYS trading days; `--run-on-start` also takes an immediate snapshot.
+
 ## Data
 
 - Writes `broker.positions_snapshot`, `broker.account_state_snapshot`, `broker.executions`,

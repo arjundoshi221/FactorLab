@@ -6,12 +6,12 @@
 
 This is a provider member with two sources, `HouseClerkFilings` and `HouseClerkTrades` ([sources.py](src/factorlab/sources/house_clerk/sources.py)), for market `USA`.
 Importing `factorlab.sources.house_clerk` registers them ([`__init__.py`](src/factorlab/sources/house_clerk/__init__.py)).
-The pure parsers in [parse.py](src/factorlab/sources/house_clerk/parse.py) are shared with the legacy political bootstrap, which is still the production writer.
+The maintained political bootstrap uses these sources and their pure parsers in [parse.py](src/factorlab/sources/house_clerk/parse.py).
 
 ## Owns and does not own
 
 - Owns: HTTPS fetches restricted to `disclosures-clerk.house.gov`, the ZIP/XML index parser, PDF text extraction and the PTR transaction parser (`PARSER_VERSION = "house_ptr_v1"`), and ticker canonicalisation (`BRK.B` -> `BRK-B`).
-- Does not own: resolving filers to legislators (the DB service resolves the `legislator_name` hint, using legislators from [congress-legislators](../congress-legislators/CONTEXT.md)), choosing which filings to fetch trades for (the orchestration CLI builds the `FilingsRequest` from `recent_filings`, `--recent-filings N`), ClickHouse writes, or the production bootstrap (`components/ingest-political` legacy).
+- Does not own: resolving filers to legislators (the DB service resolves the `legislator_name` hint, using legislators from [congress-legislators](../congress-legislators/CONTEXT.md)), choosing which filings to fetch trades for (the orchestration CLI builds the `FilingsRequest` from `recent_filings`, `--recent-filings N`), ClickHouse writes, or the production bootstrap (`components/ingest-political/bootstrap.py`).
 
 ## Entry points
 
@@ -35,8 +35,8 @@ There are no secrets and no auth. The PTR PDF URL comes from each filing's `fili
 
 - `source` is `house_clerk`. `source_channel` is `<instance>:filing_index` or `<instance>:ptr`. Unit names are `index:<year>` and `ptr:<filing_id>`.
 - Bindings in [bindings.yaml](../../configs/ingestion/bindings.yaml):
-  - `{dataset: alt.political_filings, market: USA, provider: house_clerk, role: shadow}     # -> primary`
-  - `{dataset: alt.political_trades, market: USA, provider: house_clerk, role: shadow}      # -> primary`
+  - `{dataset: alt.political_filings, market: USA, provider: house_clerk, role: primary}`
+  - `{dataset: alt.political_trades, market: USA, provider: house_clerk, role: primary}`
 - These tables have no `source` in their key. A shadow run fetches, archives and normalizes, but only counts rows and writes nothing (07 §9.2).
 - The index parser keeps only `FilingType == "P"` (PTR) rows.
 - Filing records carry `filer=EntityRef("legislator_name", key, "person_legislator", raw)` from `legislator_name_key`. Trade records carry `instrument=InstrumentRef("", "", "", ticker, "US")` and keep `ticker_raw`.
@@ -62,12 +62,11 @@ There are no secrets and no auth. The PTR PDF URL comes from each filing's `fili
 ## Release and rollback
 
 - A provider is never released alone. It ships inside the `ingest-political` image: `providers: [house_clerk, congress_legislators]` in [component.yaml](../../components/ingest-political/component.yaml) and [providers.py](../../components/ingest-political/src/factorlab/components/ingest_political/providers.py). Rollback class is `writer`.
-- Production is `ingest-political bootstrap --ptr-limit 20`, scheduled `15 2 * * *` through [legacy/bootstrap.py](../../components/ingest-political/src/factorlab/components/ingest_political/legacy/bootstrap.py).
+- `ingest-political bootstrap --ptr-limit 20`, scheduled `15 2 * * *`, collects the index before fetching the newest PTRs for the requested year, through [bootstrap.py](../../components/ingest-political/src/factorlab/components/ingest_political/bootstrap.py).
 - Bindings changes are config, not code. `configs/` is baked into the image, so they ship with an `ingest-political` image. Cutover follows 07 §15.2.
 
 ## Pitfalls
 
-- A change to [parse.py](src/factorlab/sources/house_clerk/parse.py) changes production today. [legacy/house_clerk.py](../../components/ingest-political/src/factorlab/components/ingest_political/legacy/house_clerk.py) re-exports its parsers and URL constants. Bump `PARSER_VERSION` when parse output changes.
+- Bump `PARSER_VERSION` when [parse.py](src/factorlab/sources/house_clerk/parse.py) output changes; these parsers are the only maintained implementation.
 - The parser has a known quirk: it reads `BILL` as a ticker from "US Treasury Bill [GS]". It is tracked in 06 §15 Wave 4 and was kept for parity.
-- `parse.py` and `__init__.py` docstrings still say the legacy fetchers live in `sources.political.house_clerk`. The real module is the component's `legacy/house_clerk.py`.
 - Keep the host allow-list. `_get` refuses any URL that is not `https://disclosures-clerk.house.gov`.

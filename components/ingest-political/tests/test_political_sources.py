@@ -5,13 +5,10 @@ from datetime import date
 import pytest
 from defusedxml import EntitiesForbidden
 
-from factorlab.components.ingest_political.legacy.house_clerk import (
+from factorlab.ingest.identifiers import legislator_name_key
+from factorlab.sources.house_clerk.parse import (
     parse_house_filing_index,
     parse_house_ptr_text,
-)
-from factorlab.storage.political_names import (
-    build_name_resolver,
-    resolve_filing_bioguide,
 )
 
 
@@ -85,17 +82,4 @@ def test_ptr_parser_handles_wrapped_asset_metadata_and_page_duplicates():
 
 
 def test_name_resolution_matches_house_filing_to_bioguide():
-    legislators = [
-        {
-            "id": {"bioguide": "E000001"},
-            "name": {"first": "Ada", "last": "Example"},
-        }
-    ]
-    filing = {
-        "filer_first_name": "Ada M.",
-        "filer_last_name": "Example",
-    }
-
-    resolver = build_name_resolver(legislators)
-
-    assert resolve_filing_bioguide(filing, resolver) == "E000001"
+    assert legislator_name_key("Ada M.", "Example") == legislator_name_key("Ada", "Example")

@@ -1,9 +1,4 @@
-"""EODHD provider adapter (US: listed-equity master, index constituents, unadjusted daily bars).
-
-Importing this package registers its sources. The legacy
-``factorlab.components.ingest_us.legacy.eodhd`` package keeps serving the
-production universe job until the P4 cutover (07 §15).
-"""
+"""EODHD dataset sources for configured index membership and optional market feeds."""
 
 from factorlab.ingest.registry import register_source
 from factorlab.sources.eodhd.sources import EodhdDailyBars, EodhdListings, EodhdUniverse

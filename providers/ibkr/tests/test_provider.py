@@ -30,7 +30,7 @@ def _loaded(ib):
     ib.portfolio.return_value = [make_portfolio_item()]
     ib.accountValues.return_value = [make_account_value()]
     ib.reqExecutions.return_value = [make_fill()]
-    ib.openTrades.return_value = [make_trade()]
+    ib.reqAllOpenOrders.return_value = [make_trade()]
     return ib
 
 
@@ -82,7 +82,7 @@ def test_unreachable_gateway_is_one_failed_unit(mock_ib_paper, now_utc):
 
 def test_dataset_failure_does_not_stop_other_datasets(mock_ib_paper, now_utc):
     ib = _loaded(mock_ib_paper)
-    ib.openTrades.side_effect = TimeoutError("openTrades timed out")
+    ib.reqAllOpenOrders.side_effect = TimeoutError("reqAllOpenOrders timed out")
 
     class FailingPositions(DryRunBrokerStorage):
         def write_positions(self, rows, *, provenance):

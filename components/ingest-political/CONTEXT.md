@@ -13,17 +13,16 @@ it daily at 02:15 UTC. It is a writer component (image
 ## Owns and does not own
 
 - Owns: the `factorlab-ingest-political` CLI ([cli.py](src/factorlab/components/ingest_political/cli.py)),
-  the run logic in [legacy/bootstrap.py](src/factorlab/components/ingest_political/legacy/bootstrap.py),
-  the fetchers [house_clerk.py](src/factorlab/components/ingest_political/legacy/house_clerk.py) and
-  [references.py](src/factorlab/components/ingest_political/legacy/references.py), and the providers
+  the ordered engine job in [bootstrap.py](src/factorlab/components/ingest_political/bootstrap.py),
+  and the providers
   the image ships ([providers.py](src/factorlab/components/ingest_political/providers.py):
   `house_clerk`, `congress_legislators`).
 - Does not own: the cron entry and wrapper (`platform`:
   [deploy/cron/factorlab-political](../../deploy/cron/factorlab-political),
   [run-political-ingest.sh](../../deploy/scripts/run-political-ingest.sh),
   [install-political-cron.sh](../../deploy/scripts/install-political-cron.sh)), the writers
-  ([`V2PoliticalClickHouseStorage`](../../libs/storage/src/factorlab/storage/v2_political.py),
-  `political_names.py`), the political API routes (`api`).
+  ([political sinks](../../libs/storage/src/factorlab/storage/sinks/political.py)),
+  the political API routes (`api`).
 
 ## Entry points
 
@@ -49,15 +48,16 @@ it daily at 02:15 UTC. It is a writer component (image
 
 ## Data
 
-- Writes `raw.archive` (`source` = `congress_legislators_legislators`,
-  `congress_legislators_committees`, `congress_legislators_memberships`,
-  `house_clerk_filing_index`, `house_clerk_ptr_pdf`), `ref.entities`,
+- Writes `raw.archive` (`source` = `congress_legislators` or `house_clerk`,
+  channels `<instance>:legislators|committees|memberships|filing_index|ptr`), `ref.entities`,
   `ref.identifier_aliases`, `ref.legislator_terms`, `alt.political_committees`,
   `alt.political_committee_memberships`, `alt.political_filings`, `alt.political_trades`,
   and one `meta.ingestion_runs` row per run.
 - Pipeline (frozen): `political_bootstrap`, `source` = `political`, `market_code` =
   `ALT_POLITICAL`, `universe` = `house`. Requested units = 4 + PTR limit; status `success`,
-  `partial` (only when fewer filings exist than the limit) or `failed` (any exception).
+  `partial` (isolated unit failures or fewer filings than the limit) or `failed` (fatal exception).
+  Dataset writes retain their binding source and share the parent job run ID.
+  A failed reference or index stage defers dependent stages. Negative PTR limits are rejected.
 
 ## Dependencies and contracts
 
@@ -66,7 +66,7 @@ it daily at 02:15 UTC. It is a writer component (image
   third-party `requests` ([pyproject.toml](pyproject.toml)). `pdfplumber` may ship only in
   this image ([tools/verify_image.py](../../tools/verify_image.py)).
 - Contracts: the v2 write shape behind `data_contract: 1`; legislator matching of filings
-  (`resolve_filing_bioguide`); the political API reads these tables.
+  (canonical `legislator_name` aliases; ambiguous names stay unresolved); the political API reads these tables.
 
 ## Observability
 
@@ -105,8 +105,8 @@ Bump `data_contract` when written data changes. The legacy monolith path (`relea
 - The subcommand `bootstrap` is unrelated to the compose service `bootstrap` (the
   `schema-migrator` readiness gate this job waits on).
 - The cron entry uses `flock -n -E 75`: an overlapping run exits 75 and is skipped.
-- Errors are not isolated per filing: one failed fetch or PDF parse raises, marks the run
-  `failed` and exits non-zero, after earlier steps have already written their rows.
+- Failed PTRs are recorded individually and the job exits nonzero on any partial run.
+  Index refreshes preserve existing trade counts. `--year` filters PTR selection before limiting.
 - [`component-rollback.yml`](../../.github/workflows/component-rollback.yml) does not check
   `data_contract`; never roll back across a contract bump.
 

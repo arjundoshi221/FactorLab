@@ -1,0 +1,22 @@
+# Exact roster template. Set count and effective timestamp from the supplied file.
+# Do not activate before installing a licensed/authoritative current constituent CSV.
+version: 2
+name: us_russell3000
+provider: constituent_csv
+daily_source: schwab
+refresh_interval_minutes: 1440
+indexes:
+  - name: russell3000
+    minimum_constituents: 2800
+providers:
+  constituent_csv:
+    indexes:
+      russell3000:
+        path: /app/config/constituents/russell3000.csv
+        symbol_column: Symbol
+        # Example count only; verify against the current roster, including share classes.
+        expected_constituents: 3023
+        as_of: 2026-10-01T00:00:00Z
+        max_age_days: 7
+        source_url: https://www.lseg.com/en/ftse-russell/indices/russell-us
+extra_symbols: []

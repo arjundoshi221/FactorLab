@@ -21,7 +21,7 @@ auth:
 
 rate_limits:
   requests_per_minute: 120            # approximate, not officially documented
-  requests_per_second: 2.0            # safe sustained rate
+  requests_per_second: 1.0            # conservative local pacing; shares token with production
   streaming_connections: 1            # one WebSocket per account
   # HTTP 429 on throttle, check Retry-After header
 

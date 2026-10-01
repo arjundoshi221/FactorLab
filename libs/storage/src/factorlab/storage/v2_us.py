@@ -4,24 +4,13 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from factorlab.calendars.us import NY, bounds, calendar
-from factorlab.storage.clickhouse import _decimal, _integer, _version, rows
+from factorlab.storage.clickhouse import _version, rows
 from factorlab.storage.v2_india import V2IndiaStorage
-from factorlab.storage.v2_reference import UnresolvedReference
 
-US_EXCHANGE_CODES = {
-    "XNAS": "NASDAQ",
-    "XNYS": "NYSE",
-    "ARCX": "NYSE Arca",
-    "XASE": "NYSE American",
-    "BATS": "Cboe BZX",
-    "CBOE": "Cboe BZX",
-    "Z": "Cboe BZX",
-}
 US_EXTRA_EXCHANGES = {
     "NYSE American": ("XASE", "NYSE American"),
     "Cboe BZX": ("BATS", "Cboe BZX Exchange"),
@@ -31,11 +20,10 @@ US_EXTRA_EXCHANGES = {
 class V2USStorage(V2IndiaStorage):
     country_code = "US"
 
-    def active_reference_count(self) -> int:
-        result = self.client.query(
-            "SELECT count() FROM ref.listings FINAL WHERE country_code = 'US' AND active"
-        )
-        return int(result.result_rows[0][0])
+    def seed_us_reference_data(self) -> None:
+        """Ensure the approved auxiliary US stock venues exist without changing schema."""
+        for exchange in US_EXTRA_EXCHANGES:
+            self._ensure_us_exchange(exchange)
 
     def _ensure_us_exchange(self, exchange: str) -> None:
         definition = US_EXTRA_EXCHANGES.get(exchange)
@@ -65,94 +53,6 @@ class V2USStorage(V2IndiaStorage):
                     "ingested_at": now,
                 }
             ],
-        )
-
-    def _upsert_us(
-        self,
-        item: Mapping[str, Any],
-        *,
-        source: str,
-        key: str,
-        provider_symbol: str,
-        raw_id: uuid.UUID | None = None,
-    ) -> uuid.UUID:
-        symbol = str(item["symbol"])
-        provider_exchange = str(item.get("exchange_code") or item.get("exchange") or "")
-        exchange = US_EXCHANGE_CODES.get(provider_exchange, provider_exchange)
-        if not exchange:
-            raise UnresolvedReference(f"exchange unresolved for {symbol}")
-        self._ensure_us_exchange(exchange)
-        security_type = "etf" if str(item.get("assetType") or "").upper() == "ETF" else "common"
-        try:
-            _, _, listing_id = self.references.upsert_listing(
-                {
-                    "instrument_key": key,
-                    "isin": item.get("isin"),
-                    "country_code": "US",
-                    "exchange_code": exchange,
-                    "currency_code": str(item.get("currency") or "USD"),
-                    "trading_symbol": symbol,
-                    "name": item.get("name") or item.get("description") or symbol,
-                    "security_type": security_type,
-                    "lot_size": 1,
-                },
-                alias_kind="eodhd_symbol" if source == "eodhd" else "schwab_symbol",
-                alias_value=provider_symbol,
-                source=source,
-            )
-        except UnresolvedReference as exc:
-            self._identity_status(
-                source=source,
-                alias_kind="eodhd_symbol" if source == "eodhd" else "schwab_symbol",
-                alias_value=provider_symbol,
-                raw_id=raw_id,
-                reason=str(exc),
-            )
-            raise
-        self._identity_status(
-            source=source,
-            alias_kind="eodhd_symbol" if source == "eodhd" else "schwab_symbol",
-            alias_value=provider_symbol,
-            raw_id=raw_id,
-            target_kind="listing",
-            target_id=listing_id,
-        )
-        return listing_id
-
-    def sync_reference_master(self, records: Sequence[Mapping[str, Any]], raw_id=None):
-        lookup = {}
-        for item in records:
-            symbol = str(item["symbol"])
-            lookup[symbol] = self._upsert_us(
-                item,
-                source="eodhd",
-                key=f"USA:{symbol}",
-                provider_symbol=str(item.get("provider_symbol") or symbol),
-                raw_id=raw_id,
-            )
-        return lookup
-
-    def upsert_resolved_constituents(self, constituents, *, source="schwab", raw_id=None):
-        lookup = {}
-        for value in constituents:
-            item = value if isinstance(value, dict) else value.model_dump()
-            symbol = str(item["symbol"])
-            lookup[symbol] = self._upsert_us(
-                item,
-                source=source,
-                key=f"USA:{symbol}",
-                provider_symbol=symbol,
-                raw_id=raw_id,
-            )
-        return lookup
-
-    def reference(self, symbol, provider_symbol, record, raw_id, universe):
-        return self._upsert_us(
-            {**record, "symbol": symbol},
-            source="schwab",
-            key=f"schwab:USA:{symbol}",
-            provider_symbol=provider_symbol,
-            raw_id=raw_id,
         )
 
     def sync_expected_series(self, series, *, source, universe, resolution):
@@ -361,169 +261,17 @@ class V2USStorage(V2IndiaStorage):
             ],
         )
 
-    def _listing_reference(self, listing_id):
-        result = self.client.query(
-            "SELECT l.security_id, s.entity_id, s.security_type "
-            "FROM ref.listings AS l FINAL INNER JOIN ref.securities AS s FINAL "
-            "ON s.security_id = l.security_id "
-            "WHERE l.listing_id = {id:UUID} AND l.country_code = 'US'",
-            parameters={"id": listing_id},
-        )
-        if len(result.result_rows) != 1:
-            raise UnresolvedReference(f"US listing/security unresolved: {listing_id}")
-        return result.result_rows[0]
-
-    def _bar_record(
+    def _coverage_record(
         self,
-        *,
-        listing_id,
-        trade_date,
-        bar_time,
-        resolution,
-        source,
-        raw_id,
-        prices,
-        volume,
-        now,
-        reference=None,
-    ):
-        if self._active_run_id is None:
-            raise RuntimeError("start an ingestion run before writing v2 bars")
-        security_id, entity_id, security_type = (
-            reference if reference is not None else self._listing_reference(listing_id)
-        )
-        session = (
-            "regular"
-            if resolution == "daily" or time(9, 30) <= bar_time.astimezone(NY).time() < time(16, 0)
-            else "pre"
-            if bar_time.astimezone(NY).time() < time(9, 30)
-            else "post"
-        )
-        return {
-            "country_code": "US",
-            "listing_id": listing_id,
-            "security_id": security_id,
-            "entity_id": entity_id,
-            "product_type": "common" if security_type == "equity" else security_type,
-            "resolution": resolution,
-            "session": session,
-            "bar_time": bar_time,
-            "trade_date": trade_date,
-            **{key: _decimal(prices.get(key), 6) for key in ("open", "high", "low", "close")},
-            "volume": _integer(volume),
-            "turnover": None,
-            "trades_count": None,
-            "oi": None,
-            "settlement_price": None,
-            "source": source,
-            "source_channel": source,
-            "raw_id": raw_id,
-            "ingest_run_id": self._active_run_id,
-            "as_of_time": now,
-            "ingested_at": now,
-            "latency_ms": None,
-            "version": _version(now),
-        }
-
-    def _insert_daily_by_five_years(self, table, records):
-        """Bound each insert to at most 60 monthly ClickHouse partitions."""
-        windows = {}
-        for record in records:
-            window = record["trade_date"].year // 5
-            windows.setdefault(window, []).append(record)
-        for window in sorted(windows):
-            self._insert_dicts(table, windows[window])
-
-    def write_daily(self, frame, *, instrument_id, symbol, raw_id, source="schwab"):
-        now = datetime.now(UTC)
-        reference = self._listing_reference(instrument_id)
-        records = []
-        for row in frame.to_dict("records"):
-            day = row["trade_date"]
-            bar_time = datetime(day.year, day.month, day.day, tzinfo=NY).astimezone(UTC)
-            records.append(
-                self._bar_record(
-                    listing_id=instrument_id,
-                    trade_date=day,
-                    bar_time=bar_time,
-                    resolution="daily",
-                    source=source,
-                    raw_id=raw_id,
-                    prices=row,
-                    volume=row.get("volume"),
-                    now=now,
-                    reference=reference,
-                )
-            )
-        self._insert_daily_by_five_years("market.bars", records)
-        return len(records)
-
-    def write_daily_records(self, records, *, source="eodhd"):
-        now = datetime.now(UTC)
-        inserts = []
-        references = {}
-        for item in records:
-            day = item["trade_date"]
-            bar_time = datetime(day.year, day.month, day.day, tzinfo=NY).astimezone(UTC)
-            listing_id = item["instrument_id"]
-            if listing_id not in references:
-                references[listing_id] = self._listing_reference(listing_id)
-            inserts.append(
-                self._bar_record(
-                    listing_id=listing_id,
-                    trade_date=day,
-                    bar_time=bar_time,
-                    resolution="daily",
-                    source=source,
-                    raw_id=item.get("raw_id"),
-                    prices=item,
-                    volume=item.get("volume"),
-                    now=now,
-                    reference=references[listing_id],
-                )
-            )
-        self._insert_daily_by_five_years("market.bars", inserts)
-        return len(inserts)
-
-    def write_candles_1min(
-        self,
-        candles,
-        *,
-        instrument_id,
-        symbol,
-        contract_id=None,
-        source="schwab",
-        raw_id=None,
-        market_code="USA",
-    ):
-        if contract_id is not None:
-            raise ValueError("US contract bars require a contract-specific v2 writer")
-        now = datetime.now(UTC)
-        reference = self._listing_reference(instrument_id)
-        inserts = []
-        for row in candles.to_dict("records"):
-            bar_time = row["timestamp"]
-            if hasattr(bar_time, "to_pydatetime"):
-                bar_time = bar_time.to_pydatetime()
-            bar_time = bar_time.astimezone(UTC)
-            inserts.append(
-                self._bar_record(
-                    listing_id=instrument_id,
-                    trade_date=bar_time.astimezone(NY).date(),
-                    bar_time=bar_time,
-                    resolution="1min",
-                    source=source,
-                    raw_id=raw_id,
-                    prices=row,
-                    volume=row.get("volume"),
-                    now=now,
-                    reference=reference,
-                )
-            )
-        self._insert_dicts("market.bars", inserts)
-        return len(inserts)
-
-    def _coverage_record(self, listing_id, symbol, source, resolution, day, expected, actual, now):
+        listing_id: uuid.UUID,
+        symbol: str,
+        source: str,
+        resolution: str,
+        day: date,
+        expected: int,
+        actual: int,
+        now: datetime,
+    ) -> dict[str, Any]:
         return {
             "country_code": "US",
             "listing_id": listing_id,
@@ -540,27 +288,6 @@ class V2USStorage(V2IndiaStorage):
             "ingested_at": now,
             "migrated_at": None,
         }
-
-    def record_daily_snapshot_coverage(self, items, records, trading_date, *, source="eodhd"):
-        present = {uuid.UUID(str(item["instrument_id"])) for item in records}
-        now = datetime.now(UTC)
-        self._insert_dicts(
-            "meta.session_coverage",
-            [
-                self._coverage_record(
-                    item["instrument_id"],
-                    item["symbol"],
-                    source,
-                    "daily",
-                    trading_date,
-                    1,
-                    int(item["instrument_id"] in present),
-                    now,
-                )
-                for item in items
-            ],
-        )
-        return present
 
     def liquid_candidates(self, limit=400):
         return rows(
@@ -584,9 +311,26 @@ class V2USStorage(V2IndiaStorage):
             )
         )
 
+    def _insert_daily_by_five_years(self, table: str, records: list[dict[str, Any]]) -> None:
+        """Bound each insert to at most 60 monthly ClickHouse partitions."""
+        windows: dict[int, list[dict[str, Any]]] = {}
+        for record in records:
+            window = record["trade_date"].year // 5
+            windows.setdefault(window, []).append(record)
+        for window in sorted(windows):
+            self._insert_dicts(table, windows[window])
+
     def coverage(
-        self, instrument_id, symbol, resolution, start, end, available_from, *, source="schwab"
-    ):
+        self,
+        instrument_id: uuid.UUID,
+        symbol: str,
+        resolution: str,
+        start: datetime,
+        end: datetime,
+        available_from: datetime | None,
+        *,
+        source: str = "schwab",
+    ) -> int | None:
         if available_from is None:
             return None
         first = max(start.astimezone(NY).date(), available_from.astimezone(NY).date())
@@ -608,10 +352,13 @@ class V2USStorage(V2IndiaStorage):
         )
         actuals = {item["day"]: item["actual"] for item in result}
         now = datetime.now(UTC)
-        records = []
+        records: list[dict[str, Any]] = []
         for session in calendar().sessions_in_range(first, last):
             day = session.date()
-            opened, closed = bounds(day)
+            session_bounds = bounds(day)
+            if session_bounds is None:
+                raise ValueError(f"Calendar session has no bounds: {day}")
+            opened, closed = session_bounds
             expected = (
                 int(closed <= end)
                 if resolution == "daily"

@@ -290,8 +290,40 @@ def test_clickhouse_rewrites_are_idempotent_with_rising_versions():
     assert len(keys) == 1
 
 
-def test_clickhouse_raw_archive_round_trips_for_replay():
+def test_mic_resolves_to_existing_exchange_code_without_reminting():
+    db = FakeClickHouse(exchanges={"NASDAQ": ("XNAS", "US", "USD")})
+    sink = ClickHouseSinks(V2IndiaStorage(db))
+    native = InstrumentRef("first_symbol", "ALPHA", "NASDAQ", "ALPHA", "US")
+    mic = InstrumentRef("second_symbol", "ALPHA", "XNAS", "ALPHA", "US")
+    initial = InstrumentRecord(native, "Alpha", "common", "USD")
+    alternate = InstrumentRecord(mic, "Alpha", "common", "USD")
+    assert write(sink, "upsert_instruments", [initial], source="first").rows_written == 1
+    [before] = db.rows("ref.listings")
+    assert write(sink, "upsert_instruments", [alternate], source="second").rows_written == 1
+    [after] = db.rows("ref.listings")
+    assert after["listing_id"] == before["listing_id"]
+    assert after["exchange_code"] == "NASDAQ"
+    assert {r["target_id"] for r in db.rows("ref.identifier_aliases")} == {before["listing_id"]}
+
+
+def test_clickhouse_raw_archive_round_trips_for_replay(monkeypatch):
     harness = ClickHouseHarness()
+    original_query = harness.client.query
+
+    def query(sql, parameters=None, column_formats=None):
+        result = original_query(sql, parameters=parameters, column_formats=column_formats)
+        if "FROM raw.archive" in sql and (column_formats or {}).get("response_body") != "bytes":
+            # Native String decoding renders non-UTF8 gzip bytes as hex text.
+            result.result_rows = [
+                tuple(
+                    value.hex() if index == 7 and isinstance(value, bytes) else value
+                    for index, value in enumerate(row)
+                )
+                for row in result.result_rows
+            ]
+        return result
+
+    monkeypatch.setattr(harness.client, "query", query)
     with run(harness.sink) as ctx:
         raw_id = ctx.archive(
             RawCapture(b"\x00payload\xff", "req", "http", NOW, metadata={"k": "v"}),
@@ -310,19 +342,21 @@ def test_existing_legacy_listing_is_found_by_alias_and_never_rekeyed():
     harness = ClickHouseHarness()
     storage = harness.sink.storage
     handle = storage.start_ingestion_run(pipeline="legacy", source="upstox")
-    legacy = storage.sync_instruments(
-        [
-            {
-                "instrument_key": "NSE_EQ|INE002A01018",
-                "segment": "NSE_EQ",
-                "instrument_type": "EQ",
-                "isin": ISIN,
-                "trading_symbol": "RELIANCE",
-                "name": "Reliance",
-                "tick_size": 0.05,
-            }
-        ]
-    )["RELIANCE"]
+    _, _, legacy = storage.references.upsert_listing(
+        {
+            "instrument_key": "NSE_EQ|INE002A01018",
+            "isin": ISIN,
+            "country_code": "IN",
+            "exchange_code": "NSE",
+            "currency_code": "INR",
+            "trading_symbol": "RELIANCE",
+            "name": "Reliance",
+            "security_type": "common",
+        },
+        alias_kind="upstox_instrument_key",
+        alias_value="NSE_EQ|INE002A01018",
+        source="upstox",
+    )
     storage.finish_ingestion_run(handle, status="success")
     write(harness.sink, "upsert_instruments", [instrument(UPSTOX)])
     assert [row["listing_id"] for row in harness.client.rows("ref.listings")] == [legacy]
@@ -446,3 +480,52 @@ def test_active_listings_by_exchange(harness):
     write(harness.sink, "upsert_instruments", [instrument(UPSTOX)])
     assert harness.sink.active_listings("NSE") == [_only_listing(harness)]
     assert harness.sink.active_listings("BSE") == []
+
+
+def test_long_history_insert_stays_within_monthly_partition_limit():
+    harness = ClickHouseHarness()
+    write(harness.sink, "upsert_instruments", [instrument(UPSTOX)])
+    rows = [
+        BarRecord(
+            UPSTOX,
+            "daily",
+            datetime(year, month, 2, tzinfo=UTC),
+            Decimal(10),
+            Decimal(12),
+            Decimal(9),
+            Decimal(11),
+            volume=100,
+        )
+        for year in range(1985, 2027)
+        for month in range(1, 13)
+    ]
+    from unittest.mock import Mock
+
+    insert = Mock(wraps=harness.client.insert)
+    harness.client.insert = insert
+    write(harness.sink, "write_bars", rows)
+    blocks = [c for c in insert.call_args_list if c.args[0] == "market.bars"]
+    assert len(blocks) == 9
+    assert sum(len(c.args[1]) for c in blocks) == len(rows)
+    for call in blocks:
+        columns = call.kwargs["column_names"]
+        i = columns.index("trade_date")
+        assert len({(row[i].year, row[i].month) for row in call.args[1]}) <= 60
+
+
+def test_unresolved_snapshot_preserves_every_existing_membership(harness):
+    refs = [
+        ref("upstox_instrument_key", f"NSE_EQ|TEST{i}", symbol=f"TEST{i}", isin=None)
+        for i in range(5)
+    ]
+    write(harness.sink, "upsert_instruments", [instrument(r) for r in refs])
+    write(harness.sink, "write_constituents", [ConstituentRecord("test", r) for r in refs])
+    before = set(harness.sink.universe_members(["test"]))
+    missing = ref("upstox_instrument_key", "NSE_EQ|MISSING", symbol="MISSING", isin=None)
+    result = write(
+        harness.sink,
+        "write_constituents",
+        [ConstituentRecord("test", r) for r in [*refs[:4], missing]],
+    )
+    assert result.unresolved == 1 and result.rows_written == 0
+    assert len(before) == 5 and set(harness.sink.universe_members(["test"])) == before

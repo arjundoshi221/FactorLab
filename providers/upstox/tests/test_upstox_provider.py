@@ -131,7 +131,12 @@ def test_candle_plan_splits_history_by_ist_day_and_adds_today_intraday():
         "NSE_EQ|INE002A01018:intraday:2026-09-24",
     ]
     history, today = units
-    assert history.params == {"endpoint": "historical", "from": "2026-09-23", "to": "2026-09-23"}
+    assert history.params == {
+        "endpoint": "historical",
+        "from": "2026-09-23",
+        "to": "2026-09-23",
+        "require_complete": False,
+    }
     assert today.start == datetime(2026, 9, 23, 18, 30, tzinfo=UTC)  # IST midnight
     assert source._url(history).endswith("/minutes/1/2026-09-23/2026-09-23")
     assert "%7C" in source._url(today)  # the instrument key is URL-encoded
@@ -155,6 +160,39 @@ def test_quote_plan_batches_up_to_the_configured_size():
     assert all(u.source_channel == "upstox:v3_quote_ohlc" for u in units)
     with pytest.raises(ValueError):
         source.plan(BarRequest("IND", "1min", (), params={"mode": "stream"}))
+
+
+def test_past_session_recovery_uses_history_and_preserves_close_bound():
+    source = UpstoxBars(UpstoxSettings())
+    start = datetime(2026, 9, 23, 3, 45, tzinfo=UTC)
+    end = datetime(2026, 9, 23, 10, 0, tzinfo=UTC)
+    units = source.plan(
+        BarRequest(
+            "IND", "1min", (SeriesWindow(REL, start, end),), params={"as_of": NOW.isoformat()}
+        )
+    )
+    assert len(units) == 1
+    assert units[0].params["endpoint"] == "historical"
+    assert units[0].params["to"] == "2026-09-23"
+    assert (units[0].start, units[0].end) == (start, end)
+
+
+def test_normalization_excludes_bars_outside_archived_window():
+    from dataclasses import replace
+
+    capture = {name: item for name, item, _ in kit.cases("upstox", "market.bars")}[
+        "historical_window"
+    ]
+    capture = replace(
+        capture,
+        metadata={
+            **capture.metadata,
+            "start": "2026-09-23T03:46:00+00:00",
+            "end": "2026-09-23T09:59:00+00:00",
+        },
+    )
+    rows = UpstoxBars(UpstoxSettings()).normalize(capture)
+    assert [r.bar_time.isoformat() for r in rows] == ["2026-09-23T03:46:00+00:00"]
 
 
 def _body(dataset: str, case: str) -> bytes:

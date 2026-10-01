@@ -26,7 +26,14 @@ SERVICES = {
     "ingest-political": "ingest-political",
 }
 DAEMONS = [name for name in SERVICES if name != "ingest-political"]
-PROTECTED = ["factorlab-api-1", "factorlab-clickhouse", "factorlab-cloudflare-secrets-agent-1"]
+PROTECTED = [
+    "factorlab-api-1",
+    "factorlab-api-candidate-1",
+    "factorlab-web-1",
+    "factorlab-monitor-1",
+    "factorlab-clickhouse",
+    "factorlab-cloudflare-secrets-agent-1",
+]
 
 
 def run(*args: str, capture: bool = True) -> str:
@@ -86,7 +93,7 @@ def verify_protected(before: list[dict]) -> None:
     if public_state(PROTECTED) != before:
         raise RuntimeError("A protected API/database/secret-agent container changed")
     for path in ("/health", "/hub/api/v1/overview"):
-        with urllib.request.urlopen("http://127.0.0.1:8000" + path, timeout=30) as response:
+        with urllib.request.urlopen("http://127.0.0.1:18000" + path, timeout=30) as response:
             if response.status != 200:
                 raise RuntimeError(f"API check failed: {path}")
 
@@ -113,8 +120,8 @@ def plan(root: Path, test_id: str) -> None:
         definition = newer["services"][name]
         # Keep operator-specific provider and runtime configuration from the live model.
         definition["environment"] = {
-            **original["services"][name].get("environment", {}),
             **definition.get("environment", {}),
+            **original["services"][name].get("environment", {}),
         }
         image = f"factorlab-test-{unit}:{test_id}"
         metadata = json.loads(run("docker", "image", "inspect", image))[0]
@@ -126,9 +133,9 @@ def plan(root: Path, test_id: str) -> None:
             .startswith(test_id.split("-", 1)[1])
         ):
             raise RuntimeError(f"Image revision does not match the test id: {unit}")
-        # The installed monolith secret agent writes 0400 root-owned secret files.
-        # Keep that agent and its secret volumes unchanged for this branch test.
-        definition["user"] = "0:0"
+        # Keep the already verified secret/data ownership contract. The remaining
+        # component rollout installed UID 10001; do not revert it to root.
+        definition["user"] = original["services"][name].get("user") or metadata["Config"]["User"]
         definition["image"] = metadata["Id"]
         candidate["services"][name] = definition
         for mount in definition.get("volumes", []):

@@ -36,6 +36,11 @@ None (library). Main calls: `register_source(cls)` (from a provider's `__init__`
 `validate_bindings(bindings, REGISTRY)`, `run_binding(binding, adapter, sink, request)`,
 `replay(...)`, `bar_request(...)`, `reference_request(...)`, `source_priority_rows(bindings)`.
 
+`collect_binding(ctx, binding, adapter, sink, request)` composes dependent datasets
+inside one parent run, retaining each binding's source and prefixed unit outcomes.
+It avoids nested storage runs and closes adapters after collection.
+Political readers can constrain newest filings by `filing_year` before limiting.
+
 ## Configuration and secrets
 
 | Setting | Env / secret name | Default | Notes |
@@ -100,8 +105,8 @@ their previous tags; the library version is not tagged.
 
 ## Pitfalls
 
-- Every binding in `configs/ingestion/bindings.yaml` is `role: shadow` today;
-  production rows still come from each component's legacy daemon.
+- Maintained collectors select primary bindings explicitly; optional comparisons
+  remain shadow bindings. Verify installed image revisions before assuming a cutover.
 - A shadow of a dataset that is not `source_keyed` (everything except the two bar
   datasets) fetches, archives and normalizes but writes nothing (`counts_only`).
 - `CONFIGS_DIR` / `BINDINGS_PATH` are resolved at import; set env vars first.
@@ -109,3 +114,8 @@ their previous tags; the library version is not tagged.
   itself never needs a provider import (R4; `test_new_ingestion_layers_are_clean`).
 
 **UDP service monitoring:** `RunContext.fail_unit` reports redacted failures through runtime monitoring, using classify() codes; transient/rate/normalization failures warn, other failures error. Both successful and failed units tick rate-limited progress heartbeats. Runtime is now a declared dependency and allowed lower library layer.
+
+Dataset collection checks cancellation before each fetch. PartialNormalizationError
+preserves usable rows while recording a unit failure. Completeness remains explicit.
+Authoritative universe snapshots with unresolved members fail their unit and leave
+existing membership intact; shadow comparisons retain resolution counts.

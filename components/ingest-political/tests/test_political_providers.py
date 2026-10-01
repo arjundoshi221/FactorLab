@@ -218,3 +218,116 @@ def test_memory_sink_political_semantics_match():
     summary = run_binding(binding, source, sink, reference_request(binding))
     assert summary.rows_written == 2 + 2 + 2  # legislators, committees, known memberships
     assert date(2026, 9, 24) == NOW.date()
+
+
+def _bootstrap_sources(monkeypatch, session):
+    from factorlab.components.ingest_political import bootstrap
+
+    def build(binding):
+        if binding.dataset == "ref.legislators":
+            return CongressLegislators(
+                CongressLegislatorsSettings(), session=session, clock=lambda: NOW
+            )
+        cls = HouseClerkFilings if binding.dataset == "alt.political_filings" else HouseClerkTrades
+        return cls(HouseClerkSettings(), session=session, clock=lambda: NOW)
+
+    monkeypatch.setattr(bootstrap, "source_for", build)
+    return bootstrap
+
+
+def _bootstrap_routes():
+    return {
+        "legislators-current": body("congress_legislators", "ref.legislators", "legislators"),
+        "committees-current": body("congress_legislators", "ref.legislators", "committees"),
+        "committee-membership": body("congress_legislators", "ref.legislators", "memberships"),
+        "2026FD.ZIP": body("house_clerk", "alt.political_filings", "index_2026"),
+        "20000001.pdf": body("house_clerk", "alt.political_trades", "ptr_20000001"),
+        "20000002.pdf": body("house_clerk", "alt.political_trades", "ptr_20000001"),
+    }
+
+
+def test_bootstrap_retains_one_run_and_each_dataset_lineage(monkeypatch):
+    db = FakeClickHouse(exchanges=US)
+    sink = ClickHouseSinks(V2USStorage(db))
+    bootstrap = _bootstrap_sources(monkeypatch, Session(_bootstrap_routes()))
+    monkeypatch.setattr(ClickHouseSinks, "from_environment", lambda market: sink)
+    monkeypatch.setattr(sink, "close", lambda: None)
+    assert bootstrap.main(["--year", "2026", "--congress", "118", "--ptr-limit", "2"]) == 0
+    runs = db.rows("meta.ingestion_runs")
+    assert len({r["run_id"] for r in runs}) == 1
+    run = runs[-1]
+    assert (run["pipeline"], run["status"], run["requested_series"], run["successful_series"]) == (
+        "political_bootstrap",
+        "success",
+        6,
+        6,
+    )
+    archives = {r["raw_id"]: r for r in db.rows("raw.archive")}
+    assert len(archives) == 6
+    for table in (
+        "alt.political_filings",
+        "alt.political_trades",
+        "alt.political_committees",
+        "alt.political_committee_memberships",
+    ):
+        assert db.rows(table)
+        for row in db.rows(table):
+            raw = archives[row["raw_id"]]
+            assert row["ingest_run_id"] == run["run_id"]
+            assert row["source"] == raw["source"]
+            assert row["as_of_time"] == NOW
+    assert {r["congress_number"] for r in db.rows("alt.political_committees")} == {118}
+    assert {r["congress_number"] for r in db.rows("alt.political_committee_memberships")} == {118}
+
+
+def test_bootstrap_defers_filings_after_reference_failure(monkeypatch):
+    from factorlab.ingest.bindings import load_bindings
+
+    routes = _bootstrap_routes()
+    routes["legislators-current"] = b"invalid JSON"
+    session = Session(routes)
+    bootstrap = _bootstrap_sources(monkeypatch, session)
+    sink = ClickHouseSinks(V2USStorage(FakeClickHouse(exchanges=US)))
+    bindings = {b.dataset: b for b in load_bindings().bindings if b.dataset in bootstrap.DATASETS}
+    with ingestion_run(
+        sink, pipeline="political_bootstrap", source="political", market_code="ALT_POLITICAL"
+    ) as ctx:
+        bootstrap.collect(ctx, sink, bindings, year=2026, congress=119, ptr_limit=2)
+    assert ctx.status == "partial"
+    assert not any("2026FD.ZIP" in url for url in session.calls)
+    assert {u.name for u in ctx.units if not u.ok} >= {
+        "alt.political_filings",
+        "alt.political_trades",
+    }
+
+
+def test_recent_filings_filters_year_before_limiting():
+    db = FakeClickHouse(exchanges=US)
+    records = [
+        {
+            "country_code": "US",
+            "chamber": "house",
+            "filing_id": "old",
+            "filing_year": 2025,
+            "filing_date": date(2025, 5, 1),
+            "filing_url": "https://disclosures-clerk.house.gov/old.pdf",
+            "version": 1,
+        },
+        {
+            "country_code": "US",
+            "chamber": "house",
+            "filing_id": "new",
+            "filing_year": 2026,
+            "filing_date": date(2026, 5, 1),
+            "filing_url": "https://disclosures-clerk.house.gov/new.pdf",
+            "version": 1,
+        },
+    ]
+    columns = list(records[0])
+    db.insert(
+        "alt.political_filings", [[r[c] for c in columns] for r in records], column_names=columns
+    )
+    sink = ClickHouseSinks(V2USStorage(db))
+    assert [
+        f.filing_id for f in sink.recent_filings(chamber="house", limit=1, filing_year=2025)
+    ] == ["old"]

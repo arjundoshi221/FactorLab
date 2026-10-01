@@ -318,6 +318,7 @@ services:
     volumes:
     - us_runtime:/run/secrets/app:ro
     - ${FACTORLAB_US_UNIVERSE_CONFIG:-/etc/factorlab/us-universe.yaml}:/app/config/us-universe.yaml:ro
+    - ${FACTORLAB_US_CONSTITUENTS_DIR:-/etc/factorlab/constituents}:/app/config/constituents:ro
     - /var/log/factorlab/ingest-us:/var/log/factorlab/ingest-us
   ingest-us:
     image: ${FACTORLAB_INGEST_US_IMAGE:-${FACTORLAB_US_IMAGE:-${FACTORLAB_IMAGE:-factorlab:latest}}}
@@ -347,6 +348,8 @@ services:
       FACTORLAB_COMPONENT: ingest-us
       FACTORLAB_SERVICE: ingest-us
       FACTORLAB_LOG_DIR: /var/log/factorlab/ingest-us
+      US_MINUTE_TIER_SIZE: ${US_MINUTE_TIER_SIZE:-250}
+      SCHWAB_MIN_REQUEST_INTERVAL_SECONDS: ${SCHWAB_MIN_REQUEST_INTERVAL_SECONDS:-1.0}
     depends_on:
       bootstrap:
         condition: service_completed_successfully

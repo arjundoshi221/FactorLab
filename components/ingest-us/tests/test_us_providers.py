@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from unittest.mock import Mock
 
 import pytest
 
@@ -294,8 +295,33 @@ def test_universe_membership_drives_the_bar_universe():
     universe = Binding(dataset="ref.universe_membership", market="USA", provider="github_csv")
     summary = run_binding(universe, github, sinks, reference_request(universe))
     # AAPL and BRK-B resolve by country-scoped ticker; MSFT is not in the listing slice.
-    assert (summary.status, summary.rows_written) == ("success", 2)
+    assert (summary.status, summary.rows_written) == ("failed", 0)
     assert any(row["alias_value"] == "US:MSFT" for row in db.log["meta.unresolved_entities"])
+    assert db.rows("ref.universe_membership") == []
+
+    complete_settings = GithubCsvSettings.model_validate(
+        {
+            "indexes": {
+                "sp500": {
+                    "url": csv_capture.source_url,
+                    "symbol_column": "Symbol",
+                    "minimum_constituents": 2,
+                    "name": "S&P 500",
+                }
+            }
+        }
+    )
+    complete_session = Mock()
+    complete_session.get.return_value = GithubResponse(
+        b"Symbol\nAAPL\nBRK.B\n", csv_capture.source_url
+    )
+    complete = GithubCsvUniverse(
+        complete_settings,
+        session=complete_session,
+        clock=lambda: NOW,
+    )
+    retry = run_binding(universe, complete, sinks, reference_request(universe))
+    assert (retry.status, retry.rows_written) == ("success", 2)
     assert db.rows("ref.universes")[0]["name"] == "S&P 500"
 
     # EODHD's own S&P components run as shadow: resolved and reported, nothing written.

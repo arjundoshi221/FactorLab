@@ -1,8 +1,7 @@
 """House Clerk parsing: annual filing-index ZIP/XML and PTR transaction text.
 
-Pure functions over the downloaded bytes/text (07 rule R7), shared by the
-dataset sources in this package and the legacy ``sources.political.house_clerk``
-fetchers that the production political bootstrap still calls.
+Pure functions over the downloaded bytes/text (07 rule R7), used by the
+filing-index and PTR dataset sources in this package.
 """
 
 from __future__ import annotations

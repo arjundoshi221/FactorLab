@@ -56,12 +56,10 @@ political image. Do not run a normal release concurrently with this test.
 
 ## Compatibility and verification limits
 
-The currently installed secret agent renders files as root-owned `0400`; the
-new component images declare user `10001`. The test runner uses a `0:0` user
-override to consume existing secret volumes and runtime data without changing
-their permissions. This validates the component images' runtime behavior with
-the current host, but does not validate the eventual non-root rollout or the
-per-component host deployer.
+The October 1 ingestion runner preserves the installed service UID and operator
+runtime environment. The earlier trial used root before the remaining component
+rollout; the current collectors run as UID 10001. API, web, monitor, ClickHouse and
+secret-agent identities are protected during a collector replacement.
 
 Check new `meta.ingestion_runs` records and raw-to-curated lineage, provider
 status, configured universe, logs and restarts. India needs an open-session
@@ -76,8 +74,8 @@ sudo python3 /opt/factorlab/deployment-tests/20260930-d599402/ingestion_test.py 
 ```
 
 This restores deployment configuration and code, not database contents. No
-schema migrations or data deletion are part of this workflow. Collector code
-under component `legacy/` directories remains in use and cannot yet be removed.
+schema migrations or data deletion are part of this workflow. The October 1 source revision removes collector legacy modules after replay parity;
+preceding image pins remain available for operational restoration.
 
 ## Remaining components and non-root operation
 

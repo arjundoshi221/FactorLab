@@ -13,7 +13,7 @@ from factorlab.runtime.supervised import supervised
 
 
 def _bootstrap(argv: list[str]) -> int | None:
-    from factorlab.components.ingest_political.legacy.bootstrap import main
+    from factorlab.components.ingest_political.bootstrap import main
 
     return main(argv)
 

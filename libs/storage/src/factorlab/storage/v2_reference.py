@@ -57,6 +57,19 @@ class V2ReferenceWriter:
                 parameters={"exchange": exchange},
             )
         )
+        if exchange_row is None:
+            # Providers may identify a venue by MIC while migrated databases use
+            # their existing exchange code. Resolve only a single approved venue.
+            venue = _one(
+                self.client.query(
+                    "SELECT exchange_code, mic, country_code, currency_code FROM ref.exchanges FINAL "
+                    "WHERE mic = {exchange:String} AND active",
+                    parameters={"exchange": exchange},
+                )
+            )
+            if venue is not None:
+                exchange = _decoded_text(venue[0])
+                exchange_row = venue[1:]
         if (
             exchange_row is None
             or _decoded_text(exchange_row[1]) != country

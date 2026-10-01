@@ -2,8 +2,8 @@
 
 * ``ref.listings`` by per-symbol ``/instruments`` lookup. Schwab has no master
   file, so the request carries canonical listings (``ReferenceRequest.instruments``)
-  or ``params.symbols``; Schwab is meant to run as ``secondary`` here, attaching
-  its ``schwab_symbol`` aliases to listings another provider owns.
+  or ``params.symbols``. Production validates quote batches, preserving existing
+  identities and attaching ``schwab_symbol`` aliases.
 * ``market.bars`` daily and 1min from ``/pricehistory``, one symbol per unit;
   minute windows are clamped to Schwab's lookback and split into short chunks.
 """
@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import timedelta
 from typing import Any, ClassVar
 
@@ -20,12 +21,14 @@ from factorlab.ingest.datasets import (
     Capabilities,
     FetchUnit,
     InstrumentRecord,
+    InstrumentRef,
     ReferenceRequest,
 )
 from factorlab.ingest.provider import RawCapture
 from factorlab.sources.schwab.normalize import (
     normalize_instrument,
     normalize_pricehistory,
+    normalize_quote_listings,
     provider_symbol,
     ref_to_metadata,
 )
@@ -62,11 +65,26 @@ class _SchwabSource:
 
 class SchwabListings(_SchwabSource):
     dataset: ClassVar[str] = "ref.listings"
-    capabilities: ClassVar[Capabilities] = Capabilities(markets=MARKETS)
+    capabilities: ClassVar[Capabilities] = Capabilities(markets=MARKETS, max_batch=50)
 
     def plan(self, request: ReferenceRequest) -> Sequence[FetchUnit]:
         symbols = [provider_symbol(ref.trading_symbol) for ref in request.instruments]
         symbols += [provider_symbol(str(s)) for s in request.params.get("symbols", ())]
+        symbols = list(dict.fromkeys(symbols))
+        if request.params.get("mode") == "quotes":
+            size = self.settings.quote_batch_size
+            return [
+                FetchUnit(
+                    f"quotes:{symbols[i]}..{symbols[i + size - 1] if i + size <= len(symbols) else symbols[-1]}",
+                    self._channel("quotes"),
+                    params={"symbols": symbols[i : i + size]},
+                    instruments=tuple(
+                        InstrumentRef(ALIAS_KIND, s, "", s.replace("/", "-"), "US")
+                        for s in symbols[i : i + size]
+                    ),
+                )
+                for i in range(0, len(symbols), size)
+            ]
         return [
             FetchUnit(
                 f"instrument:{symbol}", self._channel("instruments"), params={"symbol": symbol}
@@ -75,6 +93,14 @@ class SchwabListings(_SchwabSource):
         ]
 
     def fetch(self, unit: FetchUnit) -> RawCapture:
+        if "symbols" in unit.params:
+            symbols = unit.params["symbols"]
+            return self.transport.get(
+                "/quotes",
+                {"symbols": ",".join(symbols)},
+                request_key=unit.name,
+                metadata={"symbols": symbols, "endpoint": "quotes"},
+            )
         symbol = str(unit.params["symbol"])
         return self.transport.get(
             "/instruments",
@@ -84,6 +110,8 @@ class SchwabListings(_SchwabSource):
         )
 
     def normalize(self, capture: RawCapture) -> Sequence[InstrumentRecord]:
+        if capture.metadata.get("endpoint") == "quotes":
+            return normalize_quote_listings(capture, exchanges=self.settings.exchanges)
         return normalize_instrument(capture, exchanges=self.settings.exchanges)
 
 
@@ -112,7 +140,16 @@ class SchwabBars(_SchwabSource):
                 stop = min(start + step, window.end)
                 units.append(self._unit(ref, "1min", start, stop))
                 start = stop
-        return units
+        return [
+            replace(
+                unit,
+                params={
+                    **unit.params,
+                    "require_complete": bool(request.params.get("require_complete", False)),
+                },
+            )
+            for unit in units
+        ]
 
     def _unit(self, ref: Any, resolution: str, start: Any, end: Any) -> FetchUnit:
         return FetchUnit(
@@ -143,6 +180,7 @@ class SchwabBars(_SchwabSource):
             metadata={
                 "resolution": unit.params["resolution"],
                 "instruments": [ref_to_metadata(ref)],
+                "require_complete": unit.params.get("require_complete", False),
             },
         )
 

@@ -7,37 +7,17 @@ import hashlib
 import json
 import uuid
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime
 from typing import Any
-from zoneinfo import ZoneInfo
-
-import pandas as pd
 
 from factorlab.ingest.provider import RawCapture
 from factorlab.storage.clickhouse import (
     _NO_CONTRACT_ID,
     ClickHouseStorage,
     IngestionRunHandle,
-    _as_utc_datetime,
-    _decimal,
-    _integer,
     _version,
 )
 from factorlab.storage.v2_reference import UnresolvedReference, V2ReferenceWriter
-
-IST = ZoneInfo("Asia/Kolkata")
-MAX_UINT64 = 2**64 - 1
-
-
-def _unsigned_count(value: Any) -> int | None:
-    """Treat provider sentinels outside ClickHouse's UInt64 range as missing."""
-    count = _integer(value)
-    return count if count is not None and 0 <= count <= MAX_UINT64 else None
-
-
-def _session(bar_time: datetime) -> str:
-    local = bar_time.astimezone(IST).time()
-    return "pre" if local < time(9, 15) else ("regular" if local < time(15, 30) else "post")
 
 
 class V2IndiaStorage(ClickHouseStorage):
@@ -164,110 +144,6 @@ class V2IndiaStorage(ClickHouseStorage):
         if result.result_rows[0][0] != 1:
             raise UnresolvedReference("NSE reference is absent from ref.exchanges")
 
-    def sync_instruments(
-        self,
-        instruments: Sequence[Mapping[str, Any]],
-        *,
-        raw_id: uuid.UUID | None = None,
-    ) -> dict[str, uuid.UUID]:
-        lookup: dict[str, uuid.UUID] = {}
-        for item in instruments:
-            if item.get("segment") != "NSE_EQ" or item.get("instrument_type") != "EQ":
-                continue
-            key = str(item["instrument_key"])
-            try:
-                _, _, listing_id = self.references.upsert_listing(
-                    {
-                        "instrument_key": key,
-                        "isin": item.get("isin"),
-                        "country_code": "IN",
-                        "exchange_code": "NSE",
-                        "currency_code": "INR",
-                        "trading_symbol": str(item["trading_symbol"]),
-                        "name": item.get("name") or item["trading_symbol"],
-                        "security_type": "common",
-                        "lot_size": item.get("lot_size") or 1,
-                        "tick_size": _decimal(item.get("tick_size"), 6),
-                    },
-                    alias_kind="upstox_instrument_key",
-                    alias_value=key,
-                    source="upstox",
-                )
-            except UnresolvedReference as exc:
-                self._identity_status(
-                    source="upstox",
-                    alias_kind="upstox_instrument_key",
-                    alias_value=key,
-                    raw_id=raw_id,
-                    reason=str(exc),
-                )
-                raise
-            self._identity_status(
-                source="upstox",
-                alias_kind="upstox_instrument_key",
-                alias_value=key,
-                raw_id=raw_id,
-                target_kind="listing",
-                target_id=listing_id,
-            )
-            lookup[str(item["trading_symbol"])] = listing_id
-        return lookup
-
-    def sync_contracts(
-        self,
-        instruments: Sequence[Mapping[str, Any]],
-        instrument_lookup: Mapping[str, uuid.UUID],
-        *,
-        raw_id: uuid.UUID | None = None,
-        instrument_keys: set[str] | None = None,
-    ) -> dict[str, uuid.UUID]:
-        from factorlab.storage.clickhouse import _epoch_ms_to_date
-
-        lookup: dict[str, uuid.UUID] = {}
-        for item in instruments:
-            if item.get("segment") != "NSE_FO" or item.get("instrument_type") != "FUT":
-                continue
-            if instrument_keys is not None and str(item["instrument_key"]) not in instrument_keys:
-                continue
-            underlying = instrument_lookup.get(str(item.get("underlying_symbol") or ""))
-            key = str(item["instrument_key"])
-            try:
-                if underlying is None:
-                    raise UnresolvedReference(
-                        f"future underlying unresolved: {item.get('underlying_symbol')}"
-                    )
-                lookup[key] = self.references.upsert_future(
-                    {
-                        "contract_key": key,
-                        "exchange_code": "NSE",
-                        "country_code": "IN",
-                        "expiry": _epoch_ms_to_date(item.get("expiry")),
-                        "lot_size": item.get("lot_size") or 1,
-                        "tick_size": _decimal(item.get("tick_size"), 6),
-                        "weekly": item.get("weekly", False),
-                    },
-                    underlying_listing_id=underlying,
-                    source="upstox",
-                )
-            except UnresolvedReference as exc:
-                self._identity_status(
-                    source="upstox",
-                    alias_kind="upstox_instrument_key",
-                    alias_value=key,
-                    raw_id=raw_id,
-                    reason=str(exc),
-                )
-                raise
-            self._identity_status(
-                source="upstox",
-                alias_kind="upstox_instrument_key",
-                alias_value=key,
-                raw_id=raw_id,
-                target_kind="contract",
-                target_id=lookup[key],
-            )
-        return lookup
-
     def start_ingestion_run(self, **kwargs: Any) -> IngestionRunHandle:
         handle = super().start_ingestion_run(**kwargs)
         self._active_run_id = handle.run_id
@@ -316,122 +192,6 @@ class V2IndiaStorage(ClickHouseStorage):
                 }
             ],
         )
-
-    def write_candles_1min(
-        self,
-        candles: pd.DataFrame,
-        *,
-        instrument_id: uuid.UUID,
-        symbol: str,
-        contract_id: uuid.UUID | None = None,
-        source: str = "upstox",
-        raw_id: uuid.UUID | None = None,
-        market_code: str = "IND",
-    ) -> int:
-        return self.write_candles_1min_batch(
-            [
-                {
-                    "candles": candles,
-                    "instrument_id": instrument_id,
-                    "contract_id": contract_id,
-                    "symbol": symbol,
-                    "raw_id": raw_id,
-                }
-            ],
-            source=source,
-            market_code=market_code,
-        )
-
-    def write_candles_1min_batch(
-        self,
-        series_batches: Sequence[Mapping[str, Any]],
-        *,
-        source: str = "upstox",
-        market_code: str = "IND",
-    ) -> int:
-        if self._active_run_id is None:
-            raise RuntimeError("start an ingestion run before writing v2 bars")
-        now = datetime.now(UTC)
-        bars: list[dict[str, Any]] = []
-        futures: list[dict[str, Any]] = []
-        for item in series_batches:
-            candles = item["candles"]
-            if candles.empty:
-                continue
-            listing_id = uuid.UUID(str(item["instrument_id"]))
-            ref = self.client.query(
-                "SELECT l.security_id, s.entity_id, s.security_type "
-                "FROM ref.listings AS l FINAL INNER JOIN ref.securities AS s FINAL "
-                "ON s.security_id = l.security_id "
-                "WHERE l.listing_id = {listing_id:UUID} AND l.country_code = 'IN'",
-                parameters={"listing_id": listing_id},
-            ).result_rows
-            if len(ref) != 1:
-                raise UnresolvedReference(f"listing/security unresolved: {listing_id}")
-            contract = item.get("contract_id")
-            if contract:
-                match = self.client.query(
-                    "SELECT contract_id FROM ref.contracts FINAL "
-                    "WHERE contract_id = {contract_id:UUID} "
-                    "AND underlying_listing_id = {listing_id:UUID}",
-                    parameters={"contract_id": contract, "listing_id": listing_id},
-                ).result_rows
-                if len(match) != 1:
-                    raise UnresolvedReference(f"future contract unresolved: {contract}")
-            for candle in candles.to_dict("records"):
-                bar_time = _as_utc_datetime(candle["timestamp"])
-                common = {
-                    "country_code": "IN",
-                    "resolution": "1min",
-                    "session": _session(bar_time),
-                    "bar_time": bar_time,
-                    "trade_date": bar_time.astimezone(IST).date(),
-                    **{
-                        key: _decimal(candle.get(key), 6)
-                        for key in ("open", "high", "low", "close")
-                    },
-                    "volume": _unsigned_count(candle.get("volume")),
-                    "oi": _unsigned_count(candle.get("oi")),
-                    "source": source,
-                    "raw_id": item.get("raw_id"),
-                    "ingest_run_id": self._active_run_id,
-                    "as_of_time": now,
-                    "ingested_at": now,
-                    "version": _version(now),
-                }
-                if contract:
-                    futures.append(
-                        {
-                            "country_code": "IN",
-                            "underlying_listing_id": listing_id,
-                            "contract_id": contract,
-                            "source_symbol": item["symbol"],
-                            **{
-                                key: value for key, value in common.items() if key != "country_code"
-                            },
-                        }
-                    )
-                else:
-                    bars.append(
-                        {
-                            "country_code": "IN",
-                            "listing_id": listing_id,
-                            "security_id": ref[0][0],
-                            "entity_id": ref[0][1],
-                            "product_type": str(ref[0][2]),
-                            **{
-                                key: value for key, value in common.items() if key != "country_code"
-                            },
-                            "turnover": None,
-                            "trades_count": None,
-                            "settlement_price": None,
-                            "source_channel": "upstox_candles",
-                            "latency_ms": None,
-                        }
-                    )
-        self._insert_dicts("market.bars", bars)
-        self._insert_dicts("market.futures_contract_bars", futures)
-        return len(bars) + len(futures)
 
     def latest_candle_times(
         self,

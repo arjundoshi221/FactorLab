@@ -20,7 +20,7 @@ One uv workspace (`pyproject.toml`, `uv.lock`); the full layout, dependency rule
 
 - `libs/`: shared libraries, `factorlab-<x>` → `factorlab.<x>`: `core` (settings, secrets, paths, logging), `runtime`, `calendars`, `clickhouse`, `schema` (ClickHouse v2 migrations as package data), `ingest` (the provider contract and engine), `storage` (sinks and writers), `orchestration` (engine CLI), `testkit` (dev only).
 - `providers/`: data providers, `factorlab-provider-<p>` → `factorlab.sources.<p>`; they import only core, calendars and ingest.
-- `components/`: deployable units, each with `component.yaml`, a Dockerfile, a compose fragment and its own releases: `api`, `web` (npm), `ingest-india`, `ingest-us`, `ingest-political`, `ingest-broker`, `secrets-agent`, `schema-migrator`. Legacy production code awaiting its engine cutover lives in `components/*/src/**/legacy/` and may only shrink.
+- `components/`: deployable units, each with `component.yaml`, a Dockerfile, a compose fragment and its own releases: `api`, `web` (npm), `ingest-india`, `ingest-us`, `ingest-political`, `ingest-broker`, `secrets-agent`, `schema-migrator`. Collectors use shared ingestion contracts and canonical sinks. Keep `tests/architecture/legacy_budget.txt` empty.
 - `deploy/`: the platform unit: compose base, host deployer and scripts, logrotate/systemd/sshd config. `deploy/README.md` is the release and server operations guide.
 - `cloudflare/`: Cloudflare Workers for Upstox authentication and the OAuth callback.
 - `configs/`: bindings (`configs/ingestion/bindings.yaml`), source settings and universes. Keep secrets in environment-managed secret stores, never in checked-in config.

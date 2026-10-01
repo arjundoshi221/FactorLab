@@ -1,9 +1,7 @@
 """Schwab market-data transport for the dataset sources.
 
-Separate from ``market.MarketClient`` (which the production US daemon still
-uses) so the new adapter never changes the legacy path. The access token and
-its ``.expires_at`` companion come from ``get_secret``; the Cloudflare secrets
-agent (05) keeps them fresh, so an expired or missing token is ``AuthRequired``.
+Credentials are read on every request. Rejected GETs retry once when the runtime
+token changes; missing or expired credentials raise AuthRequired.
 """
 
 from __future__ import annotations
@@ -41,7 +39,7 @@ class SchwabTransport:
         self._clock = clock
         self._secret = secret
 
-    def _token(self) -> str:
+    def _token(self, now: datetime | None = None) -> str:
         name = self.settings.api.access_token_env
         token = (self._secret(name, "") or "").strip()
         expiry = (self._secret(f"{name}.expires_at", "") or "").strip()
@@ -53,9 +51,17 @@ class SchwabTransport:
             raise AuthRequired(f"{name}.expires_at is not an ISO timestamp") from exc
         if expires.tzinfo is None:
             expires = expires.replace(tzinfo=UTC)
-        if expires <= self._clock():
+        if expires <= (now or self._clock()):
             raise AuthRequired(f"{name} expired at {expiry}; reauthenticate Schwab")
         return token
+
+    def token_ready(self, now: datetime | None = None) -> bool:
+        """Check rendered credentials without making a network request."""
+        try:
+            self._token(now)
+        except AuthRequired:
+            return False
+        return True
 
     def get(
         self,
@@ -65,13 +71,25 @@ class SchwabTransport:
         request_key: str,
         metadata: Mapping[str, Any] | None = None,
     ) -> RawCapture:
-        headers = {"Accept": "application/json", "Authorization": f"Bearer {self._token()}"}
+        token = self._token()
+        headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
         url = f"{self.settings.api.base_url.rstrip('/')}{MARKET_DATA_PATH}{endpoint}"
         self.limiter.acquire()
         try:
             response = self.session.get(
                 url, params=dict(params), headers=headers, timeout=self.settings.api.timeout
             )
+            if response.status_code == 401:
+                refreshed = self._token()
+                if refreshed != token:
+                    self.limiter.acquire()
+                    response.close()
+                    response = self.session.get(
+                        url,
+                        params=dict(params),
+                        headers={**headers, "Authorization": f"Bearer {refreshed}"},
+                        timeout=self.settings.api.timeout,
+                    )
         except requests.RequestException as exc:
             raise TransientError(f"Schwab request failed: {type(exc).__name__}") from exc
         raise_for_status("Schwab", response.status_code, response.headers, request_key)

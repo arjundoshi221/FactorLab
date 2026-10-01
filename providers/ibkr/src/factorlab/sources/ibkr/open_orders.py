@@ -1,10 +1,10 @@
 """Open-orders snapshot (capture + normalize, no archive).
 
 Observing only — orders may have been placed by any client (typically the
-future trade engine). The Gateway must have "Download open orders on
-connection" enabled to see cross-client orders.
+future trade engine). Each capture explicitly requests all clients' current
+open orders with a bounded timeout; no startup order cache is required.
 
-This module is intentionally read-only: it inspects what ``ib.openTrades()``
+This module is intentionally read-only: it inspects what ``ib.reqAllOpenOrders()``
 returns and never constructs an order. The read-only-grep test asserts no
 ``Order`` subclass names appear.
 """

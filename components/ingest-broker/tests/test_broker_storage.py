@@ -158,7 +158,7 @@ def test_executions_map_execution_method_and_contract_identity(storage, mock_ib_
 
 
 def test_open_orders_rows_match_ddl(storage, mock_ib_paper, now_utc):
-    mock_ib_paper.openTrades.return_value = [make_trade(order=make_order(client_id=10))]
+    mock_ib_paper.reqAllOpenOrders.return_value = [make_trade(order=make_order(client_id=10))]
     rows = normalize_open_orders(
         decode_capture(capture_open_orders(mock_ib_paper, fetched_at=now_utc).body)
     )

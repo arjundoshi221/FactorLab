@@ -13,13 +13,13 @@ from factorlab.runtime.supervised import supervised
 
 
 def _daemon(argv: list[str]) -> int | None:
-    from factorlab.components.ingest_india.legacy.daemon import main
+    from factorlab.components.ingest_india.collector import main
 
     return main(argv)
 
 
 def _premarket(argv: list[str]) -> int | None:
-    from factorlab.components.ingest_india.legacy.premarket import main
+    from factorlab.components.ingest_india.premarket import main
 
     return main(argv)
 

@@ -85,7 +85,13 @@ class IdentityResolver:
     def _natural_listing(self, ref: InstrumentRef) -> tuple[UUID, str] | None:
         # Blank exchange = country-scoped lookup (e.g. bare index tickers).
         scope, scope_params = (
-            ("l.exchange_code = {exchange:String}", {"exchange": ref.exchange_code})
+            (
+                (
+                    "l.exchange_code IN (SELECT exchange_code FROM ref.exchanges FINAL WHERE "
+                    "(exchange_code = {exchange:String} OR mic = {exchange:String}) AND active)"
+                ),
+                {"exchange": ref.exchange_code},
+            )
             if ref.exchange_code
             else ("l.country_code = {country:String}", {"country": ref.country_code})
         )

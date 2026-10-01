@@ -142,7 +142,6 @@ allowed-confusables = ["–"]   # EN DASH in user-facing text
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["DTZ"]                         # tests build naive datetimes on purpose
-"**/legacy/**" = ["BLE001", "PLW0603", "DTZ"]   # frozen until its cutover deletes it
 "libs/runtime/src/factorlab/runtime/notify/*.py" = ["BLE001"]  # notifications are best-effort
 
 [tool.ruff.lint.isort]

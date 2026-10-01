@@ -229,7 +229,7 @@ class InMemorySink(NullProviderStorage):
                 continue
             resolved += 1
             by_universe[row.universe_code].add(listing)
-        if mode != "authoritative":
+        if mode != "authoritative" or unresolved:
             return WriteResult(0, unresolved, resolved)
         for code, snapshot in by_universe.items():
             members = self.memberships.setdefault(code, {})
@@ -312,12 +312,14 @@ class InMemorySink(NullProviderStorage):
         return WriteResult(written, orphans, written - unmatched)
 
     def recent_filings(
-        self, *, chamber: str, limit: int, country_code: str = "US"
+        self, *, chamber: str, limit: int, country_code: str = "US", filing_year: int | None = None
     ) -> list[FilingRef]:
         found = [
             f["record"]
             for (c, _), f in self.filings.items()
-            if c == chamber and f["record"].country_code == country_code
+            if c == chamber
+            and f["record"].country_code == country_code
+            and (filing_year is None or f["record"].filing_year == filing_year)
         ]
         found.sort(key=lambda r: (r.filing_date, r.filing_id), reverse=True)
         return [FilingRef(r.filing_id, r.filing_year, r.filing_url) for r in found[:limit]]

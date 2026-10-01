@@ -32,7 +32,9 @@ def _stock(ib):
     ib.reqExecutions.return_value = [
         make_fill(execution=make_execution(time_=datetime(2026, 9, 23, 14, 5, tzinfo=UTC)))
     ]
-    ib.openTrades.return_value = [make_trade(order=make_order(), order_status=make_order_status())]
+    ib.reqAllOpenOrders.return_value = [
+        make_trade(order=make_order(), order_status=make_order_status())
+    ]
     return ib
 
 

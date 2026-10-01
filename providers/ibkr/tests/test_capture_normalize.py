@@ -39,7 +39,7 @@ def _loaded(mock_ib):
         make_account_value(tag="Cushion-S", value="0.9"),
     ]
     mock_ib.reqExecutions.return_value = [make_fill()]
-    mock_ib.openTrades.return_value = [make_trade()]
+    mock_ib.reqAllOpenOrders.return_value = [make_trade()]
     return mock_ib
 
 

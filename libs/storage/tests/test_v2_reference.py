@@ -84,7 +84,7 @@ def test_live_reference_keeps_migrated_first_dates_and_alias_start():
 
 
 def test_unresolved_exchange_cannot_create_reference():
-    client = Client([[]])
+    client = Client([[], []])
     with pytest.raises(UnresolvedReference, match="exchange/currency"):
         V2ReferenceWriter(client).upsert_listing(
             RECORD,

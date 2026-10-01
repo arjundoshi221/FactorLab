@@ -25,7 +25,7 @@ from factorlab.ingest.datasets import (
     InstrumentRecord,
     InstrumentRef,
 )
-from factorlab.ingest.errors import NormalizationError
+from factorlab.ingest.errors import NormalizationError, PartialNormalizationError
 from factorlab.ingest.provider import RawCapture
 from factorlab.sources.upstox.settings import ALIAS_KIND
 
@@ -290,12 +290,35 @@ def normalize_bars(
                 out.append(
                     record(refs[key], "1min", bar_time, o, h, low, c, volume=volume, oi=None)
                 )
+        if capture.metadata.get("require_complete"):
+            payload = _json(capture)
+            data = payload.get("data") or {}
+            observed = {
+                str(q.get("instrument_token")) for q in data.values() if isinstance(q, Mapping)
+            }
+            missing = set(refs) - observed
+            if missing:
+                raise PartialNormalizationError(
+                    f"quote omitted {len(missing)} requested instruments", rows=out
+                )
         return out
     if endpoint not in ("intraday", "historical"):
         raise NormalizationError(f"{capture.request_key}: unknown endpoint {endpoint!r}")
     ref = next(iter(refs.values()))
     for bar_time, (o, h, low, c), volume, oi in _candle_rows(capture):
+        start = capture.metadata.get("start")
+        end = capture.metadata.get("end")
+        if start and bar_time < datetime.fromisoformat(start):
+            continue
+        if end and bar_time >= datetime.fromisoformat(end):
+            continue
+        if capture.metadata.get("require_complete") and bar_time >= capture.fetched_at.astimezone(
+            UTC
+        ).replace(second=0, microsecond=0):
+            continue
         out.append(record(ref, "1min", bar_time, o, h, low, c, volume=volume, oi=oi))
+    if capture.metadata.get("require_complete") and not out:
+        raise NormalizationError("no finalized candles returned for the requested window")
     return out
 
 
