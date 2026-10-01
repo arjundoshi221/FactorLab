@@ -4,8 +4,8 @@ Defense in depth on top of .gitignore. .gitignore can be defeated with
 `git add -f` or by editing .gitignore in the same commit; this hook runs
 on every commit and refuses outright.
 
-Allowed exceptions: anything under tests/fixtures/ or docs/ (small curated
-samples that legitimately ship in the repo).
+Allowed exceptions: the generated root .env.example and anything under
+tests/fixtures/ or docs/ (small curated samples that legitimately ship).
 
 Receives staged file paths via argv (pre-commit framework convention).
 Exits 1 (blocking) on any banned path.
@@ -22,6 +22,8 @@ ALLOWED_PREFIXES = ("tests/fixtures/", "docs/")
 
 def is_banned(path: str) -> bool:
     p = path.replace("\\", "/")
+    if p == ".env.example":
+        return False
     if any(p.startswith(a) for a in ALLOWED_PREFIXES):
         return False
     if p in BANNED_EXACT or p.startswith(".env."):
@@ -37,13 +39,8 @@ def main() -> int:
     for p in bad:
         print(f"  - {p}", file=sys.stderr)
     print(file=sys.stderr)
-    print("Allowed exceptions: tests/fixtures/**, docs/**", file=sys.stderr)
-    print(
-        "If you genuinely need to commit one of these, do an explicit "
-        "`git add -f <path>` only after rotating any potentially-leaked "
-        "credentials.",
-        file=sys.stderr,
-    )
+    print("Allowed exceptions: .env.example, tests/fixtures/**, docs/**", file=sys.stderr)
+    print("Keep runtime data and credentials outside tracked source.", file=sys.stderr)
     return 1
 
 
