@@ -28,4 +28,7 @@ jobs:
             df -i / /opt /tmp /var/lib/docker
             sudo docker system df
             sudo du -xsh /opt/factorlab/deployment-tests /var/lib/docker /var/log/factorlab /tmp 2>/dev/null
+            sudo du -xsh /var/* /opt/* 2>/dev/null | sort -h | tail -25
+            sudo python3 /opt/factorlab/deploy/scripts/prune-images.py --dry-run
+            sudo docker image ls --filter dangling=true --format "{{.ID}} {{.Size}}"
           '
