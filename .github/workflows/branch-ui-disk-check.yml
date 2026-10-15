@@ -1,4 +1,4 @@
-name: Branch UI disk preflight
+name: Branch UI disk reclaim
 
 on:
   push:
@@ -38,3 +38,18 @@ jobs:
               sudo docker image inspect "$id" --format "created={{.Created}} tags={{.RepoTags}} labels={{.Config.Labels}}"
             done
           '
+      - name: Remove only the audited unreferenced images
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          run_dir="/tmp/factorlab-ui-reclaim-${{ github.run_id }}"
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "install -d -m 0700 '$run_dir'"
+          scp -i ~/.ssh/factorlab_deploy -o BatchMode=yes \
+            deploy/testing/reclaim_trial_disk.py "$VPS_USER@$VPS_HOST:$run_dir/"
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "sudo python3 '$run_dir/reclaim_trial_disk.py'"
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "rm -rf -- '$run_dir'"
