@@ -1,0 +1,31 @@
+name: Branch UI disk preflight
+
+on:
+  push:
+    branches: [restructure/deploy-market-data-ui]
+    paths: [.github/workflows/branch-ui-disk-check.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  host-disk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/vps-ssh
+        with:
+          private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          host-key: ${{ secrets.VPS_SSH_HOST_KEY }}
+      - name: Read filesystem and Docker capacity
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" '
+            df -h / /opt /tmp /var/lib/docker
+            df -i / /opt /tmp /var/lib/docker
+            sudo docker system df
+            sudo du -xsh /opt/factorlab/deployment-tests /var/lib/docker /var/log/factorlab /tmp 2>/dev/null
+          '
