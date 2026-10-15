@@ -72,6 +72,7 @@ factorlab-component-monitor = { workspace = true }
 # Tests live with the member they test (libs/*/tests, providers/*/tests,
 # components/*/tests); tests/ holds the cross-cutting ones. importlib mode lets
 # members share test file names without __init__.py packages.
+pythonpath = ["."]
 testpaths = ["libs", "providers", "components", "tests"]
 addopts = ["--import-mode=importlib"]
 norecursedirs = ["node_modules", "dist", ".venv", ".tmp", "src"]
