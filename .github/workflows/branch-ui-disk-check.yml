@@ -31,4 +31,10 @@ jobs:
             sudo du -xsh /var/* /opt/* 2>/dev/null | sort -h | tail -25
             sudo python3 /opt/factorlab/deploy/scripts/prune-images.py --dry-run
             sudo docker image ls --filter dangling=true --format "{{.ID}} {{.Size}}"
+            for id in $(sudo docker image ls --filter dangling=true --no-trunc --quiet); do
+              refs=$(sudo grep -R -l -F "$id" /opt/factorlab/deployment-tests /opt/factorlab/deploy/compose.production.yml 2>/dev/null | wc -l)
+              containers=$(sudo docker ps --all --filter "ancestor=$id" --quiet | wc -l)
+              echo "dangling=$id backup_refs=$refs containers=$containers"
+              sudo docker image inspect "$id" --format "created={{.Created}} tags={{.RepoTags}} labels={{.Config.Labels}}"
+            done
           '
