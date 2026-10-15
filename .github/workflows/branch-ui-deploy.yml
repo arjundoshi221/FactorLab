@@ -119,7 +119,7 @@ jobs:
           set +e
           ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=30 "$VPS_USER@$VPS_HOST" \
-            "sudo python3 '$RUN_DIR/ui_test.py' apply '$TEST_ID' --commit '$COMMIT' --api-image '$API_IMAGE' --web-image '$WEB_IMAGE'" \
+            "sudo env PYTHONDONTWRITEBYTECODE=1 python3 '$RUN_DIR/ui_test.py' apply '$TEST_ID' --commit '$COMMIT' --api-image '$API_IMAGE' --web-image '$WEB_IMAGE'" \
             | tee trial.log
           status=${PIPESTATUS[0]}
           set -e
@@ -147,5 +147,5 @@ jobs:
         run: |
           if [[ -n ${RUN_DIR:-} ]]; then
             ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
-              "rm -rf -- '$RUN_DIR'" || true
+              "sudo rm -rf -- '$RUN_DIR'" || true
           fi

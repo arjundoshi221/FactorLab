@@ -153,6 +153,8 @@ def apply(root: Path, commit: str, api_image: str, web_image: str) -> None:
         raise RuntimeError("Trial ID already exists")
     if (test.DEPLOY.parent / "state/images.env").exists():
         raise RuntimeError("Component pins exist; use the normal release workflow")
+    if shutil.disk_usage(test.DEPLOY.parent).free < 2 * 1024**3:
+        raise RuntimeError("Less than 2 GiB free on the VPS root filesystem")
     os.umask(0o077)
     root.mkdir(mode=0o700, parents=True)
     for filename in ("ui_test.py", "ingestion_test.py"):
