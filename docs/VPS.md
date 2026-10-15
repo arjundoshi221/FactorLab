@@ -14,6 +14,44 @@ values.
 
 ## Server
 
+Portfolio UI trial, 2026-10-15: deployed API and web from commit
+`743777d49c1b14eb4fcfafa31ae1b79cf3a010fd`, version
+`0.0.0-trial.743777d49c1b`, through the CI-gated tag
+`ui-trial/743777d49c1b`. [Deployment run](https://github.com/arjundoshi221/FactorLab/actions/runs/38764040856)
+completed successfully. API digest:
+`sha256:a62bd2114b66e151fb742456bca7241809e5800cb53192135b6237747e9bdf56`;
+web digest:
+`sha256:9baa294b4c2bbdeb50b0925d1726119450447dd76a4653fa56848be7cb00fe2b`.
+Only `api-candidate` and `web` were replaced; protected container identities,
+image labels, health, version and existing Market Data reads passed verification.
+Private rollback records are under
+`/opt/factorlab/deployment-tests/ui-743777d49c1b/`. No ports, secret bindings or
+public routing changed. This remains a branch trial before component-pin rollout.
+
+Applied only schema Waves 12 and 13 through the migration runner; both journal
+entries succeeded. Seeded events 1-3 of the IBKR stream scenario: profile
+`IBKR stream tester` (`9480653e-7863-48f5-b8c1-52a85259d187`), simulated paper
+account `SIM_IBKR_STREAM`, AAPL order `1800219929310147` with 4 of 10 shares filled.
+Created Demo theme, Demo strategy and Demo trade. Assignment, all three grouped
+PnL reports (USD -0.35 after commission), history and clearing passed against the
+live API. The order was left unassigned for manual testing. All four portfolio
+routes return HTTP 200 at the private web origin. Public `/portfolio` redirects
+to Cloudflare Access; authenticated browser interaction was not verified because
+no browser was connected. Simulator checkpoint `demo` remains on the workstation;
+resume it rather than replaying from another machine or deleting its state.
+
+Deployment preparation found the root disk full from a 43.61 GiB uncapped
+ClickHouse Docker console log. Compressed and verified every source chunk and
+the stored archive before truncating that diagnostic file; archive and SHA-256
+metadata are root-only under
+`/mnt/factorlab-data/maintenance/portfolio-20261015/`. No application data or
+rollback images were removed. The file logger had stopped writing and was
+emitting repeated Poco file-access stack traces. Sent the supported SIGHUP log
+reopen signal; normal file logging resumed and console growth fell to 3.5 KB in
+three seconds. ClickHouse container identity, start time and restart count stayed
+unchanged. Docker console rotation for this pre-rollout ClickHouse container is
+still absent; keep it in scope for its next planned recreation.
+
 ```text
 Host:       145.239.75.163
 SSH user:   ubuntu

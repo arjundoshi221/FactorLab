@@ -1,7 +1,7 @@
 ---
 id: F-036
 title: Profile-owned order tags and portfolio PnL
-status: review
+status: shipped
 priority: P1
 components: [schema, storage, api, web]
 owner: unassigned
@@ -68,3 +68,7 @@ the profile catalogs; a profile selector is not an authorization boundary.
 ## Log
 
 - 2026-10-15: Implemented schema, API, ledger, UI and local verification; not deployed.
+- 2026-10-15: Applied Waves 12/13 and deployed the API/web branch trial from
+  `743777d`. CI and live synthetic assignment, grouped PnL, audit and clear checks
+  passed. Partial AAPL order and demo catalogs are ready for manual testing;
+  see [VPS state](../VPS.md). Authenticated browser verification remains pending.
