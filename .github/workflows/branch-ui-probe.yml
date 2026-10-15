@@ -1,0 +1,38 @@
+name: Branch UI deployment preflight
+
+on:
+  push:
+    branches: [restructure/deploy-market-data-ui]
+    paths: [.github/workflows/branch-ui-probe.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  host-preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/vps-ssh
+        with:
+          private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          host-key: ${{ secrets.VPS_SSH_HOST_KEY }}
+      - name: Check installed branch deployment boundary
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" '
+            if test -e /opt/factorlab/state/images.env; then
+              echo "component-pins=present"
+            else
+              echo "component-pins=absent"
+            fi
+            if test -e /opt/factorlab/deploy/compose.production.yml; then
+              echo "trial-compose=present"
+            else
+              echo "trial-compose=absent"
+            fi
+            sudo -n -l
+          '
