@@ -126,6 +126,26 @@ def verify(root: Path) -> None:
     with urllib.request.urlopen("http://127.0.0.1:8080/market-data", timeout=30) as response:
         if response.status != 200:
             raise RuntimeError("Market Data page is unavailable")
+    for path, field in (
+        ("services", "services"),
+        ("daily", "days"),
+        ("coverage", "feeds"),
+        ("errors", "issues"),
+    ):
+        result = read_json(f"http://127.0.0.1:18000/hub/api/v1/monitoring/{path}")
+        if not isinstance(result.get(field), list):
+            raise RuntimeError(f"Invalid monitoring response: {path}")
+        if path == "errors" and result.get("unavailable"):
+            raise RuntimeError("Monitoring error history is incomplete")
+    with urllib.request.urlopen("http://127.0.0.1:8080/monitoring", timeout=30) as response:
+        page = response.read().decode()
+    assets = re.findall(r'src="(/assets/[^"<>]+\.js)"', page)
+    if not assets:
+        raise RuntimeError("Monitoring JavaScript bundle is missing")
+    with urllib.request.urlopen(f"http://127.0.0.1:8080{assets[0]}", timeout=30) as response:
+        bundle = response.read().decode()
+    if "Error inbox" not in bundle or "/monitoring/errors?" not in bundle:
+        raise RuntimeError("The served bundle does not contain the new monitoring view")
     print("FACTORLAB_RESULT_VERIFICATION=passed", flush=True)
 
 

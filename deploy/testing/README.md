@@ -3,7 +3,7 @@
 ## Dedicated UI trial branch
 
 The current public UI is served by the `web` and `api-candidate` services from the
-pre-rollout branch trial. A new Market Data tab can be deployed without merging the
+pre-rollout branch trial. UI updates, including Monitoring, can be deployed without merging the
 platform restructure to `main` by using `restructure/deploy-market-data-ui` and the
 reviewed [UI trial workflow](../../.github/workflows/branch-ui-deploy.yml). This path
 replaces only those two services. It leaves the primary API, ClickHouse, ingestion,
@@ -17,7 +17,7 @@ images through the existing image workflow, then runs
 captures the live resolved Compose model and protected container identities in a
 root-only `/opt/factorlab/deployment-tests/ui-<SHA>/` directory, pulls both image
 digests, replaces the candidate API first and web second, and checks health,
-version, four US/India daily/historical universe reads, and the Market Data route.
+version, four US/India daily/historical universe reads, and the Market Data route. Monitoring responses and the served error-inbox bundle are also verified.
 An activation or verification failure restores the exact preceding images and
 model. The workflow summary reports verification and recovery.
 

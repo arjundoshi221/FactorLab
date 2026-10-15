@@ -124,3 +124,5 @@ Selecting a row opens a focused side panel with the provider-to-FactorLab ticker
 coverage and recovery details. Escape and the close control return to the universe list.
 Search accepts either ticker, as well as company names.
 Future rows label the FactorLab ticker as the underlying and retain their separate contract ID.
+
+The Monitoring control room includes a searchable service grid, daily telemetry, recorded coverage gaps, pipeline activity and an error inbox. Current source failures override healthy process heartbeats; repeated failures retain first/last occurrence, counts and explicit recovery evidence. See the service-monitoring runbook.

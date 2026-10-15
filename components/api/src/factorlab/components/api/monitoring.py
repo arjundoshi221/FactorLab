@@ -1,6 +1,6 @@
 """Monitoring reads ClickHouse independently of the UDP daemon."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from factorlab.clickhouse import ClickHouse, rows
 from factorlab.core.paths import home
+
+from .monitoring_errors import error_history
 
 router = APIRouter()
 
@@ -25,6 +27,116 @@ def repository():
 
 
 Client = Annotated[Any, Depends(repository)]
+
+
+@router.get("/errors")
+def errors(
+    client: Client,
+    hours: Annotated[int, Query(ge=1, le=720)] = 168,
+    service_id: str = "",
+    severity: Literal["all", "error", "fatal", "warning"] = "all",
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+):
+    return error_history(client, hours=hours, service_id=service_id, severity=severity, limit=limit)
+
+
+@router.get("/daily")
+def daily(client: Client):
+    """Aggregate stored telemetry, never infer uptime from sampled events."""
+    now = datetime.now(UTC)
+    try:
+        items = rows(
+            client.query(
+                """SELECT service_id, toDate(received_at, 'UTC') AS day,
+                count() AS reports, countIf(type = 'err') AS errors,
+                countIf(type = 'warn') AS warnings, countIf(type = 'restart') AS restarts,
+                countIf(type = 'state' AND state = 'down') AS outages
+            FROM meta.service_events
+            WHERE received_at >= {since:DateTime64(3, 'UTC')}
+              AND received_at <= {now:DateTime64(3, 'UTC')}
+            GROUP BY service_id, day ORDER BY service_id, day""",
+                parameters={
+                    "since": now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    - timedelta(days=6),
+                    "now": now,
+                },
+                settings={"readonly": 2, "max_execution_time": 5},
+            )
+        )
+        return {"generated_at": now, "days": items}
+    except Exception as exc:
+        raise HTTPException(503, "Daily monitoring is unavailable") from exc
+
+
+@router.get("/coverage")
+def coverage(client: Client):
+    """Latest recorded session per feed within a bounded 30-day window."""
+    now = datetime.now(UTC)
+    try:
+        items = rows(
+            client.query(
+                """SELECT country_code, source, resolution, trade_date,
+                count() AS checked_series, sum(expected) AS expected,
+                sum(actual) AS actual, sum(missing) AS missing,
+                countIf(missing > 0) AS affected_series, max(ingested_at) AS checked_at
+            FROM meta.session_coverage FINAL
+            WHERE trade_date >= {since:Date} AND trade_date <= {today:Date}
+            GROUP BY country_code, source, resolution, trade_date
+            ORDER BY country_code, source, resolution, trade_date DESC
+            LIMIT 1 BY country_code, source, resolution""",
+                parameters={"since": (now - timedelta(days=30)).date(), "today": now.date()},
+                settings={"readonly": 2, "max_execution_time": 5},
+            )
+        )
+        expected = rows(
+            client.query(
+                """SELECT e.country_code, e.source, e.resolution,
+                    uniqExact(e.listing_id) AS active_series,
+                    uniqExactIf(e.listing_id, isNull(c.listing_id)) AS unreported_series
+                FROM (SELECT DISTINCT country_code, source, resolution, listing_id
+                    FROM meta.expected_series FINAL WHERE active AND isNull(contract_id)) AS e
+                LEFT JOIN (
+                    SELECT country_code, source, resolution, listing_id
+                    FROM meta.session_coverage FINAL
+                    WHERE trade_date >= {since:Date} AND trade_date <= {today:Date}
+                      AND (country_code, source, resolution, trade_date) IN (
+                        SELECT country_code, source, resolution, max(trade_date)
+                        FROM meta.session_coverage FINAL
+                        WHERE trade_date >= {since:Date} AND trade_date <= {today:Date}
+                        GROUP BY country_code, source, resolution)
+                ) AS c ON e.country_code = c.country_code AND e.source = c.source
+                    AND e.resolution = c.resolution AND e.listing_id = c.listing_id
+                GROUP BY e.country_code, e.source, e.resolution""",
+                parameters={"since": (now - timedelta(days=30)).date(), "today": now.date()},
+                settings={"readonly": 2, "max_execution_time": 5, "join_use_nulls": 1},
+            )
+        )
+        by_feed = {
+            (item["country_code"], item["source"], item["resolution"]): item for item in items
+        }
+        for feed in expected:
+            key = (feed["country_code"], feed["source"], feed["resolution"])
+            if key not in by_feed:
+                item = {
+                    "country_code": feed["country_code"],
+                    "source": feed["source"],
+                    "resolution": feed["resolution"],
+                    "trade_date": None,
+                    "checked_series": 0,
+                    "expected": 0,
+                    "actual": 0,
+                    "missing": 0,
+                    "affected_series": 0,
+                    "checked_at": None,
+                }
+                items.append(item)
+                by_feed[key] = item
+            by_feed[key].update(
+                active_series=feed["active_series"], unreported_series=feed["unreported_series"]
+            )
+        return {"generated_at": now, "feeds": items}
+    except Exception as exc:
+        raise HTTPException(503, "Data coverage is unavailable") from exc
 
 
 def registry():
