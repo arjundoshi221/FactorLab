@@ -23,6 +23,7 @@ class UniverseTicker(BaseModel):
     listing_id: UUID
     contract_id: UUID | None = None
     symbol: str
+    factorlab_symbol: str | None = None
     name: str | None
     source: str
     universe: str
@@ -105,6 +106,7 @@ class MarketDataRepository:
                    WHERE country_code = {market:String} AND resolution = {resolution:String} AND active
                    GROUP BY listing_id, contract_id"""
         search_sql = """AND (positionCaseInsensitiveUTF8(c.symbol, {search:String}) > 0
+                         OR positionCaseInsensitiveUTF8(ifNull(l.trading_symbol, ''), {search:String}) > 0
                          OR positionCaseInsensitiveUTF8(ifNull(e.legal_name, ''), {search:String}) > 0)"""
         data_sql = ""
         if data_filter != "all":
@@ -126,6 +128,7 @@ class MarketDataRepository:
         total = self.query(f"SELECT count() AS total {scope}", **parameters)[0]["total"]
         entries = self.query(
             f"""SELECT c.listing_id AS listing_id, c.contract_id AS contract_id, c.symbol AS symbol,
+                       l.trading_symbol AS factorlab_symbol,
                        e.legal_name AS name, c.source AS source, c.universe AS universe,
                        c.series_count AS series_count
                 {scope} ORDER BY c.symbol, c.listing_id, c.contract_id
@@ -226,14 +229,18 @@ class MarketDataRepository:
         )
         if not configured:
             raise HTTPException(404, "Ticker is not in the configured universe")
-        name = self.query(
-            """SELECT e.legal_name AS name FROM ref.listings AS l FINAL
+        identity = self.query(
+            """SELECT e.legal_name AS name, l.trading_symbol AS factorlab_symbol FROM ref.listings AS l FINAL
                LEFT JOIN ref.securities AS s FINAL ON s.security_id = l.security_id
                LEFT JOIN ref.entities AS e FINAL ON e.entity_id = s.entity_id
                WHERE l.listing_id = {id:UUID} LIMIT 1""",
             id=listing_id,
         )
-        entry = {**configured[0], "name": name[0]["name"] if name else None}
+        entry = {
+            **configured[0],
+            "name": identity[0]["name"] if identity else None,
+            "factorlab_symbol": identity[0]["factorlab_symbol"] if identity else None,
+        }
         item = self._coverage(market, stream, resolution, [entry])[0]
         if not item.latest_date:
             return TickerCoverage(

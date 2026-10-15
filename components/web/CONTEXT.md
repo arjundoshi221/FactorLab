@@ -120,3 +120,7 @@ and daily collection write the same bars. The page searches configured symbols a
 names through `/hub/api/v1/market-data/universe`, shows zero-data tickers, and opens per-ticker
 stored coverage and recovery state. List requests are paginated at 50 tickers.
 Indian equity and futures series are separate rows even when they share a listing ID.
+Selecting a row opens a focused side panel with the provider-to-FactorLab ticker mapping,
+coverage and recovery details. Escape and the close control return to the universe list.
+Search accepts either ticker, as well as company names.
+Future rows label the FactorLab ticker as the underlying and retain their separate contract ID.

@@ -20,7 +20,8 @@ def test_configured_universe_includes_tickers_without_bars_and_searches_names():
             [
                 {
                     "listing_id": ident,
-                    "symbol": "AAPL",
+                    "symbol": "AAPL.US",
+                    "factorlab_symbol": "AAPL",
                     "name": "Apple Inc.",
                     "source": "schwab",
                     "universe": "russell3000",
@@ -35,12 +36,15 @@ def test_configured_universe_includes_tickers_without_bars_and_searches_names():
         market="US", stream="daily", search="apple", data_filter="no_data", limit=50, offset=0
     )
     assert page.configured_total == 2
-    assert page.items[0].symbol == "AAPL"
+    assert page.items[0].symbol == "AAPL.US"
+    assert page.items[0].factorlab_symbol == "AAPL"
     assert page.items[0].rows == 0
     sql = repo.query.call_args_list[1].args[0]
     assert "meta.expected_series FINAL" in sql
     assert "LEFT JOIN ref.listings AS l FINAL ON l.listing_id = c.listing_id" in sql
     assert "positionCaseInsensitiveUTF8(ifNull(e.legal_name" in sql
+    assert "positionCaseInsensitiveUTF8(ifNull(l.trading_symbol" in sql
+    assert "l.trading_symbol AS factorlab_symbol" in repo.query.call_args_list[2].args[0]
     assert "NOT IN" in sql
     assert "b.trade_date >= {cutoff:Date}" in sql
     assert repo.query.call_args_list[1].kwargs["search"] == "apple"
@@ -54,13 +58,13 @@ def test_ticker_detail_counts_market_sessions_missing_from_stored_range():
             [
                 {
                     "listing_id": ident,
-                    "symbol": "AAPL",
+                    "symbol": "AAPL.US",
                     "source": "schwab",
                     "universe": "russell3000",
                     "series_count": 1,
                 }
             ],
-            [{"name": "Apple Inc."}],
+            [{"name": "Apple Inc.", "factorlab_symbol": "AAPL"}],
             [
                 {
                     "listing_id": ident,
@@ -77,6 +81,8 @@ def test_ticker_detail_counts_market_sessions_missing_from_stored_range():
     )
     detail = repo.ticker("US", "historical", ident)
     assert detail.rows == 2
+    assert detail.symbol == "AAPL.US"
+    assert detail.factorlab_symbol == "AAPL"
     assert detail.missing_trading_days == 1
     assert detail.history_complete is False
     assert detail.gap_window_from == date(2026, 10, 12)

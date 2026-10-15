@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { errorMessage, fetchJson } from "../shared/api";
 import "./MarketData.css";
 
@@ -10,6 +11,7 @@ interface Ticker {
   listing_id: string;
   contract_id: string | null;
   symbol: string;
+  factorlab_symbol: string | null;
   name: string | null;
   source: string;
   universe: string;
@@ -61,6 +63,21 @@ export function MarketData() {
   const [detailError, setDetailError] = useState("");
   const [detailLoading, setDetailLoading] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const detailRef = useRef<HTMLElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!selected) return;
+    detailRef.current?.focus();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [selected]);
+
+  const closeDetail = () => {
+    setSelected(null);
+    window.requestAnimationFrame(() => triggerRef.current?.focus());
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => setQuery(search.trim()), 250);
@@ -136,7 +153,7 @@ export function MarketData() {
       <div className="table-tools market-data__tools">
         <label htmlFor="market-data-search">Search tickers or companies
           <input id="market-data-search" type="search" value={search} maxLength={100}
-            placeholder="Symbol or company name" onChange={event => { setSearch(event.target.value); setOffset(0); }} />
+            placeholder="Provider ticker, FactorLab ticker, or company" onChange={event => { setSearch(event.target.value); setOffset(0); }} />
         </label>
         <label htmlFor="market-data-filter">Stored data
           <select id="market-data-filter" value={filter} onChange={event => {
@@ -149,11 +166,15 @@ export function MarketData() {
       {error && <p role="alert" className="notice notice--error">Coverage is unavailable: {error}</p>}
       {selectedPage && <>
         <div className="table-scroll"><table className="market-data__table"><thead><tr>
-          <th>Ticker</th><th>Company</th><th>Series</th><th>Universe</th><th>{stream === "daily" ? "Rows · 30 days" : "Stored rows"}</th><th>Trading days</th>
+          <th>Provider ticker</th><th>FactorLab ticker</th><th>Company</th><th>Series</th><th>Universe</th><th>{stream === "daily" ? "Rows · 30 days" : "Stored rows"}</th><th>Trading days</th>
           <th>First date</th><th>Latest date</th><th>Last ingested</th>
-        </tr></thead><tbody>{selectedPage.items.map(item => <tr key={`${item.listing_id}:${item.contract_id ?? "equity"}`}>
-          <td><button className="market-data__ticker" type="button" onClick={() => setSelected(item)}
-            aria-label={`View coverage for ${item.symbol}${item.contract_id ? " future" : ""}`}>{item.symbol}</button></td>
+        </tr></thead><tbody>{selectedPage.items.map(item => <tr key={`${item.listing_id}:${item.contract_id ?? "equity"}`}
+          className={selected?.listing_id === item.listing_id && selected.contract_id === item.contract_id ? "is-selected" : ""}>
+          <td><button className="market-data__ticker" type="button" onClick={event => { triggerRef.current = event.currentTarget; setSelected(item); }}
+            aria-label={`View coverage for ${item.symbol}${item.contract_id ? " future" : ""}`}>
+            {item.symbol}<span aria-hidden="true">↗</span></button></td>
+          <td>{item.factorlab_symbol || <span className="market-data__empty">Unmapped</span>}
+            {item.contract_id && <small className="market-data__subtle">Underlying</small>}</td>
           <td>{item.name || "—"}</td><td>{item.contract_id ? "Future" : "Listing"}</td><td>{item.universe}</td>
           <td>{item.rows ? count.format(item.rows) : <span className="market-data__empty">No data</span>}</td>
           <td>{count.format(item.trading_days)}</td><td>{item.first_date || "—"}</td>
@@ -170,12 +191,29 @@ export function MarketData() {
       </>}
     </section>
 
-    {selected && <section className="inventory market-data__detail" aria-label={`${selected.symbol} coverage`}>
+    {selected && createPortal(<div className="market-data__overlay" onMouseDown={event => {
+      if (event.target === event.currentTarget) closeDetail();
+    }}><section className="market-data__detail" role="dialog" aria-modal="true"
+      aria-label={`${selected.symbol} coverage`} tabIndex={-1} ref={detailRef}
+      onKeyDown={event => {
+        if (event.key === "Escape") closeDetail();
+        if (event.key === "Tab") {
+          event.preventDefault();
+          detailRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+        }
+      }}>
       <div className="section-heading"><div><span className="eyebrow">{market === "US" ? "US" : "India"} · {stream}</span>
-        <h2>{selected.symbol} <small>{selected.name}</small></h2></div>
-        <button type="button" onClick={() => setSelected(null)} aria-label="Close ticker details">Close</button></div>
+        <h2>{selected.symbol}</h2><p>{selected.name || "Configured ticker"}</p></div>
+        <button type="button" onClick={closeDetail} aria-label="Close ticker details">Close</button></div>
+      <div className="market-data__identity">
+        <div><span>Provider ticker</span><strong>{selected.symbol}</strong></div>
+        <span aria-hidden="true">→</span>
+        <div><span>{selected.contract_id ? "FactorLab underlying ticker" : "FactorLab ticker"}</span>
+          <strong>{detail?.factorlab_symbol ?? selected.factorlab_symbol ?? "Unmapped"}</strong></div>
+      </div>
+      <p className="market-data__hint">{selected.contract_id ? "Future contract" : "Listing"} · {selected.source} · {selected.universe}</p>
       {detailLoading && <p role="status">Loading ticker coverage…</p>}
-      {detailError && <p role="alert" className="notice notice--error">{detailError}</p>}
+      {detailError && <p role="alert" className="notice notice--error">Could not load full coverage: {detailError}. The summary below is from the universe list.</p>}
       {detail && <>
         <dl className="market-data__facts">
           <div><dt>{stream === "daily" ? "Rows · last 30 days" : "Stored rows"}</dt><dd>{count.format(detail.rows)}</dd></div>
@@ -195,6 +233,11 @@ export function MarketData() {
         {detail.recovery_error && <p className="notice notice--error">Recovery: {detail.recovery_error}</p>}
         {detail.rows === 0 && <p className="notice">This ticker is configured, but no bars are stored {stream === "daily" ? "in the last 30 calendar days" : "yet"}.</p>}
       </>}
-    </section>}
+      {!detail && !detailLoading && <dl className="market-data__facts">
+        <div><dt>{stream === "daily" ? "Rows · last 30 days" : "Stored rows"}</dt><dd>{count.format(selected.rows)}</dd></div>
+        <div><dt>Trading days with data</dt><dd>{count.format(selected.trading_days)}</dd></div>
+        <div><dt>Latest data date</dt><dd>{selected.latest_date || "No data"}</dd></div>
+      </dl>}
+    </section></div>, document.body)}
   </main>;
 }

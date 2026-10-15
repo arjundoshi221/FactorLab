@@ -44,6 +44,10 @@ separately. Search and has-data filters run before pagination. Ticker detail cou
 market sessions within up to the latest 365 days of its stored range.
 Indian futures are keyed by contract ID as well as listing ID so their counts do not
 merge with the underlying equity.
+Universe rows expose the configured provider symbol and the FactorLab trading symbol from
+`ref.listings.trading_symbol`; search matches either symbol or the company name. An absent
+listing leaves the FactorLab symbol unmapped rather than guessing a ticker.
+For futures this is the underlying listing's symbol; `contract_id` identifies the future.
 
 ## Configuration and secrets
 
