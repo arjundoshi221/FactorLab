@@ -1,0 +1,26 @@
+.portfolio-page { display: grid; gap: 1.5rem; }
+.portfolio-selector { display: grid; gap: .5rem; max-width: 38rem; font-weight: 600; }
+.portfolio-selector select { width: 100%; padding: .75rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--panel-soft); color: var(--ink); }
+.portfolio-details { display: grid; gap: 1rem; }
+.portfolio-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.portfolio-section { padding: 1.25rem; border: 1px solid var(--line); border-radius: .75rem; background: var(--panel); min-width: 0; }
+.portfolio-section .table-scroll { overflow-x: auto; }
+.portfolio-section table { width: 100%; min-width: 600px; }
+.portfolio-section h3 { margin-top: 0; }
+.portfolio-simulated { display: inline-block; padding: .15rem .5rem; border-radius: .3rem; background: #fff0cb; color: #604900; font-size: .8rem; }
+.portfolio-stale { color: var(--amber, #e4b965); }
+.portfolio-pagination { display: flex; gap: 1rem; align-items: center; margin-top: 1rem; }
+.portfolio-tabs, .portfolio-actions { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
+.portfolio-tabs a { padding: .65rem 1rem; border: 1px solid var(--line); border-radius: .5rem; }
+.portfolio-tabs [aria-current="page"] { background: var(--panel-soft); font-weight: 700; }
+.portfolio-order { padding: 1rem 0; border-bottom: 1px solid var(--line); }
+.portfolio-order h4 { margin: .5rem 0; overflow-wrap: anywhere; }
+.portfolio-tag-selectors, .portfolio-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1rem 0; }
+.portfolio-tag-selectors label, .portfolio-catalog-form label { display: grid; gap: .4rem; }
+.portfolio-tag-selectors select, .portfolio-catalog-form input, .portfolio-catalog-form textarea { width: 100%; min-width: 0; padding: .6rem; border: 1px solid var(--line); border-radius: .4rem; background: var(--panel-soft); color: var(--ink); }
+.portfolio-catalog-form { display: grid; gap: 1rem; max-width: 40rem; }
+.portfolio-catalog { padding: 0; list-style: none; }
+.portfolio-catalog li { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.portfolio-catalog p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.portfolio-metrics dt { color: var(--muted); }
+.portfolio-metrics dd { margin: .5rem 0; font-size: 1.3rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }

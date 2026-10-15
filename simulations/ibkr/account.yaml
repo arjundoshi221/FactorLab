@@ -1,0 +1,13 @@
+users:
+  - user_id: "9480653e-7863-48f5-b8c1-52a85259d187"
+    display_name: IBKR stream tester
+accounts:
+  - user_id: "9480653e-7863-48f5-b8c1-52a85259d187"
+    broker_code: ibkr
+    account_id: SIM_IBKR_STREAM
+    account_mode: paper
+    base_currency: USD
+    booking_country: US
+    opened_date: "2026-10-01"
+    simulated: true
+    notes: Scripted trade stream; no actual broker connection

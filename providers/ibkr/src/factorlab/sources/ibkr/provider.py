@@ -13,11 +13,12 @@ datasets still land and the run finishes ``partial``.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
 
 from factorlab.ingest.provider import (
     NullProviderStorage,
@@ -59,6 +60,22 @@ class BrokerStorage(ProviderStorage, Protocol):
     def write_account_state(self, rows: Sequence[Any], *, provenance: Provenance) -> int: ...
     def write_executions(self, rows: Sequence[Any], *, provenance: Provenance) -> int: ...
     def write_open_orders(self, rows: Sequence[Any], *, provenance: Provenance) -> int: ...
+
+
+@runtime_checkable
+class SnapshotRecorder(Protocol):
+    """Optional snapshot-completeness extension; older sinks remain compatible."""
+
+    def record_broker_snapshot(
+        self,
+        accounts: Sequence[str],
+        *,
+        broker_code: str,
+        dataset: str,
+        snapshot_time: datetime,
+        provenance: Provenance,
+        simulated: bool = False,
+    ) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,11 +127,15 @@ class IBKRBrokerProvider:
         *,
         connector: Connector = _default_connector,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        channel_prefix: str = "",
+        simulated: bool = False,
     ) -> None:
         self.storage = storage
         self.config = config or SnapshotConfig()
         self._connector = connector
         self._clock = clock
+        self._channel_prefix = channel_prefix
+        self._simulated = simulated
 
     def collect(self, ctx: RunContext) -> None:
         for mode in self.config.modes:
@@ -160,11 +181,22 @@ class IBKRBrokerProvider:
         }[dataset]
 
     def _snapshot_mode(self, ctx: RunContext, ib: IB, mode: Mode) -> None:
-        channel = source_channel_for(mode)
+        channel = self._channel_prefix + source_channel_for(mode)
+        accounts = list(ib.managedAccounts())
         for dataset in self._datasets():
             unit = f"{mode}:{dataset.name}"
             try:
                 capture = dataset.capture(ib, self._clock())
+                if self._simulated:
+                    envelope = json.loads(capture.body)
+                    envelope["simulated"] = True
+                    capture = replace(
+                        capture,
+                        body=json.dumps(envelope, sort_keys=True).encode(),
+                        metadata={"simulated": True, "accounts": accounts},
+                        transport="file",
+                        source_url=f"simulation://{channel}/{dataset.name}",
+                    )
                 raw_id = ctx.archive(capture, source_channel=channel)
                 payload = decode_capture(capture.body, expected_kind=dataset.kind)
                 rows = NORMALIZERS[dataset.kind](payload, country_code=self.config.country_code)
@@ -172,6 +204,16 @@ class IBKRBrokerProvider:
                     source_channel=channel, raw_id=raw_id, as_of_time=capture.fetched_at
                 )
                 written = self._writer(dataset.name)(rows, provenance=provenance)
+                captured_accounts = sorted(set(accounts) | {row.account_id for row in rows})
+                if isinstance(self.storage, SnapshotRecorder):
+                    self.storage.record_broker_snapshot(
+                        captured_accounts,
+                        broker_code="ibkr",
+                        dataset=dataset.name,
+                        snapshot_time=capture.fetched_at,
+                        provenance=provenance,
+                        simulated=self._simulated,
+                    )
             except Exception as exc:  # isolate dataset failures into run units
                 log.warning("IBKR %s failed", unit, exc_info=True)
                 ctx.fail_unit(unit, exc)
@@ -186,6 +228,28 @@ class DryRunBrokerStorage(NullProviderStorage):
     def __init__(self) -> None:
         super().__init__()
         self.counts: dict[str, int] = {}
+        self.snapshots: list[dict[str, Any]] = []
+
+    def record_broker_snapshot(
+        self,
+        accounts: Sequence[str],
+        *,
+        broker_code: str,
+        dataset: str,
+        snapshot_time: datetime,
+        provenance: Provenance,
+        simulated: bool = False,
+    ) -> None:
+        for account in accounts:
+            self.snapshots.append(
+                {
+                    "broker_code": broker_code,
+                    "account_id": account,
+                    "dataset": dataset,
+                    "snapshot_time": snapshot_time.isoformat(),
+                    "simulated": simulated,
+                }
+            )
 
     def _count(self, dataset: str, rows: Sequence[Any], provenance: Provenance) -> int:
         key = f"{provenance.source_channel}:{dataset}"

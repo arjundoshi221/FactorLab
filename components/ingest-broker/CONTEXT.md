@@ -51,6 +51,8 @@ No IBKR credentials reach this container; Gateway logins go only to the Gateway 
 
 ## Data
 
+`profiles sync`, `simulate`, and `simulate-stream` register synthetic profiles/accounts and replay orders/fills through normal raw capture and broker storage. `simulations/ibkr/run.py` is the workstation launcher; simulation never connects to a Gateway. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md).
+
 - Writes `broker.positions_snapshot`, `broker.account_state_snapshot`, `broker.executions`,
   `broker.open_orders_snapshot`, `raw.archive` (`transport='tcp_socket'`), `ref.*` identity
   rows, `meta.unresolved_entities`, `meta.source_status` (`source` = `ibkr`) and

@@ -83,6 +83,8 @@ from factorlab.components.api.political_observability import (
     PoliticalTickersPage,
     PoliticalTickerSummary,
 )
+from factorlab.components.api.portfolio import router as portfolio_router
+from factorlab.components.api.portfolio_tagging import router as portfolio_tagging_router
 from factorlab.components.api.schema_map import (
     SchemaMapRepository,
     SchemaMapResponse,
@@ -161,6 +163,8 @@ app.include_router(
 app.include_router(us_router, prefix="/hub/api/v1/us", tags=["hub-us"])
 app.include_router(market_data_router, prefix="/hub/api/v1/market-data", tags=["hub-market-data"])
 app.include_router(monitoring_router, prefix="/hub/api/v1/monitoring", tags=["hub-monitoring"])
+app.include_router(portfolio_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
+app.include_router(portfolio_tagging_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
 
 
 @app.get("/hub/api/v1/docker-images", response_model=DockerImagesResponse, tags=["hub"])
@@ -1406,8 +1410,11 @@ def hub_monitoring() -> FileResponse:
     return _hub_index()
 
 
-@app.get("/market-data", include_in_schema=False)
-def hub_market_data() -> FileResponse:
+@app.get("/portfolio", include_in_schema=False)
+@app.get("/portfolio/themes", include_in_schema=False)
+@app.get("/portfolio/strategies", include_in_schema=False)
+@app.get("/portfolio/trade-names", include_in_schema=False)
+def hub_portfolio() -> FileResponse:
     return _hub_index()
 
 
@@ -1423,6 +1430,11 @@ def hub_india_instrument(listing_id: UUID) -> FileResponse:
 
 @app.get("/us", include_in_schema=False)
 def hub_us_markets() -> FileResponse:
+    return _hub_index()
+
+
+@app.get("/market-data", include_in_schema=False)
+def hub_market_data() -> FileResponse:
     return _hub_index()
 
 

@@ -46,6 +46,8 @@ Access cookies do the authentication.
 
 ## Data
 
+`/portfolio` displays profiles/accounts, orders and tagging. `/portfolio/themes`, `/portfolio/strategies`, `/portfolio/trade-names` manage independent catalogs and grouped recorded-history PnL. Account/profile changes reset reports. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md).
+
 None in ClickHouse. It calls, among others, `/hub/api/v1/overview`, `/hub/api/v1/catalog*`,
 `/hub/api/v1/schema-map`, `/hub/api/v1/docker-images`, `/hub/api/v1/us/*`,
 `/hub/api/v1/india/*`, `/hub/api/v1/market-data/*`, `/hub/api/v1/political/*`. Host path:

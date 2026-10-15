@@ -38,6 +38,8 @@ The component also reads `IBKR_SNAPSHOT_TIMES`, `IBKR_SNAPSHOT_MODES` and `IBKR_
 
 ## Data
 
+`simulation.py` and `stream_simulation.py` provide synthetic Gateway-shaped responses with durable IDs. Capture requests fresh all-client open orders with a bounded timeout. Providers preserve complete snapshot manifests and simulation provenance. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md).
+
 - Binding in [bindings.yaml](../../configs/ingestion/bindings.yaml): `{dataset: broker.snapshot, market: USA, provider: ibkr, role: shadow, params: {modes: [paper, live]}}  # -> primary`
 - The tables are `broker.positions_snapshot`, `broker.account_state_snapshot`, `broker.executions` and `broker.open_orders_snapshot`. They have no `source` in their key, so the shadow fetches, archives and normalizes but writes nothing.
 - `source` is `ibkr`. The legacy provider's `source_channel` is `paper_gateway` or `live_gateway`. The engine source's is `<instance>:paper_gateway` or `<instance>:live_gateway`. Switching paths changes that column in `broker.*` (07 §15.1).

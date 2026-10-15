@@ -56,6 +56,8 @@ applied by a reviewed, operator-run migration; the `schema-migrator` component's
 
 ## Data
 
+Forward Waves 12/13 add application profiles/account ownership, nullable catalog profile IDs and append-only durable-order assignments. These migrations are separate operator operations; applied waves stay frozen. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md).
+
 - Databases: `ref`, `market`, `fundamentals`, `alt`, `book`, `risk`, `derived`,
   `broker`, `meta`, `raw`, `research`.
 - Migration bookkeeping: `meta.schema_migrations` (journal, latest `version` wins),

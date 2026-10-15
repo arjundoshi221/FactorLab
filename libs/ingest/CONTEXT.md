@@ -48,6 +48,8 @@ No environment reads and no secrets here. Provider YAML holds secret *names* onl
 
 ## Data
 
+`factorlab.ingest.profiles` defines validated shared profiles and synthetic broker account registration contracts. Simulation is opt-in and requires dedicated SIM_ paper accounts. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md).
+
 Defines, but does not write, the dataset ids and their tables: `ref.listings`,
 `ref.contracts`, `ref.universe_membership`, `ref.legislators`,
 `alt.political_filings`, `alt.political_trades`, `fundamentals.filings`,

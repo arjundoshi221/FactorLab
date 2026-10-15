@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -623,6 +623,7 @@ dependencies = [
     { name = "factorlab-core" },
     { name = "factorlab-runtime" },
     { name = "factorlab-schema" },
+    { name = "factorlab-storage" },
     { name = "fastapi" },
     { name = "pandas" },
     { name = "pydantic" },
@@ -639,6 +640,7 @@ requires-dist = [
     { name = "factorlab-core", editable = "libs/core" },
     { name = "factorlab-runtime", editable = "libs/runtime" },
     { name = "factorlab-schema", editable = "libs/schema" },
+    { name = "factorlab-storage", editable = "libs/storage" },
     { name = "fastapi", specifier = ">=0.111" },
     { name = "pandas", specifier = ">=2.1" },
     { name = "pydantic", specifier = ">=2.5" },

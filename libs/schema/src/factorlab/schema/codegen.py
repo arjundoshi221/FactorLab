@@ -37,6 +37,16 @@ FORWARD_TABLES: dict[str, tuple[int, str]] = {
     "ref.source_priorities": (10, "source_priorities"),
     "meta.service_events": (11, "service_monitoring"),
     "meta.service_status": (11, "service_monitoring"),
+    "ref.app_users": (12, "app_profiles"),
+    "ref.broker_account_owners": (12, "app_profiles"),
+    "book.order_assignment_events": (13, "portfolio_tagging"),
+}
+
+# Alter existing registries only in a forward wave, leaving their original DDL frozen.
+FORWARD_ALTERS = {
+    "book.themes": (13, "portfolio_tagging"),
+    "book.strategies": (13, "portfolio_tagging"),
+    "book.trade_names": (13, "portfolio_tagging"),
 }
 
 NULLABLE_SORT_KEY_TABLES = {
@@ -220,6 +230,10 @@ def collect_forward_tables() -> dict[tuple[int, str], list[tuple[str, str]]]:
             if match and match.group(1).lower() in FORWARD_TABLES:
                 name = match.group(1).lower()
                 forward.setdefault(FORWARD_TABLES[name], []).append((name, normalize(statement)))
+            alter = re.search(r"\bALTER\s+TABLE\s+([a-z_]+\.[a-z_]+)", statement, re.IGNORECASE)
+            if alter and alter.group(1).lower() in FORWARD_ALTERS:
+                name = alter.group(1).lower()
+                forward.setdefault(FORWARD_ALTERS[name], []).append((name, statement.strip()))
     return forward
 
 

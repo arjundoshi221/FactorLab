@@ -1,0 +1,23 @@
+# Synthetic identities only. Keep real account configuration outside source control.
+users:
+  - user_id: "d677331a-a04f-454a-8a1e-02425be2c101"
+    display_name: Test user A
+  - user_id: "d677331a-a04f-454a-8a1e-02425be2c102"
+    display_name: Test user B
+accounts:
+  - user_id: "d677331a-a04f-454a-8a1e-02425be2c101"
+    broker_code: ibkr
+    account_id: SIM_USER_A
+    account_mode: paper
+    base_currency: USD
+    booking_country: US
+    opened_date: "2026-10-01"
+    simulated: true
+  - user_id: "d677331a-a04f-454a-8a1e-02425be2c102"
+    broker_code: ibkr
+    account_id: SIM_USER_B
+    account_mode: paper
+    base_currency: USD
+    booking_country: US
+    opened_date: "2026-10-01"
+    simulated: true

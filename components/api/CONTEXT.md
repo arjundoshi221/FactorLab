@@ -5,8 +5,7 @@
 ## Purpose
 
 The `api` component serves the private hub's JSON API (`/hub/api/v1/*`), the bearer-key
-research API (`/api/v1/*`) and `/health`. It only reads ClickHouse and the host's
-Docker image snapshot; it writes no data. It is a deployable component (image
+research API (`/api/v1/*`) and `/health`. It reads ClickHouse and the host's Docker image snapshot, and writes portfolio catalogs and order assignments through storage. It is a deployable component (image
 `ghcr.io/arjundoshi221/factorlab-api`, manifest [component.yaml](component.yaml)).
 
 ## Owns and does not own
@@ -63,6 +62,8 @@ Secret resolution is [`factorlab.core.secrets.get_secret`](../../libs/core/src/f
 `<NAME>_FILE`, then `FACTORLAB_SECRETS_DIR/<NAME>`, then the environment.
 
 ## Data
+
+Portfolio catalogs, order assignments and FIFO stock/ETF PnL live under `/hub/api/v1/portfolio/*`; writes use factorlab-storage. Requires forward Waves 12/13. Shared workspace access remains unchanged. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md).
 
 Reads only. Tables include `meta.ingestion_runs`, `meta.expected_series`,
 `meta.session_coverage`, `meta.source_status`, `meta.recovery_state`,

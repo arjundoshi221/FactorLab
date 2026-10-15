@@ -49,6 +49,8 @@ No direct environment reads in this member.
 
 ## Data
 
+ProfileStorage registers stable profile/account ownership; PortfolioBookStorage validates independent catalogs and complete order tag assignments. V2BrokerStorage records successful snapshot manifests, including empty snapshots, in run metadata. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md).
+
 - Writes: `raw.archive` (gzip body, `response_sha256`, `content_encoding = 'gzip'`),
   `meta.ingestion_runs` (`source_channel` = the run's `source`), `meta.unresolved_entities`
   (parked rows), `meta.expected_series`, `meta.recovery_state`, `meta.session_coverage`,

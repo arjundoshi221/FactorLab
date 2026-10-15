@@ -4499,3 +4499,112 @@ CREATE TABLE meta.service_status (
 ) ENGINE = ReplacingMergeTree(version)
 ORDER BY service_id;
 ```
+
+## Shared application profiles (Wave 12)
+
+An application profile is a named tester with a stable ID, distinct from a
+broker account or a `ref.entities` person. Profiles are not login identities.
+During testing, everyone admitted by Cloudflare Access can inspect every profile.
+A broker account has one profile owner; one profile can own several accounts.
+Ownership is administrative and is not a privacy boundary. Market and public
+reference data remain shared. Future authentication must map verified identities
+to these IDs and enforce ownership on the server, including catalog/export paths.
+Themes, strategies, attribution, and private research scoping are deferred.
+
+### `ref.app_users`
+
+Named application profiles with stable user IDs, independent of broker logins.
+Profiles organize shared testing data; they do not enforce privacy.
+
+```sql
+CREATE TABLE ref.app_users (
+    user_id UUID,                   -- Stable application profile ID, not a broker login
+    display_name String,            -- Human-readable tester name; renaming preserves user_id
+    active Bool,                    -- Administrative lifecycle flag; not an access permission
+    version UInt64,
+    ingested_at DateTime64(3, 'UTC')
+) ENGINE = ReplacingMergeTree(version)
+ORDER BY user_id;
+```
+
+### `ref.broker_account_owners`
+
+The application profile responsible for each broker account. One profile can own
+several accounts; each account has one owner. Simulation status distinguishes
+scripted test responses from actual broker data.
+
+```sql
+CREATE TABLE ref.broker_account_owners (
+    broker_code LowCardinality(String), -- Broker namespace, combined with account_id
+    account_id String,                 -- Native broker account ID; SIM_ reserved for simulation
+    user_id UUID,                      -- Logical FK ref.app_users
+    simulated Bool,                    -- Synthetic responses, not actual Gateway data
+    version UInt64,
+    ingested_at DateTime64(3, 'UTC')
+) ENGINE = ReplacingMergeTree(version)
+ORDER BY (broker_code, account_id);
+```
+
+Operator registration validates all links before writing. It is serialized and
+repeatable, not transactional; an interrupted registration can be rerun. Omitted
+records are retained. Ownership and simulation status cannot be reassigned by sync.
+Unmapped accounts remain visible as Unassigned. Synthetic accounts use `SIM_` IDs
+and separate run pipelines/source channels. No credentials belong in profile config.
+
+Successful broker dataset snapshots are listed in `meta.ingestion_runs.metadata_json`
+under `broker_snapshots`, with broker/account identity, dataset, snapshot_time,
+source_channel, raw_id, and simulated flag. The manifest is written only after
+archiving, normalization, and successful writes, even when the dataset is empty.
+Portfolio reads use the latest successful manifest per account/dataset, falling
+back to stored snapshot rows only for older runs without manifests. Failed refreshes
+retain the previous successful state. Logical execution IDs and times are stable
+across simulator reruns; reads use FINAL to collapse replacing-table versions.
+## Profile-owned portfolio tagging (forward Wave 13)
+
+This extension supersedes inherited theme/strategy relationships for portfolio
+tagging. Original book DDL remains frozen below. The three catalogs are independent
+and profile-owned. Legacy parent fields remain metadata; unowned historical entries
+are retained and excluded from profile catalogs.
+
+```sql
+ALTER TABLE book.themes ADD COLUMN IF NOT EXISTS user_id Nullable(UUID);
+ALTER TABLE book.strategies ADD COLUMN IF NOT EXISTS user_id Nullable(UUID);
+ALTER TABLE book.trade_names ADD COLUMN IF NOT EXISTS user_id Nullable(UUID);
+ALTER TABLE book.trade_names MODIFY COLUMN theme_id Nullable(UUID);
+```
+
+### `book.order_assignment_events`
+
+Append-only audit of complete assignments or clears on a durable broker order.
+Latest `(changed_at, event_id)` wins per broker/account/perm_id. Joining at read
+time covers existing and future partial fills; retagging restates recorded-history
+PnL. The older fill-level book.attribution contract remains separate. user_id is
+the owning profile, not an authenticated actor identity.
+
+```sql
+CREATE TABLE book.order_assignment_events (
+    event_id UUID,
+    user_id UUID,
+    broker_code LowCardinality(String),
+    account_id String,
+    perm_id Int64,
+    theme_id Nullable(UUID),
+    strategy_id Nullable(UUID),
+    trade_name_id Nullable(UUID),
+    changed_at DateTime64(6, 'UTC'),
+    CONSTRAINT durable_order CHECK perm_id > 0,
+    CONSTRAINT complete_assignment CHECK
+        (isNull(theme_id) AND isNull(strategy_id) AND isNull(trade_name_id)) OR
+        (isNotNull(theme_id) AND isNotNull(strategy_id) AND isNotNull(trade_name_id))
+) ENGINE = MergeTree
+PARTITION BY toYYYYMM(changed_at)
+ORDER BY (broker_code, account_id, perm_id, changed_at, event_id);
+```
+
+PnL uses deduplicated stock/ETF fills and FIFO inside each account, instrument,
+currency and tag triple. Prices come from successful position snapshots. Realized
+and unrealized amounts exclude commissions; total subtracts commissions once in
+their own currency. Reports cover available recorded history, not a verified
+inception basis. Snapshot-cutoff quantity reconciliation detects missing history.
+Missing basis/marks and unsupported products yield unavailable totals. FX, other
+cash flows, derivatives PnL and historical charts are outside the first version.
