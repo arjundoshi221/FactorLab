@@ -5,6 +5,7 @@ import { IndiaMarkets } from "./pages/IndiaMarkets";
 import { IndiaInstrumentDetail } from "./pages/IndiaInstrumentDetail";
 import { PoliticalData } from "./pages/PoliticalData";
 import { USMarkets } from "./pages/USMarkets";
+import { MarketData } from "./pages/MarketData";
 import { Monitoring } from "./pages/Monitoring";
 import { DockerImages } from "./pages/DockerImages";
 
@@ -122,6 +123,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <a className={path.startsWith("/schema") ? "active" : ""} href="/schema">Schema</a>
           <a className={path === "/data/pipelines" ? "active" : ""} href="/data/pipelines">Pipelines</a>
           <a className={path === "/monitoring" ? "active" : ""} href="/monitoring">Monitoring</a>
+          <a className={path === "/market-data" ? "active" : ""} href="/market-data">Market data</a>
           <details className={`nav-menu${inOperations ? " is-active" : ""}`}>
             <summary>Operations</summary>
             <div className="nav-menu__panel">
@@ -471,7 +473,7 @@ export function App() {
   }
   return (
     <Shell>
-      {path === "/monitoring" ? <Monitoring /> : path === "/roadmap" ? <Roadmap /> : path === "/docker-images" ? <DockerImages /> : indiaInstrumentMatch ? <IndiaInstrumentDetail listingId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
+      {path === "/market-data" ? <MarketData /> : path === "/monitoring" ? <Monitoring /> : path === "/roadmap" ? <Roadmap /> : path === "/docker-images" ? <DockerImages /> : indiaInstrumentMatch ? <IndiaInstrumentDetail listingId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
     </Shell>
   );
 }

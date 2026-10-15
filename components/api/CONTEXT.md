@@ -31,11 +31,20 @@ Docker image snapshot; it writes no data. It is a deployable component (image
   `/hub/api/v1/catalog/pipelines[/{pipeline_id}/runs]`,
   `/hub/api/v1/catalog/tables/{name}[/rows|/rows.csv|/stats|/activity]`,
   `/hub/api/v1/schema-map[/v2]`, `/hub/api/v1/docker-images`,
-  `/hub/api/v1/india/*`, `/hub/api/v1/us/*`, `/hub/api/v1/political/*`; and
+  `/hub/api/v1/india/*`, `/hub/api/v1/us/*`, `/hub/api/v1/market-data/*`, `/hub/api/v1/political/*`; and
   `/api/v1/india/*`, `/api/v1/us/*`, `/api/v1/political/*` (these require
   `Authorization: Bearer <FACTORLAB_API_KEY>`). FastAPI's `/docs` and `/openapi.json` are on.
-- SPA fallbacks (`/`, `/data`, `/schema`, `/india`, `/us`, `/political`, `/docker-images`,
+- SPA fallbacks (`/`, `/data`, `/schema`, `/india`, `/us`, `/market-data`, `/political`, `/docker-images`,
   `/roadmap`, ...) return `index.html` from `FACTORLAB_WEB_DIST`, or 503 if it is absent.
+
+The private `/hub/api/v1/market-data/universe` routes list active configured US/India
+tickers and fetch per-ticker stored coverage. Daily reads use a rolling 30-calendar-day
+window; historical reads use the full stored range. Both resolve membership from
+`meta.expected_series` and coverage from canonical bars, with recovery state reported
+separately. Search and has-data filters run before pagination. Ticker detail counts missing
+market sessions within up to the latest 365 days of its stored range.
+Indian futures are keyed by contract ID as well as listing ID so their counts do not
+merge with the underlying equity.
 
 ## Configuration and secrets
 

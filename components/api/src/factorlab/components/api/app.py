@@ -66,6 +66,7 @@ from factorlab.components.api.india_observability import (
     IndiaObservabilityRepository,
     IndiaSourceStatusPage,
 )
+from factorlab.components.api.market_data import router as market_data_router
 from factorlab.components.api.monitoring import router as monitoring_router
 from factorlab.components.api.political import PoliticalTradesPage, PoliticalTradesRepository
 from factorlab.components.api.political_observability import (
@@ -158,6 +159,7 @@ app.include_router(
     us_router, prefix="/api/v1/us", tags=["us"], dependencies=[Depends(require_api_key)]
 )
 app.include_router(us_router, prefix="/hub/api/v1/us", tags=["hub-us"])
+app.include_router(market_data_router, prefix="/hub/api/v1/market-data", tags=["hub-market-data"])
 app.include_router(monitoring_router, prefix="/hub/api/v1/monitoring", tags=["hub-monitoring"])
 
 
@@ -1401,6 +1403,11 @@ def hub_docker_images() -> FileResponse:
 
 @app.get("/monitoring", include_in_schema=False)
 def hub_monitoring() -> FileResponse:
+    return _hub_index()
+
+
+@app.get("/market-data", include_in_schema=False)
+def hub_market_data() -> FileResponse:
     return _hub_index()
 
 

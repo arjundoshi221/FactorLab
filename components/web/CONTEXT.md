@@ -27,7 +27,7 @@ data comes from the `api` component's `/hub/api/v1/*` routes on the same hostnam
   `/health`, `/docs`, `/redoc`, `/openapi.json` return 404 so a misrouted API call never
   gets the SPA. `/version.json` carries `{"component":"web","version","commit"}`.
 - Client routes (in [App.tsx](src/App.tsx)): `/`, `/data`, `/data/tables/<db>.<table>`,
-  `/data/pipelines`, `/schema`, `/schema/v2`, `/india`, `/india/instruments/<uuid>`, `/us`,
+  `/data/pipelines`, `/schema`, `/schema/v2`, `/india`, `/india/instruments/<uuid>`, `/us`, `/market-data`,
   `/political`, `/docker-images`, `/roadmap`.
 - npm scripts ([package.json](package.json)): `dev` (Vite on 127.0.0.1, proxies `/hub/api`
   to `http://127.0.0.1:8000`), `build` (`tsc -b && vite build`), `test` (`vitest run`).
@@ -48,7 +48,7 @@ Access cookies do the authentication.
 
 None in ClickHouse. It calls, among others, `/hub/api/v1/overview`, `/hub/api/v1/catalog*`,
 `/hub/api/v1/schema-map`, `/hub/api/v1/docker-images`, `/hub/api/v1/us/*`,
-`/hub/api/v1/india/*`, `/hub/api/v1/political/*`. Host path:
+`/hub/api/v1/india/*`, `/hub/api/v1/market-data/*`, `/hub/api/v1/political/*`. Host path:
 `/var/log/factorlab/web` (bind mount for nginx logs).
 
 ## Dependencies and contracts
@@ -110,3 +110,11 @@ still runs production until the rollout completes).
   `^[a-z_]+\.[a-z0-9_]+$`, as on the API side.
 
 **UDP service monitoring:** The primary navigation has a visible Monitoring tab at `/monitoring`. It polls the monitoring API every 15 seconds, shows status tiles, ages, uptime, restart counts and filterable event history. A stale watcher status shows the monitor offline banner.
+
+**Market Data universe:** `/market-data` switches between US and India and between recent
+daily collection (last 30 calendar days) and full historical recovery. Both views use the
+current `meta.expected_series` configuration; a ticker can appear in both because recovery
+and daily collection write the same bars. The page searches configured symbols and company
+names through `/hub/api/v1/market-data/universe`, shows zero-data tickers, and opens per-ticker
+stored coverage and recovery state. List requests are paginated at 50 tickers.
+Indian equity and futures series are separate rows even when they share a listing ID.
