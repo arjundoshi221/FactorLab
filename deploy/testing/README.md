@@ -1,4 +1,35 @@
-# Production ingestion tests from a branch
+# Production branch trials
+
+## Dedicated UI trial branch
+
+The current public UI is served by the `web` and `api-candidate` services from the
+pre-rollout branch trial. A new Market Data tab can be deployed without merging the
+platform restructure to `main` by using `restructure/deploy-market-data-ui` and the
+reviewed [UI trial workflow](../../.github/workflows/branch-ui-deploy.yml). This path
+replaces only those two services. It leaves the primary API, ClickHouse, ingestion,
+monitor, secrets agent, Caddy, and Cloudflare Access configuration untouched.
+
+From a clean, synchronized deployment branch after CI passes, run
+`./deploy/release-ui-trial.ps1`. It pushes an immutable `ui-trial/<12-char SHA>` tag.
+The workflow checks branch tip and CI again, builds and verifies immutable API/web
+images through the existing image workflow, then runs
+[`ui_test.py`](ui_test.py) on the host under the global release lock. The runner
+captures the live resolved Compose model and protected container identities in a
+root-only `/opt/factorlab/deployment-tests/ui-<SHA>/` directory, pulls both image
+digests, replaces the candidate API first and web second, and checks health,
+version, four US/India daily/historical universe reads, and the Market Data route.
+An activation or verification failure restores the exact preceding images and
+model. The workflow summary reports verification and recovery.
+
+The tag is not a normal component release and does not bootstrap component pins.
+Once the platform rollout installs `/opt/factorlab/state/images.env`, the runner
+refuses activation and normal per-component releases take over. A verified trial
+may be restored using `sudo python3
+/opt/factorlab/deployment-tests/ui-<SHA>/ui_test.py restore ui-<SHA>`
+while its private rollback record remains on the host. Do not use the
+September 30 ingestion-only restore command for this UI trial.
+
+## Ingestion trial
 
 This is an owner-authorized exception for testing ingestion component images on
 the existing VPS before merging the restructure. The normal release helper and

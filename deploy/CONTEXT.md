@@ -5,6 +5,9 @@
 ## Purpose
 
 `deploy/` is the `platform` release unit ([component.yaml](component.yaml)); it ships host files and recreates no services.
+The temporary UI branch trial is documented in [testing/README.md](testing/README.md):
+`release-ui-trial.ps1` starts an immutable, CI-gated API/web trial without merging
+the restructure into `main` or starting the component-pin rollout.
 Owns Compose base (networks, tmpfs secrets, ClickHouse, optional IB Gateways, ops tools), the root-run component deployer, provisioning, log rotation and restricted log reader. Operator runbook: [README.md](README.md).
 
 ## Owns and does not own
