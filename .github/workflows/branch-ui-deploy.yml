@@ -45,9 +45,11 @@ jobs:
             any(.workflow_runs[]; .name == "CI" and .head_sha == $sha
               and .status == "completed" and .conclusion == "success")
           ' <<<"$runs" >/dev/null || { echo "CI is not green for $commit" >&2; exit 1; }
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
-          echo "version=0.0.0-trial.$short" >> "$GITHUB_OUTPUT"
-          echo "test_id=ui-$short" >> "$GITHUB_OUTPUT"
+          {
+            echo "commit=$commit"
+            echo "version=0.0.0-trial.$short"
+            echo "test_id=ui-$short"
+          } >> "$GITHUB_OUTPUT"
 
   api-image:
     needs: authorize

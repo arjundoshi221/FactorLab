@@ -59,7 +59,8 @@ def protected_names() -> list[str]:
 
 
 def image_id(image: str, unit: str, commit: str, version: str) -> str:
-    if not IMAGE_RE.fullmatch(image) or IMAGE_RE.fullmatch(image).group(1) != unit:
+    match = IMAGE_RE.fullmatch(image)
+    if match is None or match.group(1) != unit:
         raise RuntimeError(f"Invalid {unit} image reference")
     test.run("docker", "pull", image)
     [metadata] = json.loads(test.run("docker", "image", "inspect", image))
