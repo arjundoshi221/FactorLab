@@ -114,3 +114,7 @@ The earlier ingestion-only restore runner is for the original root trial. After
 the remaining rollout, use the private `remaining-before.json` and ownership
 record when restoring this stage; do not use the old ingestion-only `verify`
 as proof of secret-agent identity, because the agent has intentionally changed.
+
+## Component-scoped monitoring rollout
+
+For an authorized US monitoring update, use a fresh private test directory and build only `ingest-us` from tracked source. Run `plan <test-id> --component ingest-us`; the saved scope limits apply/verify/restore to `ingest-us` and `universe-us`, protecting API, web, India, broker, monitor, ClickHouse and secrets-agent identities. Do not run an unscoped plan for this update.

@@ -25,6 +25,7 @@ SERVICES = {
     "ibkr-snapshot": "ingest-broker",
     "ingest-political": "ingest-political",
 }
+ALL_SERVICES = dict(SERVICES)
 DAEMONS = [name for name in SERVICES if name != "ingest-political"]
 PROTECTED = [
     "factorlab-api-1",
@@ -34,6 +35,37 @@ PROTECTED = [
     "factorlab-clickhouse",
     "factorlab-cloudflare-secrets-agent-1",
 ]
+BASE_PROTECTED = list(PROTECTED)
+
+
+def configure_scope(root: Path, component: str | None, *, planning: bool) -> None:
+    """Persist scope so apply, verification and restoration stay on the selected unit."""
+    scope_path = root / "scope.json"
+    if scope_path.exists():
+        saved = json.loads(scope_path.read_text())["component"]
+        if component is not None and component != saved:
+            raise RuntimeError("Component differs from the saved deployment scope")
+        component = saved
+    elif not planning and component is not None:
+        raise RuntimeError("Cannot narrow an existing unscoped deployment plan")
+    if component is not None and component not in {"ingest-india", "ingest-us", "ingest-broker"}:
+        raise RuntimeError("Unknown ingestion component")
+    SERVICES.clear()
+    SERVICES.update(
+        {
+            name: unit
+            for name, unit in ALL_SERVICES.items()
+            if component is None or unit == component
+        }
+    )
+    DAEMONS[:] = [name for name in SERVICES if name != "ingest-political"]
+    PROTECTED[:] = BASE_PROTECTED + [
+        f"factorlab-{name}-1"
+        for name in ALL_SERVICES
+        if name not in SERVICES and name != "ingest-political"
+    ]
+    if planning and not scope_path.exists():
+        store(scope_path, {"component": component})
 
 
 def run(*args: str, capture: bool = True) -> str:
@@ -150,6 +182,8 @@ def plan(root: Path, test_id: str) -> None:
         "ingest-broker": ["snapshot", "engine"],
         "ingest-political": ["bootstrap", "engine"],
     }.items():
+        if unit not in SERVICES.values():
+            continue
         image = f"factorlab-test-{unit}:{test_id}"
         for command in subcommands:
             run("docker", "run", "--rm", "--network", "none", image, command, "--help")
@@ -218,6 +252,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("plan", "apply", "verify", "restore"))
     parser.add_argument("test_id")
+    parser.add_argument("--component", choices=("ingest-india", "ingest-us", "ingest-broker"))
     args = parser.parse_args()
     if os.geteuid() != 0 or not re.fullmatch(r"[0-9]{8}-[0-9a-f]{7,40}", args.test_id):
         parser.error("Run as root with YYYYMMDD-<commit> test id")
@@ -226,6 +261,7 @@ def main() -> None:
         parser.error("Missing private backup of the live deployment")
     with Path("/var/lock/factorlab-release.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        configure_scope(root, args.component, planning=args.action == "plan")
         if args.action == "plan":
             plan(root, args.test_id)
         elif args.action == "apply":

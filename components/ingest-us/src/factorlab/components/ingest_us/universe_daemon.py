@@ -17,10 +17,10 @@ from factorlab.components.ingest_us.engine_client import EngineClient
 from factorlab.components.ingest_us.universe import UniverseConfig, load_config
 from factorlab.components.ingest_us.universe.base import UniverseResolver
 from factorlab.components.ingest_us.universe.engine import RosterSink, create_resolver
-from factorlab.core.logging import configure_logging
+from factorlab.core.logging import configure_logging, redact
 from factorlab.ingest.datasets import ConstituentRecord, InstrumentRef
 from factorlab.ingest.provider import RawCapture, ingestion_run
-from factorlab.runtime.monitor import MonitoredEvent
+from factorlab.runtime.monitor import MonitoredEvent, monitor_client
 from factorlab.sources.schwab.normalize import provider_symbol
 from factorlab.storage.sinks.identity import IdentityResolver
 from factorlab.storage.v2_us import V2USStorage as USStorage
@@ -29,6 +29,11 @@ log = logging.getLogger("factorlab.us-universe")
 stop = MonitoredEvent()
 RETRY_MINUTES = 15
 JOB_ERRORS = (ClickHouseError, OSError, RuntimeError, ValueError, yaml.YAMLError)
+
+
+def failure_detail(exc: Exception) -> str:
+    detail = str(exc) if isinstance(exc, (ValueError, RuntimeError)) else type(exc).__name__
+    return redact(detail)[:240]
 
 
 def safe_status(storage, status: str, detail: str) -> None:
@@ -126,8 +131,7 @@ def sync_once(
         )
         return series
     except JOB_ERRORS as exc:
-        detail = str(exc) if isinstance(exc, (ValueError, RuntimeError)) else type(exc).__name__
-        safe_status(storage, "error", f"Universe refresh failed: {detail[:240]}")
+        safe_status(storage, "error", f"Universe refresh failed: {failure_detail(exc)}")
         raise
     finally:
         if resolver is None and current is not None:
@@ -157,9 +161,17 @@ def run_daemon(config, storage, resolver=None) -> int:
                 next_refresh = now + timedelta(minutes=config.refresh_interval_minutes)
             except JOB_ERRORS as exc:
                 log.error("Universe refresh failed: %s", type(exc).__name__)
+                monitor_client("universe-us").error(
+                    "universe_refresh_failed",
+                    f"Universe refresh failed: {failure_detail(exc)}. Retrying in {RETRY_MINUTES} minutes.",
+                    pipeline="us_universe_sync",
+                    provider=config.provider,
+                    retry_minutes=RETRY_MINUTES,
+                    exception_type=type(exc).__name__,
+                )
                 last_result = (
                     "error",
-                    f"{config.provider}: universe refresh failed: {type(exc).__name__}",
+                    f"{config.provider}: universe refresh failed: {failure_detail(exc)}",
                 )
                 next_refresh = now + timedelta(minutes=RETRY_MINUTES)
             last_heartbeat = now
@@ -185,6 +197,7 @@ def main(argv: list[str] | None = None) -> int:
         config = load_config(args.config)
     except JOB_ERRORS as exc:
         log.error("Invalid universe config: %s", exc)
+        monitor_client("universe-us").error("universe_config_invalid", failure_detail(exc))
         return 2
     storage = USStorage.from_environment()
     resolver = None
@@ -194,7 +207,13 @@ def main(argv: list[str] | None = None) -> int:
             return run_daemon(config, storage, resolver)
         sync_once(config, storage, resolver)
         return 0
-    except JOB_ERRORS:
+    except JOB_ERRORS as exc:
+        monitor_client("universe-us").error(
+            "universe_refresh_failed",
+            f"Universe collection failed: {failure_detail(exc)}",
+            pipeline="us_universe_sync",
+            provider=config.provider,
+        )
         return 1
     finally:
         storage.client.close()

@@ -137,3 +137,5 @@ Provider fetch, normalize and write run through the shared engine. The mounted
 universe config selects membership authority for this job; generic runs use global
 bindings. Index snapshots are staged until Schwab validates the entire union.
 Exact operator CSVs archive as files; scheduler priority and frozen pipelines remain.
+
+Caught universe refresh failures report monitoring errors while retrying; source status retains the redacted failure reason. A running process does not establish successful roster publication.
