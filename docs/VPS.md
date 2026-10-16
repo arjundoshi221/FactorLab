@@ -14,6 +14,37 @@ values.
 
 ## Server
 
+Monitoring rollout, 2026-10-16: API candidate and web run commit
+`cb3525b8c7ded794d2cf545600fc524d818ba9bd`, version
+`0.0.0-trial.cb3525b8c7de`. [Verified UI workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/38855967183).
+API image: `sha256:41b9e507a1005f555319a1a26ba42c5c9fdb27c811545a1518e7238cbe65f9fd`;
+web image: `sha256:becf6961078c8759e842165393026d3b25b2e73019c0e0c545d0e08eec7dea8d`.
+The served bundle contains the service grid and error inbox; services, daily history,
+coverage and error APIs passed live checks. The universe-filtered inbox returned
+seven error groups with no unavailable sections. Rollback record:
+`/opt/factorlab/deployment-tests/ui-cb3525b8c7de/`.
+
+US collector and universe services run commit
+`1fe998a3c9af64a4ac33b7eb0d63686dacbc426e`, version
+`0.0.0-test.20261016-1fe998a`, image
+`sha256:cd9879a15abf297099d76273ecc63ced2f288330eeded6cddfe22422974b89b5`.
+[Full CI passed](https://github.com/arjundoshi221/FactorLab/actions/runs/38856343053).
+The component-scoped branch runner passed plan, activation and verification; both
+services had healthy monitor heartbeats and zero restarts after stabilization.
+Private rollback model and protected-container records:
+`/opt/factorlab/deployment-tests/20261016-1fe998a/`.
+
+The first UI attempt (`54447e44c369`) failed the new live coverage check and
+restored the preceding images automatically. Qualified ClickHouse aggregate inputs
+fixed the query before the verified replacement. The US update preserved its
+previously deployed engine baseline and changed only monitoring behavior; CI
+preparation also normalized generated path examples and repository test imports.
+Protected primary API, ClickHouse, India, broker, monitor and secret-agent container
+identities remained unchanged; the ingestion step also protected the new API/web.
+No migrations, data deletion, ports, secret bindings or public routing changes.
+Origin APIs and served assets were verified; authenticated browser testing was not
+available. This remains the supported branch deployment path before component pins.
+
 ```text
 Host:       145.239.75.163
 SSH user:   ubuntu
