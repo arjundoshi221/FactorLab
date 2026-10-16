@@ -67,7 +67,8 @@ def test_daily_and_coverage_are_bounded_read_only_aggregates():
         assert coverage.status_code == 200
         assert coverage.json()["feeds"] == []
         sql, kwargs = queries[1]
-        assert "meta.session_coverage FINAL" in sql
+        assert "meta.session_coverage AS c FINAL" in sql
+        assert "countIf(c.missing > 0)" in sql
         assert "LIMIT 1 BY country_code, source, resolution" in sql
         assert (kwargs["parameters"]["today"] - kwargs["parameters"]["since"]).days == 30
         assert kwargs["settings"] == {"readonly": 2, "max_execution_time": 5}

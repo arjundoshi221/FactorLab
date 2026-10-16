@@ -76,10 +76,10 @@ def coverage(client: Client):
         items = rows(
             client.query(
                 """SELECT country_code, source, resolution, trade_date,
-                count() AS checked_series, sum(expected) AS expected,
-                sum(actual) AS actual, sum(missing) AS missing,
-                countIf(missing > 0) AS affected_series, max(ingested_at) AS checked_at
-            FROM meta.session_coverage FINAL
+                count() AS checked_series, sum(c.expected) AS expected,
+                sum(c.actual) AS actual, sum(c.missing) AS missing,
+                countIf(c.missing > 0) AS affected_series, max(c.ingested_at) AS checked_at
+            FROM meta.session_coverage AS c FINAL
             WHERE trade_date >= {since:Date} AND trade_date <= {today:Date}
             GROUP BY country_code, source, resolution, trade_date
             ORDER BY country_code, source, resolution, trade_date DESC
