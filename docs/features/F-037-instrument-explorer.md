@@ -134,4 +134,20 @@ availability is intentionally evaluated at request time, not assumed from develo
 ## Log
 
 - 2026-10-16: Implemented registry, private endpoints, instrument explorer, focused tests
-  and documentation; awaiting review and authorized release.
+  and documentation.
+
+## Deployment record
+
+- 2026-10-16: Deployed API candidate and web through the authorized API/web branch trial,
+  version `0.0.0-trial.70f911b3cd3d`, source commit
+  `70f911b3cd3dba79747a9766211c2b558586d3de`.
+  [Deployment workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/38918441456)
+  completed successfully; verification passed and recovery was not needed.
+- API digest: `sha256:9565ce254cf0a60dfbe4d428376f9e3ed890f39550a2f2f625f7a2817a595d92`.
+- Web digest: `sha256:f33b1b2e1e36301d70a6e8352fd1fb980876337a8764755f9b8d01e9a0f41f4d`.
+- Both containers were healthy with zero restarts; served web version matched the source.
+  Inventory/identity, ten representative coverage datasets, record previews, existing
+  collection views and monitoring checks passed. Separate read-only preflight checks also
+  validated assignment/computation/candidate joins and contract-isolated queries.
+- Protected production container identities stayed unchanged. No main merge, schema
+  migration, ingestion deployment, component-pin bootstrap or routing change occurred.
