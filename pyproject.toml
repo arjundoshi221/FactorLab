@@ -74,6 +74,7 @@ factorlab-component-monitor = { workspace = true }
 # members share test file names without __init__.py packages.
 testpaths = ["libs", "providers", "components", "tests"]
 addopts = ["--import-mode=importlib"]
+pythonpath = ["."]
 norecursedirs = ["node_modules", "dist", ".venv", ".tmp", "src"]
 
 [tool.coverage.run]
