@@ -48,7 +48,7 @@ const time = (value: string | null) => value
   ? new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
   : "—";
 
-export function MarketData() {
+export function CollectionCoverage() {
   const [market, setMarket] = useState<Market>("US");
   const [stream, setStream] = useState<Stream>("daily");
   const [search, setSearch] = useState("");

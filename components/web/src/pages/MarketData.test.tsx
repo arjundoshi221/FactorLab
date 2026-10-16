@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { MarketData } from "./MarketData";
+import { CollectionCoverage as MarketData } from "./MarketData";
 
 const ticker = {
   listing_id: "00000000-0000-0000-0000-000000000001", symbol: "AAPL.US", factorlab_symbol: "AAPL", name: "Apple Inc.",

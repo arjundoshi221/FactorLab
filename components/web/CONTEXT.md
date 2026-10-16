@@ -113,7 +113,7 @@ still runs production until the rollout completes).
 
 **UDP service monitoring:** The primary navigation has a visible Monitoring tab at `/monitoring`. It polls the monitoring API every 15 seconds, shows status tiles, ages, uptime, restart counts and filterable event history. A stale watcher status shows the monitor offline banner.
 
-**Market Data universe:** `/market-data` switches between US and India and between recent
+**Collection coverage:** `/market-data?view=collection` switches between US and India and between recent
 daily collection (last 30 calendar days) and full historical recovery. Both views use the
 current `meta.expected_series` configuration; a ticker can appear in both because recovery
 and daily collection write the same bars. The page searches configured symbols and company
@@ -126,3 +126,5 @@ Search accepts either ticker, as well as company names.
 Future rows label the FactorLab ticker as the underlying and retain their separate contract ID.
 
 The Monitoring control room includes a searchable service grid, daily telemetry, recorded coverage gaps, pipeline activity and an error inbox. Current source failures override healthy process heartbeats; repeated failures retain first/last occurrence, counts and explicit recovery evidence. See the service-monitoring runbook.
+
+**Instrument explorer:** `/market-data` defaults to all registered listings/contracts, including inactive and empty instruments. URL-backed filters/selection open scoped lifetime coverage, previews and recorded provenance; broader matches and investigation candidates are labeled separately. `/market-data?view=collection` retains collection coverage. [Specification](../../docs/features/F-037-instrument-explorer.md).

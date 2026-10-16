@@ -96,6 +96,42 @@ def read_json(url: str) -> dict:
         return json.load(response)
 
 
+def verify_instruments() -> None:
+    base = "http://127.0.0.1:18000/hub/api/v1/market-data/instruments"
+    inventory = read_json(base + "?search=AAPL&instrument_type=common&country=US&limit=1")
+    if not inventory.get("items") or not isinstance(inventory.get("total"), int):
+        raise RuntimeError("Instrument inventory did not resolve the known AAPL listing")
+    item = inventory["items"][0]
+    identity_url = f"{base}/{item['kind']}/{item['id']}"
+    identity = read_json(identity_url)
+    if identity.get("instrument", {}).get("id") != item["id"] or not identity.get("datasets"):
+        raise RuntimeError("Invalid instrument identity or dataset registry")
+    states = {}
+    for dataset in (
+        "market.bars",
+        "market.quotes",
+        "alt.political_trades",
+        "alt.political_filings",
+        "alt.social_reddit_posts",
+        "fundamentals.filings",
+        "broker.executions",
+        "derived.factors",
+        "ref.identifier_aliases",
+        "meta.expected_series",
+    ):
+        result = read_json(f"{identity_url}/datasets/{dataset}/coverage")
+        state = result.get("state")
+        if state not in {"stored", "empty", "missing_table"}:
+            raise RuntimeError(f"Instrument coverage failed: {dataset}: {state}")
+        if dataset == "market.bars" and state == "missing_table":
+            raise RuntimeError("Canonical market bar storage is missing")
+        states[dataset] = state
+    preview = read_json(f"{identity_url}/datasets/market.bars/rows?limit=2")
+    if preview.get("state") not in {"stored", "empty"} or not isinstance(preview.get("rows"), list):
+        raise RuntimeError("Instrument record preview failed")
+    print("Instrument explorer verified: " + json.dumps(states), flush=True)
+
+
 def verify(root: Path) -> None:
     candidate = json.loads((root / "candidate.json").read_text())
     for service in SERVICES:
@@ -146,6 +182,9 @@ def verify(root: Path) -> None:
         bundle = response.read().decode()
     if "Error inbox" not in bundle or "/monitoring/errors?" not in bundle:
         raise RuntimeError("The served bundle does not contain the new monitoring view")
+    if "All tickers" not in bundle or "Collection coverage" not in bundle:
+        raise RuntimeError("The served bundle does not contain the instrument explorer")
+    verify_instruments()
     print("FACTORLAB_RESULT_VERIFICATION=passed", flush=True)
 
 

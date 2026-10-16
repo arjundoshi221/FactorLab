@@ -141,3 +141,5 @@ tags ([release.yml](../../.github/workflows/release.yml), `deploy-release.sh`).
 **UDP service monitoring:** `/hub/api/v1/monitoring/services` joins latest ClickHouse statuses with the mounted service registry; `/events` supports service/type/since/limit filters. The API marks monitor offline after 15 seconds without a status update. Its lifespan sends heartbeats and a deliberate stop. No monitor daemon connection is needed for reads.
 
 Monitoring error history aggregates stored service errors/warnings and failed/partial runs, with current source problems and later successful runs as separate evidence. Heartbeats do not resolve collection errors. See the service-monitoring runbook.
+
+**Instrument explorer:** `/market-data` defaults to all registered listings/contracts, including inactive and empty instruments. URL-backed filters/selection open scoped lifetime coverage, previews and recorded provenance; broader matches and investigation candidates are labeled separately. `/market-data?view=collection` retains collection coverage. [Specification](../../docs/features/F-037-instrument-explorer.md).

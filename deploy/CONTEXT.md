@@ -147,4 +147,4 @@ until the rollout completes.
 - Edit fragments, then `render-compose`; CI fails when `compose.production.yml` is stale.
 
 **UDP service monitoring:** `monitor_runtime` is a separate tmpfs secret volume. Component manifests accept monitor deadlines and optional wall-clock active windows (timezone, ISO weekdays, start/end HH:MM). render-compose also generates monitor-services.yaml; mount it into monitor and api. Enable senders with FACTORLAB_MONITOR_ADDR=monitor:9125 only after schema and monitor releases. UDP 9125 remains on backend with no published host port.
-The UI trial verifier checks monitoring services/daily/coverage/error responses and the served error-inbox bundle before accepting the rollout; any failed check follows its existing restoration path.
+The UI trial verifier checks monitoring responses, the served explorer/error-inbox bundle, instrument inventory/identity, representative scoped coverage and previews before accepting the rollout; any failed check follows its existing restoration path.

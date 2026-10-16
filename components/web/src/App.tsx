@@ -5,7 +5,7 @@ import { IndiaMarkets } from "./pages/IndiaMarkets";
 import { IndiaInstrumentDetail } from "./pages/IndiaInstrumentDetail";
 import { PoliticalData } from "./pages/PoliticalData";
 import { USMarkets } from "./pages/USMarkets";
-import { MarketData } from "./pages/MarketData";
+import { MarketData } from "./pages/InstrumentExplorer";
 import { Monitoring } from "./pages/Monitoring";
 import { DockerImages } from "./pages/DockerImages";
 import { Portfolio } from "./pages/Portfolio";
