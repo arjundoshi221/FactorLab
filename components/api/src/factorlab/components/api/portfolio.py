@@ -12,6 +12,8 @@ from pydantic import BaseModel
 
 from factorlab.clickhouse import ClickHouse, rows
 
+from .source_health import broker_snapshot_stale
+
 router = APIRouter()
 
 
@@ -163,14 +165,15 @@ class PortfolioRepository:
             "AND snapshot_time = {at:DateTime64(3, 'UTC')} AND source_channel = {channel:String}",
             {**params, "at": stamp, "channel": latest["source_channel"]},
         )
-        age = max(0, (datetime.now(UTC) - stamp).total_seconds())
+        now = datetime.now(UTC)
+        age = max(0, (now - stamp).total_seconds())
         return SnapshotPage(
             items=items,
             snapshot_time=stamp,
             age_seconds=age,
             source_channel=latest["source_channel"],
             simulated=bool(account["simulated"]),
-            freshness="stale" if age > 7200 else "fresh",
+            freshness="stale" if broker_snapshot_stale(stamp, now) else "fresh",
         )
 
     def executions(self, account: dict[str, Any], *, limit: int, offset: int) -> ExecutionPage:

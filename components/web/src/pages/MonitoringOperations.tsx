@@ -77,7 +77,7 @@ export function MonitoringOperations({ coverage, pipelines, showSourceAlerts = t
       <div className="monitoring-services">{coverage.data?.feeds.map(feed => {
         const percent = feed.expected > 0 ? Math.max(0, Math.min(100, (feed.expected - feed.missing) / feed.expected * 100)) : null;
         const gaps = feed.missing > 0 || Boolean(feed.unreported_series);
-        return <article className={`monitoring-coverage-card ${gaps ? "has-gaps" : ""}`} key={`${feed.country_code}-${feed.source}-${feed.resolution}`}>
+        return <article className={`monitoring-coverage-card ${gaps ? "has-gaps" : ""}`} id={`coverage-${feed.country_code}-${feed.source}-${feed.resolution}`} key={`${feed.country_code}-${feed.source}-${feed.resolution}`}>
           <div className="monitoring-service-top"><span className={`monitoring-chip monitoring-chip--${coverage.error ? "unknown" : gaps ? "down" : percent === null ? "unknown" : "up"}`}><i />{coverage.error ? "Stale coverage" : gaps ? "Coverage gaps" : percent === null ? "No expectation" : "Recorded checks complete"}</span><span className="monitoring-service-kind">{feed.country_code}</span></div>
           <h3>{feed.source} <small>{feed.resolution}</small></h3><p className="monitoring-session">{feed.trade_date ? `Session ${feed.trade_date}` : "No recorded session in the last 30 days"}</p>
           <div className="monitoring-coverage-value"><strong>{percent === null ? "—" : `${percent.toFixed(1)}%`}</strong><span>{number(feed.missing)} missing bars</span></div>
@@ -85,7 +85,7 @@ export function MonitoringOperations({ coverage, pipelines, showSourceAlerts = t
           <dl><div><dt>Checked series</dt><dd>{number(feed.checked_series)}</dd></div><div><dt>With gaps</dt><dd>{number(feed.affected_series)}</dd></div><div><dt>Expected bars</dt><dd>{number(feed.expected)}</dd></div></dl>
           {feed.active_series !== undefined && <p className={feed.unreported_series ? "monitoring-danger monitoring-session" : "monitoring-session"}>{number(feed.unreported_series ?? 0)} of {number(feed.active_series)} active series have no check for this session.</p>}
           <p className="monitoring-service-note">{feed.checked_at ? `Checked ${timestamp(feed.checked_at)}. ` : "No checks received. "}The percentage covers recorded bars only. Missing entire sessions and exchange calendars are not evaluated here.</p>
-          <a className="monitoring-link" href={`/data/tables/meta.session_coverage?market=${feed.country_code}`}>Inspect coverage records ↗</a>
+          <div className="monitoring-card-links"><a className="monitoring-link" href={`/market-data?view=matrix&attention=bars&country=${feed.country_code}`}>Tickers missing bars →</a><a className="monitoring-link" href={`/data/tables/meta.session_coverage?market=${feed.country_code}`}>Inspect coverage records ↗</a></div>
         </article>;
       })}</div>
       {!coverage.data && !coverage.error && <div className="monitoring-empty" role="status">Loading coverage...</div>}
@@ -94,7 +94,7 @@ export function MonitoringOperations({ coverage, pipelines, showSourceAlerts = t
     <section className="monitoring-data" aria-labelledby="monitoring-pipelines-title">
       <div className="monitoring-section-heading"><div><h2 id="monitoring-pipelines-title">Daily ingestion</h2><p>Rolling 24-hour runs and rows · schedule-aware pipeline health · cached for up to 60s.</p></div><label className="monitoring-toggle"><input type="checkbox" checked={onlyProblems} onChange={event => setOnlyProblems(event.target.checked)} /> Problems only</label></div>
       {pipelines.error && <div className="monitoring-notice" role="status">Pipeline refresh failed. {pipelines.data ? `Showing snapshot from ${timestamp(pipelines.data.generated_at)}.` : "Ingestion health is unknown."}</div>}
-      <div className="monitoring-services">{visible.map(card => <article className={`monitoring-pipeline ${problem(card) ? "has-gaps" : ""}`} key={card.id}>
+      <div className="monitoring-services">{visible.map(card => <article className={`monitoring-pipeline ${problem(card) ? "has-gaps" : ""}`} id={`pipeline-${card.id}`} key={card.id}>
         <div className="monitoring-service-top"><span className={`monitoring-chip monitoring-chip--${pipelines.error ? "unknown" : problem(card) ? "late" : card.runs_24h ? "up" : "unknown"}`}><i />{pipelines.error ? "Stale snapshot" : card.status.replaceAll("_", " ")}</span><span className="monitoring-service-kind">{card.market} · {card.source}</span></div>
         <h3>{card.label}</h3><p className="monitoring-service-note">{card.status_reason}</p>
         <dl><div><dt>Runs / 24h</dt><dd>{number(card.runs_24h)}</dd></div><div><dt>Problems / 24h</dt><dd className={card.problem_24h ? "monitoring-danger" : ""}>{number(card.problem_24h)}</dd></div><div><dt>Rows / 24h</dt><dd>{number(card.rows_24h)}</dd></div></dl>

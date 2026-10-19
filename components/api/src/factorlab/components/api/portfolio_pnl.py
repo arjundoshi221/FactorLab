@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation, localcontext
 from typing import Any
 
+from .source_health import broker_snapshot_stale
+
 ZERO = Decimal(0)
 TAG_FIELDS = ("theme_id", "strategy_id", "trade_name_id")
 SUPPORTED = {"STK", "ETF", "stock", "equity", "etf", "common", "preferred", "adr", "reit"}
@@ -183,7 +185,7 @@ def _ledger(
             else:
                 item["unrealized"] = sum((qty * (price - cost) for qty, cost in queue), ZERO)
                 item["price_time"] = mark["snapshot_time"]
-                if (now - timestamp(mark["snapshot_time"])).total_seconds() > 7200:
+                if broker_snapshot_stale(timestamp(mark["snapshot_time"]), now):
                     item["issues"].add("stale_price")
         realized = None if fatal & item["issues"] else item["realized"]
         unrealized = (

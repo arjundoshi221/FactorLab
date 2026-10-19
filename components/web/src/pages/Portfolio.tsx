@@ -3,25 +3,45 @@ import { useState } from "react";
 import type { AccountSummary, BrokerAccount, BrokerRow, ExecutionPage, ItemsPage, Profile, SnapshotPage } from "../portfolioTypes";
 import { errorMessage, useRemote } from "../shared/api";
 import { formatTime } from "../shared/format";
-import "./Portfolio.css";
 import { OrderTagging, PortfolioTabs } from "./PortfolioBook";
+import { Amount, EmptyState, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery, usePortfolioRefresh } from "./PortfolioUI";
+import "./Portfolio.css";
 
 const API = "/hub/api/v1/portfolio";
-type Column = [string, string];
+type Column = [string, string, ("money" | "quantity" | "pnl" | "time")?];
 
 function Records({ title, rows, columns, empty }: { title: string; rows: BrokerRow[]; columns: Column[]; empty: string }) {
-  return rows.length ? <div className="table-scroll"><table aria-label={title}>
-    <thead><tr>{columns.map(([key, label]) => <th key={key}>{label}</th>)}</tr></thead>
-    <tbody>{rows.map((row, index) => <tr key={index}>{columns.map(([key, label]) => <td key={key} data-label={label}>{row[key] ?? "—"}</td>)}</tr>)}</tbody>
-  </table></div> : <p className="no-results">{empty}</p>;
+  return rows.length ? <div className="portfolio-table-scroll" tabIndex={0} role="region" aria-label={`${title} table`}><table aria-label={title}>
+    <thead><tr>{columns.map(([key, label, format]) => <th scope="col" key={key} className={format && format !== "time" ? "portfolio-numeric" : ""}>{label}</th>)}</tr></thead>
+    <tbody>{rows.map((row, index) => <tr key={String(row.exec_id ?? row.vendor_id ?? index)}>{columns.map(([key, label, format]) => <td key={key} data-label={label} className={format && format !== "time" ? "portfolio-numeric" : ""}>
+      {format === "time" ? formatTime(String(row[key] ?? ""), "—") : format ? <Amount value={row[key]} quantity={format === "quantity"} signed={format === "pnl"} /> : row[key] ?? "—"}
+    </td>)}</tr>)}</tbody>
+  </table></div> : <p className="portfolio-empty-inline">{empty}</p>;
 }
 
 function SnapshotTime({ data }: { data: SnapshotPage }) {
-  if (!data.snapshot_time) return <p>No successful snapshot reported yet.</p>;
-  return <p className={data.freshness === "stale" ? "portfolio-stale" : "muted"}>
-    Snapshot: {formatTime(data.snapshot_time)} · {Math.floor((data.age_seconds ?? 0) / 60)} minutes ago
-    {data.freshness === "stale" && " · Stale: showing the last successful snapshot"}
+  if (!data.snapshot_time) return <p className="portfolio-footnote">No successful snapshot reported yet.</p>;
+  return <p className={`portfolio-footnote${data.freshness === "stale" ? " portfolio-stale" : ""}`}>
+    <span className={`portfolio-dot${data.freshness === "stale" ? " is-stale" : ""}`} />
+    {data.freshness === "stale" ? "Last snapshot · " : "Updated "}{formatTime(data.snapshot_time)}
+    {data.freshness === "stale" && " · Stale snapshot"}
   </p>;
+}
+
+function AccountMetrics({ account, summary, positions, orders }: {
+  account: BrokerAccount; summary: AccountSummary | null; positions: SnapshotPage | null; orders: SnapshotPage | null;
+}) {
+  const currency = account.base_currency;
+  function metric(name: string) {
+    // Only show an account-wide value in its stated base currency; never add currencies or segments.
+    return currency ? summary?.balances.items.find(row => row.metric === name && !row.segment && row.currency === currency)?.value_num : null;
+  }
+  return <dl className="portfolio-overview" aria-label="Account overview">
+    <div><dt>Net liquidation <span>{currency}</span></dt><dd><Amount value={metric("NetLiquidation")} /></dd><small>Broker account value</small></div>
+    <div><dt>Cash balance <span>{currency}</span></dt><dd><Amount value={metric("TotalCashValue")} /></dd><small>Total broker-reported cash</small></div>
+    <div><dt>Open positions</dt><dd>{positions?.snapshot_time ? positions.items.length : "—"}</dd><small>In the latest snapshot</small></div>
+    <div><dt>Working orders</dt><dd>{orders?.snapshot_time ? orders.items.length : "—"}</dd><small>In the latest snapshot</small></div>
+  </dl>;
 }
 
 function AccountDetails({ account, userId }: { account: BrokerAccount; userId: string }) {
@@ -33,78 +53,83 @@ function AccountDetails({ account, userId }: { account: BrokerAccount; userId: s
   const positions = useRemote<SnapshotPage>(`${base}/positions?${filter}`, 60_000);
   const orders = useRemote<SnapshotPage>(`${base}/open-orders?${filter}`, 60_000);
   return <section aria-label="Selected account" className="portfolio-details">
-    <header className="portfolio-heading"><div><h2>{account.account_id}</h2><p>{account.display_name} · {account.broker_code.toUpperCase()} · {account.account_mode}
-      {account.base_currency && ` · ${account.base_currency}`} {account.simulated && <strong className="portfolio-simulated">Simulated</strong>}</p></div>
-      <button type="button" onClick={() => { summary.refresh(); positions.refresh(); orders.refresh(); setOffset(0); setTradeRevision(value => value + 1); }} disabled={summary.refreshing || positions.refreshing || orders.refreshing}>Refresh account</button>
+    <header className="portfolio-account-heading"><div className="portfolio-account-identity"><span className="portfolio-broker-mark" aria-hidden="true">{account.broker_code.slice(0, 2).toUpperCase()}</span><div>
+      <h2>{account.account_id}</h2><p>{account.broker_code.toUpperCase()}<span>·</span>{account.account_mode === "paper" ? "Paper account" : account.account_mode}{account.base_currency && <><span>·</span>{account.base_currency}</>}</p>
+    </div><strong className={`portfolio-badge${account.simulated ? " portfolio-badge--amber" : ""}`}>{account.simulated ? "Simulated" : account.account_mode}</strong></div>
+      <div className="portfolio-account-update">{summary.data && <SnapshotTime data={summary.data.balances} />}<button className="portfolio-button portfolio-button--secondary" type="button" onClick={() => { summary.refresh(); positions.refresh(); orders.refresh(); setOffset(0); setTradeRevision(value => value + 1); }} disabled={summary.refreshing || positions.refreshing || orders.refreshing}><PortfolioIcon name="refresh" />Refresh account</button><a className="portfolio-button portfolio-button--ghost" href={`/portfolio/trades?${new URLSearchParams({ user_id: userId, account: JSON.stringify([account.broker_code, account.account_id]) })}`}>View all trades</a></div>
     </header>
-    {[summary, positions, orders].some(remote => remote.error) && <p role="alert">Account refresh failed. Showing any last successful snapshots for this account.</p>}
-    <section className="portfolio-section"><h3>Balances</h3>
-      {summary.loading && !summary.data ? <p>Loading balances…</p> : summary.data ? <>
-        <SnapshotTime data={summary.data.balances} />
-        <Records title="Balances" rows={summary.data.balances.items} columns={[["metric", "Metric"], ["segment", "Segment"], ["value_num", "Value"], ["value_str", "Text"], ["currency", "Currency"]]} empty="No balances in this snapshot." />
-      </> : <p>Balances unavailable.</p>}
-    </section>
-    <section className="portfolio-section"><h3>Positions</h3>
-      {positions.loading && !positions.data ? <p>Loading positions…</p> : positions.data ? <>
-        <SnapshotTime data={positions.data} />
-        <Records title="Positions" rows={positions.data.items} columns={[["trading_symbol", "Instrument"], ["position", "Quantity"], ["avg_cost", "Average cost"], ["market_price", "Price"], ["market_value", "Value"], ["unrealized_pnl", "Unrealized P&L"], ["currency", "Currency"]]} empty={positions.data.snapshot_time ? "No open positions in this snapshot." : "Positions have not been reported yet."} />
-      </> : <p>Positions unavailable.</p>}
-    </section>
-    <section className="portfolio-section"><h3>Open orders</h3>
-      {orders.loading && !orders.data ? <p>Loading orders…</p> : orders.data ? <>
-        <SnapshotTime data={orders.data} />
-        <Records title="Open orders" rows={orders.data.items} columns={[["trading_symbol", "Instrument"], ["side", "Side"], ["quantity", "Quantity"], ["remaining_quantity", "Remaining"], ["order_type", "Type"], ["limit_price", "Limit price"], ["status", "Status"], ["currency", "Currency"]]} empty={orders.data.snapshot_time ? "No open orders in this snapshot." : "Open orders have not been reported yet."} />
-      </> : <p>Orders unavailable.</p>}
-    </section>
-    <Executions key={`${offset}/${tradeRevision}`} base={base} filter={filter} offset={offset} setOffset={setOffset} />
-    <OrderTagging key={JSON.stringify([account.broker_code, account.account_id, tradeRevision])} account={account} />
+    {[summary, positions, orders].some(remote => remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">Account refresh failed. Showing any last successful snapshots for this account.</p>}
+    <AccountMetrics account={account} summary={summary.data} positions={positions.data} orders={orders.data} />
+    <div className="portfolio-workspace">
+      <OrderTagging account={account} revision={tradeRevision} />
+      <section className="portfolio-section portfolio-positions"><div className="portfolio-section-heading"><div><span className="portfolio-eyebrow">Holdings</span><h3>Open positions</h3></div><span className="portfolio-count">{positions.data?.items.length ?? "—"}</span></div>
+        {positions.loading && !positions.data ? <p className="portfolio-empty-inline" role="status">Loading positions…</p> : positions.data ? <>
+          <Records title="Positions" rows={positions.data.items} columns={[["trading_symbol", "Instrument"], ["position", "Qty", "quantity"], ["market_price", "Price", "money"], ["unrealized_pnl", "Unrealized", "pnl"], ["currency", "CCY"]]} empty={positions.data.snapshot_time ? "No open positions in this snapshot." : "Positions have not been reported yet."} />
+          <SnapshotTime data={positions.data} />
+          {positions.data.items.length > 0 && <p className="portfolio-footnote">Broker-reported positions and unrealized PnL.</p>}
+        </> : <p className="portfolio-empty-inline">Positions unavailable.</p>}
+      </section>
+    </div>
+    <details className="portfolio-section portfolio-disclosure"><summary><span>Account activity<small>Working orders, executions and balance details</small></span><PortfolioIcon name="chevron" /></summary>
+      <div className="portfolio-activity">
+        <section><div className="portfolio-section-heading"><h3>Open orders</h3>{orders.data && <SnapshotTime data={orders.data} />}</div>
+          {orders.loading && !orders.data ? <p role="status">Loading orders…</p> : orders.data ? <Records title="Open orders" rows={orders.data.items} columns={[["trading_symbol", "Instrument"], ["side", "Side"], ["quantity", "Quantity", "quantity"], ["remaining_quantity", "Remaining", "quantity"], ["order_type", "Type"], ["limit_price", "Limit price", "money"], ["status", "Status"], ["currency", "CCY"]]} empty={orders.data.snapshot_time ? "No open orders in this snapshot." : "Open orders have not been reported yet."} /> : <p>Orders unavailable.</p>}
+        </section>
+        <Executions key={offset} base={base} filter={filter} offset={offset} setOffset={setOffset} revision={tradeRevision} />
+        <section><div className="portfolio-section-heading"><h3>Balances</h3>{summary.data && <SnapshotTime data={summary.data.balances} />}</div>
+          {summary.loading && !summary.data ? <p role="status">Loading balances…</p> : summary.data ? <Records title="Balances" rows={summary.data.balances.items} columns={[["metric", "Metric"], ["segment", "Segment"], ["value_num", "Value", "money"], ["value_str", "Text"], ["currency", "CCY"]]} empty="No balances in this snapshot." /> : <p>Balances unavailable.</p>}
+        </section>
+        {positions.data && <section><h3>Position details</h3><Records title="Position details" rows={positions.data.items} columns={[["trading_symbol", "Instrument"], ["position", "Quantity", "quantity"], ["avg_cost", "Average cost", "money"], ["market_value", "Market value", "money"], ["currency", "CCY"]]} empty="No open positions in this snapshot." /></section>}
+      </div>
+    </details>
   </section>;
 }
 
-function Executions({ base, filter, offset, setOffset }: { base: string; filter: string; offset: number; setOffset: (value: number) => void }) {
+function Executions({ base, filter, offset, setOffset, revision }: { base: string; filter: string; offset: number; setOffset: (value: number) => void; revision: number }) {
   const remote = useRemote<ExecutionPage>(`${base}/executions?${filter}&limit=50&offset=${offset}`, 60_000);
-  return <section className="portfolio-section"><div className="portfolio-heading"><h3>Executed trades</h3><button type="button" onClick={remote.refresh}>Refresh trades</button></div>
-    {Boolean(remote.error) && <p role="alert">Trades refresh failed. Showing any last successful results.</p>}
-    {remote.loading && !remote.data ? <p>Loading executed trades…</p> : remote.data ? <>
-      <Records title="Executed trades" rows={remote.data.items} columns={[["exec_time", "Executed at (UTC)"], ["trading_symbol", "Instrument"], ["side", "Side"], ["quantity", "Quantity"], ["price", "Price"], ["commission", "Commission"], ["realized_pnl", "Realized P&L"], ["currency", "Currency"]]} empty="No executed trades reported." />
-      <div className="portfolio-pagination"><button type="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous trades</button>
-        <span>Page {Math.floor(offset / 50) + 1}</span><button type="button" disabled={!remote.data.has_more} onClick={() => setOffset(offset + 50)}>Next trades</button></div>
+  usePortfolioRefresh(revision, remote.refresh);
+  return <section><div className="portfolio-section-heading"><h3>Executed trades</h3><button className="portfolio-button portfolio-button--ghost" type="button" onClick={remote.refresh} disabled={remote.refreshing}><PortfolioIcon name="refresh" />Refresh trades</button></div>
+    {Boolean(remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">Trades refresh failed. Showing any last successful results.</p>}
+    {remote.loading && !remote.data ? <p role="status">Loading executed trades…</p> : remote.data ? <>
+      <Records title="Executed trades" rows={remote.data.items} columns={[["exec_time", "Executed at (IST)", "time"], ["trading_symbol", "Instrument"], ["side", "Side"], ["quantity", "Quantity", "quantity"], ["price", "Price", "money"], ["commission", "Fees", "money"], ["realized_pnl", "Realized PnL", "pnl"], ["currency", "CCY"]]} empty="No executed trades reported." />
+      {(offset > 0 || remote.data.has_more) && <div className="portfolio-pagination"><button className="portfolio-button portfolio-button--secondary" type="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous trades</button>
+        <span>Page {Math.floor(offset / 50) + 1}</span><button className="portfolio-button portfolio-button--secondary" type="button" disabled={!remote.data.has_more} onClick={() => setOffset(offset + 50)}>Next trades</button></div>}
     </> : <p>Trades unavailable.</p>}
   </section>;
 }
 
-function Accounts({ userId }: { userId: string }) {
+function Accounts({ userId, selected, onSelect }: { userId: string; selected: string; onSelect: (value: string) => void }) {
   const remote = useRemote<ItemsPage<BrokerAccount>>(`${API}/accounts?user_id=${encodeURIComponent(userId)}`, 60_000);
-  const [selected, setSelected] = useState(() => new URLSearchParams(window.location.search).get("account") ?? "");
   const accounts = remote.data?.items ?? [];
   const account = accounts.find(item => JSON.stringify([item.broker_code, item.account_id]) === selected) ?? accounts[0];
   return <>
-    {Boolean(remote.error) && <p role="alert">{errorMessage(remote.error, "Account list is unavailable.")}</p>}
-    {remote.loading && !remote.data ? <p>Loading accounts…</p> : <label className="portfolio-selector">Broker account
-      <select value={account ? JSON.stringify([account.broker_code, account.account_id]) : ""} onChange={event => setSelected(event.target.value)} disabled={!accounts.length}>
+    {Boolean(remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(remote.error, "Account list is unavailable.")}</p>}
+    {remote.loading && !remote.data ? <p className="portfolio-empty-inline" role="status">Loading accounts…</p> : <div className="portfolio-account-toolbar"><label className="portfolio-selector"><span>Broker account</span>
+      <select value={account ? JSON.stringify([account.broker_code, account.account_id]) : ""} onChange={event => onSelect(event.target.value)} disabled={!accounts.length}>
         {!accounts.length && <option value="">No accounts</option>}
         {accounts.map(item => <option key={JSON.stringify([item.broker_code, item.account_id])} value={JSON.stringify([item.broker_code, item.account_id])}>
-          {item.display_name} · {item.broker_code} / {item.account_id}{item.simulated ? " · Simulated" : ""}
+          {item.broker_code.toUpperCase()} · {item.account_id}{!userId ? ` · ${item.display_name}` : ""}
         </option>)}
       </select>
-    </label>}
+    </label><span className="portfolio-footnote">Snapshots refresh every minute</span></div>}
     {account && <AccountDetails key={JSON.stringify([userId, account.broker_code, account.account_id])} account={account} userId={userId} />}
-    {!remote.loading && !Boolean(remote.error) && !account && <p>No accounts registered for this profile.</p>}
+    {!remote.loading && !Boolean(remote.error) && !account && <EmptyState title="No accounts registered for this profile.">Choose another profile to view its accounts.</EmptyState>}
   </>;
 }
 
 export function Portfolio() {
   const remote = useRemote<ItemsPage<Profile>>(`${API}/profiles`, 60_000);
-  const [userId, setUserId] = useState(() => new URLSearchParams(window.location.search).get("user_id") ?? "");
+  const [userId, setUserId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("user_id"));
+  const [account, setAccount] = useState(() => new URLSearchParams(window.location.search).get("account") ?? "");
+  const profiles = remote.data?.items ?? [];
+  const selected = userId ?? profiles.find(profile => profile.active)?.user_id ?? profiles[0]?.user_id ?? "";
   return <main className="portfolio-page">
-    <section className="hero"><div><span className="eyebrow">Shared testing workspace</span><h1>Portfolios</h1>
-      <p>Choose a test profile and broker account. Everyone in this workspace can view every profile. Market data is shared.</p></div></section>
-    <PortfolioTabs active="accounts" userId={userId} />
-    {Boolean(remote.error) && <p role="alert">{errorMessage(remote.error, "Profiles are unavailable.")}</p>}
-    <label className="portfolio-selector">Test profile<select value={userId} onChange={event => setUserId(event.target.value)}>
-      <option value="">All profiles</option><option value="unassigned">Unassigned</option>
-      {(remote.data?.items ?? []).map(profile => <option key={profile.user_id} value={profile.user_id}>{profile.display_name}{!profile.active ? " (inactive)" : ""}</option>)}
-    </select></label>
-    <Accounts key={userId} userId={userId} />
+    <PortfolioHeader title="Portfolio" description="Your accounts, orders and investment ideas. All in one place.">
+      <ProfileSelect profiles={profiles} value={selected} disabled={remote.loading && !remote.data} all onChange={value => { setUserId(value); setAccount(""); setPortfolioQuery(value); }} />
+    </PortfolioHeader>
+    <PortfolioTabs active="accounts" userId={selected} account={account} />
+    {Boolean(remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(remote.error, "Profiles are unavailable.")} <button className="portfolio-button portfolio-button--ghost" onClick={remote.refresh}>Retry</button></p>}
+    {remote.loading && !remote.data ? <p className="portfolio-empty-inline" role="status">Loading your portfolio…</p> : <Accounts key={selected} userId={selected} selected={account} onSelect={value => { setAccount(value); setPortfolioQuery(selected, value); }} />}
+    <p className="portfolio-workspace-note">Shared workspace · Profiles organize accounts and tags; everyone with workspace access can view and edit them.</p>
   </main>;
 }

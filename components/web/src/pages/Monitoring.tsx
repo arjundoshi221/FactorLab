@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import "./Monitoring.css";
 import { DailyStrip, MonitoringOperations, useMonitoringOperations } from "./MonitoringOperations";
-import { SourceAlerts, sourceProblems } from "./MonitoringSources";
+import { sourceProblems } from "./MonitoringSources";
 import { MonitoringErrors } from "./MonitoringErrors";
+import { MonitoringStatus } from "./MonitoringStatus";
 
 interface Service {
   service_id: string; status: string; registered: boolean;
@@ -120,16 +121,8 @@ export function Monitoring() {
     </header>
     {offline && <div className="monitoring-notice" role="alert"><strong>Monitor offline.</strong> Heartbeat tracking is interrupted. Service statuses may be stale.</div>}
     {error && <div className="monitoring-notice monitoring-notice--error" role="alert"><strong>{error}</strong> {updated ? "Showing the last successful snapshot." : "Try refreshing to reconnect."}</div>}
-    <SourceAlerts data={operations.pipelines.data} stale={operations.pipelines.error} />
-    <nav className="monitoring-section-nav" aria-label="Monitoring sections"><a href="#monitoring-services-title">Service health</a><a href="#monitoring-errors-title">Error inbox</a><a href="#monitoring-data-title">Data completeness</a><a href="#monitoring-pipelines-title">Ingestion</a></nav>
-    <section className="monitoring-summary" aria-label="Health overview">
-      {[
-        ["Healthy", services.filter(s => s.status === "up" && !needsAttention(s)).length, "up", error || offline ? "Stale snapshot · verify connection" : "On time, no errors or warnings / 1h"],
-        ["Needs attention", services.filter(needsAttention).length, "down", "Heartbeat, telemetry or recent error issues"],
-        ["Awaiting report", services.filter(s => s.status === "unknown").length, "unknown", "No telemetry received yet"],
-        ["Stopped", services.filter(s => s.status === "stopped").length, "stopped", "Reported a deliberate stop"],
-      ].map(([label, count, tone, description]) => <div className={`monitoring-summary-item monitoring-summary-item--${tone}`} key={label}><span>{label}</span><strong>{updated ? count : "\u2014"}</strong><small>{description}</small></div>)}
-    </section>
+    <nav className="monitoring-section-nav" aria-label="Monitoring sections"><a href="#monitoring-status">Status</a><a href="#monitoring-services-title">Services</a><a href="#monitoring-errors-title">Error inbox</a><a href="#monitoring-data-title">Data completeness</a><a href="#monitoring-pipelines-title">Ingestion</a><a href="#monitoring-events-title">Events</a></nav>
+    <MonitoringStatus refreshKey={refreshKey} />
     <div className="monitoring-daily-overview">
       <div><span>Errors today · UTC</span><strong>{operations.daily.data?.days ? operations.daily.data.days.filter(d => d.day === operations.daily.data!.generated_at.slice(0, 10)).reduce((sum, d) => sum + d.errors, 0).toLocaleString() : "—"}</strong><small>{operations.daily.error ? "Daily telemetry unavailable or stale" : "Full stored event counts"}</small></div>
       <div><span>Pipeline problems / 24h</span><strong>{operations.pipelines.data?.pipelines ? operations.pipelines.data.pipelines.reduce((sum, p) => sum + p.problem_24h, 0).toLocaleString() : "—"}</strong><small>{operations.pipelines.error ? "Ingestion snapshot unavailable or stale" : "Failed and partial runs"}</small></div>
@@ -142,7 +135,7 @@ export function Monitoring() {
       {!updated && loading && <div className="monitoring-empty" role="status">Loading service health...</div>}
       {updated && !services.length && <div className="monitoring-empty">No services have been registered yet.</div>}
       <div className="monitoring-services">
-        {ordered.map(s => <button type="button" className={`monitoring-service monitoring-service--${serviceTone(s)} ${service === s.service_id ? "is-selected" : ""}`} key={s.service_id} aria-pressed={service === s.service_id} aria-label={`View events for ${s.service_id}`} onClick={() => setService(service === s.service_id ? "" : s.service_id)}>
+        {ordered.map(s => <button type="button" id={`service-${s.service_id}`} className={`monitoring-service monitoring-service--${serviceTone(s)} ${service === s.service_id ? "is-selected" : ""}`} key={s.service_id} aria-pressed={service === s.service_id} aria-label={`View events for ${s.service_id}`} onClick={() => setService(service === s.service_id ? "" : s.service_id)}>
           <div className="monitoring-service-top"><span className={`monitoring-chip monitoring-chip--${serviceTone(s)}`}><i />{serviceLabel(s)}</span><span className="monitoring-service-kind">{s.monitor?.max_silence_s ? "Scheduled job" : "Service"}</span></div>
           <h3>{names[s.service_id] || s.service_id.replaceAll("-", " ")}</h3><code>{s.service_id}</code>
           {sourceFailure(s) && <p className="monitoring-service-error">{sourceFailure(s)?.detail || "Collection has not reported a healthy source status."}</p>}

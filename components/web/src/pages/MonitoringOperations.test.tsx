@@ -24,13 +24,21 @@ it("does not label universe collection healthy just because the process reports 
     : url.includes("/coverage") ? {generated_at: "2026-10-15T12:00:00Z", feeds: []}
     : url.includes("/daily") ? {generated_at: "2026-10-15T12:00:00Z", days: []}
     : url.includes("/errors") ? {generated_at: "2026-10-15T12:00:00Z", since: "2026-10-08T12:00:00Z", issues: [], unavailable: [], has_more: false}
+    : url.includes("/summary") ? {generated_at: "2026-10-15T12:00:00Z", verdict: "critical", counts: {critical: 1, warning: 0, unknown: 0, info: 0, ok: 1}, checks: [
+      {id: "sources:US:universe", area: "sources", severity: "critical", title: "US / universe: error", detail: "Universe membership validation failed", count: null, observed_at: "2026-10-15T11:59:00Z", href: "/monitoring#monitoring-errors-title", link_label: "Inspect errors"},
+      {id: "services:ok", area: "services", severity: "ok", title: "1 services reporting on time", detail: "", count: 1, observed_at: null, href: "/monitoring#monitoring-services-title", link_label: "Open details"}]}
     : {events: []},
   })));
   render(<Monitoring />);
   const card = await screen.findByRole("button", {name: "View events for universe-us"});
   expect(within(card).getByText("Collection needs attention")).toBeInTheDocument();
   expect(within(card).queryByText("Healthy")).not.toBeInTheDocument();
-  expect(screen.getByRole("alert")).toHaveTextContent("Universe membership validation failed");
+  expect(within(card).getByText("Universe membership validation failed")).toBeInTheDocument();
+  // The status verdict leads with the failure and links to its evidence.
+  const status = await screen.findByRole("region", {name: "1 thing needs attention"});
+  expect(within(status).getByText("US / universe: error")).toBeInTheDocument();
+  expect(within(status).getByRole("link", {name: "Inspect errors →"})).toHaveAttribute("href", "/monitoring#monitoring-errors-title");
+  expect(within(status).getByText("1 checks passing", { selector: "summary" })).toBeInTheDocument();
   fireEvent.click(screen.getByLabelText("Needs attention only"));
   expect(card).toBeInTheDocument();
 });

@@ -73,70 +73,73 @@ def coverage(client: Client):
     """Latest recorded session per feed within a bounded 30-day window."""
     now = datetime.now(UTC)
     try:
-        items = rows(
-            client.query(
-                """SELECT country_code, source, resolution, trade_date,
-                count() AS checked_series, sum(c.expected) AS expected,
-                sum(c.actual) AS actual, sum(c.missing) AS missing,
-                countIf(c.missing > 0) AS affected_series, max(c.ingested_at) AS checked_at
-            FROM meta.session_coverage AS c FINAL
-            WHERE trade_date >= {since:Date} AND trade_date <= {today:Date}
-            GROUP BY country_code, source, resolution, trade_date
-            ORDER BY country_code, source, resolution, trade_date DESC
-            LIMIT 1 BY country_code, source, resolution""",
-                parameters={"since": (now - timedelta(days=30)).date(), "today": now.date()},
-                settings={"readonly": 2, "max_execution_time": 5},
-            )
-        )
-        expected = rows(
-            client.query(
-                """SELECT e.country_code, e.source, e.resolution,
-                    uniqExact(e.listing_id) AS active_series,
-                    uniqExactIf(e.listing_id, isNull(c.listing_id)) AS unreported_series
-                FROM (SELECT DISTINCT country_code, source, resolution, listing_id
-                    FROM meta.expected_series FINAL WHERE active AND isNull(contract_id)) AS e
-                LEFT JOIN (
-                    SELECT country_code, source, resolution, listing_id
-                    FROM meta.session_coverage FINAL
-                    WHERE trade_date >= {since:Date} AND trade_date <= {today:Date}
-                      AND (country_code, source, resolution, trade_date) IN (
-                        SELECT country_code, source, resolution, max(trade_date)
-                        FROM meta.session_coverage FINAL
-                        WHERE trade_date >= {since:Date} AND trade_date <= {today:Date}
-                        GROUP BY country_code, source, resolution)
-                ) AS c ON e.country_code = c.country_code AND e.source = c.source
-                    AND e.resolution = c.resolution AND e.listing_id = c.listing_id
-                GROUP BY e.country_code, e.source, e.resolution""",
-                parameters={"since": (now - timedelta(days=30)).date(), "today": now.date()},
-                settings={"readonly": 2, "max_execution_time": 5, "join_use_nulls": 1},
-            )
-        )
-        by_feed = {
-            (item["country_code"], item["source"], item["resolution"]): item for item in items
-        }
-        for feed in expected:
-            key = (feed["country_code"], feed["source"], feed["resolution"])
-            if key not in by_feed:
-                item = {
-                    "country_code": feed["country_code"],
-                    "source": feed["source"],
-                    "resolution": feed["resolution"],
-                    "trade_date": None,
-                    "checked_series": 0,
-                    "expected": 0,
-                    "actual": 0,
-                    "missing": 0,
-                    "affected_series": 0,
-                    "checked_at": None,
-                }
-                items.append(item)
-                by_feed[key] = item
-            by_feed[key].update(
-                active_series=feed["active_series"], unreported_series=feed["unreported_series"]
-            )
-        return {"generated_at": now, "feeds": items}
+        return {"generated_at": now, "feeds": coverage_feeds(client, now)}
     except Exception as exc:
         raise HTTPException(503, "Data coverage is unavailable") from exc
+
+
+def coverage_feeds(client: Any, now: datetime) -> list[dict[str, Any]]:
+    """Latest checked session per feed, plus active series that have no check."""
+    items = rows(
+        client.query(
+            """SELECT country_code, source, resolution, trade_date,
+            count() AS checked_series, sum(c.expected) AS expected,
+            sum(c.actual) AS actual, sum(c.missing) AS missing,
+            countIf(c.missing > 0) AS affected_series, max(c.ingested_at) AS checked_at
+        FROM meta.session_coverage AS c FINAL
+        WHERE trade_date >= {since:Date} AND trade_date <= {today:Date}
+        GROUP BY country_code, source, resolution, trade_date
+        ORDER BY country_code, source, resolution, trade_date DESC
+        LIMIT 1 BY country_code, source, resolution""",
+            parameters={"since": (now - timedelta(days=30)).date(), "today": now.date()},
+            settings={"readonly": 2, "max_execution_time": 5},
+        )
+    )
+    expected = rows(
+        client.query(
+            """SELECT e.country_code, e.source, e.resolution,
+                uniqExact(e.listing_id) AS active_series,
+                uniqExactIf(e.listing_id, isNull(c.listing_id)) AS unreported_series
+            FROM (SELECT DISTINCT country_code, source, resolution, listing_id
+                FROM meta.expected_series FINAL WHERE active AND isNull(contract_id)) AS e
+            LEFT JOIN (
+                SELECT country_code, source, resolution, listing_id
+                FROM meta.session_coverage FINAL
+                WHERE trade_date >= {since:Date} AND trade_date <= {today:Date}
+                  AND (country_code, source, resolution, trade_date) IN (
+                    SELECT country_code, source, resolution, max(trade_date)
+                    FROM meta.session_coverage FINAL
+                    WHERE trade_date >= {since:Date} AND trade_date <= {today:Date}
+                    GROUP BY country_code, source, resolution)
+            ) AS c ON e.country_code = c.country_code AND e.source = c.source
+                AND e.resolution = c.resolution AND e.listing_id = c.listing_id
+            GROUP BY e.country_code, e.source, e.resolution""",
+            parameters={"since": (now - timedelta(days=30)).date(), "today": now.date()},
+            settings={"readonly": 2, "max_execution_time": 5, "join_use_nulls": 1},
+        )
+    )
+    by_feed = {(item["country_code"], item["source"], item["resolution"]): item for item in items}
+    for feed in expected:
+        key = (feed["country_code"], feed["source"], feed["resolution"])
+        if key not in by_feed:
+            item = {
+                "country_code": feed["country_code"],
+                "source": feed["source"],
+                "resolution": feed["resolution"],
+                "trade_date": None,
+                "checked_series": 0,
+                "expected": 0,
+                "actual": 0,
+                "missing": 0,
+                "affected_series": 0,
+                "checked_at": None,
+            }
+            items.append(item)
+            by_feed[key] = item
+        by_feed[key].update(
+            active_series=feed["active_series"], unreported_series=feed["unreported_series"]
+        )
+    return items
 
 
 def registry():

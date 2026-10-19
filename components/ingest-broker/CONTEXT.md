@@ -59,6 +59,11 @@ No IBKR credentials reach this container; Gateway logins go only to the Gateway 
   `meta.ingestion_runs`. Reads `ref.broker_metrics_map` and `ref.execution_methods`.
 - Pipeline (frozen) `ibkr_broker_snapshot`, `source` = `ibkr`, `universe` = `ibkr_accounts`;
   `source_channel` = `paper_gateway` / `live_gateway`.
+- The hub catalogues both `ibkr_broker_snapshot` and `ibkr_broker_simulation` (market "Broker")
+  and attributes their runs and the `ibkr` source status to the `ibkr-snapshot` service. The
+  api reads the same `IBKR_SNAPSHOT_TIMES`, so changing the slots needs both values updated
+  (F-038). After each run the daemon writes `waiting`, which replaces the run's result in
+  `meta.source_status`; the hub's pipeline status still shows a failed or partial latest run.
 
 ## Dependencies and contracts
 

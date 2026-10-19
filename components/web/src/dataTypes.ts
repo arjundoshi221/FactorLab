@@ -80,9 +80,15 @@ export interface PipelineCard {
   recent_problems: PipelineRun[];
 }
 
+/** ``service_id``/``stale``/``severe``/``problem`` are judged by the API with each source's own schedule. */
+export interface SourceHealth {
+  country_code: string; source: string; status: string; detail: string; checked_at: string | null;
+  service_id?: string; stale?: boolean; severe?: boolean; problem?: boolean;
+}
+
 export interface PipelinesResponse {
   generated_at: string; pipelines: PipelineCard[];
-  sources: { country_code: string; source: string; status: string; detail: string; checked_at: string | null }[];
+  sources: SourceHealth[];
 }
 
 export interface PipelineRunsPage { pipeline: string; items: PipelineRun[]; limit: number; offset: number; has_more: boolean }

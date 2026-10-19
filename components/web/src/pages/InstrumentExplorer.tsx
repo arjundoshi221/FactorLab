@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { errorMessage, fetchJson } from "../shared/api";
 import type { Dataset, DatasetResult, Identity, Instrument, InstrumentPage } from "../instrumentTypes";
+import { AtAGlance, DataMatrix } from "./DataMatrix";
 import { CollectionCoverage } from "./MarketData";
 import "./InstrumentExplorer.css";
 
@@ -61,7 +62,7 @@ function Preview({ url }: { url: string }) {
 
 function DatasetPanel({ dataset, coverage, error, url }: { dataset: Dataset; coverage?: DatasetResult; error?: string; url: string }) {
   const [expanded, setExpanded] = useState(false);
-  return <article className="instrument-dataset">
+  return <article className="instrument-dataset" id={`dataset-${dataset.table}`}>
     <h4>{dataset.title} <a href={`/data/tables/${dataset.table}`}><code>{dataset.table}</code></a></h4>
     <p>{dataset.description}</p><p>{dataset.relationships.join(", ") || "No reliable instrument link"} · {dataset.classification}</p>
     {dataset.notes.map(note => <p key={note}>{note}</p>)}
@@ -81,6 +82,9 @@ function Detail({ kind, id, select }: { kind: string; id: string; select: (i: In
   const { data, error } = useLoad<Identity>(url);
   const [coverage, setCoverage] = useState<Record<string, DatasetResult>>({});
   const [failures, setFailures] = useState<Record<string, string>>({});
+  const top = useRef<HTMLElement>(null);
+  // Selecting a ticker from a long list should land on its detail, not leave it below the fold.
+  useEffect(() => { top.current?.scrollIntoView?.({ block: "start" }); }, [url]);
   useEffect(() => {
     setCoverage({}); setFailures({});
     if (!data) return;
@@ -102,8 +106,9 @@ function Detail({ kind, id, select }: { kind: string; id: string; select: (i: In
   if (error) return <p role="alert">{error}</p>;
   if (!data) return <p>Loading instrument identity…</p>;
   const item = data.instrument;
-  return <section aria-label="Instrument detail">
+  return <section aria-label="Instrument detail" ref={top} className="instrument-detail">
     <h2>{label(item)}</h2><p>{item.name} · {item.instrument_type} · {item.active ? "Active" : "Inactive"}</p>
+    {item.kind === "listing" && <AtAGlance listingId={item.id} />}
     <p>Collection membership: {item.configured ? "Configured" : "Not configured"}. This does not establish stored data availability.</p>
     <dl>{["id", "listing_id", "security_id", "entity_id"].map(key => <div key={key}><dt>{key}{item.kind === "contract" && key !== "id" ? " (underlying)" : ""}</dt><dd>{cell(item[key as keyof Instrument])}</dd></div>)}</dl>
     {data.warnings.map(w => <p role="status" key={w}>{w}</p>)}
@@ -127,15 +132,19 @@ export function MarketData() {
     for (const [k, v] of Object.entries(values)) { if (v) next.set(k, v); else next.delete(k); }
     window.history.pushState(null, "", `${window.location.pathname}?${next}`); setQuery(`?${next}`);
   }
-  const collection = params.get("view") === "collection";
+  const view = params.get("view") === "collection" ? "collection" : params.get("view") === "matrix" ? "matrix" : "all";
+  const collection = view === "collection";
   const inventory = new URLSearchParams();
   for (const key of ["search", "country", "exchange", "instrument_type", "active", "configured", "offset"]) if (params.has(key)) inventory.set(key, params.get(key)!);
-  const { data, error } = useLoad<InstrumentPage>(collection ? null : `${base}?${inventory}`);
+  const { data, error } = useLoad<InstrumentPage>(view === "all" ? `${base}?${inventory}` : null);
   const select = (i: Instrument) => update({ kind: i.kind, id: i.id });
   const offset = Math.max(0, Number(params.get("offset")) || 0);
   return <main className="instrument-explorer"><h1>Market Data</h1>
-    <nav aria-label="Market Data views"><button aria-pressed={!collection} onClick={() => update({ view: "" })}>All tickers</button><button aria-pressed={collection} onClick={() => update({ view: "collection" })}>Collection coverage</button></nav>
-    {collection ? <CollectionCoverage /> : <>
+    <nav aria-label="Market Data views"><button aria-pressed={view === "all"} onClick={() => update({ view: "", offset: "" })}>All tickers</button><button aria-pressed={view === "matrix"} onClick={() => update({ view: "matrix", offset: "" })}>Data matrix</button><button aria-pressed={collection} onClick={() => update({ view: "collection", offset: "" })}>Collection coverage</button></nav>
+    {collection ? <CollectionCoverage /> : view === "matrix" ? <>
+      <DataMatrix params={params} update={update} select={select} />
+      {params.get("kind") && params.get("id") && <Detail key={`${params.get("kind")}/${params.get("id")}`} kind={params.get("kind")!} id={params.get("id")!} select={select} />}
+    </> : <>
       <p>Every registered listing and derivative contract, including inactive instruments and instruments without collected data.</p>
       <div className="instrument-filters">
         {[['search', 'Search symbol, company, UUID or alias'], ['country', 'Country'], ['exchange', 'Exchange'], ['instrument_type', 'Instrument type']].map(([key, title]) =>

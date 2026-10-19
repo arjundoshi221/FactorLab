@@ -28,7 +28,7 @@ data comes from the `api` component's `/hub/api/v1/*` routes on the same hostnam
   gets the SPA. `/version.json` carries `{"component":"web","version","commit"}`.
 - Client routes (in [App.tsx](src/App.tsx)): `/`, `/data`, `/data/tables/<db>.<table>`,
   `/data/pipelines`, `/schema`, `/schema/v2`, `/india`, `/india/instruments/<uuid>`, `/us`, `/market-data`,
-  `/political`, `/docker-images`, `/roadmap`.
+  `/political`, `/docker-images`, `/roadmap`, `/monitoring`, `/portfolio[/trades|/themes|/strategies|/trade-names]`; `/market-data?view=matrix` is the data matrix.
 - npm scripts ([package.json](package.json)): `dev` (Vite on 127.0.0.1, proxies `/hub/api`
   to `http://127.0.0.1:8000`), `build` (`tsc -b && vite build`), `test` (`vitest run`).
 
@@ -46,7 +46,7 @@ Access cookies do the authentication.
 
 ## Data
 
-`/portfolio` displays profiles/accounts, orders and tagging. `/portfolio/themes`, `/portfolio/strategies`, `/portfolio/trade-names` manage independent catalogs and grouped recorded-history PnL. Account/profile changes reset reports. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md).
+**Portfolios:** `/portfolio` shows account summary cards, orders beside holdings, on-demand three-tag editors and collapsed activity. `/portfolio/themes`, `/portfolio/strategies`, `/portfolio/trade-names` manage profile catalogs and cumulative FIFO stock/ETF PnL in expandable comparison tables; currencies/modes/simulations remain separate with explicit unavailable/stale states. [Feature and UI behavior](../../docs/features/F-036-portfolio-tagging-pnl.md). Profile/account changes clear report data; refreshes preserve drafts and last results. Search/status filters cover the current 50-order page. Navigation preserves profile/account context; all testers share access. `PortfolioUI.tsx` owns shared controls and exact decimal-string formatting; `Portfolio.css` scopes responsive styles. Headline balances use only account-wide metrics in the base currency; unavailable values remain em dashes. **Trade ledger** (F-040): `/portfolio/trades` (`TradeLedger.tsx`) lists every executed order across the profile's accounts with theme/strategy/trade name; filters (account, ticker, listing, tags, tag status, dates) are URL-backed and applied by the API across full history, with status chips showing counts. Inline and bulk tagging reuse `TagSelectors` and the existing assignment PUT (two at a time, at most 200 selected; failures stay selected and are listed). Rows link to the ticker; account pages link to their trades. [F-040](../../docs/features/F-040-trade-ledger.md).
 
 None in ClickHouse. It calls, among others, `/hub/api/v1/overview`, `/hub/api/v1/catalog*`,
 `/hub/api/v1/schema-map`, `/hub/api/v1/docker-images`, `/hub/api/v1/us/*`,
@@ -111,7 +111,7 @@ still runs production until the rollout completes).
 - `/india/instruments/<id>` expects a UUID; `/data/tables/<name>` must match
   `^[a-z_]+\.[a-z0-9_]+$`, as on the API side.
 
-**UDP service monitoring:** The primary navigation has a visible Monitoring tab at `/monitoring`. It polls the monitoring API every 15 seconds, shows status tiles, ages, uptime, restart counts and filterable event history. A stale watcher status shows the monitor offline banner.
+**UDP service monitoring:** The primary navigation has a visible Monitoring tab at `/monitoring`. It polls the monitoring API every 15 seconds, shows status tiles, ages, uptime, restart counts and filterable event history. A stale watcher status shows the monitor offline banner. **Status verdict:** the page opens with `MonitoringStatus` (`/monitoring/summary`, 30s poll, also refreshed by "Refresh now"): a verdict, problems worst first with links to their evidence, collapsed notes and passing checks. It replaces the summary tiles and top source banners; the section nav is sticky; service/pipeline/coverage cards carry `#service-<id>`, `#pipeline-<id>` and `#coverage-<country>-<source>-<res>` anchors. Source problem/stale/service fields come from the API. [F-038](../../docs/features/F-038-monitoring-status-verdict.md).
 
 **Collection coverage:** `/market-data?view=collection` switches between US and India and between recent
 daily collection (last 30 calendar days) and full historical recovery. Both views use the
@@ -127,4 +127,4 @@ Future rows label the FactorLab ticker as the underlying and retain their separa
 
 The Monitoring control room includes a searchable service grid, daily telemetry, recorded coverage gaps, pipeline activity and an error inbox. Current source failures override healthy process heartbeats; repeated failures retain first/last occurrence, counts and explicit recovery evidence. See the service-monitoring runbook.
 
-**Instrument explorer:** `/market-data` defaults to all registered listings/contracts, including inactive and empty instruments. URL-backed filters/selection open scoped lifetime coverage, previews and recorded provenance; broader matches and investigation candidates are labeled separately. `/market-data?view=collection` retains collection coverage. [Specification](../../docs/features/F-037-instrument-explorer.md).
+**Instrument explorer:** `/market-data` defaults to all registered listings/contracts, including inactive and empty instruments. URL-backed filters/selection open scoped lifetime coverage, previews and recorded provenance; broader matches and investigation candidates are labeled separately. `/market-data?view=collection` retains collection coverage. [Specification](../../docs/features/F-037-instrument-explorer.md). **Data matrix** (F-039): `/market-data?view=matrix` (`DataMatrix.tsx`) shows each ticker against bars per configured feed, futures, issuer-level fundamentals, political trades, holdings, trades and tags. States: up to date, behind, missing, stored (not configured), none, needs tags, unavailable ("?"; never healthy). URL-backed search/country/scope/attention filters; tickers open the F-037 detail, which now starts with an "At a glance" strip; trade/tag cells open the ledger; dataset panels carry `#dataset-<table>` anchors. [F-039](../../docs/features/F-039-ticker-data-matrix.md).

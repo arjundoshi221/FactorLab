@@ -1,17 +1,29 @@
-import type { PipelinesResponse } from "../dataTypes";
+import type { PipelinesResponse, SourceHealth } from "../dataTypes";
 
 export function sourceService(country: string, source: string) {
+  if (source === "ibkr") return "ibkr-snapshot";
   if (country === "US") return source === "universe" ? "universe-us" : "ingest-us";
   if (country === "IN") return "ingest-india";
   return source;
 }
 
+const SEVERE = ["error", "failed", "auth_required", "incomplete"];
+
+// The API judges sources against their own schedules; the fixed 10-minute rule is a fallback
+// for responses from an API that predates those fields.
+function judge(source: SourceHealth, generatedAt: string) {
+  if (source.problem !== undefined) {
+    return { problem: source.problem, stale: Boolean(source.stale), severe: Boolean(source.severe), service: source.service_id || sourceService(source.country_code, source.source) };
+  }
+  const age = source.checked_at ? (Date.parse(generatedAt) - Date.parse(source.checked_at)) / 1000 : Infinity;
+  return { problem: source.status !== "ready" || age > 600, stale: age > 600, severe: SEVERE.includes(source.status), service: sourceService(source.country_code, source.source) };
+}
+
 export function sourceProblems(data: PipelinesResponse | null) {
   if (!data) return [];
   return data.sources.flatMap(source => {
-    const age = source.checked_at ? (Date.parse(data.generated_at) - Date.parse(source.checked_at)) / 1000 : Infinity;
-    if (source.status === "ready" && age <= 600) return [];
-    return [{ ...source, stale: age > 600, severe: ["error", "failed", "auth_required", "incomplete"].includes(source.status), service: sourceService(source.country_code, source.source) }];
+    const { problem, ...state } = judge(source, data.generated_at);
+    return problem ? [{ ...source, ...state }] : [];
   });
 }
 

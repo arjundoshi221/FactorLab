@@ -6,6 +6,7 @@ import { IndiaInstrumentDetail } from "./pages/IndiaInstrumentDetail";
 import { PoliticalData } from "./pages/PoliticalData";
 import { USMarkets } from "./pages/USMarkets";
 import { MarketData } from "./pages/InstrumentExplorer";
+import { TradeLedger } from "./pages/TradeLedger";
 import { Monitoring } from "./pages/Monitoring";
 import { DockerImages } from "./pages/DockerImages";
 import { Portfolio } from "./pages/Portfolio";
@@ -454,6 +455,7 @@ export function App() {
   const path = window.location.pathname;
   const indiaInstrumentMatch = path.match(/^\/india\/instruments\/([0-9a-f-]+)$/i);
   if (path === "/portfolio") return <Shell><Portfolio /></Shell>;
+  if (path === "/portfolio/trades") return <Shell><TradeLedger /></Shell>;
   if (path === "/portfolio/themes") return <Shell><PortfolioGroups kind="themes" /></Shell>;
   if (path === "/portfolio/strategies") return <Shell><PortfolioGroups kind="strategies" /></Shell>;
   if (path === "/portfolio/trade-names") return <Shell><PortfolioGroups kind="trade-names" /></Shell>;

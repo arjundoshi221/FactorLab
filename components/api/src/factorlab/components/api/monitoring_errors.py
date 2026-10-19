@@ -6,8 +6,11 @@ from typing import Any
 from factorlab.clickhouse import rows
 
 from .catalog_query import scrub_text
+from .source_health import source_state
 
 PIPELINE_SERVICES = {
+    "ibkr_broker_snapshot": "ibkr-snapshot",
+    "ibkr_broker_simulation": "ibkr-snapshot",
     "us_universe_sync": "universe-us",
     "us_live": "ingest-us",
     "us_recovery_daily": "ingest-us",
@@ -139,21 +142,12 @@ def error_history(client: Any, *, hours: int, service_id: str, severity: str, li
         )
     for item in sources:
         checked = item.get("checked_at")
-        stale = not checked or (now - checked).total_seconds() > 600
-        if item["status"] == "ready" and not stale:
+        state = source_state(item, now)
+        if not state["problem"]:
             continue
-        source_service = (
-            ("universe-us" if item["source"] == "universe" else "ingest-us")
-            if item["country_code"] == "US"
-            else "ingest-india"
-            if item["country_code"] == "IN"
-            else item["source"]
-        )
-        source_severity = (
-            "error"
-            if item["status"] in ("error", "failed", "auth_required", "incomplete")
-            else "warning"
-        )
+        stale = state["stale"]
+        source_service = state["service_id"]
+        source_severity = "error" if state["severe"] else "warning"
         if service_id and source_service != service_id:
             continue
         if severity != "all" and severity != source_severity:

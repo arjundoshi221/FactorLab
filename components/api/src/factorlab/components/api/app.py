@@ -66,9 +66,13 @@ from factorlab.components.api.india_observability import (
     IndiaObservabilityRepository,
     IndiaSourceStatusPage,
 )
+from factorlab.components.api.instrument_matrix import router as instrument_matrix_router
 from factorlab.components.api.instruments import router as instruments_router
 from factorlab.components.api.market_data import router as market_data_router
+from factorlab.components.api.monitoring import repository as monitoring_repository
 from factorlab.components.api.monitoring import router as monitoring_router
+from factorlab.components.api.monitoring_summary import CACHE as SUMMARY_CACHE
+from factorlab.components.api.monitoring_summary import Summary, build_summary
 from factorlab.components.api.political import PoliticalTradesPage, PoliticalTradesRepository
 from factorlab.components.api.political_observability import (
     PoliticalAnomaliesPage,
@@ -85,6 +89,7 @@ from factorlab.components.api.political_observability import (
     PoliticalTickerSummary,
 )
 from factorlab.components.api.portfolio import router as portfolio_router
+from factorlab.components.api.portfolio_ledger import router as portfolio_ledger_router
 from factorlab.components.api.portfolio_tagging import router as portfolio_tagging_router
 from factorlab.components.api.schema_map import (
     SchemaMapRepository,
@@ -163,10 +168,14 @@ app.include_router(
 )
 app.include_router(us_router, prefix="/hub/api/v1/us", tags=["hub-us"])
 app.include_router(instruments_router, prefix="/hub/api/v1/market-data", tags=["hub-market-data"])
+app.include_router(
+    instrument_matrix_router, prefix="/hub/api/v1/market-data", tags=["hub-market-data"]
+)
 app.include_router(market_data_router, prefix="/hub/api/v1/market-data", tags=["hub-market-data"])
 app.include_router(monitoring_router, prefix="/hub/api/v1/monitoring", tags=["hub-monitoring"])
 app.include_router(portfolio_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
 app.include_router(portfolio_tagging_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
+app.include_router(portfolio_ledger_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
 
 
 @app.get("/hub/api/v1/docker-images", response_model=DockerImagesResponse, tags=["hub"])
@@ -303,6 +312,16 @@ def get_catalog_pipelines(
     """Schedule-aware health of every collection pipeline over the last seven days."""
 
     return _catalog_call(service.pipelines)
+
+
+@app.get("/hub/api/v1/monitoring/summary", response_model=Summary, tags=["hub-monitoring"])
+def get_monitoring_summary(
+    client: Annotated[object, Depends(monitoring_repository)],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+) -> Summary:
+    """One verdict for whether everything is working; failed checks read as unknown."""
+
+    return SUMMARY_CACHE.get(lambda: build_summary(client, service))
 
 
 @app.get(
@@ -1413,6 +1432,7 @@ def hub_monitoring() -> FileResponse:
 
 
 @app.get("/portfolio", include_in_schema=False)
+@app.get("/portfolio/trades", include_in_schema=False)
 @app.get("/portfolio/themes", include_in_schema=False)
 @app.get("/portfolio/strategies", include_in_schema=False)
 @app.get("/portfolio/trade-names", include_in_schema=False)

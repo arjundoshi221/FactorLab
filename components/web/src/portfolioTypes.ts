@@ -33,3 +33,19 @@ export interface PnlGroup {
   realized: string | null; unrealized: string | null; commissions: string | null; total: string | null;
   issues: string[]; details: PnlDetail[];
 }
+
+export type LedgerTagStatus = "tagged" | "untagged" | "not_taggable";
+export interface LedgerRow extends OrderAssignment {
+  key: string; broker_code: string; account_id: string; account_mode: string; simulated: boolean;
+  perm_id: string; taggable: boolean; trading_symbol: string; listing_id: string | null;
+  security_id: string | null; contract_id: string | null; product_type: string; currency: string;
+  side: string; quantity: string; avg_price: string | null; first_fill_at: string; last_fill_at: string;
+  fill_count: number; commissions: { currency: string; amount: string }[]; broker_realized_pnl: string | null;
+  theme_name: string | null; strategy_name: string | null; trade_name_name: string | null;
+  tag_status: LedgerTagStatus; fills: BrokerRow[]; fills_truncated: boolean;
+}
+export interface LedgerPage extends ItemsPage<LedgerRow> {
+  total: number; limit: number; offset: number; counts: Record<LedgerTagStatus, number>;
+  accounts: { broker_code: string; account_id: string; account_mode: string | null; simulated: boolean }[];
+  generated_at: string;
+}
