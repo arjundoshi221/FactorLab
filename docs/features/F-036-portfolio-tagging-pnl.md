@@ -84,6 +84,8 @@ Profile/account selections carry through navigation URLs.
 
 ## Log
 
+- 2026-10-19: the local portfolio UI cleanup shipped with the F-038 to F-040 branch
+  trial `0.0.0-trial.8bea6df4a265`; see [VPS state](../VPS.md).
 - 2026-10-15: Cleaned up the portfolio UI locally: compact navigation, account
   summary cards, orders beside holdings, expandable tag forms and activity,
   PnL comparison tables and a catalog library with on-demand creation/editing.

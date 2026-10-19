@@ -126,8 +126,9 @@ establish availability. Account-wide totals are never allocated to instruments.
 
 ## Rollout
 
-Review API and web changes together, then release through the existing component release
-workflow when explicitly requested. No schema or collector change is needed. Production
+The authorized API/web branch trial uses `deploy/release-ui-trial.ps1` after CI passes;
+`branch-ui-deploy.yml` publishes verified immutable images and runs the scoped UI verifier.
+Normal component releases remain available after the component foundation reaches main. No schema or collector change is needed. Production
 availability is intentionally evaluated at request time, not assumed from development.
 
 ## Log

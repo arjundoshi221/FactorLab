@@ -56,7 +56,7 @@ applied by a reviewed, operator-run migration; the `schema-migrator` component's
 
 ## Data
 
-**Portfolios:** Pending Wave 12 adds profiles/account ownership. Pending Wave 13 adds nullable catalog profile IDs, nullable legacy trade-name theme and append-only `book.order_assignment_events`. Both require separate operator migrations. Forward ALTERs are emitted by codegen; applied waves remain frozen. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md).
+Forward Waves 12/13 add application profiles/account ownership, nullable catalog profile IDs and append-only durable-order assignments. These migrations are separate operator operations; applied waves stay frozen. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md).
 
 - Databases: `ref`, `market`, `fundamentals`, `alt`, `book`, `risk`, `derived`,
   `broker`, `meta`, `raw`, `research`.

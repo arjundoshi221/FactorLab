@@ -114,25 +114,14 @@ still runs production until the rollout completes).
 
 **UDP service monitoring:** The primary navigation has a visible Monitoring tab at `/monitoring`. Its responsive health overview and service cards show human-readable statuses, last reports, instance uptime and restart counts, with delayed/missing heartbeats first. Scheduled jobs awaiting telemetry explain that their first monitored run has not reported. Selecting a card filters the latest 100 events; service, event type and relative time range filters are applied by the API. Polling runs every 15 seconds with manual refresh, loading states and a checked timestamp. Failed refreshes retain the last successful snapshot; a stale watcher shows the monitor offline banner. Page-specific styles live in `src/pages/Monitoring.css`. **Status verdict:** the page opens with `MonitoringStatus` (`/monitoring/summary`, 30s poll, also refreshed by "Refresh now"): a verdict, problems worst first with links to their evidence, collapsed notes and passing checks. It replaces the summary tiles and top source banners; the section nav is sticky; service/pipeline/coverage cards carry `#service-<id>`, `#pipeline-<id>` and `#coverage-<country>-<source>-<res>` anchors. Source problem/stale/service fields come from the API. [F-038](../../docs/features/F-038-monitoring-status-verdict.md).
 
-The operations grid adds name/ID search and an attention filter (including unregistered
-senders, unknown telemetry and errors/warnings in the last hour). Cards display hourly
-error/warning counts, packet gaps, configured deadlines and seven UTC calendar days of
-stored telemetry from `/monitoring/daily`. Activity strips are not uptime measurements.
-Daily ingestion cards reuse `/catalog/pipelines`, with rolling 24-hour runs/rows/problems,
-schedule-aware status, seven-day activity and expandable failed/partial run details.
-`/monitoring/coverage` supplies latest recorded feed sessions, missing bars, affected
-series and active listing series with no coverage record. A feed without checks remains
-visible as unknown coverage. Percentages apply only to recorded checks, not unreported
-series or entire missing sessions. Coverage/daily/pipeline requests refresh independently
-every 15s; manual refresh refreshes all, and failed panels retain explicitly stale snapshots.
-Pipeline data can be cached by the API for 60s. Shared operations UI and polling live in
-`src/pages/MonitoringOperations.tsx`.
+The operations grid adds name/ID search and an attention filter (including unregistered senders, unknown telemetry and errors/warnings in the last hour). Cards display hourly error/warning counts, packet gaps, configured deadlines and seven UTC calendar days of stored telemetry from `/monitoring/daily`. Activity strips are not uptime measurements. Daily ingestion cards reuse `/catalog/pipelines`, with rolling 24-hour runs/rows/problems, schedule-aware status, seven-day activity and expandable failed/partial run details. `/monitoring/coverage` supplies latest recorded feed sessions, missing bars, affected series and active listing series with no coverage record. A feed without checks remains visible as unknown coverage. Percentages apply only to recorded checks, not unreported series or entire missing sessions. Coverage/daily/pipeline requests refresh independently every 15s; manual refresh refreshes all, and failed panels retain explicitly stale snapshots. Pipeline data can be cached by the API for 60s. Shared operations UI and polling live in `src/pages/MonitoringOperations.tsx`.
 
 **Collection coverage:** `/market-data?view=collection` switches between US and India and between recent daily collection (last 30 calendar days) and full historical recovery. Both views use the current `meta.expected_series` configuration; a ticker can appear in both because recovery
 and daily collection write the same bars. The page searches configured symbols and company
 names through `/hub/api/v1/market-data/universe`, shows zero-data tickers, and opens per-ticker
 stored coverage and recovery state. List requests are paginated at 50 tickers.
 Indian equity and futures series are separate rows even when they share a listing ID.
+Selecting a row opens a focused side panel with the provider-to-FactorLab ticker mapping, coverage and recovery details. Escape and the close control return to the universe list. Search accepts either ticker, as well as company names. Future rows label the FactorLab ticker as the underlying and retain their separate contract ID.
 
 **Collection health**: Whether a source is successfully doing its collection work.
 It is independent of process heartbeat liveness; a reported source failure remains

@@ -1,0 +1,151 @@
+name: Branch UI trial release
+
+# A tagged, CI-green commit on the dedicated branch updates only the running
+# api-candidate and web trial services. Main and normal release tags are untouched.
+on:
+  push:
+    tags: ["ui-trial/*"]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: factorlab-ui-trial
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.check.outputs.commit }}
+      version: ${{ steps.check.outputs.version }}
+      test_id: ${{ steps.check.outputs.test_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check immutable tag, branch tip, and CI
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ $TAG =~ ^ui-trial/([0-9a-f]{12})$ ]] || { echo "Invalid UI trial tag" >&2; exit 1; }
+          short=${BASH_REMATCH[1]}
+          commit=$(git rev-parse HEAD)
+          [[ ${commit:0:12} == "$short" ]] || { echo "Tag does not name its commit" >&2; exit 1; }
+          git fetch --no-tags origin restructure/deploy-market-data-ui
+          [[ $(git rev-parse FETCH_HEAD) == "$commit" ]] || {
+            echo "Tag must point to the dedicated branch tip" >&2; exit 1; }
+          runs=$(gh api "repos/$REPOSITORY/actions/runs?head_sha=$commit&per_page=30")
+          jq -e --arg sha "$commit" '
+            any(.workflow_runs[]; .name == "CI" and .head_sha == $sha
+              and .status == "completed" and .conclusion == "success")
+          ' <<<"$runs" >/dev/null || { echo "CI is not green for $commit" >&2; exit 1; }
+          {
+            echo "commit=$commit"
+            echo "version=0.0.0-trial.$short"
+            echo "test_id=ui-$short"
+          } >> "$GITHUB_OUTPUT"
+
+  api-image:
+    needs: authorize
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/_release-image.yml
+    with:
+      unit: api
+      version: ${{ needs.authorize.outputs.version }}
+      image: ghcr.io/arjundoshi221/factorlab-api
+      dockerfile: components/api/Dockerfile
+      commit: ${{ needs.authorize.outputs.commit }}
+
+  web-image:
+    needs: authorize
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/_release-image.yml
+    with:
+      unit: web
+      version: ${{ needs.authorize.outputs.version }}
+      image: ghcr.io/arjundoshi221/factorlab-web
+      dockerfile: components/web/Dockerfile
+      commit: ${{ needs.authorize.outputs.commit }}
+
+  deploy:
+    needs: [authorize, api-image, web-image]
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      COMMIT: ${{ needs.authorize.outputs.commit }}
+      TEST_ID: ${{ needs.authorize.outputs.test_id }}
+      API_IMAGE: ghcr.io/arjundoshi221/factorlab-api@${{ needs.api-image.outputs.digest }}
+      WEB_IMAGE: ghcr.io/arjundoshi221/factorlab-web@${{ needs.web-image.outputs.digest }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.authorize.outputs.commit }}
+      - uses: ./.github/actions/vps-ssh
+        with:
+          private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          host-key: ${{ secrets.VPS_SSH_HOST_KEY }}
+      - name: Transfer the reviewed trial runner
+        run: |
+          set -euo pipefail
+          [[ $API_IMAGE =~ ^ghcr\.io/arjundoshi221/factorlab-api@sha256:[0-9a-f]{64}$ ]]
+          [[ $WEB_IMAGE =~ ^ghcr\.io/arjundoshi221/factorlab-web@sha256:[0-9a-f]{64}$ ]]
+          run_dir="/tmp/factorlab-$TEST_ID-${{ github.run_id }}"
+          echo "RUN_DIR=$run_dir" >> "$GITHUB_ENV"
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+            "install -d -m 0700 '$run_dir'"
+          scp -i ~/.ssh/factorlab_deploy -o BatchMode=yes \
+            deploy/testing/ui_test.py deploy/testing/ingestion_test.py \
+            "$VPS_USER@$VPS_HOST:$run_dir/"
+      - name: Apply and verify the API and web trial
+        id: trial
+        run: |
+          set -euo pipefail
+          set +e
+          ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=30 "$VPS_USER@$VPS_HOST" \
+            "sudo env PYTHONDONTWRITEBYTECODE=1 python3 '$RUN_DIR/ui_test.py' apply '$TEST_ID' --commit '$COMMIT' --api-image '$API_IMAGE' --web-image '$WEB_IMAGE'" \
+            | tee trial.log
+          status=${PIPESTATUS[0]}
+          set -e
+          for key in VERIFICATION ROLLBACK; do
+            value=$(sed -n "s/^FACTORLAB_RESULT_${key}=//p" trial.log | tail -1)
+            echo "$(tr '[:upper:]' '[:lower:]' <<<"$key")=${value:-not-reported}" >> "$GITHUB_OUTPUT"
+          done
+          exit "$status"
+      - name: Record the exact trial result
+        if: always()
+        env:
+          VERIFICATION: ${{ steps.trial.outputs.verification }}
+          ROLLBACK: ${{ steps.trial.outputs.rollback }}
+        run: |
+          {
+            echo "## UI trial $TEST_ID"
+            echo "- Commit: \`$COMMIT\`"
+            echo "- API image: \`$API_IMAGE\`"
+            echo "- Web image: \`$WEB_IMAGE\`"
+            echo "- Verification: \`${VERIFICATION:-not-run}\`"
+            echo "- Recovery: \`${ROLLBACK:-not-reported}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove the temporary runner transfer
+        if: always()
+        run: |
+          if [[ -n ${RUN_DIR:-} ]]; then
+            ssh -i ~/.ssh/factorlab_deploy -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+              "sudo rm -rf -- '$RUN_DIR'" || true
+          fi

@@ -35,6 +35,7 @@ separately. Search and has-data filters run before pagination. Ticker detail cou
 market sessions within up to the latest 365 days of its stored range.
 Indian futures are keyed by contract ID as well as listing ID so their counts do not
 merge with the underlying equity.
+Universe rows expose the configured provider symbol and the FactorLab trading symbol from `ref.listings.trading_symbol`; search matches either symbol or the company name. An absent listing leaves the FactorLab symbol unmapped rather than guessing a ticker. For futures this is the underlying listing's symbol; `contract_id` identifies the future.
 
 ## Configuration and secrets
 
@@ -45,6 +46,7 @@ merge with the underlying equity.
 | ClickHouse password | secret `CLICKHOUSE_PASSWORD` | - | file in `FACTORLAB_SECRETS_DIR` |
 | Bearer key for `/api/v1/*` | secret `FACTORLAB_API_KEY` | - | missing -> 503 on bearer routes |
 | Secret directory | `FACTORLAB_SECRETS_DIR` | compose: `/run/secrets/app` | mounts the `political_runtime` tmpfs volume |
+| IBKR snapshot slots | `IBKR_SNAPSHOT_TIMES` | `06:00,16:30` | must match `ibkr-snapshot`'s value (production: hourly); drives schedule-aware broker freshness |
 | Catalog previews | `FACTORLAB_CATALOG_PREVIEW`, `FACTORLAB_CATALOG_CSV`, `FACTORLAB_CATALOG_CSV_MAX_ROWS`, `FACTORLAB_CATALOG_PREVIEW_DENY` | `on`, `on`, `10000`, empty | set in `production.env`; applied on the next `api` recreate |
 | Docker image snapshot | `FACTORLAB_DOCKER_IMAGES_SNAPSHOT` | `/run/docker-images/snapshot.v2.json`, else `snapshot.json` | host dir mounted read-only |
 | UI bundle | `FACTORLAB_WEB_DIST` | `<FACTORLAB_HOME>/components/web/dist` | only the monolith image sets it |
@@ -125,22 +127,14 @@ tags ([release.yml](../../.github/workflows/release.yml), `deploy-release.sh`).
 
 **UDP service monitoring:** `/hub/api/v1/monitoring/services` joins latest ClickHouse statuses with the mounted service registry; `/events` supports service/type/since/limit filters. The API marks monitor offline after 15 seconds without a status update. Its lifespan sends heartbeats and a deliberate stop. No monitor daemon connection is needed for reads. **Status verdict:** `/monitoring/summary` (`monitoring_summary.py`) rolls services, source status, pipelines, coverage feeds and broker snapshots of active non-simulated accounts into linked checks and a verdict (critical, then attention, then unknown, then ok); a failed gatherer is `unknown`, never `ok`; cached 15s. **Schedule-aware freshness** (`source_health.py`): IBKR is stale only when a slot at least 1 h old has no snapshot after it, using `IBKR_SNAPSHOT_TIMES` (default `06:00,16:30`; must match `ibkr-snapshot`, production is hourly). The same rule drives IBKR source status, its pipeline card, portfolio `freshness` and PnL `stale_price`; `waiting` is normal; `ibkr` maps to `ibkr-snapshot`. [F-038](../../docs/features/F-038-monitoring-status-verdict.md).
 
-`/monitoring/daily` counts stored service reports/errors/warnings/restarts/down transitions over seven UTC
-calendar days, including today, without sampling the event log. `/monitoring/coverage`
-aggregates the latest recorded session per country/source/resolution within 30 days from
-`meta.session_coverage FINAL`. It also joins active non-contract listing series from
-`meta.expected_series FINAL` to checks for that feed's latest recorded date to count
-unreported series; active feeds without checks are returned with null session/check dates.
-These reads are bounded and read-only with 5s per-query deadlines. They evaluate recorded
-checks, not exchange calendars or entirely absent expected sessions; recorded bar
-percentages cannot establish whole-universe completeness. Failed queries return 503.
+`/monitoring/daily` counts stored service reports/errors/warnings/restarts/down transitions over seven UTC calendar days, including today, without sampling the event log. `/monitoring/coverage` aggregates the latest recorded session per country/source/resolution within 30 days from `meta.session_coverage FINAL`. It also joins active non-contract listing series from `meta.expected_series FINAL` to checks for that feed's latest recorded date to count unreported series; active feeds without checks are returned with null session/check dates. These reads are bounded and read-only with 5s per-query deadlines. They evaluate recorded checks, not exchange calendars or entirely absent expected sessions; recorded bar percentages cannot establish whole-universe completeness. Failed queries return 503.
 
 **Stored error group**: Repeated reports with the same service, severity, error type
 and message, or failed runs with the same pipeline, provider, status and error.
 First/last occurrence and counts are scoped to the selected history window.
 
-**Current source problem**: The latest source status is not ready, or its report is
-older than ten minutes. It remains relevant outside the error-history window and has
+**Current source problem**: The latest source status is not ready (IBKR `waiting` is normal), or its report is
+older than its schedule allows (ten minutes; IBKR follows its snapshot slots). It remains relevant outside the error-history window and has
 no inferred first failure time or count.
 
 **Later successful run**: A recorded successful run of the same pipeline and provider

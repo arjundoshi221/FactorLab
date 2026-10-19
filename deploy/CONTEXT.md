@@ -5,6 +5,7 @@
 ## Purpose
 
 `deploy/` is the `platform` release unit ([component.yaml](component.yaml)); it ships host files and recreates no services.
+The temporary UI branch trial is documented in [testing/README.md](testing/README.md): `release-ui-trial.ps1` starts an immutable, CI-gated API/web trial without merging the restructure into `main` or starting the component-pin rollout.
 Owns Compose base (networks, tmpfs secrets, ClickHouse, optional IB Gateways, ops tools), the root-run component deployer, provisioning, log rotation and restricted log reader. Operator runbook: [README.md](README.md).
 
 ## Owns and does not own
@@ -102,20 +103,9 @@ uv run pytest tests/deploy tests/test_deploy_host.py
 
 ## Release and rollback
 
-Owner-authorized ingestion tests before merging use the separate branch workflow in
-[testing/README.md](testing/README.md) and [testing/ingestion_test.py](testing/ingestion_test.py).
-It saves the preceding host model and image IDs, preserves installed ownership,
-and verifies protected container identities. It does not complete the platform rollout.
+Owner-authorized ingestion tests before merging use the separate branch workflow in [testing/README.md](testing/README.md) and [testing/ingestion_test.py](testing/ingestion_test.py). It saves the preceding host model and image IDs, preserves installed ownership, and verifies protected container identities. It does not complete the platform rollout.
 
-The remaining rollout uses [testing/component_test.py](testing/component_test.py): non-root
-ingestion, schema checks, and loopback API/web tests; primary hub routing normally waits
-for Access. On September 30 the owner explicitly deferred Tunnel setup and switched
-the existing Caddy hostname to the private test API/web ports. The previous Caddy
-configuration and old API remain available for rollback; see the public-switch section
-in [the validation report](../docs/operations/vps-restructure-validation-2026-09-30.md).
-Before pin bootstrap, the operator command uses `compose.production.yml`; afterwards it
-uses fragments and pins. Runtime data UID is 10001; log UIDs match the images (web 101,
-secrets agent 0, others 10001).
+The remaining rollout uses [testing/component_test.py](testing/component_test.py): non-root ingestion, schema checks, and loopback API/web tests; primary hub routing normally waits for Access. On September 30 the owner explicitly deferred Tunnel setup and switched the existing Caddy hostname to the private test API/web ports. The previous Caddy configuration and old API remain available for rollback; see the public-switch section in [the validation report](../docs/operations/vps-restructure-validation-2026-09-30.md). Before pin bootstrap, the operator command uses `compose.production.yml`; afterwards it uses fragments and pins. Runtime data UID is 10001; log UIDs match the images (web 101, secrets agent 0, others 10001).
 
 `.\deploy\release.ps1 -Component platform [-Bump ...] [-DryRun]` bumps `version:` in
 [component.yaml](component.yaml), pushes `platform/vX.Y.Z`;
@@ -148,4 +138,4 @@ until the rollout completes.
 - Image retention includes local monolith/trial images and protects images in branch deployment JSON records. Processor profiling retains one day; other diagnostic TTLs remain seven days.
 
 **UDP service monitoring:** `monitor_runtime` is a separate tmpfs secret volume. Component manifests accept monitor deadlines and optional wall-clock active windows (timezone, ISO weekdays, start/end HH:MM). render-compose also generates monitor-services.yaml; mount it into monitor and api. Enable senders with FACTORLAB_MONITOR_ADDR=monitor:9125 only after schema and monitor releases. UDP 9125 remains on backend with no published host port.
-The branch ingestion runner persists an optional component scope; only that component is replaced, smoke-tested and restored, while other daemons remain protected.
+The branch ingestion runner persists an optional component scope; only that component is replaced, smoke-tested and restored, while other daemons remain protected. The UI trial verifier checks monitoring responses, the served explorer/error-inbox bundle, instrument inventory/identity, representative scoped coverage and previews before accepting the rollout; any failed check follows its existing restoration path.

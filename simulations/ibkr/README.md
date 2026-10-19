@@ -74,7 +74,8 @@ Dry runs neither resume nor alter checkpoints.
 
 This is an IBKR-shaped data replay, not a TWS socket-server emulator or a broker
 execution simulator. It does not place real orders or consume current market
-prices. It exercises existing data and portfolio features; themes, strategies,
-and trade attribution remain deferred. For installed component usage, the same
+prices. After Waves 12/13 and the portfolio release, orders can be tagged on `/portfolio`;
+all partial fills inherit their durable order assignment. Use the same three tags
+on closing orders to match the opening lots in the FIFO reports. For installed component usage, the same
 runner is available as `factorlab-ingest-broker simulate-stream --config <yaml>
 --scenario <yaml>` with the same options.
