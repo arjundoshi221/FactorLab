@@ -20,9 +20,18 @@ then `ui-trial/29bda76225d5` (unresolved political trades link by filing ticker;
 link through trading legislators,
 [CI](https://github.com/arjundoshi221/FactorLab/actions/runs/39278250560),
 [workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/39282612960)). Both
-workflows succeeded; only api-candidate and web changed. The political identity repair
-(`docs/operations/identity-repair.md`) is not deployed: `ingest-political` still runs the
-monolith image.
+workflows succeeded; only api-candidate and web changed.
+
+Political identity repair, 2026-10-19/20 (`docs/operations/identity-repair.md`): the
+`ingest-political` image the daily cron runs is now the branch-trial image from commit
+`86d9ce08902f` (`political-trial/86d9ce08902f`,
+[workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/39305653277), success).
+The first trial (`political-trial/342ab392b39c`,
+[workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/39290010286)) retired
+150 duplicate US listings and relinked trades but left 433 superseded trade rows and failed
+verification; the second deleted them. Checked afterwards: 641 trade rows for 641 trades,
+563 linked (was 472), 0 on retired listings, 0 US symbols with two active listings; 63
+stock trades remain unresolved because their tickers have no FactorLab US listing.
 
 Merged-branch rollout, 2026-10-19: API candidate and web run commit
 `314faa41b7ac` (merge of all local work with both deployment branches), version

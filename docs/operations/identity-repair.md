@@ -53,7 +53,9 @@ stale second row (433 rows), and its verification failed. The second trial remov
 ## Checks
 
 Expected from the 2026-10-19 dry-run preview: 150 retirements, 3 aliases moved, nothing
-skipped. Afterwards, no US symbol has two active listings that are not retired, and
+skipped. Result after the second trial (2026-10-20): 641 rows for 641 trades, 563 linked,
+0 on retired listings; the 63 unresolved stock trades name tickers with no FactorLab US
+listing (for example VIK, TSM, NVO) and link once reference data adds them. Afterwards, no US symbol has two active listings that are not retired, and
 `alt.political_trades` has no `listing_id` among retired listings.
 
 ## Undo
