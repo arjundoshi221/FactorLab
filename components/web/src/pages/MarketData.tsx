@@ -119,77 +119,77 @@ export function CollectionCoverage() {
   const selectedPage = page?.market === market && page.stream === stream && query === search.trim() ? page : null;
   const rangeEnd = selectedPage ? Math.min(offset + selectedPage.items.length, selectedPage.total) : 0;
 
-  return <main className="market-data">
-    <section className="hero market-data__hero">
-      <div><span className="eyebrow">Configured collection · US and India</span>
-        <h1>Market data</h1>
-        <p>Explore every ticker selected for collection and see the data stored for each one.</p></div>
-      <button type="button" onClick={() => setRefresh(value => value + 1)} disabled={loading}>Refresh data</button>
-    </section>
-
-    <section className="inventory market-data__inventory" aria-label="Market universe">
-      <div className="market-data__switch" aria-label="Market">
+  return <section className="market-data" aria-label="Collection coverage">
+    <div className="market-data__controls">
+      <div className="segmented" role="group" aria-label="Market">
         <button type="button" aria-pressed={market === "US"} className={market === "US" ? "is-active" : ""}
           onClick={() => switchMarket("US")}>US</button>
         <button type="button" aria-pressed={market === "IN"} className={market === "IN" ? "is-active" : ""}
           onClick={() => switchMarket("IN")}>India</button>
       </div>
-      <div className="market-data__switch" aria-label="Collection view">
+      <div className="segmented" role="group" aria-label="Collection view">
         <button type="button" aria-pressed={stream === "daily"} className={stream === "daily" ? "is-active" : ""}
           onClick={() => switchStream("daily")}>Daily collection</button>
         <button type="button" aria-pressed={stream === "historical"} className={stream === "historical" ? "is-active" : ""}
           onClick={() => switchStream("historical")}>Historical recovery</button>
       </div>
-      <p className="market-data__hint">{stream === "daily"
-        ? "Current collector universe and bars stored in the last 30 calendar days. Select a ticker for its recent coverage."
-        : "Recovery uses the configured collector universe and the same stored bars. Select a ticker for its full stored range and recovery status."}</p>
+      <button type="button" className="md-ghost market-data__refresh" onClick={() => setRefresh(value => value + 1)} disabled={loading}>
+        {loading ? "Refreshing…" : "Refresh data"}</button>
+    </div>
+    <p className="md-note">{stream === "daily"
+      ? "Current collector universe and bars stored in the last 30 calendar days. Select a ticker for its recent coverage."
+      : "Recovery uses the configured collector universe and the same stored bars. Select a ticker for its full stored range and recovery status."}</p>
 
-      <div className="market-data__summary">
-        <div><span>Configured tickers</span><strong>{selectedPage ? count.format(selectedPage.configured_total) : "—"}</strong></div>
-        <div><span>Matching tickers</span><strong>{selectedPage ? count.format(selectedPage.total) : "—"}</strong></div>
-        <div><span>Universe updated</span><strong>{selectedPage ? time(selectedPage.configuration_as_of) : "—"}</strong></div>
-      </div>
+    <div className="market-data__summary">
+      <div><span>Configured tickers</span><strong>{selectedPage ? count.format(selectedPage.configured_total) : "—"}</strong></div>
+      <div><span>Matching tickers</span><strong>{selectedPage ? count.format(selectedPage.total) : "—"}</strong></div>
+      <div><span>Universe updated</span><strong className="market-data__time">{selectedPage ? time(selectedPage.configuration_as_of) : "—"}</strong></div>
+    </div>
 
-      <div className="table-tools market-data__tools">
-        <label htmlFor="market-data-search">Search tickers or companies
-          <input id="market-data-search" type="search" value={search} maxLength={100}
-            placeholder="Provider ticker, FactorLab ticker, or company" onChange={event => { setSearch(event.target.value); setOffset(0); }} />
-        </label>
-        <label htmlFor="market-data-filter">Stored data
-          <select id="market-data-filter" value={filter} onChange={event => {
-            setFilter(event.target.value as DataFilter); setOffset(0);
-          }}><option value="all">All configured</option><option value="has_data">Has data</option>
-            <option value="no_data">No data</option></select>
-        </label>
+    <div className="instrument-filters">
+      <label htmlFor="market-data-search" className="instrument-filters__search">Search tickers or companies
+        <input id="market-data-search" type="search" value={search} maxLength={100}
+          placeholder="Provider ticker, FactorLab ticker, or company" onChange={event => { setSearch(event.target.value); setOffset(0); }} />
+      </label>
+      <label htmlFor="market-data-filter">Stored data
+        <select id="market-data-filter" value={filter} onChange={event => {
+          setFilter(event.target.value as DataFilter); setOffset(0);
+        }}><option value="all">All configured</option><option value="has_data">Has data</option>
+          <option value="no_data">No data</option></select>
+      </label>
+    </div>
+    {loading && <p role="status" className="md-loading">Loading configured tickers…</p>}
+    {error && <p role="alert" className="notice notice--error">Coverage is unavailable: {error}</p>}
+    {selectedPage && <>
+      <div className="md-table"><table className="market-data__table"><thead><tr>
+        <th>Provider ticker</th><th>FactorLab ticker</th><th>Company</th><th>Series</th><th>Universe</th>
+        <th className="numeric">{stream === "daily" ? "Rows · 30 days" : "Stored rows"}</th><th className="numeric">Trading days</th>
+        <th>First date</th><th>Latest date</th><th>Last ingested</th>
+      </tr></thead><tbody>{selectedPage.items.map(item => <tr key={`${item.listing_id}:${item.contract_id ?? "equity"}`}
+        className={selected?.listing_id === item.listing_id && selected.contract_id === item.contract_id ? "is-selected" : ""}>
+        <td data-label="Provider ticker"><button className="md-symbol" type="button" onClick={event => { triggerRef.current = event.currentTarget; setSelected(item); }}
+          aria-label={`View coverage for ${item.symbol}${item.contract_id ? " future" : ""}`}>{item.symbol}</button></td>
+        <td data-label="FactorLab ticker"><code>{item.factorlab_symbol || <span className="md-muted">Unmapped</span>}</code>
+          {item.contract_id && <small>Underlying</small>}</td>
+        <td data-label="Company" className="market-data__company">{item.name || "—"}</td>
+        <td data-label="Series"><span className="market-data__tag">{item.contract_id ? "Future" : "Listing"}</span></td>
+        <td data-label="Universe">{item.universe}</td>
+        <td data-label="Rows" className="numeric">{item.rows ? count.format(item.rows) : <span className="market-data__nodata">No data</span>}</td>
+        <td data-label="Trading days" className="numeric">{count.format(item.trading_days)}</td>
+        <td data-label="First date" className="market-data__date">{item.first_date || "—"}</td>
+        <td data-label="Latest date" className="market-data__date">{item.latest_date || "—"}</td>
+        <td data-label="Last ingested" className="market-data__date">{time(item.last_ingested_at)}</td>
+      </tr>)}</tbody></table>
+        {!selectedPage.items.length && <p className="md-empty">No configured tickers match this search and filter.</p>}
       </div>
-      {loading && <p role="status">Loading configured tickers…</p>}
-      {error && <p role="alert" className="notice notice--error">Coverage is unavailable: {error}</p>}
-      {selectedPage && <>
-        <div className="table-scroll"><table className="market-data__table"><thead><tr>
-          <th>Provider ticker</th><th>FactorLab ticker</th><th>Company</th><th>Series</th><th>Universe</th><th>{stream === "daily" ? "Rows · 30 days" : "Stored rows"}</th><th>Trading days</th>
-          <th>First date</th><th>Latest date</th><th>Last ingested</th>
-        </tr></thead><tbody>{selectedPage.items.map(item => <tr key={`${item.listing_id}:${item.contract_id ?? "equity"}`}
-          className={selected?.listing_id === item.listing_id && selected.contract_id === item.contract_id ? "is-selected" : ""}>
-          <td><button className="market-data__ticker" type="button" onClick={event => { triggerRef.current = event.currentTarget; setSelected(item); }}
-            aria-label={`View coverage for ${item.symbol}${item.contract_id ? " future" : ""}`}>
-            {item.symbol}<span aria-hidden="true">↗</span></button></td>
-          <td>{item.factorlab_symbol || <span className="market-data__empty">Unmapped</span>}
-            {item.contract_id && <small className="market-data__subtle">Underlying</small>}</td>
-          <td>{item.name || "—"}</td><td>{item.contract_id ? "Future" : "Listing"}</td><td>{item.universe}</td>
-          <td>{item.rows ? count.format(item.rows) : <span className="market-data__empty">No data</span>}</td>
-          <td>{count.format(item.trading_days)}</td><td>{item.first_date || "—"}</td>
-          <td>{item.latest_date || "—"}</td><td>{time(item.last_ingested_at)}</td>
-        </tr>)}</tbody></table></div>
-        {!selectedPage.items.length && <p className="notice">No configured tickers match this search and filter.</p>}
-        <div className="market-data__pager"><span>{selectedPage.total
-          ? `${count.format(offset + 1)}–${count.format(rangeEnd)} of ${count.format(selectedPage.total)}`
-          : "0 results"}</span><div>
-          <button type="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous</button>
-          <button type="button" disabled={rangeEnd >= selectedPage.total}
-            onClick={() => setOffset(offset + 50)}>Next</button>
-        </div></div>
-      </>}
-    </section>
+      <div className="md-pager"><span>{selectedPage.total
+        ? `${count.format(offset + 1)}–${count.format(rangeEnd)} of ${count.format(selectedPage.total)}`
+        : "0 results"}</span><div>
+        <button type="button" className="md-ghost" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous</button>
+        <button type="button" className="md-ghost" disabled={rangeEnd >= selectedPage.total}
+          onClick={() => setOffset(offset + 50)}>Next</button>
+      </div></div>
+    </>}
 
     {selected && createPortal(<div className="market-data__overlay" onMouseDown={event => {
       if (event.target === event.currentTarget) closeDetail();
@@ -202,17 +202,17 @@ export function CollectionCoverage() {
           detailRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
         }
       }}>
-      <div className="section-heading"><div><span className="eyebrow">{market === "US" ? "US" : "India"} · {stream}</span>
+      <div className="market-data__detail-head"><div><span className="eyebrow">{market === "US" ? "US" : "India"} · {stream === "daily" ? "Daily collection" : "Historical recovery"}</span>
         <h2>{selected.symbol}</h2><p>{selected.name || "Configured ticker"}</p></div>
-        <button type="button" onClick={closeDetail} aria-label="Close ticker details">Close</button></div>
+        <button type="button" className="md-ghost" onClick={closeDetail} aria-label="Close ticker details">Close</button></div>
       <div className="market-data__identity">
         <div><span>Provider ticker</span><strong>{selected.symbol}</strong></div>
         <span aria-hidden="true">→</span>
         <div><span>{selected.contract_id ? "FactorLab underlying ticker" : "FactorLab ticker"}</span>
           <strong>{detail?.factorlab_symbol ?? selected.factorlab_symbol ?? "Unmapped"}</strong></div>
       </div>
-      <p className="market-data__hint">{selected.contract_id ? "Future contract" : "Listing"} · {selected.source} · {selected.universe}</p>
-      {detailLoading && <p role="status">Loading ticker coverage…</p>}
+      <p className="md-meta">{selected.contract_id ? "Future contract" : "Listing"} · {selected.source} · {selected.universe}</p>
+      {detailLoading && <p role="status" className="md-loading">Loading ticker coverage…</p>}
       {detailError && <p role="alert" className="notice notice--error">Could not load full coverage: {detailError}. The summary below is from the universe list.</p>}
       {detail && <>
         <dl className="market-data__facts">
@@ -226,7 +226,7 @@ export function CollectionCoverage() {
           <div><dt>Source</dt><dd>{detail.source}</dd></div>
           <div><dt>Universe</dt><dd>{detail.universe}</dd></div>
           {stream === "historical" && <div><dt>Recovery</dt><dd>{detail.history_complete === null
-            ? "No recovery report" : detail.history_complete ? "History complete" : "In progress"}</dd></div>}
+            ? "No recovery report" : detail.history_complete ? <span className="market-data__ok">History complete</span> : "In progress"}</dd></div>}
           {detail.missing_trading_days !== null && <div><dt>Missing trading days</dt>
             <dd>{count.format(detail.missing_trading_days)} <small>({detail.gap_window_from} to {detail.gap_window_to})</small></dd></div>}
         </dl>
@@ -239,5 +239,5 @@ export function CollectionCoverage() {
         <div><dt>Latest data date</dt><dd>{selected.latest_date || "No data"}</dd></div>
       </dl>}
     </section></div>, document.body)}
-  </main>;
+  </section>;
 }

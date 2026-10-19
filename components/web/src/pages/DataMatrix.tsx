@@ -56,7 +56,6 @@ export function DataMatrix({ params, update, select }: {
   }, []) : [];
   const filter = (key: string, value: string) => update({ [key]: value, offset: "" });
   return <section className="data-matrix" aria-label="Data matrix">
-    <p>Each FactorLab ticker against each dataset. Bars are judged against the exchange's latest completed session; holdings, trades and tags follow the account owner's profile. Select a ticker to see everything linked to it.</p>
     <div className="instrument-filters">
       <label>Search<input type="search" placeholder="Symbol, company or alias" value={params.get("search") ?? ""} onChange={e => filter("search", e.target.value)} /></label>
       <label>Country<select value={params.get("country") ?? ""} onChange={e => filter("country", e.target.value)}><option value="">All</option><option value="US">US</option><option value="IN">India</option></select></label>
@@ -93,8 +92,8 @@ export function DataMatrix({ params, update, select }: {
       </table></div>
       {!data.items.length && <p>No tickers match these filters.</p>}
       <div className="matrix-pager"><span>{data.total ? `${offset + 1}–${Math.min(offset + PAGE, data.total)} of ${data.total.toLocaleString()}` : "0 results"}</span>
-        <button type="button" disabled={offset === 0} onClick={() => update({ offset: String(Math.max(0, offset - PAGE)) })}>Previous</button>
-        <button type="button" disabled={offset + PAGE >= data.total} onClick={() => update({ offset: String(offset + PAGE) })}>Next</button></div>
+        <button type="button" className="md-ghost" disabled={offset === 0} onClick={() => update({ offset: String(Math.max(0, offset - PAGE)) })}>Previous</button>
+        <button type="button" className="md-ghost" disabled={offset + PAGE >= data.total} onClick={() => update({ offset: String(offset + PAGE) })}>Next</button></div>
     </>}
   </section>;
 }
