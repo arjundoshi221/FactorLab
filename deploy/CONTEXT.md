@@ -148,3 +148,4 @@ until the rollout completes.
 - Image retention includes local monolith/trial images and protects images in branch deployment JSON records. Processor profiling retains one day; other diagnostic TTLs remain seven days.
 
 **UDP service monitoring:** `monitor_runtime` is a separate tmpfs secret volume. Component manifests accept monitor deadlines and optional wall-clock active windows (timezone, ISO weekdays, start/end HH:MM). render-compose also generates monitor-services.yaml; mount it into monitor and api. Enable senders with FACTORLAB_MONITOR_ADDR=monitor:9125 only after schema and monitor releases. UDP 9125 remains on backend with no published host port.
+The branch ingestion runner persists an optional component scope; only that component is replaced, smoke-tested and restored, while other daemons remain protected.

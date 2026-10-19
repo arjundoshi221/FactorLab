@@ -22,7 +22,7 @@ from __future__ import annotations
 import ast
 import importlib
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import yaml
 
@@ -91,7 +91,13 @@ def model_lines(model: type) -> tuple[list[str], set[str]]:
             secrets.add(secret.name)
             continue
         default = field.get_default(call_default_factory=True)
-        value = "" if default is None else str(default)
+        value = (
+            ""
+            if default is None
+            else default.as_posix()
+            if isinstance(default, PurePath)
+            else str(default)
+        )
         lines.append(f"# {variable}={value}")
     return lines, secrets
 

@@ -6,10 +6,12 @@ import datetime as dt
 import importlib.util
 import json
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
+from pydantic.fields import FieldInfo
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -53,6 +55,17 @@ def test_the_repository_docs_are_consistent():
 
 def test_env_example_is_current():
     assert env_example.main(["--check"]) == 0
+
+
+@pytest.mark.parametrize(
+    "path", [PurePosixPath("/app/data/us-ingest.lock"), PureWindowsPath("/app/data/us-ingest.lock")]
+)
+def test_path_defaults_are_platform_independent(path):
+    model = SimpleNamespace(
+        model_config={"env_prefix": "US_"}, model_fields={"ingest_lock": FieldInfo(default=path)}
+    )
+    lines, _ = env_example.model_lines(model)
+    assert lines == ["# US_INGEST_LOCK=/app/data/us-ingest.lock"]
 
 
 def test_every_member_has_a_context_file_with_the_template_headings():

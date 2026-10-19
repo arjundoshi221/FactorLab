@@ -14,6 +14,7 @@ def runner(monkeypatch):
         monkeypatch.setitem(sys.modules, "fcntl", ModuleType("fcntl"))
     path = Path(__file__).resolve().parents[2] / "deploy/testing/ingestion_test.py"
     spec = importlib.util.spec_from_file_location("ingestion_test_scope", path)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
