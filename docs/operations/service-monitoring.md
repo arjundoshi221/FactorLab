@@ -5,8 +5,19 @@ to `/monitoring`; its API reads ClickHouse independently of the monitor process.
 
 ## Hub page
 
-The health overview counts healthy, delayed/missing, awaiting-report and deliberately
-stopped services. Service cards put delayed/missing heartbeats first and distinguish
+The page opens with a **status verdict** (F-038) from `/hub/api/v1/monitoring/summary`:
+"All systems working", "N things need attention", "Some checks could not run" or
+"System status unavailable". Problems appear worst first, each with a link to its
+evidence: a service, pipeline or coverage card on this page, the data matrix filtered to
+tickers missing their latest session, a broker account, or the trade ledger. Notes,
+such as feeds without session checks and untagged orders, never change the verdict.
+Passing checks are collapsed. The summary rolls up services, source status, pipelines,
+coverage feeds, broker snapshots of active non-simulated accounts and ticker freshness.
+Each area is read independently, so a failed read shows as "not checked" and never as
+healthy. The result is cached for 15 seconds. The section navigation stays visible
+while scrolling.
+
+Service cards put delayed/missing heartbeats first and distinguish
 scheduled jobs awaiting their first monitored run from services missing a heartbeat.
 Null report ages display "Not yet reported"; unavailable instance uptime displays a dash.
 Select a card to filter its events, or use the service, event type and time range controls.
@@ -52,18 +63,24 @@ required for these read APIs; deploy API and web together to expose the new pane
 
 ## Error inbox and collection failures
 
-The page puts reported source problems above the health overview. A universe source
-error marks `universe-us` as needing attention even if the daemon's heartbeat is on
-time and its last-hour error counter is zero. Source reports older than ten minutes
-are shown as stale rather than fresh collection health. Use the **Error inbox** link
-to investigate; process liveness does not establish successful collection.
+Reported source problems appear in the status verdict. A universe source error marks
+`universe-us` as needing attention even if the daemon's heartbeat is on time and its
+last-hour error counter is zero. Staleness follows each source's schedule, and the API
+decides it (`source_health.py`). Most sources are stale after ten minutes without a
+report. IBKR (`ibkr-snapshot`) is stale only when a snapshot slot from at least one
+hour ago has no newer snapshot. Its slots are `IBKR_SNAPSHOT_TIMES` on NYSE trading
+days, and its normal `waiting` status between runs is not a problem. The same rule
+drives portfolio snapshot freshness and the PnL stale-price flag. Use the **Error
+inbox** link to investigate; process liveness does not establish successful collection.
 
 The inbox reads `/hub/api/v1/monitoring/errors` independently of the latest 100 event
 activity rows. Select the last 24 hours, 7 days (default), or 30 days, a service and a
 severity. The API accepts `hours` (1-720), `service_id`, `severity` (`all`, `error`,
 `fatal`, `warning`) and `limit` (1-200, default 100). It aggregates all matching stored
 error/warning packets and failed/partial ingestion runs before applying the group
-limit. Service filtering maps `us_universe_sync` to `universe-us`. Current source
+limit. Service filtering maps `us_universe_sync` to `universe-us` and the
+`ibkr_broker_snapshot`/`ibkr_broker_simulation` pipelines and the `ibkr` source to
+`ibkr-snapshot`. Current source
 problems appear even if their last report predates the selected history window.
 
 Expand a group for its message, first/last occurrence within the window, count, latest

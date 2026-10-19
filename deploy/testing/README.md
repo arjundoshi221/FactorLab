@@ -21,6 +21,13 @@ version, four US/India daily/historical universe reads, and the Market Data rout
 An activation or verification failure restores the exact preceding images and
 model. The workflow summary reports verification and recovery.
 
+Branch state, 2026-10-19: `testing/prod-ingestion-20260930` holds all committed
+local work. It merges both deployment branches (`restructure/deploy-market-data-ui`
+and `restructure/deploy-monitoring-ingest`), and the UI trial branch was
+fast-forwarded to it. Develop on the working branch, then fast-forward
+`restructure/deploy-market-data-ui` to the commit to deploy. The workflow requires the
+tag to name that branch's tip.
+
 The tag is not a normal component release and does not bootstrap component pins.
 Once the platform rollout installs `/opt/factorlab/state/images.env`, the runner
 refuses activation and normal per-component releases take over. A verified trial

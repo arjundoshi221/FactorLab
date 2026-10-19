@@ -111,7 +111,10 @@ Edit `/opt/factorlab/deploy/production.env`. The template is
 
 Production uses an hourly override as of 2026-09-30: set
 `IBKR_SNAPSHOT_TIMES=00:00,01:00,02:00,03:00,04:00,05:00,06:00,07:00,08:00,09:00,10:00,11:00,12:00,13:00,14:00,15:00,16:00,17:00,18:00,19:00,20:00,21:00,22:00,23:00`
-in `production.env`. This retains the XNYS trading-day calendar. Apply a schedule
+in `production.env`. This retains the XNYS trading-day calendar. The hub API reads
+the same variable to judge snapshot freshness (F-038). Keep the value identical for
+`ibkr-snapshot` and the API (including `api-candidate` during branch trials); otherwise
+the hub flags missed snapshots against different slots. Apply a schedule
 change with `sudo factorlab-compose up -d --no-deps --no-build --pull never
 --force-recreate ibkr-snapshot`; a plain restart does not reload environment
 settings. Recreating triggers an immediate snapshot through `--run-on-start`.

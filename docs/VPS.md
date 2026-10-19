@@ -14,6 +14,16 @@ values.
 
 ## Server
 
+Merged-branch rollout, 2026-10-19: API candidate and web run commit
+`314faa41b7ac` (merge of all local work with both deployment branches), version
+`0.0.0-trial.314faa41b7ac`. [CI](https://github.com/arjundoshi221/FactorLab/actions/runs/39266181438);
+[trial workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/39270938896).
+API image: `sha256:6a9432d84ff76a0702d7d94e8610f7ce5910e603db8002fb6c3af6ee4c960b10`;
+web image: `sha256:ad1caaad833032cc4828d21d2a990453731f2235a41518c3a5464826bc1e75f7`.
+Verification passed; rollback not needed. Only api-candidate and web changed;
+ingestion services keep their existing images (per-unit cutovers remain separate).
+`IBKR_SNAPSHOT_TIMES` is still unset on api-candidate (default slots apply).
+
 Status/matrix/ledger rollout, 2026-10-19: API candidate and web run commit
 `8bea6df4a265ca2b504d29d561143bbcdd3807f5`, version `0.0.0-trial.8bea6df4a265`
 (F-038 status verdict, F-039 ticker data matrix, F-040 trade ledger, plus the
