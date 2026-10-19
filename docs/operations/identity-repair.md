@@ -12,6 +12,11 @@ as `BRK-B` to the listing `BRK.B`. Both are fixed in `sinks/political.py`.
 
 ## Commands
 
+Before the platform rollout, the political trial applies this end to end:
+`./deploy/release-ui-trial.ps1 -Trial political` from the CI-green tip of
+`restructure/deploy-market-data-ui` ([deploy/testing/README.md](../../deploy/testing/README.md#political-trial)).
+The steps it runs are below.
+
 Run inside the `ingest-political` image, which has the writer credentials. Each command is
 a dry run unless `--apply` is given and prints a JSON report.
 

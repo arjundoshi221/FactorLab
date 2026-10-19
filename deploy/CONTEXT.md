@@ -5,7 +5,7 @@
 ## Purpose
 
 `deploy/` is the `platform` release unit ([component.yaml](component.yaml)); it ships host files and recreates no services.
-The temporary UI branch trial is documented in [testing/README.md](testing/README.md): `release-ui-trial.ps1` starts an immutable, CI-gated API/web trial without merging the restructure into `main` or starting the component-pin rollout.
+The temporary UI branch trial is documented in [testing/README.md](testing/README.md): `release-ui-trial.ps1` starts an immutable, CI-gated API/web trial without merging the restructure into `main` or starting the component-pin rollout. `release-ui-trial.ps1 -Trial political` starts the political trial ([branch-political-deploy.yml](../.github/workflows/branch-political-deploy.yml), [testing/political_test.py](testing/political_test.py)): it installs the ingest-political image the cron runs and applies the identity repair.
 Owns Compose base (networks, tmpfs secrets, ClickHouse, optional IB Gateways, ops tools), the root-run component deployer, provisioning, log rotation and restricted log reader. Operator runbook: [README.md](README.md).
 
 ## Owns and does not own

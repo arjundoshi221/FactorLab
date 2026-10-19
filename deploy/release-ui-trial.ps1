@@ -6,9 +6,16 @@ Tag a CI-green commit on the dedicated UI deployment branch.
 The immutable ui-trial/<short SHA> tag starts branch-ui-deploy.yml. That workflow
 builds verified API and web images, then updates only the current branch-trial
 api-candidate and web containers. It does not change main or ingestion services.
+
+With -Trial political, the political-trial/<short SHA> tag starts
+branch-political-deploy.yml instead: it installs the ingest-political image and
+applies the identity repair (docs/operations/identity-repair.md).
 #>
 [CmdletBinding()]
-param()
+param(
+    [ValidateSet("ui", "political")]
+    [string]$Trial = "ui"
+)
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
@@ -37,22 +44,22 @@ try {
     })
     if ($green.Count -eq 0) { throw "CI has not passed for $commit." }
     $short = $commit.Substring(0, 12)
-    $tag = "ui-trial/$short"
+    $tag = "$Trial-trial/$short"
     & git show-ref --verify --quiet "refs/tags/$tag"
     if ($LASTEXITCODE -eq 0) { throw "Trial tag already exists locally: $tag" }
     if ($LASTEXITCODE -ne 1) { throw "Could not check local tags." }
     $remoteTag = & git ls-remote --tags origin "refs/tags/$tag"
     if ($LASTEXITCODE -ne 0 -or $remoteTag) { throw "Trial tag exists remotely or tag lookup failed." }
-    & git tag --annotate $tag --message "UI trial $short"
+    & git tag --annotate $tag --message "$Trial trial $short"
     if ($LASTEXITCODE -ne 0) { throw "Could not create trial tag." }
     & git push origin "refs/tags/$tag"
     if ($LASTEXITCODE -ne 0) {
         & git tag --delete $tag | Out-Null
         throw "Trial tag push failed."
     }
-    Write-Host "UI trial started: $tag"
+    Write-Host "Trial started: $tag"
     Write-Host "Commit: $commit"
-    Write-Host "Follow branch-ui-deploy.yml through verification and recovery."
+    Write-Host "Follow branch-$Trial-deploy.yml through verification and recovery."
 }
 finally {
     Pop-Location

@@ -36,6 +36,23 @@ may be restored using `sudo python3
 while its private rollback record remains on the host. Do not use the
 September 30 ingestion-only restore command for this UI trial.
 
+## Political trial
+
+Same branch, gate and image build as the UI trial, for `ingest-political`:
+`./deploy/release-ui-trial.ps1 -Trial political` pushes `political-trial/<12-char SHA>`
+and starts [branch-political-deploy.yml](../../.github/workflows/branch-political-deploy.yml).
+On the host, [`political_test.py`](political_test.py) takes the release lock and the
+political cron lock, pulls the digest, checks labels and the runtime user, smoke-tests
+the production subcommands with no network, and installs a model that changes only the
+`ingest-political` image (no long-running container is recreated; the daily cron uses
+it). It then runs the [identity repair](../../docs/operations/identity-repair.md):
+dry runs, a refusal above `--max-retire 200` retirements, both applies, and dry runs
+that must find nothing left. A failure before any data write restores the preceding
+model; after data writes it reports `not-possible-after-data-writes`. The private
+directory `/opt/factorlab/deployment-tests/political-<SHA>/` keeps `before.json`,
+`candidate.json`, `retire-plan.json` and `repair.json`; `political_test.py restore
+political-<SHA>` reinstalls the preceding model (image only, not data).
+
 ## Ingestion trial
 
 This is an owner-authorized exception for testing ingestion component images on
