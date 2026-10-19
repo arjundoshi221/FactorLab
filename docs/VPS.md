@@ -14,6 +14,19 @@ values.
 
 ## Server
 
+Status/matrix/ledger rollout, 2026-10-19: API candidate and web run commit
+`8bea6df4a265ca2b504d29d561143bbcdd3807f5`, version `0.0.0-trial.8bea6df4a265`
+(F-038 status verdict, F-039 ticker data matrix, F-040 trade ledger, plus the
+F-036 portfolio UI cleanup). [CI](https://github.com/arjundoshi221/FactorLab/actions/runs/39263043641);
+[trial workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/39263389282).
+API image: `sha256:037a9308448a3fc33c616b2e2301cbed0e0ba557fdbe35cdd8a1a4296ba2733e`;
+web image: `sha256:6a4f4146a740967e43fef983057f531024878ba32a2b6a178d3b90c5c49bcb2a`.
+Verification passed; rollback not needed. Only api-candidate and web changed. The
+candidate keeps its existing environment, so `IBKR_SNAPSHOT_TIMES` is not set there
+yet and the API judges IBKR freshness against the default 06:00/16:30 slots; set it to
+the hourly production value on the candidate to match `ibkr-snapshot`. No migrations,
+ports, secrets or routing changed; authenticated browser testing was not available.
+
 Monitoring rollout, 2026-10-16: API candidate and web run commit
 `cb3525b8c7ded794d2cf545600fc524d818ba9bd`, version
 `0.0.0-trial.cb3525b8c7de`. [Verified UI workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/38855967183).

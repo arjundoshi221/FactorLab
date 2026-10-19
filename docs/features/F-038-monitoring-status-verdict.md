@@ -95,3 +95,4 @@ production uses hourly slots. There is no schema change.
 
 - 2026-10-19: implemented locally (summary endpoint, schedule-aware source health, IBKR
   pipeline mapping, status panel); not deployed.
+- 2026-10-19: deployed via the API/web branch trial `0.0.0-trial.8bea6df4a265` (commit `8bea6df`); verification passed. See [VPS state](../VPS.md).
