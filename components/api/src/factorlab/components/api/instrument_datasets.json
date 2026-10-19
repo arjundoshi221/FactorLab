@@ -1,0 +1,2823 @@
+{
+  "alt.political_committee_memberships": {
+    "group": "Alternative & political",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "effective_from",
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "country_code",
+      "congress_number",
+      "committee_id",
+      "committee_entity_id",
+      "bioguide_id",
+      "legislator_entity_id",
+      "role",
+      "majority_status",
+      "rank",
+      "effective_from",
+      "effective_to",
+      "source",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, congress_number, committee_id, bioguide_id, effective_from)"
+  },
+  "alt.political_committees": {
+    "group": "Alternative & political",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "effective_from",
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "committee_id",
+      "committee_entity_id",
+      "country_code",
+      "congress_number",
+      "parent_committee_id",
+      "chamber",
+      "name",
+      "jurisdiction",
+      "url",
+      "is_subcommittee",
+      "effective_from",
+      "effective_to",
+      "source",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(committee_id, effective_from)"
+  },
+  "alt.political_filings": {
+    "group": "Alternative & political",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct trade filing",
+          "(tuple(country_code, chamber, filing_id) IN (SELECT country_code, chamber, filing_id FROM alt.political_trades FINAL WHERE contract_id IS NULL AND listing_id = {id:UUID}))"
+        ],
+        [
+          "security trade filing",
+          "(tuple(country_code, chamber, filing_id) IN (SELECT country_code, chamber, filing_id FROM alt.political_trades FINAL WHERE contract_id IS NULL AND listing_id IS NULL AND security_id = {security_id:UUID})) AND NOT (tuple(country_code, chamber, filing_id) IN (SELECT country_code, chamber, filing_id FROM alt.political_trades FINAL WHERE contract_id IS NULL AND listing_id = {id:UUID}))"
+        ],
+        [
+          "issuer trade filing",
+          "(tuple(country_code, chamber, filing_id) IN (SELECT country_code, chamber, filing_id FROM alt.political_trades FINAL WHERE contract_id IS NULL AND listing_id IS NULL AND security_id IS NULL AND entity_id = {entity_id:UUID})) AND NOT (tuple(country_code, chamber, filing_id) IN (SELECT country_code, chamber, filing_id FROM alt.political_trades FINAL WHERE contract_id IS NULL AND listing_id = {id:UUID})) AND NOT (tuple(country_code, chamber, filing_id) IN (SELECT country_code, chamber, filing_id FROM alt.political_trades FINAL WHERE contract_id IS NULL AND listing_id IS NULL AND security_id = {security_id:UUID}))"
+        ]
+      ],
+      "contract": [
+        [
+          "matching trade filing",
+          "tuple(country_code, chamber, filing_id) IN (SELECT country_code, chamber, filing_id FROM alt.political_trades FINAL WHERE contract_id = {id:UUID})"
+        ]
+      ]
+    },
+    "time_column": "filing_date",
+    "dimensions": [
+      "source",
+      "source_channel"
+    ],
+    "columns": [
+      "filing_id",
+      "country_code",
+      "chamber",
+      "filing_type",
+      "filing_year",
+      "filing_date",
+      "filer_name_raw",
+      "bioguide_id",
+      "legislator_entity_id",
+      "bioguide_confidence",
+      "filing_url",
+      "amends_filing_id",
+      "original_filing_id",
+      "amendment_seq",
+      "is_amended",
+      "is_amendment",
+      "trade_count",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, chamber, filing_id)"
+  },
+  "alt.political_trades": {
+    "group": "Alternative & political",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "contract_id IS NULL AND listing_id = {listing_id:UUID}"
+        ],
+        [
+          "security",
+          "contract_id IS NULL AND listing_id IS NULL AND security_id = {security_id:UUID}"
+        ],
+        [
+          "issuer",
+          "contract_id IS NULL AND listing_id IS NULL AND security_id IS NULL AND entity_id = {entity_id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "transaction_date",
+    "dimensions": [
+      "source",
+      "contract_id",
+      "source_channel"
+    ],
+    "columns": [
+      "political_trade_id",
+      "country_code",
+      "chamber",
+      "filing_id",
+      "filing_url",
+      "filing_date",
+      "transaction_date",
+      "notification_date",
+      "legislator_name_raw",
+      "bioguide_id",
+      "legislator_entity_id",
+      "bioguide_confidence",
+      "ticker_raw",
+      "asset_name_raw",
+      "filing_asset_type_code",
+      "security_type",
+      "listing_id",
+      "contract_id",
+      "security_id",
+      "entity_id",
+      "resolution_confidence",
+      "transaction_type",
+      "owner_code",
+      "filer_type",
+      "amount_bucket_id",
+      "amount_min",
+      "amount_max",
+      "amount_currency",
+      "amount_str_raw",
+      "source",
+      "source_channel",
+      "parser_version",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, chamber, transaction_date, entity_id, political_trade_id)"
+  },
+  "alt.social_reddit_posts": {
+    "group": "Alternative & political",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "has(mentioned_listings, {id:UUID})"
+        ],
+        [
+          "issuer",
+          "NOT has(mentioned_listings, {id:UUID}) AND has(mentioned_entities, {entity_id:UUID})"
+        ]
+      ]
+    },
+    "time_column": "posted_at",
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "post_id",
+      "country_code",
+      "subreddit",
+      "posted_at",
+      "author",
+      "title",
+      "body",
+      "score",
+      "comment_count",
+      "mentioned_listings",
+      "mentioned_entities",
+      "ticker_confidence",
+      "sentiment_score",
+      "sentiment_source",
+      "source",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, subreddit, posted_at, post_id)"
+  },
+  "book.attribution": {
+    "group": "Broker & portfolio",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "unambiguous execution assignment",
+          "execution_id IN (SELECT exec_id FROM broker.executions FINAL GROUP BY exec_id HAVING uniqExact(tuple(broker_code, account_id)) = 1 AND countIf(contract_id IS NULL AND listing_id = {id:UUID}) > 0 AND countIf(NOT ifNull((contract_id IS NULL AND listing_id = {id:UUID}), false)) = 0)"
+        ]
+      ],
+      "contract": [
+        [
+          "unambiguous execution assignment",
+          "execution_id IN (SELECT exec_id FROM broker.executions FINAL GROUP BY exec_id HAVING uniqExact(tuple(broker_code, account_id)) = 1 AND countIf(contract_id = {id:UUID}) > 0 AND countIf(NOT ifNull((contract_id = {id:UUID}), false)) = 0)"
+        ]
+      ]
+    },
+    "time_column": "assigned_at",
+    "dimensions": [],
+    "columns": [
+      "execution_id",
+      "trade_name_id",
+      "theme_id",
+      "strategy_id",
+      "assigned_at",
+      "assigned_by",
+      "confidence",
+      "rationale",
+      "computation_id",
+      "ingest_run_id",
+      "as_of_time",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(trade_name_id, execution_id, assigned_at)"
+  },
+  "book.order_assignment_events": {
+    "group": "Broker & portfolio",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "order assignment",
+          "tuple(broker_code, account_id, perm_id) IN (SELECT broker_code, account_id, perm_id FROM broker.order_events FINAL WHERE contract_id IS NULL AND listing_id = {id:UUID} UNION DISTINCT SELECT broker_code, account_id, perm_id FROM broker.open_orders_snapshot FINAL WHERE contract_id IS NULL AND listing_id = {id:UUID})"
+        ]
+      ],
+      "contract": [
+        [
+          "order assignment",
+          "tuple(broker_code, account_id, perm_id) IN (SELECT broker_code, account_id, perm_id FROM broker.order_events FINAL WHERE contract_id = {id:UUID} UNION DISTINCT SELECT broker_code, account_id, perm_id FROM broker.open_orders_snapshot FINAL WHERE contract_id = {id:UUID})"
+        ]
+      ]
+    },
+    "time_column": "changed_at",
+    "dimensions": [
+      "broker_code",
+      "account_id"
+    ],
+    "columns": [
+      "event_id",
+      "user_id",
+      "broker_code",
+      "account_id",
+      "perm_id",
+      "theme_id",
+      "strategy_id",
+      "trade_name_id",
+      "changed_at"
+    ],
+    "engine": "MergeTree",
+    "sorting_key": "(broker_code, account_id, perm_id, changed_at, event_id)"
+  },
+  "book.strategies": {
+    "group": "Broker & portfolio",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "assignment tag",
+          "strategy_id IN (SELECT strategy_id FROM book.order_assignment_events WHERE tuple(broker_code, account_id, perm_id) IN (SELECT broker_code, account_id, perm_id FROM broker.order_events FINAL WHERE contract_id IS NULL AND listing_id = {id:UUID} UNION DISTINCT SELECT broker_code, account_id, perm_id FROM broker.open_orders_snapshot FINAL WHERE contract_id IS NULL AND listing_id = {id:UUID}))"
+        ]
+      ],
+      "contract": [
+        [
+          "assignment tag",
+          "strategy_id IN (SELECT strategy_id FROM book.order_assignment_events WHERE tuple(broker_code, account_id, perm_id) IN (SELECT broker_code, account_id, perm_id FROM broker.order_events FINAL WHERE contract_id = {id:UUID} UNION DISTINCT SELECT broker_code, account_id, perm_id FROM broker.open_orders_snapshot FINAL WHERE contract_id = {id:UUID}))"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "strategy_id",
+      "name",
+      "description",
+      "backtest_start_date",
+      "paper_start_date",
+      "live_start_date",
+      "retired_date",
+      "paper_account_ids",
+      "live_account_ids",
+      "config_hash",
+      "code_version",
+      "universe_id",
+      "author_entity_id",
+      "active",
+      "version",
+      "ingested_at",
+      "user_id"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(strategy_id)"
+  },
+  "book.themes": {
+    "group": "Broker & portfolio",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "assignment tag",
+          "theme_id IN (SELECT theme_id FROM book.order_assignment_events WHERE tuple(broker_code, account_id, perm_id) IN (SELECT broker_code, account_id, perm_id FROM broker.order_events FINAL WHERE contract_id IS NULL AND listing_id = {id:UUID} UNION DISTINCT SELECT broker_code, account_id, perm_id FROM broker.open_orders_snapshot FINAL WHERE contract_id IS NULL AND listing_id = {id:UUID}))"
+        ]
+      ],
+      "contract": [
+        [
+          "assignment tag",
+          "theme_id IN (SELECT theme_id FROM book.order_assignment_events WHERE tuple(broker_code, account_id, perm_id) IN (SELECT broker_code, account_id, perm_id FROM broker.order_events FINAL WHERE contract_id = {id:UUID} UNION DISTINCT SELECT broker_code, account_id, perm_id FROM broker.open_orders_snapshot FINAL WHERE contract_id = {id:UUID}))"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "theme_id",
+      "name",
+      "description",
+      "thesis",
+      "inception_date",
+      "retired_date",
+      "parent_theme_id",
+      "tags",
+      "author_entity_id",
+      "owner_entity_id",
+      "active",
+      "version",
+      "ingested_at",
+      "user_id"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(theme_id)"
+  },
+  "book.trade_legs": {
+    "group": "Broker & portfolio",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {listing_id:UUID}"
+        ],
+        [
+          "security",
+          "listing_id IS NULL AND security_id = {security_id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "effective_from",
+    "dimensions": [],
+    "columns": [
+      "trade_name_id",
+      "listing_id",
+      "security_id",
+      "leg_side",
+      "target_weight_pct",
+      "target_notional",
+      "target_notional_ccy",
+      "entry_price_target",
+      "stop_price",
+      "take_profit_price",
+      "entered_at_price_avg",
+      "rationale",
+      "effective_from",
+      "effective_to",
+      "set_by_entity_id",
+      "ingest_run_id",
+      "as_of_time",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(trade_name_id, listing_id, effective_from)"
+  },
+  "book.trade_names": {
+    "group": "Broker & portfolio",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "assignment tag",
+          "trade_name_id IN (SELECT trade_name_id FROM book.order_assignment_events WHERE tuple(broker_code, account_id, perm_id) IN (SELECT broker_code, account_id, perm_id FROM broker.order_events FINAL WHERE contract_id IS NULL AND listing_id = {id:UUID} UNION DISTINCT SELECT broker_code, account_id, perm_id FROM broker.open_orders_snapshot FINAL WHERE contract_id IS NULL AND listing_id = {id:UUID}))"
+        ]
+      ],
+      "contract": [
+        [
+          "assignment tag",
+          "trade_name_id IN (SELECT trade_name_id FROM book.order_assignment_events WHERE tuple(broker_code, account_id, perm_id) IN (SELECT broker_code, account_id, perm_id FROM broker.order_events FINAL WHERE contract_id = {id:UUID} UNION DISTINCT SELECT broker_code, account_id, perm_id FROM broker.open_orders_snapshot FINAL WHERE contract_id = {id:UUID}))"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "trade_name_id",
+      "name",
+      "theme_id",
+      "strategy_id",
+      "side",
+      "base_currency",
+      "priority",
+      "inception_date",
+      "target_hold_horizon_days",
+      "thesis",
+      "exit_criteria",
+      "status",
+      "opened_by_entity_id",
+      "owner_entity_id",
+      "closed_at",
+      "close_reason",
+      "version",
+      "ingested_at",
+      "user_id"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(trade_name_id)"
+  },
+  "broker.account_state_snapshot": {
+    "group": "Broker & portfolio",
+    "classification": "related_context",
+    "relationships": {},
+    "time_column": "snapshot_time",
+    "dimensions": [
+      "source",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "source_channel"
+    ],
+    "columns": [
+      "snapshot_time",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "country_code",
+      "metric",
+      "metric_canonical",
+      "segment",
+      "currency",
+      "value_num",
+      "value_str",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(broker_code, account_id, metric, segment, currency, snapshot_time)"
+  },
+  "broker.applied_corporate_actions": {
+    "group": "Broker & portfolio",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {listing_id:UUID}"
+        ],
+        [
+          "security",
+          "listing_id IS NULL AND security_id = {security_id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "event_time",
+    "dimensions": [
+      "source",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "source_channel"
+    ],
+    "columns": [
+      "event_time",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "country_code",
+      "corp_action_id",
+      "action_type",
+      "security_id",
+      "listing_id",
+      "position_before",
+      "position_after",
+      "cash_impact",
+      "cash_currency",
+      "ratio_num",
+      "ratio_den",
+      "description",
+      "triggers_expected_drift",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(broker_code, account_id, event_time, security_id, corp_action_id)"
+  },
+  "broker.cash_flows": {
+    "group": "Broker & portfolio",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "contract_id IS NULL AND listing_id = {listing_id:UUID}"
+        ],
+        [
+          "security",
+          "contract_id IS NULL AND listing_id IS NULL AND security_id = {security_id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "event_time",
+    "dimensions": [
+      "source",
+      "contract_id",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "source_channel"
+    ],
+    "columns": [
+      "event_time",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "country_code",
+      "cash_flow_type",
+      "amount",
+      "currency",
+      "security_id",
+      "listing_id",
+      "contract_id",
+      "strategy_id",
+      "trade_name_id",
+      "linked_exec_id",
+      "linked_corp_action_id",
+      "description",
+      "ex_date",
+      "pay_date",
+      "resolution_confidence",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(broker_code, account_id, event_time, cash_flow_type, coalesce(security_id, toUUID('00000000-0000-0000-0000-000000000000')), amount, description)"
+  },
+  "broker.executions": {
+    "group": "Broker & portfolio",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "contract_id IS NULL AND listing_id = {listing_id:UUID}"
+        ],
+        [
+          "security",
+          "contract_id IS NULL AND listing_id IS NULL AND security_id = {security_id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "exec_time",
+    "dimensions": [
+      "source",
+      "contract_id",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "source_channel"
+    ],
+    "columns": [
+      "exec_id",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "country_code",
+      "order_id",
+      "perm_id",
+      "placed_by_client",
+      "execution_method_id",
+      "order_ref",
+      "route_pref",
+      "strategy_id",
+      "listing_id",
+      "security_id",
+      "contract_id",
+      "product_type",
+      "vendor_id",
+      "trading_symbol",
+      "currency",
+      "exec_time",
+      "side",
+      "quantity",
+      "price",
+      "exchange",
+      "liquidity_flag",
+      "commission",
+      "commission_ccy",
+      "realized_pnl",
+      "resolution_confidence",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(broker_code, account_id, exec_time, exec_id)"
+  },
+  "broker.open_orders_snapshot": {
+    "group": "Broker & portfolio",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "contract_id IS NULL AND listing_id = {listing_id:UUID}"
+        ],
+        [
+          "security",
+          "contract_id IS NULL AND listing_id IS NULL AND security_id = {security_id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "snapshot_time",
+    "dimensions": [
+      "source",
+      "contract_id",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "source_channel"
+    ],
+    "columns": [
+      "snapshot_time",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "country_code",
+      "perm_id",
+      "order_id",
+      "placed_by_client",
+      "execution_method_id",
+      "order_ref",
+      "strategy_id",
+      "listing_id",
+      "security_id",
+      "contract_id",
+      "product_type",
+      "vendor_id",
+      "trading_symbol",
+      "currency",
+      "side",
+      "order_type",
+      "time_in_force",
+      "quantity",
+      "filled_quantity",
+      "remaining_quantity",
+      "limit_price",
+      "aux_price",
+      "status",
+      "resolution_confidence",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(broker_code, account_id, snapshot_time, perm_id)"
+  },
+  "broker.order_events": {
+    "group": "Broker & portfolio",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "contract_id IS NULL AND listing_id = {listing_id:UUID}"
+        ],
+        [
+          "security",
+          "contract_id IS NULL AND listing_id IS NULL AND security_id = {security_id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "event_time",
+    "dimensions": [
+      "source",
+      "contract_id",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "source_channel"
+    ],
+    "columns": [
+      "event_time",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "country_code",
+      "perm_id",
+      "order_id",
+      "event_seq",
+      "event_type",
+      "prior_state",
+      "new_state",
+      "limit_price_before",
+      "limit_price_after",
+      "aux_price_before",
+      "aux_price_after",
+      "quantity_before",
+      "quantity_after",
+      "filled_qty_at_event",
+      "avg_fill_price_at_event",
+      "remaining_at_event",
+      "route_before",
+      "route_after",
+      "message",
+      "error_code",
+      "warning_text",
+      "listing_id",
+      "security_id",
+      "contract_id",
+      "product_type",
+      "vendor_id",
+      "trading_symbol",
+      "currency",
+      "execution_method_id",
+      "order_ref",
+      "strategy_id",
+      "placed_by_client",
+      "resolution_confidence",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(broker_code, account_id, perm_id, event_seq)"
+  },
+  "broker.positions_snapshot": {
+    "group": "Broker & portfolio",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "contract_id IS NULL AND listing_id = {listing_id:UUID}"
+        ],
+        [
+          "security",
+          "contract_id IS NULL AND listing_id IS NULL AND security_id = {security_id:UUID}"
+        ],
+        [
+          "issuer",
+          "contract_id IS NULL AND listing_id IS NULL AND security_id IS NULL AND entity_id = {entity_id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "snapshot_time",
+    "dimensions": [
+      "source",
+      "contract_id",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "source_channel"
+    ],
+    "columns": [
+      "snapshot_time",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "country_code",
+      "listing_id",
+      "security_id",
+      "contract_id",
+      "entity_id",
+      "product_type",
+      "vendor_id",
+      "trading_symbol",
+      "currency",
+      "position",
+      "avg_cost",
+      "market_price",
+      "market_value",
+      "unrealized_pnl",
+      "realized_pnl_ytd",
+      "market_value_usd",
+      "fx_rate_to_base",
+      "fx_rate_source_time",
+      "initial_margin_contribution",
+      "maintenance_margin_contribution",
+      "resolution_confidence",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(broker_code, account_id, snapshot_time, coalesce(listing_id, toUUID('00000000-0000-0000-0000-000000000000')), vendor_id)"
+  },
+  "derived.computations": {
+    "group": "Derived",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "recorded computation",
+          "computation_id IN (SELECT computation_id FROM derived.factors FINAL WHERE (listing_id = {listing_id:UUID}) OR (listing_id IS NULL AND security_id = {security_id:UUID}) OR (listing_id IS NULL AND security_id IS NULL AND entity_id = {entity_id:UUID}) UNION DISTINCT SELECT computation_id FROM ref.adjustment_factors FINAL WHERE (listing_id = {id:UUID}) UNION DISTINCT SELECT computation_id FROM market.futures_continuous FINAL WHERE (underlying_listing_id = {id:UUID}) UNION DISTINCT SELECT computation_id FROM book.attribution FINAL WHERE (execution_id IN (SELECT exec_id FROM broker.executions FINAL GROUP BY exec_id HAVING uniqExact(tuple(broker_code, account_id)) = 1 AND countIf(contract_id IS NULL AND listing_id = {id:UUID}) > 0 AND countIf(NOT ifNull((contract_id IS NULL AND listing_id = {id:UUID}), false)) = 0)))"
+        ]
+      ],
+      "contract": [
+        [
+          "recorded computation",
+          "computation_id IN (SELECT computation_id FROM market.futures_continuous FINAL WHERE (active_contract_id = {id:UUID}) UNION DISTINCT SELECT computation_id FROM book.attribution FINAL WHERE (execution_id IN (SELECT exec_id FROM broker.executions FINAL GROUP BY exec_id HAVING uniqExact(tuple(broker_code, account_id)) = 1 AND countIf(contract_id = {id:UUID}) > 0 AND countIf(NOT ifNull((contract_id = {id:UUID}), false)) = 0)))"
+        ]
+      ]
+    },
+    "time_column": "started_at",
+    "dimensions": [],
+    "columns": [
+      "computation_id",
+      "dataset",
+      "code_version",
+      "input_query",
+      "input_hash",
+      "input_row_count",
+      "parameters",
+      "row_count",
+      "started_at",
+      "completed_at",
+      "status",
+      "error",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(dataset, code_version, started_at, computation_id)"
+  },
+  "derived.factors": {
+    "group": "Derived",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {listing_id:UUID}"
+        ],
+        [
+          "security",
+          "listing_id IS NULL AND security_id = {security_id:UUID}"
+        ],
+        [
+          "issuer",
+          "listing_id IS NULL AND security_id IS NULL AND entity_id = {entity_id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "event_date",
+    "dimensions": [],
+    "columns": [
+      "country_code",
+      "listing_id",
+      "security_id",
+      "entity_id",
+      "sector_id",
+      "factor_id",
+      "factor_definition_hash",
+      "event_date",
+      "value",
+      "rank_pct",
+      "universe_id",
+      "computation_id",
+      "code_version",
+      "input_hash",
+      "computed_at",
+      "as_of_time",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, factor_id, universe_id, event_date, listing_id)"
+  },
+  "derived.forward_test_attribution": {
+    "group": "Derived",
+    "classification": "related_context",
+    "relationships": {},
+    "time_column": "trade_date",
+    "dimensions": [
+      "broker_code",
+      "account_id"
+    ],
+    "columns": [
+      "trade_date",
+      "strategy_id",
+      "broker_code",
+      "account_id",
+      "base_currency",
+      "paper_nav_return",
+      "backtest_return",
+      "divergence",
+      "divergence_pct",
+      "paper_nav",
+      "backtest_notional",
+      "n_executions_today",
+      "computation_id",
+      "computed_at",
+      "as_of_time",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(strategy_id, trade_date, account_id)"
+  },
+  "fundamentals.filings": {
+    "group": "Fundamentals",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "issuer",
+          "entity_id = {entity_id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "underlying issuer",
+          "entity_id = {entity_id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "filing_date",
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "filing_id",
+      "entity_id",
+      "form_type",
+      "filing_date",
+      "period_end",
+      "period_type",
+      "fiscal_year",
+      "fiscal_period",
+      "filed_at",
+      "accepted_at",
+      "accession_number",
+      "amends_filing_id",
+      "original_filing_id",
+      "amendment_seq",
+      "is_amended",
+      "is_amendment",
+      "filing_url",
+      "source",
+      "raw_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(entity_id, filed_at, filing_id)"
+  },
+  "fundamentals.line_items": {
+    "group": "Fundamentals",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "issuer",
+          "entity_id = {entity_id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "underlying issuer",
+          "entity_id = {entity_id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "period_end",
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "filing_id",
+      "entity_id",
+      "tag",
+      "tag_standard",
+      "statement",
+      "period_end",
+      "period_start",
+      "period_type",
+      "value",
+      "currency_code",
+      "unit",
+      "context_ref",
+      "dimensions",
+      "source",
+      "raw_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(entity_id, tag, period_end, filing_id)"
+  },
+  "market.bars": {
+    "group": "Market",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "bar_time",
+    "dimensions": [
+      "source",
+      "resolution",
+      "source_channel"
+    ],
+    "columns": [
+      "country_code",
+      "listing_id",
+      "security_id",
+      "entity_id",
+      "product_type",
+      "resolution",
+      "session",
+      "bar_time",
+      "trade_date",
+      "open",
+      "high",
+      "low",
+      "close",
+      "volume",
+      "turnover",
+      "trades_count",
+      "oi",
+      "settlement_price",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "latency_ms",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, product_type, listing_id, resolution, source, bar_time)"
+  },
+  "market.bars_best": {
+    "group": "Market",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": null,
+    "dimensions": [],
+    "columns": [],
+    "engine": "View",
+    "sorting_key": ""
+  },
+  "market.futures_continuous": {
+    "group": "Market",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "underlying",
+          "underlying_listing_id = {id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "active_contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "bar_time",
+    "dimensions": [
+      "resolution",
+      "active_contract_id"
+    ],
+    "columns": [
+      "country_code",
+      "underlying_listing_id",
+      "roll_method",
+      "roll_position",
+      "resolution",
+      "session",
+      "bar_time",
+      "trade_date",
+      "active_contract_id",
+      "open",
+      "high",
+      "low",
+      "close",
+      "volume",
+      "oi",
+      "roll_adjustment",
+      "computation_id",
+      "computed_at",
+      "as_of_time",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, underlying_listing_id, roll_method, roll_position, bar_time)"
+  },
+  "market.futures_contract_bars": {
+    "group": "Market",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "underlying",
+          "underlying_listing_id = {id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "bar_time",
+    "dimensions": [
+      "source",
+      "resolution",
+      "contract_id"
+    ],
+    "columns": [
+      "country_code",
+      "underlying_listing_id",
+      "contract_id",
+      "legacy_instrument_id",
+      "legacy_contract_id",
+      "source_symbol",
+      "resolution",
+      "session",
+      "bar_time",
+      "trade_date",
+      "open",
+      "high",
+      "low",
+      "close",
+      "volume",
+      "oi",
+      "source",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "source_hash",
+      "migrated_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, contract_id, resolution, bar_time, source)"
+  },
+  "market.fx_rates": {
+    "group": "Market",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "bar_time",
+    "dimensions": [
+      "source",
+      "resolution",
+      "source_channel"
+    ],
+    "columns": [
+      "base_currency",
+      "quote_currency",
+      "resolution",
+      "fix_convention",
+      "bar_time",
+      "trade_date",
+      "open",
+      "high",
+      "low",
+      "close",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(base_currency, quote_currency, resolution, fix_convention, bar_time)"
+  },
+  "market.options_bars": {
+    "group": "Market",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "underlying",
+          "underlying_listing_id = {id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "bar_time",
+    "dimensions": [
+      "source",
+      "resolution",
+      "contract_id",
+      "source_channel"
+    ],
+    "columns": [
+      "country_code",
+      "contract_id",
+      "underlying_listing_id",
+      "underlying_security_id",
+      "expiry",
+      "strike",
+      "right",
+      "exercise_style",
+      "multiplier",
+      "resolution",
+      "session",
+      "bar_time",
+      "trade_date",
+      "open",
+      "high",
+      "low",
+      "close",
+      "volume",
+      "oi",
+      "turnover",
+      "iv",
+      "delta",
+      "gamma",
+      "vega",
+      "theta",
+      "rho",
+      "underlying_price",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "latency_ms",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, underlying_listing_id, expiry, right, strike, resolution, bar_time)"
+  },
+  "market.quotes": {
+    "group": "Market",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "observed_at",
+    "dimensions": [
+      "source",
+      "source_channel"
+    ],
+    "columns": [
+      "country_code",
+      "listing_id",
+      "security_id",
+      "entity_id",
+      "observed_at",
+      "last_price",
+      "last_size",
+      "last_trade_at",
+      "bid",
+      "ask",
+      "bid_size",
+      "ask_size",
+      "day_open",
+      "day_high",
+      "day_low",
+      "day_vwap",
+      "day_volume",
+      "day_turnover",
+      "session",
+      "oi",
+      "settlement_price",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "ingested_at",
+      "latency_ms",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, listing_id, source, observed_at)"
+  },
+  "meta.expected_series": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID} AND contract_id IS NULL"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [
+      "source",
+      "resolution",
+      "contract_id"
+    ],
+    "columns": [
+      "country_code",
+      "listing_id",
+      "contract_id",
+      "legacy_instrument_id",
+      "legacy_contract_id",
+      "source_table",
+      "symbol",
+      "provider_symbol",
+      "source",
+      "universe",
+      "resolution",
+      "active",
+      "source_hash",
+      "version",
+      "ingested_at",
+      "migrated_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(source_table, source, legacy_instrument_id, legacy_contract_id, resolution)"
+  },
+  "meta.expected_series_canonical": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID} AND contract_id IS NULL"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [
+      "source",
+      "resolution",
+      "contract_id"
+    ],
+    "columns": [
+      "country_code",
+      "listing_id",
+      "contract_id",
+      "legacy_instrument_id",
+      "legacy_contract_id",
+      "source_table",
+      "symbol",
+      "provider_symbol",
+      "source",
+      "universe",
+      "resolution",
+      "active",
+      "source_hash",
+      "version",
+      "ingested_at",
+      "migrated_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, listing_id, contract_id, source, resolution)"
+  },
+  "meta.hub_schema_layouts": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": null,
+    "dimensions": [],
+    "columns": [
+      "layout_id",
+      "revision",
+      "schema_fingerprint",
+      "layout_json",
+      "updated_at"
+    ],
+    "engine": "ReplacingMergeTree(revision)",
+    "sorting_key": "layout_id"
+  },
+  "meta.ingestion_runs": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "instrument run",
+          "has(listing_ids_touched, {id:UUID})"
+        ]
+      ]
+    },
+    "time_column": "started_at",
+    "dimensions": [
+      "source",
+      "source_channel"
+    ],
+    "columns": [
+      "run_id",
+      "country_code",
+      "pipeline",
+      "source",
+      "source_channel",
+      "universe_id",
+      "status",
+      "started_at",
+      "completed_at",
+      "requested_series",
+      "successful_series",
+      "failed_series",
+      "rows_written",
+      "listing_ids_touched",
+      "error",
+      "metadata_json",
+      "parent_run_id",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, pipeline, source, started_at, run_id)"
+  },
+  "meta.lineage": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "recorded computation",
+          "computation_id IN (SELECT computation_id FROM derived.factors FINAL WHERE (listing_id = {listing_id:UUID}) OR (listing_id IS NULL AND security_id = {security_id:UUID}) OR (listing_id IS NULL AND security_id IS NULL AND entity_id = {entity_id:UUID}) UNION DISTINCT SELECT computation_id FROM ref.adjustment_factors FINAL WHERE (listing_id = {id:UUID}) UNION DISTINCT SELECT computation_id FROM market.futures_continuous FINAL WHERE (underlying_listing_id = {id:UUID}) UNION DISTINCT SELECT computation_id FROM book.attribution FINAL WHERE (execution_id IN (SELECT exec_id FROM broker.executions FINAL GROUP BY exec_id HAVING uniqExact(tuple(broker_code, account_id)) = 1 AND countIf(contract_id IS NULL AND listing_id = {id:UUID}) > 0 AND countIf(NOT ifNull((contract_id IS NULL AND listing_id = {id:UUID}), false)) = 0)))"
+        ]
+      ],
+      "contract": [
+        [
+          "recorded computation",
+          "computation_id IN (SELECT computation_id FROM market.futures_continuous FINAL WHERE (active_contract_id = {id:UUID}) UNION DISTINCT SELECT computation_id FROM book.attribution FINAL WHERE (execution_id IN (SELECT exec_id FROM broker.executions FINAL GROUP BY exec_id HAVING uniqExact(tuple(broker_code, account_id)) = 1 AND countIf(contract_id = {id:UUID}) > 0 AND countIf(NOT ifNull((contract_id = {id:UUID}), false)) = 0)))"
+        ]
+      ]
+    },
+    "time_column": "produced_at",
+    "dimensions": [],
+    "columns": [
+      "dataset",
+      "row_business_key",
+      "source_raw_ids",
+      "computation_id",
+      "produced_at",
+      "produced_by"
+    ],
+    "engine": "MergeTree",
+    "sorting_key": "(dataset, row_business_key, produced_at)"
+  },
+  "meta.migration_id_crosswalk": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "legacy_database",
+      "legacy_table",
+      "legacy_key",
+      "source_hash",
+      "target_kind",
+      "target_id",
+      "approved_by",
+      "approved_at",
+      "evidence",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(legacy_database, legacy_table, legacy_key, source_hash, target_kind)"
+  },
+  "meta.migration_political_trade_enrichment": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "contract_id IS NULL AND listing_id = {listing_id:UUID}"
+        ],
+        [
+          "security",
+          "contract_id IS NULL AND listing_id IS NULL AND security_id = {security_id:UUID}"
+        ],
+        [
+          "issuer",
+          "contract_id IS NULL AND listing_id IS NULL AND security_id IS NULL AND entity_id = {entity_id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [
+      "contract_id"
+    ],
+    "columns": [
+      "legacy_database",
+      "legacy_table",
+      "legacy_key",
+      "source_hash",
+      "amount_bucket_id",
+      "amount_min",
+      "amount_max",
+      "amount_currency",
+      "security_type",
+      "normalized_legislator_name",
+      "bioguide_id",
+      "legislator_entity_id",
+      "listing_id",
+      "security_id",
+      "entity_id",
+      "contract_id",
+      "bioguide_confidence",
+      "asset_resolution_confidence",
+      "approved_by",
+      "approved_at",
+      "evidence",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(legacy_database, legacy_table, legacy_key, source_hash)"
+  },
+  "meta.migration_reference_enrichment": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "legacy_database",
+      "legacy_table",
+      "legacy_key",
+      "source_hash",
+      "exchange_code",
+      "mic",
+      "session_timezone",
+      "regular_open",
+      "regular_close",
+      "currency_code",
+      "approved_by",
+      "approved_at",
+      "evidence",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(legacy_database, legacy_table, legacy_key, source_hash)"
+  },
+  "meta.migration_runs": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "started_at",
+    "dimensions": [],
+    "columns": [
+      "run_id",
+      "command",
+      "phase",
+      "through_wave",
+      "source_database",
+      "status",
+      "started_at",
+      "finished_at",
+      "error",
+      "host",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "run_id"
+  },
+  "meta.reconciliation_drift": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [
+      "broker_code",
+      "account_id",
+      "account_mode"
+    ],
+    "columns": [
+      "detected_at",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "drift_type",
+      "security_key",
+      "prev_snapshot_time",
+      "curr_snapshot_time",
+      "expected_value",
+      "observed_value",
+      "delta",
+      "severity",
+      "resolved_at",
+      "resolved_by",
+      "resolution_note",
+      "ingest_run_id",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(broker_code, account_id, detected_at)"
+  },
+  "meta.recovery_state": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [
+      "source",
+      "resolution"
+    ],
+    "columns": [
+      "country_code",
+      "listing_id",
+      "legacy_instrument_id",
+      "symbol",
+      "source",
+      "resolution",
+      "history_complete",
+      "available_from",
+      "last_bar",
+      "checked_through",
+      "full_refreshed_at",
+      "error",
+      "source_hash",
+      "version",
+      "ingested_at",
+      "migrated_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(source, legacy_instrument_id, resolution)"
+  },
+  "meta.recovery_state_canonical": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [
+      "source",
+      "resolution"
+    ],
+    "columns": [
+      "country_code",
+      "listing_id",
+      "legacy_instrument_id",
+      "symbol",
+      "source",
+      "resolution",
+      "history_complete",
+      "available_from",
+      "last_bar",
+      "checked_through",
+      "full_refreshed_at",
+      "error",
+      "source_hash",
+      "version",
+      "ingested_at",
+      "migrated_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, listing_id, source, resolution)"
+  },
+  "meta.schema_migrations": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "started_at",
+    "dimensions": [],
+    "columns": [
+      "migration_id",
+      "phase",
+      "wave",
+      "checksum",
+      "status",
+      "run_id",
+      "started_at",
+      "finished_at",
+      "error",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "migration_id"
+  },
+  "meta.service_events": {
+    "group": "Reference & operations",
+    "classification": "related_context",
+    "relationships": {},
+    "time_column": null,
+    "dimensions": [],
+    "columns": [
+      "received_at",
+      "sent_at",
+      "service_id",
+      "instance_id",
+      "seq",
+      "type",
+      "origin",
+      "state",
+      "severity",
+      "error_type",
+      "message",
+      "context_json",
+      "host",
+      "skew_ms"
+    ],
+    "engine": "MergeTree",
+    "sorting_key": "(service_id, received_at)"
+  },
+  "meta.service_status": {
+    "group": "Reference & operations",
+    "classification": "related_context",
+    "relationships": {},
+    "time_column": null,
+    "dimensions": [],
+    "columns": [
+      "service_id",
+      "status",
+      "last_seen_at",
+      "instance_id",
+      "instance_started_at",
+      "restarts_24h",
+      "last_error_at",
+      "last_error_type",
+      "last_error_message",
+      "warn_count_1h",
+      "err_count_1h",
+      "updated_at",
+      "version",
+      "packet_loss",
+      "registered"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "service_id"
+  },
+  "meta.session_coverage": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "trade_date",
+    "dimensions": [
+      "source",
+      "resolution"
+    ],
+    "columns": [
+      "country_code",
+      "listing_id",
+      "legacy_instrument_id",
+      "symbol",
+      "source",
+      "resolution",
+      "trade_date",
+      "expected",
+      "actual",
+      "missing",
+      "source_hash",
+      "version",
+      "ingested_at",
+      "migrated_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(source, legacy_instrument_id, resolution, trade_date)"
+  },
+  "meta.session_coverage_canonical": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "trade_date",
+    "dimensions": [
+      "source",
+      "resolution"
+    ],
+    "columns": [
+      "country_code",
+      "listing_id",
+      "legacy_instrument_id",
+      "symbol",
+      "source",
+      "resolution",
+      "trade_date",
+      "expected",
+      "actual",
+      "missing",
+      "source_hash",
+      "version",
+      "ingested_at",
+      "migrated_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, listing_id, source, resolution, trade_date)"
+  },
+  "meta.source_status": {
+    "group": "Reference & operations",
+    "classification": "related_context",
+    "relationships": {},
+    "time_column": null,
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "country_code",
+      "source",
+      "status",
+      "detail",
+      "checked_at",
+      "source_hash",
+      "version",
+      "migrated_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, source)"
+  },
+  "meta.unresolved_entities": {
+    "group": "Reference & operations",
+    "classification": "investigation",
+    "relationships": {
+      "listing": [
+        [
+          "investigation candidate",
+          "resolved_at IS NULL AND scope_country = {country:String} AND scope_exchange = {exchange:String} AND tuple(alias_kind, alias_value) IN (SELECT a.alias_kind, a.alias_value FROM ref.identifier_aliases AS a FINAL INNER JOIN meta.unresolved_entities AS u FINAL ON a.alias_kind = u.alias_kind AND a.alias_value = u.alias_value WHERE a.target_kind = 'listing' AND a.target_id = {id:UUID} AND u.scope_country = {country:String} AND u.scope_exchange = {exchange:String} AND a.valid_from <= toDate(u.first_seen) AND (a.valid_to IS NULL OR a.valid_to > toDate(u.last_seen)))"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "first_seen",
+      "last_seen",
+      "source",
+      "alias_kind",
+      "alias_value",
+      "scope_country",
+      "scope_exchange",
+      "context_json",
+      "occurrence_count",
+      "retry_count",
+      "last_retry_at",
+      "resolved_at",
+      "resolved_target_kind",
+      "resolved_target_id",
+      "resolved_by",
+      "resolution_note",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(source, alias_kind, alias_value)"
+  },
+  "raw.archive": {
+    "group": "Reference & operations",
+    "classification": "related_context",
+    "relationships": {},
+    "time_column": "fetched_at",
+    "dimensions": [
+      "source",
+      "source_channel"
+    ],
+    "columns": [
+      "raw_id",
+      "source",
+      "source_channel",
+      "transport",
+      "country_code",
+      "source_url",
+      "request_key",
+      "status_code",
+      "response_headers",
+      "response_body",
+      "content_type",
+      "content_encoding",
+      "response_sha256",
+      "fetched_at",
+      "window_start_at",
+      "event_count",
+      "as_of_time",
+      "metadata_json"
+    ],
+    "engine": "MergeTree",
+    "sorting_key": "(source, country_code, source_channel, fetched_at, raw_id)"
+  },
+  "ref.adjustment_factors": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "event_date",
+    "dimensions": [],
+    "columns": [
+      "listing_id",
+      "event_date",
+      "price_factor",
+      "volume_factor",
+      "computation_id",
+      "computed_at",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(listing_id, event_date)"
+  },
+  "ref.app_users": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "user_id",
+      "display_name",
+      "active",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "user_id"
+  },
+  "ref.broker_account_owners": {
+    "group": "Reference & operations",
+    "classification": "related_context",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [
+      "broker_code",
+      "account_id"
+    ],
+    "columns": [
+      "broker_code",
+      "account_id",
+      "user_id",
+      "simulated",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(broker_code, account_id)"
+  },
+  "ref.broker_accounts": {
+    "group": "Reference & operations",
+    "classification": "related_context",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [
+      "broker_code",
+      "account_id",
+      "account_mode"
+    ],
+    "columns": [
+      "account_id",
+      "broker_code",
+      "account_mode",
+      "base_currency",
+      "booking_country",
+      "account_type",
+      "margin_type",
+      "opened_date",
+      "closed_date",
+      "purpose",
+      "strategy_ids",
+      "notes",
+      "active",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(broker_code, account_id)"
+  },
+  "ref.broker_metrics_map": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [
+      "broker_code"
+    ],
+    "columns": [
+      "broker_code",
+      "vendor_metric",
+      "canonical_metric",
+      "description",
+      "active",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(broker_code, vendor_metric)"
+  },
+  "ref.contracts": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "underlying",
+          "underlying_listing_id = {id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [
+      "contract_id"
+    ],
+    "columns": [
+      "contract_id",
+      "underlying_listing_id",
+      "exchange_code",
+      "country_code",
+      "contract_type",
+      "expiry",
+      "strike",
+      "right",
+      "exercise_style",
+      "multiplier",
+      "lot_size",
+      "tick_size",
+      "weekly",
+      "active",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(underlying_listing_id, expiry, right, strike)"
+  },
+  "ref.corporate_actions": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {listing_id:UUID}"
+        ],
+        [
+          "security",
+          "listing_id IS NULL AND security_id = {security_id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "effective_date",
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "action_id",
+      "security_id",
+      "listing_id",
+      "action_type",
+      "announcement_date",
+      "ex_date",
+      "record_date",
+      "payable_date",
+      "effective_date",
+      "split_from",
+      "split_to",
+      "cash_amount",
+      "currency_code",
+      "old_symbol",
+      "new_symbol",
+      "notes",
+      "source",
+      "raw_id",
+      "as_of_time",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(security_id, ex_date, action_id)"
+  },
+  "ref.countries": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "country_code",
+      "name",
+      "region",
+      "default_currency",
+      "timezone",
+      "active",
+      "first_active_at",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "country_code"
+  },
+  "ref.currencies": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "currency_code",
+      "name",
+      "is_deliverable",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "currency_code"
+  },
+  "ref.dataset_versions": {
+    "group": "Reference & operations",
+    "classification": "related_context",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "dataset",
+      "version_tag",
+      "superseded_by",
+      "materialized_from",
+      "materialized_to",
+      "methodology_note",
+      "computation_id",
+      "active",
+      "created_at",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(dataset, version_tag, materialized_from)"
+  },
+  "ref.entities": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "issuer",
+          "entity_id = {entity_id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "underlying issuer",
+          "entity_id = {entity_id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "entity_id",
+      "entity_type",
+      "legal_name",
+      "lei",
+      "country_of_domicile",
+      "country_of_incorp",
+      "active",
+      "first_seen",
+      "last_seen",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "entity_id"
+  },
+  "ref.entity_relationships": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "effective_date",
+    "dimensions": [],
+    "columns": [
+      "parent_entity_id",
+      "child_entity_id",
+      "relationship",
+      "effective_date",
+      "end_date",
+      "notes",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(parent_entity_id, effective_date)"
+  },
+  "ref.exchanges": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "exchange_code",
+      "mic",
+      "name",
+      "country_code",
+      "currency_code",
+      "timezone",
+      "sessions",
+      "active",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "exchange_code"
+  },
+  "ref.execution_methods": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "method_id",
+      "category",
+      "api_client_id",
+      "algo_strategy",
+      "description",
+      "active",
+      "valid_from",
+      "valid_to",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(method_id, valid_from)"
+  },
+  "ref.holidays": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "country_code",
+      "exchange_code",
+      "holiday_date",
+      "name",
+      "market_state",
+      "override_open",
+      "override_close",
+      "override_pre_close",
+      "override_post_open",
+      "source",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, holiday_date)"
+  },
+  "ref.identifier_aliases": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "target_kind = 'listing' AND target_id = {id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "target_kind = 'contract' AND target_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "alias_kind",
+      "alias_value",
+      "scope_country",
+      "scope_exchange",
+      "target_kind",
+      "target_id",
+      "source",
+      "valid_from",
+      "valid_to",
+      "confidence",
+      "notes",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(alias_kind, alias_value, valid_from)"
+  },
+  "ref.legislator_terms": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "legislator_entity_id",
+      "bioguide_id",
+      "congress_number",
+      "chamber",
+      "state",
+      "district",
+      "party",
+      "seat_class",
+      "term_start",
+      "term_end",
+      "in_office",
+      "source",
+      "raw_id",
+      "as_of_time",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(bioguide_id, term_start)"
+  },
+  "ref.listing_migrations": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "old_listing_id = {id:UUID} OR new_listing_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "effective_date",
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "migration_id",
+      "old_listing_id",
+      "new_listing_id",
+      "effective_date",
+      "migration_type",
+      "price_adjustment",
+      "volume_adjustment",
+      "source",
+      "raw_id",
+      "notes",
+      "as_of_time",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(old_listing_id, effective_date, migration_id)"
+  },
+  "ref.listings": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "listing_id",
+      "security_id",
+      "exchange_code",
+      "country_code",
+      "trading_symbol",
+      "local_symbol",
+      "mic",
+      "lot_size",
+      "tick_size",
+      "is_primary",
+      "first_traded",
+      "last_traded",
+      "active",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "listing_id"
+  },
+  "ref.sectors": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "sector_id",
+      "level",
+      "parent_id",
+      "name",
+      "classification",
+      "active",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(classification, sector_id)"
+  },
+  "ref.securities": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "security",
+          "security_id = {security_id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "underlying security",
+          "security_id = {security_id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "security_id",
+      "entity_id",
+      "security_type",
+      "isin",
+      "cusip",
+      "figi",
+      "share_class",
+      "currency_code",
+      "issue_date",
+      "maturity_date",
+      "sector_id",
+      "sector_classification",
+      "active",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "security_id"
+  },
+  "ref.session_windows_effective": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": null,
+    "dimensions": [],
+    "columns": [],
+    "engine": "View",
+    "sorting_key": ""
+  },
+  "ref.sessions": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "effective_from",
+    "dimensions": [],
+    "columns": [
+      "exchange_code",
+      "session",
+      "day_of_week",
+      "starts_at",
+      "ends_at",
+      "effective_from",
+      "effective_to",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(exchange_code, effective_from, session)"
+  },
+  "ref.source_priorities": {
+    "group": "Reference & operations",
+    "classification": "related_context",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [
+      "source",
+      "resolution"
+    ],
+    "columns": [
+      "dataset",
+      "country_code",
+      "resolution",
+      "source",
+      "priority",
+      "role",
+      "active",
+      "synced_at",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(dataset, country_code, resolution, source)"
+  },
+  "ref.sources": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "source_id",
+      "kind",
+      "vendor",
+      "auth_type",
+      "countries",
+      "active",
+      "notes",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "source_id"
+  },
+  "ref.universe_membership": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "effective_from",
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "universe_id",
+      "listing_id",
+      "weight",
+      "effective_from",
+      "effective_to",
+      "reason",
+      "source",
+      "raw_id",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(universe_id, effective_from, listing_id)"
+  },
+  "ref.universes": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "ingested_at",
+    "dimensions": [],
+    "columns": [
+      "universe_id",
+      "name",
+      "provider",
+      "rebalance_freq",
+      "country_scope",
+      "active",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "universe_id"
+  },
+  "research.bars": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": null,
+    "dimensions": [],
+    "columns": [],
+    "engine": "View",
+    "sorting_key": ""
+  },
+  "research.owned_listings": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": null,
+    "dimensions": [],
+    "columns": [],
+    "engine": "View",
+    "sorting_key": ""
+  },
+  "research.political_trades": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": null,
+    "dimensions": [],
+    "columns": [],
+    "engine": "View",
+    "sorting_key": ""
+  },
+  "research.universe_membership": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": null,
+    "dimensions": [],
+    "columns": [],
+    "engine": "View",
+    "sorting_key": ""
+  },
+  "risk.budgets": {
+    "group": "Reference & operations",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "effective_from",
+    "dimensions": [],
+    "columns": [
+      "scope",
+      "scope_id",
+      "effective_from",
+      "effective_to",
+      "gross_exposure_pct_cap",
+      "net_exposure_pct_cap",
+      "var_1d_bps_cap",
+      "max_position_pct",
+      "max_drawdown_pct",
+      "stop_loss_pct",
+      "concentration_limit",
+      "set_by_entity_id",
+      "rationale",
+      "ingest_run_id",
+      "as_of_time",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(scope, scope_id, effective_from)"
+  }
+}

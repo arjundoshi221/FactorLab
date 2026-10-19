@@ -68,6 +68,12 @@ from factorlab.components.api.schema_map import (
     SchemaMapResponse,
     SchemaTable,
 )
+from factorlab.components.api.source_health import (
+    SLOT_GRACE,
+    broker_snapshot_stale,
+    previous_slot,
+    source_state,
+)
 
 SCHEMA_TTL_SECONDS = 600
 ROWS_TTL_SECONDS = 30
@@ -299,6 +305,11 @@ class SourceHealth(BaseModel):
     status: str
     detail: str
     checked_at: datetime | None
+    # Judged on the server with the source's own schedule (source_health.source_state).
+    service_id: str = ""
+    stale: bool = False
+    severe: bool = False
+    problem: bool = False
 
 
 class PipelinesResponse(BaseModel):
@@ -1005,6 +1016,7 @@ class CatalogService:
                     status=str(row["status"]),
                     detail=scrub_text(str(row.get("detail") or ""), limit=JSON_CELL_CHARS)[0],
                     checked_at=_as_datetime(row.get("checked_at")),
+                    **source_state({**row, "checked_at": _as_datetime(row.get("checked_at"))}, now),
                 )
                 for row in _rows(
                     self._query(
@@ -1128,6 +1140,8 @@ def pipeline_status(
     """Judge a pipeline against its own schedule, not a fixed freshness rule."""
 
     if last_started is None:
+        if pipeline.slot_schedule:
+            return "missing", "No runs were recorded in the last 7 days."
         if not pipeline.scheduled:
             return (
                 "not_configured",
@@ -1148,6 +1162,10 @@ def pipeline_status(
     in_session = _session_open(pipeline.session_calendar, now)
     runs_24h = int(values.get("runs_24h") or 0)
     problem_24h = int(values.get("problem_24h") or 0)
+    if pipeline.slot_schedule and broker_snapshot_stale(last_started, now):
+        due = previous_slot(now - SLOT_GRACE)
+        slot = f"the {due.strftime('%Y-%m-%d %H:%M')} UTC slot" if due else "its scheduled slot"
+        return "attention", f"No run since {slot}; the last run was {ago}."
     if last_status == "running" and interval and age > 2 * interval:
         return "attention", f"The latest run started {ago} and has not finished."
     if interval and in_session and age > interval:
@@ -1165,6 +1183,6 @@ def pipeline_status(
         )
         label = "failed" if last_status == "failed" else "was incomplete"
         return "attention", f"The latest run {label} ({ago}): {detail[:160]}"
-    if pipeline.session_calendar and not in_session:
+    if pipeline.session_calendar and not in_session and not pipeline.slot_schedule:
         return "not_expected", f"Outside collection hours; the last run was {ago}."
     return "healthy", f"Last run {ago} ({last_status or 'recorded'})."

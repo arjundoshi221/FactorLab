@@ -24,6 +24,7 @@ Owns Compose base (networks, tmpfs secrets, ClickHouse, optional IB Gateways, op
 
 ## Entry points
 
+- Branch runner: `testing/ingestion_test.py plan <test-id> --component ingest-us`; saved scope governs apply/verify/restore and protects other ingestion daemons.
 - Host deployer (stdlib Python, root): `factorlab_deploy.py deploy <component> <version>
   <image@sha256> <bundle.tgz>`, `rollback <component> [--to <version>]`,
   `platform <version> <bundle.tgz>`, `seed <platform-bundle-dir> <image@sha256>` (monolith
@@ -63,7 +64,7 @@ Host paths: `/opt/factorlab/{deploy,components/<name>,state/images.env,releases/
 `previous-deploy`), `/var/lib/factorlab/clickhouse`, `/mnt/factorlab-data/clickhouse-raw`
 (must be mounted, else `prepare-host.sh` refuses), `/var/lib/factorlab/app-data`,
 `/var/lib/factorlab/docker-images/snapshot.json`, `/etc/factorlab/identity`,
-`/etc/factorlab/us-universe.yaml`, `/etc/factorlab/log-reader/authorized_keys`,
+`/etc/factorlab/us-universe.yaml`, `/etc/factorlab/constituents` (exact dated US rosters, mounted read-only into `universe-us`), `/etc/factorlab/log-reader/authorized_keys`,
 `/var/log/factorlab/<component>/` (`<uid>:factorlab-logs`, 2750).
 
 ## Dependencies and contracts
@@ -103,13 +104,15 @@ uv run pytest tests/deploy tests/test_deploy_host.py
 
 Owner-authorized ingestion tests before merging use the separate branch workflow in
 [testing/README.md](testing/README.md) and [testing/ingestion_test.py](testing/ingestion_test.py).
-It replaces only ingestion services, saves the preceding host model and running image
-IDs, and verifies unchanged API, ClickHouse and secret-agent identities. Its root user
-override bridges the currently installed agent's root-only secret files; it does not
-complete the per-component platform rollout.
+It saves the preceding host model and image IDs, preserves installed ownership,
+and verifies protected container identities. It does not complete the platform rollout.
 
 The remaining rollout uses [testing/component_test.py](testing/component_test.py): non-root
-ingestion, schema checks, and loopback API/web tests; primary hub routing waits for Access.
+ingestion, schema checks, and loopback API/web tests; primary hub routing normally waits
+for Access. On September 30 the owner explicitly deferred Tunnel setup and switched
+the existing Caddy hostname to the private test API/web ports. The previous Caddy
+configuration and old API remain available for rollback; see the public-switch section
+in [the validation report](../docs/operations/vps-restructure-validation-2026-09-30.md).
 Before pin bootstrap, the operator command uses `compose.production.yml`; afterwards it
 uses fragments and pins. Runtime data UID is 10001; log UIDs match the images (web 101,
 secrets agent 0, others 10001).
@@ -142,5 +145,6 @@ until the rollout completes.
 - `prepare-host.sh` removes the sshd drop-in if `sshd -t` rejects it; keep the component list
   in it and in `logrotate/factorlab` in step with `components/*` (tested).
 - Edit fragments, then `render-compose`; CI fails when `compose.production.yml` is stale.
+- Image retention includes local monolith/trial images and protects images in branch deployment JSON records. Processor profiling retains one day; other diagnostic TTLs remain seven days.
 
 **UDP service monitoring:** `monitor_runtime` is a separate tmpfs secret volume. Component manifests accept monitor deadlines and optional wall-clock active windows (timezone, ISO weekdays, start/end HH:MM). render-compose also generates monitor-services.yaml; mount it into monitor and api. Enable senders with FACTORLAB_MONITOR_ADDR=monitor:9125 only after schema and monitor releases. UDP 9125 remains on backend with no published host port.

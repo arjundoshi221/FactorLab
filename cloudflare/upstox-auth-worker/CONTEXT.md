@@ -56,6 +56,8 @@ expiry). No ClickHouse access.
 
 - Dev dependencies only: `wrangler`, `typescript`, `@cloudflare/workers-types`;
   `compatibility_date = "2026-07-26"`.
+  The lockfile uses patched Wrangler/Miniflare development dependencies;
+  `npm audit` is clean following the October 1 audit.
 - Runtime-secret response (consumed by
   [agent.py](../../components/secrets-agent/src/factorlab/components/secrets_agent/agent.py)):
   `version: 1`, `generated_at`, `secrets.{CLICKHOUSE_PASSWORD, CLICKHOUSE_PASSWORD_SHA256,

@@ -11,24 +11,18 @@ data comes from the `api` component's `/hub/api/v1/*` routes on the same hostnam
 
 ## Owns and does not own
 
-- Owns: everything under [src/](src/) (pages, components, shared fetch helpers, the
-  TypeScript response types), [nginx/nginx.conf](nginx/nginx.conf), the
-  [Dockerfile](Dockerfile) and the compose fragment [deploy/compose.yaml](deploy/compose.yaml).
-- Does not own: the JSON API and its models (`api`), edge routing and the Access
-  application (Cloudflare dashboard, see [deploy/edge/README.md](../../deploy/edge/README.md)),
-  the compose base and the `edge` network (`platform`).
+- Owns: everything under [src/](src/) (pages, components, shared fetch helpers, the TypeScript response types), [nginx/nginx.conf](nginx/nginx.conf), the [Dockerfile](Dockerfile) and the compose fragment [deploy/compose.yaml](deploy/compose.yaml).
+- Does not own: the JSON API and its models (`api`), edge routing and the Access application (Cloudflare dashboard, see [deploy/edge/README.md](../../deploy/edge/README.md)), the compose base and the `edge` network (`platform`).
 
 ## Entry points
 
-- Compose service `web`, profile `web`, network `edge` only (it cannot reach ClickHouse or
-  the writers), published on `127.0.0.1:8080`, `read_only`, `mem_limit: 64m`, user 101.
-- nginx: `GET /healthz` returns `{"status":"ok"}`; `/assets/` is cached immutable; every
-  other path falls back to `index.html` (`no-cache`); `^/(hub/api|api)/` and
+- Compose service `web`, profile `web`, network `edge` only (it cannot reach ClickHouse or the writers), published on `127.0.0.1:8080`, `read_only`, `mem_limit: 64m`, user 101.
+- nginx: `GET /healthz` returns `{"status":"ok"}`; `/assets/` is cached immutable; every other path falls back to `index.html` (`no-cache`); `^/(hub/api|api)/` and
   `/health`, `/docs`, `/redoc`, `/openapi.json` return 404 so a misrouted API call never
   gets the SPA. `/version.json` carries `{"component":"web","version","commit"}`.
 - Client routes (in [App.tsx](src/App.tsx)): `/`, `/data`, `/data/tables/<db>.<table>`,
-  `/data/pipelines`, `/schema`, `/schema/v2`, `/india`, `/india/instruments/<uuid>`, `/us`,
-  `/political`, `/docker-images`, `/roadmap`.
+  `/data/pipelines`, `/schema`, `/schema/v2`, `/india`, `/india/instruments/<uuid>`, `/us`, `/market-data`,
+  `/political`, `/docker-images`, `/roadmap`, `/monitoring`, `/portfolio[/trades|/themes|/strategies|/trade-names]`; `/market-data?view=matrix` is the data matrix.
 - npm scripts ([package.json](package.json)): `dev` (Vite on 127.0.0.1, proxies `/hub/api`
   to `http://127.0.0.1:8000`), `build` (`tsc -b && vite build`), `test` (`vitest run`).
 
@@ -46,15 +40,24 @@ Access cookies do the authentication.
 
 ## Data
 
+**Portfolios:** `/portfolio` shows account summary cards, orders beside holdings, on-demand three-tag editors and collapsed activity. `/portfolio/themes`, `/portfolio/strategies`, `/portfolio/trade-names` manage profile catalogs and cumulative FIFO stock/ETF PnL in expandable comparison tables; currencies/modes/simulations remain separate with explicit unavailable/stale states. [Feature and UI behavior](../../docs/features/F-036-portfolio-tagging-pnl.md). Profile/account changes clear report data; refreshes preserve drafts and last results. Search/status filters cover the current 50-order page. Navigation preserves profile/account context; all testers share access. `PortfolioUI.tsx` owns shared controls and exact decimal-string formatting; `Portfolio.css` scopes responsive styles. Headline balances use only account-wide metrics in the base currency; unavailable values remain em dashes. **Trade ledger** (F-040): `/portfolio/trades` (`TradeLedger.tsx`) lists every executed order across the profile's accounts with theme/strategy/trade name; filters (account, ticker, listing, tags, tag status, dates) are URL-backed and applied by the API across full history, with status chips showing counts. Inline and bulk tagging reuse `TagSelectors` and the existing assignment PUT (two at a time, at most 200 selected; failures stay selected and are listed). Rows link to the ticker; account pages link to their trades. [F-040](../../docs/features/F-040-trade-ledger.md).
+
+The Docker images page explains the component/service/image relationship, inventory scope,
+tag/digest/ID differences, and timestamps (IST). Expandable details expose full identifiers,
+allowlisted build labels, container references, service start times and pins, and monolith
+release history metadata. Monolith records are distinguished from independent component
+deployments. Image sizes count shared layers per image and are not disk usage or reclaimable
+space; stopped container references are distinguished from unreferenced images.
+
 None in ClickHouse. It calls, among others, `/hub/api/v1/overview`, `/hub/api/v1/catalog*`,
 `/hub/api/v1/schema-map`, `/hub/api/v1/docker-images`, `/hub/api/v1/us/*`,
-`/hub/api/v1/india/*`, `/hub/api/v1/political/*`. Host path:
+`/hub/api/v1/india/*`, `/hub/api/v1/market-data/*`, `/hub/api/v1/political/*`. Host path:
 `/var/log/factorlab/web` (bind mount for nginx logs).
 
 ## Dependencies and contracts
 
 - Runtime: `react`, `react-dom`, `@xyflow/react`, `elkjs`. Dev: Vite 7, TypeScript,
-  Vitest, Testing Library, jsdom. Images: `node:22-bookworm-slim` (build) and
+  Vitest 4 (patched mocker), Testing Library, jsdom. Images: `node:22-bookworm-slim` (build) and
   `nginxinc/nginx-unprivileged:1.27-alpine` (runtime).
 - Contract: the TypeScript types (`dataTypes.ts`, `indiaTypes.ts`, `usTypes.ts`,
   `politicalTypes.ts`, `schemaTypes.ts`) mirror the `api` response models; change both
@@ -109,4 +112,39 @@ still runs production until the rollout completes).
 - `/india/instruments/<id>` expects a UUID; `/data/tables/<name>` must match
   `^[a-z_]+\.[a-z0-9_]+$`, as on the API side.
 
-**UDP service monitoring:** The primary navigation has a visible Monitoring tab at `/monitoring`. It polls the monitoring API every 15 seconds, shows status tiles, ages, uptime, restart counts and filterable event history. A stale watcher status shows the monitor offline banner.
+**UDP service monitoring:** The primary navigation has a visible Monitoring tab at `/monitoring`. Its responsive health overview and service cards show human-readable statuses, last reports, instance uptime and restart counts, with delayed/missing heartbeats first. Scheduled jobs awaiting telemetry explain that their first monitored run has not reported. Selecting a card filters the latest 100 events; service, event type and relative time range filters are applied by the API. Polling runs every 15 seconds with manual refresh, loading states and a checked timestamp. Failed refreshes retain the last successful snapshot; a stale watcher shows the monitor offline banner. Page-specific styles live in `src/pages/Monitoring.css`. **Status verdict:** the page opens with `MonitoringStatus` (`/monitoring/summary`, 30s poll, also refreshed by "Refresh now"): a verdict, problems worst first with links to their evidence, collapsed notes and passing checks. It replaces the summary tiles and top source banners; the section nav is sticky; service/pipeline/coverage cards carry `#service-<id>`, `#pipeline-<id>` and `#coverage-<country>-<source>-<res>` anchors. Source problem/stale/service fields come from the API. [F-038](../../docs/features/F-038-monitoring-status-verdict.md).
+
+The operations grid adds name/ID search and an attention filter (including unregistered
+senders, unknown telemetry and errors/warnings in the last hour). Cards display hourly
+error/warning counts, packet gaps, configured deadlines and seven UTC calendar days of
+stored telemetry from `/monitoring/daily`. Activity strips are not uptime measurements.
+Daily ingestion cards reuse `/catalog/pipelines`, with rolling 24-hour runs/rows/problems,
+schedule-aware status, seven-day activity and expandable failed/partial run details.
+`/monitoring/coverage` supplies latest recorded feed sessions, missing bars, affected
+series and active listing series with no coverage record. A feed without checks remains
+visible as unknown coverage. Percentages apply only to recorded checks, not unreported
+series or entire missing sessions. Coverage/daily/pipeline requests refresh independently
+every 15s; manual refresh refreshes all, and failed panels retain explicitly stale snapshots.
+Pipeline data can be cached by the API for 60s. Shared operations UI and polling live in
+`src/pages/MonitoringOperations.tsx`.
+
+**Collection coverage:** `/market-data?view=collection` switches between US and India and between recent daily collection (last 30 calendar days) and full historical recovery. Both views use the current `meta.expected_series` configuration; a ticker can appear in both because recovery
+and daily collection write the same bars. The page searches configured symbols and company
+names through `/hub/api/v1/market-data/universe`, shows zero-data tickers, and opens per-ticker
+stored coverage and recovery state. List requests are paginated at 50 tickers.
+Indian equity and futures series are separate rows even when they share a listing ID.
+
+**Collection health**: Whether a source is successfully doing its collection work.
+It is independent of process heartbeat liveness; a reported source failure remains
+prominent even when that service reports on time.
+
+**Error inbox**: A filtered history of grouped service errors/warnings, failed/partial
+ingestion runs and current source problems. Its first-seen time and occurrence count
+describe the selected history window; a current source status has no invented start
+time or occurrence count.
+
+**Recovery evidence**: A successful run of the same pipeline and provider after the
+last grouped failure. It supports investigation but does not establish that all
+missing data has been repaired; a heartbeat alone supplies no recovery evidence.
+
+**Instrument explorer:** **All tickers** is the default reference inventory, including inactive/empty listings and contracts. **Collection coverage** retains configured daily/history views. **Direct match** uses the selected canonical ID; security/issuer/underlying context stays separate. **Instrument coverage** means scoped lifetime stored counts, not collection intent. **Investigation candidates** have supporting alias scope/validity but never establish confirmed coverage. **Recorded provenance** follows raw/run/computation IDs; absent evidence remains unavailable. Filters and selection are shareable. [Specification and API contracts](../../docs/features/F-037-instrument-explorer.md). **Data matrix** (F-039): `/market-data?view=matrix` (`DataMatrix.tsx`) shows each ticker against bars per configured feed, futures, issuer-level fundamentals, political trades, holdings, trades and tags. States: up to date, behind, missing, stored (not configured), none, needs tags, unavailable ("?"; never healthy). URL-backed search/country/scope/attention filters; tickers open the F-037 detail, which now starts with an "At a glance" strip; trade/tag cells open the ledger; dataset panels carry `#dataset-<table>` anchors. [F-039](../../docs/features/F-039-ticker-data-matrix.md).

@@ -7,8 +7,8 @@ Ports the rules of ``market.normalize`` (the production path) onto records:
 * daily bars are kept once their session had closed by ``fetched_at``;
 * a repeated timestamp keeps the last candle.
 
-Unlike the legacy path, an invalid candle is dropped (and logged) instead of
-failing the whole symbol. Schwab's ``/pricehistory`` prices are split-adjusted
+Invalid candles are excluded. Production requires completeness, preserving usable
+rows and marking the unit incomplete when a row fails validation. Schwab's ``/pricehistory`` prices are split-adjusted
 by default (``configs/sources/schwab.yaml``), exactly as production stores them.
 """
 
@@ -22,9 +22,9 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from factorlab.calendars.us import NY, bounds
+from factorlab.calendars.us import NY, bounds, calendar
 from factorlab.ingest.datasets import BarRecord, InstrumentRecord, InstrumentRef
-from factorlab.ingest.errors import NormalizationError
+from factorlab.ingest.errors import NormalizationError, PartialNormalizationError
 from factorlab.ingest.identifiers import isin_from_cusip
 from factorlab.ingest.provider import RawCapture
 from factorlab.sources.schwab.settings import ALIAS_KIND
@@ -123,6 +123,55 @@ def normalize_instrument(
     ]
 
 
+def normalize_quote_listings(
+    capture: RawCapture, *, exchanges: Mapping[str, str]
+) -> list[InstrumentRecord]:
+    """Validate every requested stock from a batched market quote reference."""
+    payload = _json(capture)
+    if not isinstance(payload, Mapping):
+        raise NormalizationError("quotes response is not an object")
+    wanted = {canonical_symbol(str(s)) for s in capture.metadata.get("symbols", ())}
+    records = {}
+    invalid = payload.get("errors", {}).get("invalidSymbols", ())
+    invalid = {canonical_symbol(str(s)) for s in invalid}
+    for key, value in payload.items():
+        if key == "errors" or not isinstance(value, Mapping):
+            continue
+        symbol = canonical_symbol(str(value.get("symbol") or key))
+        if symbol not in wanted or symbol in invalid or value.get("assetMainType") != "EQUITY":
+            continue
+        reference = value.get("reference") or {}
+        venue = (
+            str(
+                reference.get("exchangeName")
+                or reference.get("exchange")
+                or value.get("exchangeName")
+                or value.get("exchange")
+                or ""
+            )
+            .strip()
+            .upper()
+        )
+        exchange = exchanges.get(venue)
+        currency = str(reference.get("currency") or value.get("currency") or "USD").upper()
+        if exchange is None or currency != "USD":
+            continue
+        # Quotes may omit CUSIP. The validated exchange and symbol still resolve
+        # existing identity; no guessed identifier is introduced.
+        records[symbol] = InstrumentRecord(
+            InstrumentRef(ALIAS_KIND, provider_symbol(symbol), exchange, symbol, COUNTRY),
+            str(value.get("description") or reference.get("description") or symbol).strip(),
+            "common",
+            "USD",
+        )
+    rows = [records[s] for s in sorted(records)]
+    if missing := wanted - records.keys():
+        raise PartialNormalizationError(
+            f"Schwab could not validate {len(missing)} configured equities", rows=rows
+        )
+    return rows
+
+
 # -- market.bars (price history, one symbol per capture) -------------------------------
 def normalize_pricehistory(capture: RawCapture) -> list[BarRecord]:
     instruments = capture.metadata.get("instruments") or []
@@ -139,6 +188,8 @@ def normalize_pricehistory(capture: RawCapture) -> list[BarRecord]:
     now = capture.fetched_at.astimezone(UTC)
     sessions: dict[date, tuple[datetime, datetime] | None] = {}
     out: dict[datetime, BarRecord] = {}
+    invalid = 0
+    cal = calendar()
     for candle in candles:
         if not isinstance(candle, Mapping) or "datetime" not in candle:
             continue
@@ -147,6 +198,8 @@ def normalize_pricehistory(capture: RawCapture) -> list[BarRecord]:
         except (TypeError, ValueError, OverflowError) as exc:
             raise NormalizationError(f"{capture.request_key}: bad candle time") from exc
         day = stamp.astimezone(NY).date()
+        if stamp > now or not cal.first_session.date() <= day <= cal.last_session.date():
+            continue
         if day not in sessions:
             sessions[day] = bounds(day)
         session = sessions[day]
@@ -158,6 +211,7 @@ def normalize_pricehistory(capture: RawCapture) -> list[BarRecord]:
                 continue
             if stamp.second or stamp.microsecond:
                 log.warning("%s: dropping unaligned minute %s", capture.request_key, stamp)
+                invalid += 1
                 continue
         elif closed > now:
             continue
@@ -170,13 +224,18 @@ def normalize_pricehistory(capture: RawCapture) -> list[BarRecord]:
             or volume != volume.to_integral_value()
         ):
             log.warning("%s: dropping invalid candle at %s", capture.request_key, stamp)
+            invalid += 1
             continue
         o, h, low, c = prices
         if not (low <= o <= h and low <= c <= h):
             log.warning("%s: dropping inconsistent candle at %s", capture.request_key, stamp)
+            invalid += 1
             continue
         out[stamp] = BarRecord(ref, resolution, stamp, o, h, low, c, volume=int(volume))
-    return [out[stamp] for stamp in sorted(out)]
+    rows = [out[stamp] for stamp in sorted(out)]
+    if invalid and capture.metadata.get("require_complete"):
+        raise PartialNormalizationError(f"Invalid Schwab candles: {invalid}", rows=rows)
+    return rows
 
 
 __all__ = [

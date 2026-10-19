@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Remove old FactorLab images from the VPS (stdlib only; run daily by a systemd timer).
 
-For each FactorLab repository (ghcr.io/arjundoshi221/factorlab and factorlab-<component>)
+For each FactorLab repository (registry, local monolith and factorlab-test-<component>)
 it keeps the three newest images plus every image that is:
 
   * used by a container (running or stopped),
@@ -26,7 +26,9 @@ from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path("/opt/factorlab")
-REPOSITORY = re.compile(r"^ghcr\.io/arjundoshi221/factorlab(-[a-z0-9-]+)?$")
+REPOSITORY = re.compile(
+    r"^(ghcr\.io/arjundoshi221/factorlab(-[a-z0-9-]+)?|factorlab|factorlab-test-[a-z0-9-]+)$"
+)
 DIGEST = re.compile(r"^ghcr\.io/arjundoshi221/factorlab(-[a-z0-9-]+)?@sha256:[0-9a-f]{64}$")
 
 Runner = Callable[[list[str]], subprocess.CompletedProcess]
@@ -64,6 +66,31 @@ def protected_references(root: Path) -> set[str]:
         image = str(previous.get("image", ""))
         if DIGEST.match(image):
             references.add(image)
+    # Branch deployments use local image IDs, including an idle political cron
+    # image. Keep the live model and recorded rollback models, not just containers.
+    models = [root / "deploy" / "compose.production.yml"]
+    models.extend(root.glob("deployment-tests/*/*.json"))
+    for model in models:
+        try:
+            value = json.loads(model.read_text(encoding="utf-8"))
+        except OSError:
+            continue
+        except ValueError:
+            if model.parent.parent.name == "deployment-tests":
+                raise ValueError(f"Cannot read rollback model: {model}") from None
+            continue  # normal platform Compose is YAML; its pins are protected above
+        pending = [value]
+        while pending:
+            item = pending.pop()
+            if isinstance(item, dict):
+                pending.extend(item.values())
+            elif isinstance(item, list):
+                pending.extend(item)
+            elif isinstance(item, str) and (
+                re.fullmatch(r"sha256:[0-9a-f]{64}", item)
+                or REPOSITORY.fullmatch(_repository(item))
+            ):
+                references.add(item)
     return references
 
 
@@ -79,7 +106,8 @@ def plan(images: list[dict], used: set[str], protected: set[str], keep: int) -> 
         newest = sorted(members, key=lambda item: item.get("Created", ""), reverse=True)
         for image in newest[keep:]:
             digests = set(image.get("RepoDigests") or [])
-            if image["Id"] in used or digests & protected:
+            references = {image["Id"], *digests, *(image.get("RepoTags") or [])}
+            if image["Id"] in used or references & protected:
                 continue
             removable[image["Id"]] = image
     # An image in several repositories is removed only if no repository keeps it.

@@ -109,6 +109,13 @@ Edit `/opt/factorlab/deploy/production.env`. The template is
 | `IBKR_SNAPSHOT_MODES` | `paper` to start; `paper,live` once live is set up |
 | `IBKR_SNAPSHOT_TIMES` | `06:00,16:30` (America/New_York, XNYS sessions only) |
 
+Production uses an hourly override as of 2026-09-30: set
+`IBKR_SNAPSHOT_TIMES=00:00,01:00,02:00,03:00,04:00,05:00,06:00,07:00,08:00,09:00,10:00,11:00,12:00,13:00,14:00,15:00,16:00,17:00,18:00,19:00,20:00,21:00,22:00,23:00`
+in `production.env`. This retains the XNYS trading-day calendar. Apply a schedule
+change with `sudo factorlab-compose up -d --no-deps --no-build --pull never
+--force-recreate ibkr-snapshot`; a plain restart does not reload environment
+settings. Recreating triggers an immediate snapshot through `--run-on-start`.
+
 No IBKR secrets are needed in Cloudflare for this setup. The daemon only gets
 `CLICKHOUSE_PASSWORD`.
 

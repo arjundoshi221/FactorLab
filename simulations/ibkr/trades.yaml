@@ -1,0 +1,19 @@
+# Fictional prices, not current market data. Amounts are USD.
+initial_cash: "100000"
+instruments:
+  AAPL: {con_id: 265598, initial_price: "200"}
+  MSFT: {con_id: 272093, initial_price: "420"}
+events:
+  - {kind: quote, symbol: AAPL, price: "200"}
+  - {kind: order, order_id: apple-buy, symbol: AAPL, side: BUY, quantity: "10", limit_price: "201"}
+  - {kind: fill, order_id: apple-buy, quantity: "4", price: "200", commission: "0.35"}
+  - {kind: quote, symbol: AAPL, price: "202"}
+  - {kind: fill, order_id: apple-buy, quantity: "6", price: "200.50", commission: "0.35"}
+  - {kind: order, order_id: microsoft-buy, symbol: MSFT, side: BUY, quantity: "5", limit_price: "420"}
+  - {kind: fill, order_id: microsoft-buy, quantity: "5", price: "419", commission: "0.35"}
+  - {kind: order, order_id: apple-trim, symbol: AAPL, side: SELL, quantity: "3", limit_price: "203"}
+  - {kind: fill, order_id: apple-trim, quantity: "3", price: "204", commission: "0.35"}
+  - {kind: quote, symbol: AAPL, price: "205"}
+  - {kind: quote, symbol: MSFT, price: "421"}
+  - {kind: order, order_id: apple-low-bid, symbol: AAPL, side: BUY, quantity: "2", limit_price: "195"}
+  - {kind: cancel, order_id: apple-low-bid}

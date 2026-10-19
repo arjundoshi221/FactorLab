@@ -156,6 +156,7 @@ V2_FK_TARGETS: dict[str, tuple[str, str]] = {
     "trade_name_id": ("book.trade_names", "trade_name_id"),
     "universe_id": ("ref.universes", "universe_id"),
     "account_id": ("ref.broker_accounts", "account_id"),
+    "user_id": ("ref.app_users", "user_id"),
     "computation_id": ("derived.computations", "computation_id"),
 }
 
@@ -274,8 +275,8 @@ def _planned_v2_tables() -> tuple[SchemaTable, ...]:
 
     tables: list[SchemaTable] = []
     sql_directory = _v2_sql_directory()
-    paths = sorted(sql_directory.glob("wave_*_schema.sql")) + sorted(
-        sql_directory.glob("wave_*_views.sql")
+    paths = sorted(sql_directory.glob("wave_*_schema*.sql")) + sorted(
+        sql_directory.glob("wave_*_views*.sql")
     )
     for path in paths:
         sql = re.sub(r"--[^\r\n]*", "", path.read_text(encoding="utf-8"))
@@ -302,6 +303,8 @@ def _planned_v2_tables() -> tuple[SchemaTable, ...]:
                 ):
                     column_match = re.match(r"`?([a-zA-Z_][\w]*)`?\s+(.+)", definition, re.DOTALL)
                     if column_match is None:
+                        continue
+                    if column_match.group(1).upper() in {"CONSTRAINT", "INDEX", "PROJECTION"}:
                         continue
                     column_type = re.split(
                         r"\s+(?:DEFAULT|MATERIALIZED|ALIAS|COMMENT|CODEC|TTL)\b",
@@ -343,6 +346,32 @@ def _planned_v2_tables() -> tuple[SchemaTable, ...]:
                     columns=columns,
                 )
             )
+    by_name = {table.name: table for table in tables}
+    for path in paths:
+        sql = re.sub(r"--[^\r\n]*", "", path.read_text(encoding="utf-8"))
+        for statement in _split_v2_sql(sql):
+            alter = re.fullmatch(
+                r"\s*ALTER TABLE ([a-z_]+\.[a-z_]+) (ADD|MODIFY) COLUMN "
+                r"(?:IF NOT EXISTS )?([a-z_]+) (Nullable\(UUID\))\s*;?\s*",
+                statement,
+                re.IGNORECASE,
+            )
+            if alter is None or alter.group(1) not in by_name:
+                continue
+            table = by_name[alter.group(1)]
+            column = next((item for item in table.columns if item.name == alter.group(3)), None)
+            if column is None:
+                table.columns.append(
+                    SchemaColumn(
+                        name=alter.group(3),
+                        type=alter.group(4),
+                        position=len(table.columns) + 1,
+                        nullable=True,
+                    )
+                )
+            else:
+                column.type = alter.group(4)
+                column.nullable = True
     return tuple(sorted(tables, key=lambda table: table.name))
 
 

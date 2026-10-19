@@ -35,13 +35,24 @@ Gateway endpoints are read with `get_secret`, so they come from a secret file or
 | `connect_attempts` / `connect_timeout` | - | 3 / 15s | Backoff starts at 5s, doubles, and is capped at 60s |
 
 The component also reads `IBKR_SNAPSHOT_TIMES`, `IBKR_SNAPSHOT_MODES` and `IBKR_SNAPSHOT_LOCK`. Those belong to the component, not the provider. The client-id plan (0 manual, 1 research, 2 snapshot, 3 historical, 4 watchers, 10+ trade engine) is in `ibkr.yaml`.
+After connecting, blocking requests use the connection timeout (default 15s),
+including execution requests. Gateway outages cannot leave those requests waiting forever.
 
 ## Data
+
+**Simulation:** `SimulatedGateway`/`SimulatedBrokerProvider` reuse capture and normalization for synthetic US/USD paper accounts without network calls. Runs use `ibkr_broker_simulation` / `ibkr_simulation`; file captures are marked simulated, channels are account-specific, and fill IDs/times are stable. Snapshot recording is optional for old sinks.
+
+**Trade stream:** `stream_simulation.py` supplies an event-driven cash ledger and IBKR-shaped reads for long-only USD stocks. Partial fills, fees, weighted cost, realized/unrealized P&L, cancellations, and quotes feed the same provider path; scenario validation rejects impossible fills. The component owns pacing, checkpoints, and storage.
 
 - Binding in [bindings.yaml](../../configs/ingestion/bindings.yaml): `{dataset: broker.snapshot, market: USA, provider: ibkr, role: shadow, params: {modes: [paper, live]}}  # -> primary`
 - The tables are `broker.positions_snapshot`, `broker.account_state_snapshot`, `broker.executions` and `broker.open_orders_snapshot`. They have no `source` in their key, so the shadow fetches, archives and normalizes but writes nothing.
 - `source` is `ibkr`. The legacy provider's `source_channel` is `paper_gateway` or `live_gateway`. The engine source's is `<instance>:paper_gateway` or `<instance>:live_gateway`. Switching paths changes that column in `broker.*` (07 §15.1).
 - Captures have `transport="tcp_socket"`, the envelope `{"schema": "ibkr.<kind>.v1", "kind", "mode", "fetched_at", "request", "data"}`, and kinds `portfolio`, `account_values`, `executions` and `open_orders`.
+- Open-order captures explicitly call `reqAllOpenOrders()` to retrieve a fresh
+  snapshot across clients on read-only connections. The call has a 15-second
+  timeout, restores the connection's prior timeout afterward, and propagates
+  timeout failures to the dataset unit instead of archiving an empty result.
+  No master-client setting or startup order cache is required for this snapshot.
 
 ## Dependencies and contracts
 

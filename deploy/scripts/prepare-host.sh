@@ -21,6 +21,7 @@ sudo install -d -m 0750 -o 1000 -g 1000 /var/lib/factorlab/uptime-kuma
 sudo install -d -m 0750 -o 1000 -g 1000 /var/lib/factorlab/portainer
 sudo install -d -m 0755 -o root -g root /var/lib/factorlab/docker-images
 sudo install -d -m 0700 -o root -g root /etc/factorlab/identity
+sudo install -d -m 0750 -o root -g factorlab /etc/factorlab/constituents
 
 # Component containers run as UID 10001 (factorlab); log files are group-readable by
 # factorlab-logs (GID 10002), the only group the restricted log-reader account joins.

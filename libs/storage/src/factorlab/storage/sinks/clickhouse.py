@@ -364,7 +364,7 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
         if unresolved:
             self._park(provenance, unresolved, "ref.universe_membership: constituent unresolved")
         resolved = sum(len(members) for members in snapshots.values())
-        if mode != "authoritative":
+        if mode != "authoritative" or unresolved:
             return WriteResult(0, len(unresolved), resolved)
         as_of = provenance.as_of_time.astimezone(UTC).date()
         now = datetime.now(UTC)
@@ -471,6 +471,17 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
         return WriteResult(written, 0, written)
 
     # -- market.bars -----------------------------------------------------------
+    def _insert_bars(self, table: str, records: list[dict[str, Any]]) -> None:
+        # A long daily history can exceed ClickHouse's 100-partition insert limit.
+        # Five calendar years contain at most 60 monthly partitions per country
+        # and resolution. Keep all lineage columns intact across the batches.
+        windows: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
+        for row in records:
+            key = (str(row["country_code"]), str(row["resolution"]), row["trade_date"].year // 5)
+            windows.setdefault(key, []).append(row)
+        for window in windows.values():
+            self._insert(table, window)
+
     def _bar_columns(
         self,
         row: BarRecord | ContractBarRecord,
@@ -523,7 +534,7 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
                     "latency_ms": None,
                 }
             )
-        self._insert("market.bars", records)
+        self._insert_bars("market.bars", records)
         if unresolved:
             self._park(provenance, unresolved, "market.bars: listing unresolved")
         return WriteResult(len(records), len(unresolved), len(records))
@@ -550,7 +561,7 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
                     **self._bar_columns(row, identity.country_code, provenance, now),
                 }
             )
-        self._insert("market.futures_contract_bars", records)
+        self._insert_bars("market.futures_contract_bars", records)
         if unresolved:
             self._park(provenance, unresolved, "market.futures_contract_bars: contract unresolved")
         return WriteResult(len(records), len(unresolved), len(records))
@@ -639,6 +650,7 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
             "response_headers, response_body, content_type, content_encoding, fetched_at, "
             "metadata_json FROM raw.archive WHERE raw_id = {id:UUID} LIMIT 1",
             parameters={"id": raw_id},
+            column_formats={"response_body": "bytes"},
         ).result_rows
         if not rows:
             raise KeyError(f"raw_id {raw_id} is not in raw.archive")

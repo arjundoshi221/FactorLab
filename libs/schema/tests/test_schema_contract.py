@@ -57,6 +57,15 @@ def test_forward_tables_stay_out_of_applied_waves():
         assert wave > max(generator.WAVES), f"{name} must land in a new forward wave"
 
 
+def test_portfolio_forward_wave_keeps_legacy_catalog_rows_and_order_history():
+    sql = generator.forward_file(13, "portfolio_tagging").read_text(encoding="utf-8")
+    assert sql.count("ADD COLUMN IF NOT EXISTS user_id Nullable(UUID)") == 3
+    assert "MODIFY COLUMN theme_id Nullable(UUID)" in sql
+    assert "ENGINE = MergeTree" in sql
+    assert "ORDER BY (broker_code, account_id, perm_id, changed_at, event_id)" in sql
+    assert not re.search(r"\b(DROP|TRUNCATE|DELETE|UPDATE)\b", sql)
+
+
 def test_wave_10_bars_best_selects_only_readable_roles_by_priority():
     view = (migration.MIGRATION_DIR / "wave_10_views_source_priorities.sql").read_text(
         encoding="utf-8"

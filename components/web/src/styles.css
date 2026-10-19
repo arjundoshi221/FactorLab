@@ -196,6 +196,23 @@ td > .docker-badge:first-child { margin-top: 0; }
 .docker-page td strong { display: block; color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
 .docker-page tbody tr.is-current { box-shadow: inset 3px 0 0 var(--lime); }
 .docker-services-table { min-width: 860px; }
+.docker-section-note { margin: 0; padding: 16px 22px; color: var(--muted); font-size: 12px; line-height: 1.7; border-bottom: 1px solid var(--line); }
+.release-card > .docker-section-note { border-top: 1px solid var(--line); border-bottom: 0; }
+.docker-guide { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1px; margin: 0; background: var(--line); }
+.docker-guide > div { padding: 22px; background: var(--panel-soft); }
+.docker-guide dt { margin-bottom: 10px; color: var(--ink); font-size: 13px; font-weight: 600; }
+.docker-guide dd { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.docker-details { margin-top: 10px; white-space: normal; }
+.docker-details summary { width: fit-content; color: var(--lime); font-size: 11px; cursor: pointer; }
+.docker-details summary:focus-visible { outline: 2px solid var(--lime); outline-offset: 4px; }
+.docker-details > code, .docker-detail-facts code { display: block; margin-top: 6px; white-space: normal; overflow-wrap: anywhere; font: 11px var(--mono); }
+.docker-detail-facts { margin: 12px 0 0; padding: 12px; border: 1px solid var(--line); background: var(--panel-soft); }
+.docker-detail-facts > div + div { margin-top: 14px; }
+.docker-detail-facts dt { color: var(--muted); font-size: 10px; margin-bottom: 5px; }
+.docker-detail-facts dd { margin: 0; color: var(--ink); font-size: 11px; line-height: 1.7; white-space: normal; overflow-wrap: anywhere; }
+.docker-detail-facts dd span { display: block; }
+.docker-detail-facts dd > div + div { margin-top: 10px; }
+.docker-page .release-facts dd:has(.docker-details) { white-space: normal; overflow-wrap: anywhere; }
 .release-history { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); }
 .release-history li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--panel-soft); }
 .release-history li:last-child { border-bottom: 0; }

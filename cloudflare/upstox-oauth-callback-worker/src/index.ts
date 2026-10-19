@@ -199,6 +199,12 @@ async function schwabCallback(request: Request, env: Env): Promise<Response> {
   return Response.redirect(env.MANAGEMENT_URL, 303);
 }
 export default { async fetch(request: Request, env: Env): Promise<Response> {
-  try { const path = new URL(request.url).pathname; if (path === "/health") return Response.json({ status: "ok" }); if (path === "/oauth/callback" && request.method === "GET") return callback(request, env); if (path === "/oauth/schwab/callback" && request.method === "GET") return schwabCallback(request, env); return text("Not found.", 404); }
+  try {
+    const path = new URL(request.url).pathname;
+    if (path === "/health") return Response.json({ status: "ok" });
+    if (path === "/oauth/callback" && request.method === "GET") return await callback(request, env);
+    if (path === "/oauth/schwab/callback" && request.method === "GET") return await schwabCallback(request, env);
+    return text("Not found.", 404);
+  }
   catch (error) { console.error(error); return text("OAuth callback failed.", 500); }
 } } satisfies ExportedHandler<Env>;

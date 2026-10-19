@@ -17,8 +17,8 @@ for development and ops. It never imports a provider (doc 07 rule R4; test rule 
   status, the daemon loop and its session gate (`MARKET_WINDOWS`, `in_session`).
 - Does not own: the engine, registry and bindings model (`factorlab-ingest`), sinks
   (`factorlab-storage`), provider lists (`PROVIDERS` in each ingest component's `providers.py`), compose
-  services and schedules (`components/*/component.yaml`), the legacy production
-  daemons (each component's `legacy/` package).
+  services and schedules (`components/*/component.yaml`), maintained component
+  collectors and their scheduling policies.
 
 ## Entry points
 
@@ -99,8 +99,8 @@ The daemon also ticks heartbeat during intentional waits and reports a deliberat
 UDP sending is enabled only by FACTORLAB_MONITOR_ADDR; the service id comes from
 FACTORLAB_SERVICE when a component runs it.
 
-- The compose services in the component manifests run the legacy daemons, not
-  `engine daemon`; all bindings are `shadow` until each provider's cutover (doc 07 §15.2).
+- Compose services run component collectors, which compose shared engine bindings
+  while preserving their scheduling policies; `engine daemon` is an operator tool.
 - `replay` has no `--dry-run` and always opens ClickHouse.
 - `sync-priorities` without `--dry-run` fails until wave 10 is applied.
 - `--market` accepts only `IND` and `USA`; a new market needs `_COUNTRY`,

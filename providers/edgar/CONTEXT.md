@@ -73,3 +73,4 @@ The rest of the package is a library over `www.sec.gov`, `data.sec.gov` and `eft
 - The 10 req/s ceiling is per IP across all SEC hosts. The engine source and `EdgarClient` each have their own throttle, so running both at once can exceed it.
 - Editing `rate_limits` or `api.user_agent_env` in `edgar.yaml` changes nothing. Set the top-level `EdgarSettings` field names instead.
 - An empty `tags` pulls every concept, and a large filer's companyfacts payload is big. Narrow `tags` for experiments.
+- The unexported, unused `company_rss_url` helper was removed; the supported index and source APIs remain.

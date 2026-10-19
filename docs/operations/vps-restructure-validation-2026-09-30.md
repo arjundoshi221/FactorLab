@@ -147,3 +147,20 @@ DNS and routing. No tunnel token was installed, and the browser connection attem
 was blocked by its Node runtime version. Public cutover, formal component release
 bootstrap and IBKR end-to-end writes remain pending. Concurrent monitoring work in
 the checkout was preserved; no monitoring service was deployed in this task.
+
+## Public UI switch — 13:36 UTC
+
+The owner explicitly requested replacing the existing public UI while deferring
+Cloudflare Tunnel setup. The existing Caddy hostname now routes `/hub/api/*`,
+`/api/*`, `/health`, `/docs`, `/docs/*`, `/redoc`, and `/openapi.json` to the new
+API candidate on loopback port 18000; other paths go to the new web on port 8080.
+No additional public listeners were opened. Cloudflare Access remains pending;
+this authorized test exception does not satisfy the protected-edge rollout gate.
+
+Caddy validation passed before reload. Public UI version, health, overview,
+India and US page requests returned 200; version matched source commit d599402.
+Workstation requests also verified public version, JSON overview and India page.
+The preceding configuration is retained at
+`/opt/factorlab/deployment-tests/20260930-d599402/Caddyfile-before-ui-20260930T133628Z`.
+Restore that file to `/etc/caddy/Caddyfile` and reload Caddy to roll routing back.
+The old API container remains running, and `main` was not modified.

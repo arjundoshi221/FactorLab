@@ -1,0 +1,17 @@
+.instrument-explorer { max-width: 1500px; margin: auto; padding: 24px; }
+.instrument-explorer nav, .instrument-filters { display: flex; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+.instrument-filters label { display: flex; flex-direction: column; gap: 6px; }
+.instrument-filters input, .instrument-filters select { padding: 8px; max-width: 100%; }
+.instrument-explorer button { cursor: pointer; margin: 4px; padding: 7px 12px; }
+.instrument-explorer button:disabled { cursor: default; opacity: .5; }
+.instrument-explorer [aria-pressed=true] { font-weight: 700; border-bottom: 3px solid currentColor; }
+.instrument-grid { overflow: auto; max-height: 480px; margin: 12px 0; }
+.instrument-grid table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.instrument-grid th, .instrument-grid td { text-align: left; padding: 10px; border-bottom: 1px solid #8884; max-width: 380px; overflow-wrap: anywhere; vertical-align: top; min-width: 100px; }
+.instrument-dataset { border: 1px solid #8884; border-radius: 8px; padding: 16px; margin: 12px 0; }
+.instrument-dataset h4 { margin: 0; display: flex; flex-wrap: wrap; gap: 12px; }
+.instrument-explorer dl div { display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0; }
+.instrument-explorer dd { margin: 0; overflow-wrap: anywhere; }
+.instrument-link { display: inline-block; margin: 8px; }
+.instrument-explorer details { margin: 12px 0; }
+.instrument-explorer summary { cursor: pointer; }

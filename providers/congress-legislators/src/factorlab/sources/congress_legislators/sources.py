@@ -45,7 +45,7 @@ class CongressLegislatorsSettings(ProviderSettings):
 
 
 def normalize_role(title: Any) -> str:
-    """Committee title -> canonical role (same rule as ``political_names._normalize_role``)."""
+    """Committee title -> canonical role."""
     text = str(title or "").lower().replace("-", " ").strip()
     if "ranking" in text:
         return "ranking_member"
@@ -177,7 +177,18 @@ class CongressLegislators:
     def plan(self, request: ReferenceRequest) -> Sequence[FetchUnit]:
         wanted = set(request.params.get("files") or FILES)
         return [
-            FetchUnit(f"file:{name}", f"{self.instance}:{name}", params={"file": name})
+            FetchUnit(
+                f"file:{name}",
+                f"{self.instance}:{name}",
+                params={
+                    "file": name,
+                    **(
+                        {"congress": request.params["congress"]}
+                        if "congress" in request.params
+                        else {}
+                    ),
+                },
+            )
             for name in FILES
             if name in wanted
         ]  # dependency order is fixed
@@ -201,7 +212,7 @@ class CongressLegislators:
             content_type=response.headers.get("Content-Type", "application/json"),
             status_code=response.status_code,
             headers=dict(response.headers),
-            metadata={"file": name},
+            metadata=dict(unit.params),
         )
 
     def normalize(self, capture: RawCapture) -> Sequence[LegislatorRow]:
@@ -210,7 +221,9 @@ class CongressLegislators:
         except ValueError as exc:
             raise NormalizationError(f"{capture.request_key}: body is not JSON") from exc
         name = capture.metadata.get("file")
-        congress = congress_number(capture.fetched_at.date())
+        congress = int(
+            capture.metadata.get("congress") or congress_number(capture.fetched_at.date())
+        )
         if name == "legislators":
             return _legislators(payload)
         if name == "committees":

@@ -56,14 +56,6 @@ def form_rss_url(form: str, count: int = 40) -> str:
     )
 
 
-def company_rss_url(cik: int | str, form: str = "", count: int = 40) -> str:
-    """Atom feed URL for a specific filer's filings."""
-    return (
-        "https://www.sec.gov/cgi-bin/browse-edgar"
-        f"?action=getcompany&CIK={int(cik)}&type={form}&count={count}&output=atom"
-    )
-
-
 # ── index fetchers ──────────────────────────────────────────────────────
 
 

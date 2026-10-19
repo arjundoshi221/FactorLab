@@ -49,7 +49,15 @@ component (image `ghcr.io/arjundoshi221/factorlab-ingest-broker`, manifest
 
 No IBKR credentials reach this container; Gateway logins go only to the Gateway volumes.
 
+Production override (2026-09-30): `IBKR_SNAPSHOT_TIMES` contains all 24 hourly
+slots (`00:00,01:00,...,23:00`). Snapshots run at the top of every New York hour
+on XNYS trading days; `--run-on-start` also takes an immediate snapshot.
+
 ## Data
+
+**Shared profiles:** `profiles sync --config <yaml> [--dry-run]` registers users/accounts through storage; `simulate --config <yaml> [--step initial|order|filled|closed|all] [--dry-run]` ingests synthetic responses. Simulation dry runs need no DB/Gateway. [Runbook](../../docs/operations/shared-test-users.md).
+
+**Trade stream:** `simulate-stream --config <yaml> --scenario <yaml> [--write]` replays timed orders, partial fills, cancellations, and quotes with resumable checkpoints and an account-scoped local lock. Preview is the default. [Runnable scenario folder](../../simulations/ibkr/README.md).
 
 - Writes `broker.positions_snapshot`, `broker.account_state_snapshot`, `broker.executions`,
   `broker.open_orders_snapshot`, `raw.archive` (`transport='tcp_socket'`), `ref.*` identity
@@ -57,6 +65,11 @@ No IBKR credentials reach this container; Gateway logins go only to the Gateway 
   `meta.ingestion_runs`. Reads `ref.broker_metrics_map` and `ref.execution_methods`.
 - Pipeline (frozen) `ibkr_broker_snapshot`, `source` = `ibkr`, `universe` = `ibkr_accounts`;
   `source_channel` = `paper_gateway` / `live_gateway`.
+- The hub catalogues both `ibkr_broker_snapshot` and `ibkr_broker_simulation` (market "Broker")
+  and attributes their runs and the `ibkr` source status to the `ibkr-snapshot` service. The
+  api reads the same `IBKR_SNAPSHOT_TIMES`, so changing the slots needs both values updated
+  (F-038). After each run the daemon writes `waiting`, which replaces the run's result in
+  `meta.source_status`; the hub's pipeline status still shows a failed or partial latest run.
 
 ## Dependencies and contracts
 

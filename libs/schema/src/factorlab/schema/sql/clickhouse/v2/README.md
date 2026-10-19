@@ -33,7 +33,7 @@ made runnable by this package.
 A table added to `docs/architecture/06-schema-rehau.md` after its namespace's
 wave was applied must not land in that wave's file: that would change an
 applied migration's checksum. List it in `FORWARD_TABLES` in
-`scripts/generate_clickhouse_v2_schema.py`; the generator then emits it to its
+`libs/schema/src/factorlab/schema/codegen.py`; the generator then emits it to its
 own `wave_NN_schema_<suffix>.sql`.
 
 - **Wave 10** (`*_source_priorities`, 06 rev 12): `ref.source_priorities` and
@@ -46,3 +46,9 @@ own `wave_NN_schema_<suffix>.sql`.
   `meta.service_status`. Events retain heartbeats for 14 days and other events for
   180 days; the current status uses ReplacingMergeTree(version). Install this pending
   wave before the monitor release. The secrets agent owns the restricted XML user.
+
+- **Wave 12** (`*_app_profiles`): application profiles and broker-account ownership.
+- **Wave 13** (`*_portfolio_tagging`, F-036): independent profile-owned catalogs and
+  append-only durable-order assignment events. Catalog changes are generated forward
+  ALTERs (`FORWARD_ALTERS`); original applied book table definitions stay frozen.
+  Apply profile and portfolio migrations before the portfolio API/web release.

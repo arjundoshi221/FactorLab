@@ -68,10 +68,14 @@ class FakeClickHouse:
     def _security(self, security_id):
         return self.tables["ref.securities"].get((security_id,))
 
-    @staticmethod
-    def _scoped(listing, p):
+    def _scoped(self, listing: dict[str, Any], p: dict[str, Any]) -> bool:
         if "exchange" in p:
-            return listing["exchange_code"] == p["exchange"]
+            codes = {
+                code
+                for code, row in self.exchanges.items()
+                if code == p["exchange"] or row[0] == p["exchange"]
+            }
+            return listing["exchange_code"] in codes
         return listing["country_code"] == p["country"]
 
     def _aliases(self, kind, target_kind):
@@ -82,10 +86,23 @@ class FakeClickHouse:
         ]
 
     # -- reads ---------------------------------------------------------------
-    def query(self, sql: str, parameters: dict[str, Any] | None = None) -> Result:
+    def query(
+        self,
+        sql: str,
+        parameters: dict[str, Any] | None = None,
+        column_formats: dict[str, str] | None = None,
+    ) -> Result:
         p = parameters or {}
         self.queries.append(sql)
-        if "FROM ref.exchanges FINAL" in sql:
+        if "FROM ref.exchanges FINAL" in sql and "FROM ref.listings" not in sql:
+            if sql.startswith("SELECT exchange_code, mic"):
+                return Result(
+                    [
+                        (code, *row)
+                        for code, row in self.exchanges.items()
+                        if row[0] == p["exchange"]
+                    ]
+                )
             row = self.exchanges.get(p["exchange"])
             return Result([row] if row else [])
         if "FROM ref.currencies FINAL" in sql:
@@ -305,7 +322,9 @@ class FakeClickHouse:
                 (
                     f
                     for f in self.rows("alt.political_filings")
-                    if f["country_code"] == p["country"] and f["chamber"] == p["chamber"]
+                    if f["country_code"] == p["country"]
+                    and f["chamber"] == p["chamber"]
+                    and ("year" not in p or f["filing_year"] == p["year"])
                 ),
                 key=lambda f: (f["filing_date"], f["filing_id"]),
                 reverse=True,

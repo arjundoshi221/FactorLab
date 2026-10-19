@@ -128,6 +128,9 @@ def connect(
         cfg.client_id,
     )
     ib.connect(cfg.host, cfg.port, clientId=cfg.client_id, readonly=True, timeout=timeout)
+    # connect(timeout=...) bounds startup only. ib_async otherwise defaults
+    # subsequent blocking requests to an unlimited wait (RequestTimeout=0).
+    ib.RequestTimeout = timeout
     # Tag the mode on the ib object so downstream helpers can label rows
     # without re-reading env.
     ib._factorlab_mode = cfg.mode  # type: ignore[attr-defined]

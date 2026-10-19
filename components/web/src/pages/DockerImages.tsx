@@ -4,7 +4,10 @@ interface Container {
   name: string; status: string; started_at: string | null;
   service?: string | null; image_ref?: string | null;
 }
-interface Labels { revision?: string | null; version?: string | null; source?: string | null }
+interface Labels {
+  revision?: string | null; version?: string | null; source?: string | null;
+  created?: string | null; title?: string | null; component?: string | null;
+}
 interface Image {
   id: string; tags: string[]; digests: string[]; size_bytes: number; created_at: string;
   containers: Container[]; last_container_start_at: string | null; release_activated_at: string | null;
@@ -16,7 +19,7 @@ interface Release {
 }
 interface Build { release_id: string | null; commit: string | null; component?: string | null; version?: string | null }
 interface RunningService {
-  service: string; container: string; status: string; started_at?: string | null; version?: string | null;
+  service: string; container: string; status: string; started_at?: string | null; version?: string | null; image_id?: string | null;
 }
 /** A component the host deployer manages; version is null while it still runs the seeded monolith image. */
 interface DeployedComponent { component: string; version: string | null; image: string | null; services: RunningService[] }
@@ -67,6 +70,27 @@ function imageName(image: Image): string {
   return image.tags[0] ?? image.digests[0]?.split("@")[0] ?? "Untagged";
 }
 
+function ImageDetails({ image }: { image: Image }) {
+  const labels = image.labels;
+  return <details className="docker-details">
+    <summary>Image details</summary>
+    <dl className="docker-detail-facts">
+      <div><dt>Full image ID</dt><dd><code>{image.id}</code></dd></div>
+      <div><dt>Tags</dt><dd>{image.tags.length ? image.tags.map((tag) => <code key={tag}>{tag}</code>) : "No tags recorded"}</dd></div>
+      <div><dt>Registry digests</dt><dd>{image.digests.length ? image.digests.map((digest) => <code key={digest}>{digest}</code>) : "No registry digest recorded"}</dd></div>
+      <div><dt>Platform</dt><dd>{image.platform ?? "Not recorded"}</dd></div>
+      <div><dt>Exact image size</dt><dd>{image.size_bytes.toLocaleString("en-IN")} bytes</dd></div>
+      <div><dt>Component / title</dt><dd>{[labels?.component, labels?.title].filter(Boolean).join(" · ") || "Not recorded"}</dd></div>
+      <div><dt>Build version</dt><dd>{labels?.version ?? "Not recorded"}</dd></div>
+      <div><dt>Full revision</dt><dd><code>{labels?.revision ?? "Not recorded"}</code></dd></div>
+      <div><dt>Source repository</dt><dd><code>{labels?.source ?? "Not recorded"}</code></dd></div>
+      <div><dt>Build timestamp label (IST)</dt><dd>{date(labels?.created)}</dd></div>
+      <div><dt>Container references</dt><dd>{image.containers.length ? image.containers.map((container) =>
+        <div key={container.name}><strong>{container.name}</strong><span>{container.service ?? "No Compose service"} · {container.status} · Started {date(container.started_at)}</span><code>{container.image_ref ?? "No image reference recorded"}</code></div>) : "No containers reference this image"}</dd></div>
+    </dl>
+  </details>;
+}
+
 function Commit({ value }: { value: string | null | undefined }) {
   if (!value) return <>—</>;
   return <a href={`${REPOSITORY}/commit/${value}`} target="_blank" rel="noreferrer"><code>{value.slice(0, 12)}</code></a>;
@@ -76,25 +100,29 @@ function ReleaseCard({ snapshot }: { snapshot: Snapshot }) {
   const release = snapshot.release;
   const build = snapshot.api_build;
   const releaseId = release?.id ?? snapshot.release_id;
+  const componentMode = Boolean(snapshot.components?.length);
   const mismatch = Boolean(build?.release_id && releaseId && build.release_id !== releaseId);
   return <section className="release-card" aria-labelledby="release-title">
     <div className="release-card__heading">
       <div>
-        <span className="eyebrow">Running release</span>
+        <span className="eyebrow">{componentMode ? "Monolith release record" : "Host release record"}</span>
         <h2 id="release-title">{releaseId ?? "No release recorded"}</h2>
         <p>{release?.activated_at ? `Activated ${date(release.activated_at)}` : "No activation time is recorded for this release."}</p>
       </div>
       <span className={`status status--${mismatch ? "attention" : releaseId ? "healthy" : "unknown"}`}>
         <span className="status__dot" aria-hidden="true" />
-        {mismatch ? "API build differs" : releaseId ? "Verified release" : "Unknown"}
+        {mismatch ? "API build differs" : releaseId ? "Release recorded" : "Unknown"}
       </span>
     </div>
     <dl className="release-facts">
       <div><dt>Commit</dt><dd><Commit value={release?.commit ?? build?.commit} /></dd></div>
-      <div><dt>Image</dt><dd title={release?.image ?? undefined}><code>{short(release?.image)}</code></dd></div>
+      <div><dt>Image</dt><dd title={release?.image ?? undefined}><code>{short(release?.image)}</code>
+        {release?.image && <details className="docker-details"><summary>Full release image</summary><code>{release.image}</code></details>}</dd></div>
       <div><dt>API build</dt><dd>{build?.version ? `${build.component ?? "api"} v${build.version}` : build?.release_id ?? "Not baked into this image"}</dd></div>
-      <div><dt>Previous release</dt><dd>{release?.previous_release && release.previous_release !== "unknown" ? release.previous_release : "—"}</dd></div>
+      <div><dt>Previous release</dt><dd>{release?.previous_release && release.previous_release !== "unknown" ? release.previous_release : "—"}
+        {release?.previous_image && release.previous_image !== "unknown" && <details className="docker-details"><summary>Previous image</summary><code>{release.previous_image}</code></details>}</dd></div>
     </dl>
+    {componentMode && <p className="docker-section-note">Components release independently. This monolith record may be historical; use Running components below for deployed versions and service states.</p>}
     {mismatch && <p className="notice" role="status">The API container reports release {build?.release_id}, but the host records {releaseId}. Check the latest release workflow.</p>}
   </section>;
 }
@@ -105,6 +133,7 @@ function ComponentsSection({ snapshot }: { snapshot: Snapshot }) {
   return <section className="inventory" aria-labelledby="components-title">
     <div className="section-heading"><div><span className="eyebrow">Per-component releases</span><h2 id="components-title">Running components</h2></div>
       <span>{snapshot.platform_version ? `Platform v${snapshot.platform_version}` : "Platform not released"}</span></div>
+    <p className="docker-section-note">Deployed versions and pins come from the host release records. Service versions come from image labels; a running state does not establish application health.</p>
     <div className="table-wrap"><table className="docker-components-table"><thead><tr>
       <th>Component</th><th>Deployed</th><th>Services</th><th>Pinned image</th>
     </tr></thead><tbody>{components.map((component) => {
@@ -114,8 +143,11 @@ function ComponentsSection({ snapshot }: { snapshot: Snapshot }) {
         <td data-label="Deployed">{component.version ? `v${component.version}` : <span className="docker-badge">Seeded (monolith)</span>}
           {drift && <small className="status-reason">A service runs a different version</small>}</td>
         <td data-label="Services">{component.services.length === 0 ? "—" : component.services.map((service) =>
-          <small key={service.container}>{service.service} ({service.status}{service.version ? `, v${service.version}` : ""})</small>)}</td>
-        <td data-label="Pinned image" title={component.image ?? undefined}><code>{short(component.image)}</code></td>
+          <div key={service.container}><small>{service.service} ({service.status}{service.version ? `, v${service.version}` : ""})</small>
+            <small>{service.container}</small><small>Started {date(service.started_at)} IST</small>
+            {service.image_id && <details className="docker-details"><summary>Service image ID</summary><code>{service.image_id}</code></details>}</div>)}</td>
+        <td data-label="Pinned image" title={component.image ?? undefined}><code>{short(component.image)}</code>
+          {component.image && <details className="docker-details"><summary>Full pinned image</summary><code>{component.image}</code></details>}</td>
       </tr>;
     })}</tbody></table></div>
   </section>;
@@ -161,7 +193,7 @@ export function DockerImages() {
       untagged: all.filter((image) => image.tags.length === 0).length,
       bytes: all.reduce((sum, image) => sum + image.size_bytes, 0),
       unused: unused.length,
-      reclaimable: unused.reduce((sum, image) => sum + image.size_bytes, 0),
+      notRunningBytes: unused.reduce((sum, image) => sum + image.size_bytes, 0),
     };
   }, [all]);
 
@@ -173,7 +205,7 @@ export function DockerImages() {
     const query = search.trim().toLowerCase();
     const matching = all.filter((image) =>
       (use === "all" || (use === "in_use") === isRunning(image)) &&
-      [image.id, ...image.tags, ...image.digests, image.labels?.revision ?? "",
+      [image.id, ...image.tags, ...image.digests, ...Object.values(image.labels ?? {}).filter((value): value is string => typeof value === "string"),
         ...image.containers.flatMap((item) => [item.name, item.service ?? ""])]
         .some((value) => value.toLowerCase().includes(query)));
     const value = (image: Image): string | number => {
@@ -204,7 +236,7 @@ export function DockerImages() {
   return <main className="docker-page">
     <section className="hero">
       <div><span className="eyebrow">Production host</span><h1>Docker images</h1>
-        <p>The release running on the VPS, which image each service uses, and every image stored on the host, including unused and untagged layers.</p></div>
+        <p>Understand deployed components, trace services to their images, and inspect every image stored on the VPS. All timestamps are in IST (Asia/Kolkata).</p></div>
       <div className="refresh-block">
         <span>{snapshot ? `Snapshot ${date(snapshot.snapshot_at)} · refreshes every minute` : "Reading the host inventory…"}</span>
         <button onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh images"}</button>
@@ -221,22 +253,34 @@ export function DockerImages() {
       <section className="metric-grid" aria-label="Image totals">
         <article className="metric-card"><span>Images stored</span><strong>{all.length}</strong><small>{totals.untagged} untagged</small></article>
         <article className="metric-card"><span>Images running</span><strong>{totals.running}</strong><small>{totals.containers} running containers</small></article>
-        <article className="metric-card"><span>Disk used</span><strong>{size(totals.bytes)}</strong><small>Shared layers are counted per image</small></article>
-        <article className="metric-card"><span>Reclaimable</span><strong>{size(totals.reclaimable)}</strong><small>{totals.unused} images without a running container</small></article>
+        <article className="metric-card"><span>Total image size</span><strong>{size(totals.bytes)}</strong><small>Shared layers counted per image; not disk usage</small></article>
+        <article className="metric-card"><span>Not running image size</span><strong>{size(totals.notRunningBytes)}</strong><small>{totals.unused} images; not a reclaimable space estimate</small></article>
+      </section>
+
+      <section className="inventory" aria-labelledby="guide-title">
+        <div className="section-heading"><div><span className="eyebrow">Reading this inventory</span><h2 id="guide-title">How to understand the images</h2></div></div>
+        <dl className="docker-guide">
+          <div><dt>Component → service → image</dt><dd>A component is a release unit. Its Compose services run containers created from an image. One image can serve several containers.</dd></div>
+          <div><dt>Tag, digest, and image ID</dt><dd>A tag is a name that can move to a new build. A registry digest identifies immutable registry content; the local image ID identifies the image configuration. These hashes can differ.</dd></div>
+          <div><dt>Running, stopped, and unreferenced</dt><dd>Running means at least one container is running. Stopped containers still reference their image. Unreferenced means no recorded containers use it; a deployment or rollback may still need it. Untagged only means it has no tag.</dd></div>
+          <div><dt>Created, started, and activated</dt><dd>Created is the image creation time; started is a container start time. Activated is the monolith deployer's recorded activation after verification. These are separate events.</dd></div>
+          <div><dt>Size and cleanup</dt><dd>Images can share layers, so adding sizes overcounts disk usage. An image with no running container is not necessarily removable. This page provides no deletion controls.</dd></div>
+          <div><dt>Snapshot scope</dt><dd>Only images and containers recorded on this host are shown, not the entire registry. The snapshot does not include package inventories, environment variables, mounts, or application health checks.</dd></div>
+        </dl>
       </section>
 
       <section className="inventory" aria-labelledby="services-title">
         <div className="section-heading"><div><span className="eyebrow">Compose services</span><h2 id="services-title">What each service runs</h2></div>
           <span>{services.length} containers</span></div>
         <div className="table-wrap"><table className="docker-services-table"><thead><tr>
-          <th>Service</th><th>State</th><th>Image</th><th>Started</th><th>Release</th>
+          <th>Service</th><th>State</th><th>Image</th><th>Started</th><th>Monolith record</th>
         </tr></thead><tbody>{services.map(({ image, container }) => <tr key={container.name}>
           <td data-label="Service"><strong>{container.service ?? container.name}</strong>{container.service && <small>{container.name}</small>}</td>
           <td data-label="State"><span className={`status status--${container.status === "running" ? "healthy" : container.status === "exited" ? "not_expected" : "attention"}`}>
             <span className="status__dot" aria-hidden="true" />{container.status}</span></td>
           <td data-label="Image" title={container.image_ref ?? image.id}><code>{short(container.image_ref ?? imageName(image))}</code></td>
           <td data-label="Started">{date(container.started_at)}<small>{age(container.started_at, now)}</small></td>
-          <td data-label="Release">{image.current_release ? <span className="docker-badge docker-badge--current">Current</span> : <span className="docker-badge">Other image</span>}</td>
+          <td data-label="Monolith record">{image.current_release ? <span className="docker-badge docker-badge--current">Current</span> : <span className="docker-badge">No monolith match</span>}</td>
         </tr>)}</tbody></table>
           {services.length === 0 && <p className="no-results">No containers are recorded on this host.</p>}</div>
       </section>
@@ -244,6 +288,7 @@ export function DockerImages() {
       <section className="inventory" aria-labelledby="images-title">
         <div className="section-heading"><div><span className="eyebrow">Read-only inventory</span><h2 id="images-title">Stored images</h2></div>
           <span>{images.length} of {all.length} images</span></div>
+        <p className="docker-section-note">Expand Image details for full identifiers, build labels, and container references. “Current release” identifies the host's monolith image record.</p>
         <div className="table-tools">
           <label><span className="sr-only">Search images</span>
             <input placeholder="Search images, services, or commits" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
@@ -263,8 +308,9 @@ export function DockerImages() {
           <td data-label="Image"><strong>{image.tags.length ? image.tags.join(", ") : "Untagged"}</strong>
             {image.current_release && <span className="docker-badge docker-badge--current">Current release</span>}
             <small title={image.id}><code>{short(image.id)}</code>{image.platform && ` · ${image.platform}`}</small>
-            {image.digests.map((digest) => <small key={digest} title={digest}><code>{short(digest)}</code></small>)}</td>
-          <td data-label="Use">{isRunning(image) ? "In use" : "Unused"}
+            {image.digests.map((digest) => <small key={digest} title={digest}><code>{short(digest)}</code></small>)}
+            <ImageDetails image={image} /></td>
+          <td data-label="Use">{isRunning(image) ? "Running" : image.containers.length ? "Stopped containers" : "Unreferenced"}
             {image.containers.map((container) => <small key={container.name}>{container.service ?? container.name} ({container.status})</small>)}</td>
           <td data-label="Size" className="numeric">{size(image.size_bytes)}</td>
           <td data-label="Created">{date(image.created_at)}<small>{age(image.created_at, now)}</small></td>
@@ -277,11 +323,16 @@ export function DockerImages() {
       </section>
 
       {releases.length > 0 && <section className="inventory" aria-labelledby="history-title">
-        <div className="section-heading"><div><span className="eyebrow">Deployment record</span><h2 id="history-title">Release history</h2></div>
+        <div className="section-heading"><div><span className="eyebrow">Monolith deployment record</span><h2 id="history-title">Release history</h2></div>
           <span>Latest {releases.length} releases on this host</span></div>
         <ol className="release-history">{releases.map((release) => <li key={release.id} className={release.id === currentRelease ? "is-current" : ""}>
-          <div><strong>{release.id}</strong><small>Commit <Commit value={release.commit} /></small></div>
-          <div>{release.id === currentRelease && <span className="docker-badge docker-badge--current">Running</span>}
+          <div><strong>{release.id}</strong><small>Commit <Commit value={release.commit} /></small>
+            <details className="docker-details"><summary>Release details</summary><dl className="docker-detail-facts">
+              <div><dt>Image</dt><dd><code>{release.image ?? "Not recorded"}</code></dd></div>
+              <div><dt>Previous release</dt><dd>{release.previous_release ?? "Not recorded"}</dd></div>
+              <div><dt>Previous image</dt><dd><code>{release.previous_image ?? "Not recorded"}</code></dd></div>
+            </dl></details></div>
+          <div>{release.id === currentRelease && <span className="docker-badge docker-badge--current">Recorded current</span>}
             <small>{release.activated_at ? `Activated ${date(release.activated_at)}` : "Not activated"}</small></div>
         </li>)}</ol>
       </section>}

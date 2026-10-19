@@ -7,7 +7,7 @@
 This is a provider member. It implements the engine's `plan -> fetch -> normalize` contract
 ([07 §6](../../docs/architecture/07-ingestion-provider-abstraction.md)) for four datasets in market `IND`.
 Importing `factorlab.sources.upstox` registers the sources ([`__init__.py`](src/factorlab/sources/upstox/__init__.py)).
-Every binding is still `shadow`. Production still runs the legacy daemon (see Release and rollback).
+India bindings are primary. The maintained collector uses these sources through the shared engine.
 
 ## Owns and does not own
 
@@ -41,13 +41,13 @@ The token expires daily. The YAML notes `token_expiry: "03:30 IST"`.
 
 - `source` is `upstox`. A shadow binding writes `upstox:shadow`. Alias kind is `upstox_instrument_key` (`ALIAS_KIND`).
 - `source_channel` is `<instance>:instruments`, `<instance>:v3_historical`, `<instance>:v3_intraday` or `<instance>:v3_quote_ohlc`.
-- Bindings in [bindings.yaml](../../configs/ingestion/bindings.yaml), all `role: shadow`, `priority: 10`:
-  - `{dataset: ref.listings, market: IND, provider: upstox, role: shadow, priority: 10}`
-  - `{dataset: ref.contracts, market: IND, provider: upstox, role: shadow, priority: 10}`
+- Primary bindings in [bindings.yaml](../../configs/ingestion/bindings.yaml), `priority: 10`:
+  - `{dataset: ref.listings, market: IND, provider: upstox, role: primary, priority: 10}`
+  - `{dataset: ref.contracts, market: IND, provider: upstox, role: primary, priority: 10}`
   - `market.bars` IND `1min`, `params: {universe: full_nse_eq, mode: quote}`
   - `market.futures_contract_bars` IND `1min`, `params: {mode: candles}`
 - Bar modes. `candles` (the default) makes one unit per instrument per V3 historical window for past IST days, plus one V3 intraday unit for today. `quote` makes one V3 OHLC-quote unit per 100 instruments.
-- Target tables: `market.bars` and `market.futures_contract_bars`, where shadow rows are really written. `ref.listings` and `ref.contracts` get no writes while shadow.
+- Target tables: canonical market bars, futures bars, listing and contract references.
 
 ## Dependencies and contracts
 
@@ -73,7 +73,7 @@ The token expires daily. The YAML notes `token_expiry: "03:30 IST"`.
 ## Release and rollback
 
 - A provider is never released alone. It ships inside the `ingest-india` image, which lists `providers: [upstox]` in [component.yaml](../../components/ingest-india/component.yaml) and `PROVIDERS = ("upstox",)` in [providers.py](../../components/ingest-india/src/factorlab/components/ingest_india/providers.py). Rollback class is `writer`.
-- Production today is `ingest-india daemon --universe full_nse_eq --daemon`, which runs the legacy [daemon.py](../../components/ingest-india/src/factorlab/components/ingest_india/legacy/daemon.py) over `legacy/upstox/`. This package is not in that path.
+- Production collection uses the maintained component scheduler and these dataset sources through the shared engine.
 - Bindings changes are config, not provider code. `configs/` is copied into the image (`COPY configs /app/configs`), so a bindings change still reaches production only through an `ingest-india` image release.
 - Cutover follows 07 §15.2: one full NSE session of shadow parity (`upstox` vs `upstox:shadow`), then promote to `primary` and swap the compose command.
 

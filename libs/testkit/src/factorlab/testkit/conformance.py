@@ -52,20 +52,6 @@ def fixtures_dir(provider: str) -> Path:
     return package.parents[3] / "tests" / "fixtures"
 
 
-def dump_capture(capture: RawCapture) -> dict[str, Any]:
-    return {
-        "request_key": capture.request_key,
-        "transport": capture.transport,
-        "fetched_at": capture.fetched_at.isoformat(),
-        "source_url": capture.source_url,
-        "content_type": capture.content_type,
-        "status_code": capture.status_code,
-        "headers": dict(capture.headers),
-        "metadata": dict(capture.metadata),
-        "body_b64": base64.b64encode(capture.body).decode("ascii"),
-    }
-
-
 def load_capture(data: Mapping[str, Any]) -> RawCapture:
     return RawCapture(
         body=base64.b64decode(data["body_b64"]),

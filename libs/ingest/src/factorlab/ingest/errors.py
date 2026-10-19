@@ -15,7 +15,8 @@ Any other exception fails the unit, as ``RunContext.fail_unit`` always has.
 
 from __future__ import annotations
 
-from typing import Literal
+from collections.abc import Sequence
+from typing import Any, Literal
 
 ErrorKind = Literal["auth", "rate_limited", "transient", "permanent", "normalization", "other"]
 
@@ -56,6 +57,14 @@ class NormalizationError(ProviderError):
     """Captured bytes could not be turned into records."""
 
 
+class PartialNormalizationError(NormalizationError):
+    """A capture has usable records and an explicit completeness failure."""
+
+    def __init__(self, message: str, *, rows: Sequence[Any]) -> None:
+        super().__init__(message)
+        self.rows = tuple(rows)
+
+
 def classify(error: BaseException) -> ErrorKind:
     """Map an exception to the engine's retry policy.
 
@@ -89,6 +98,7 @@ __all__ = [
     "AuthRequired",
     "ErrorKind",
     "NormalizationError",
+    "PartialNormalizationError",
     "PermanentError",
     "ProviderError",
     "QuotaExhausted",

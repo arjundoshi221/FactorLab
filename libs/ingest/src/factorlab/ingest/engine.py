@@ -30,12 +30,13 @@ from factorlab.ingest.datasets import (
     dataset,
 )
 from factorlab.ingest.datasets.ports import ArchivedCapture, CheckpointStore, ReferenceReader
-from factorlab.ingest.errors import AuthRequired, classify, retry_after
+from factorlab.ingest.errors import AuthRequired, PartialNormalizationError, classify, retry_after
 from factorlab.ingest.provider import (
     ProviderStorage,
     RawCapture,
     RunContext,
     RunSummary,
+    UnitOutcome,
     run_provider,
 )
 
@@ -65,6 +66,7 @@ class DatasetProvider:
         retries: int = DEFAULT_RETRIES,
         max_sleep: float = MAX_SLEEP_SEC,
         sleep: Callable[[float], None] = time.sleep,
+        should_stop: Callable[[], bool] = lambda: False,
     ) -> None:
         if adapter.provider != binding.provider or adapter.dataset != binding.dataset:
             raise ValueError(
@@ -82,6 +84,7 @@ class DatasetProvider:
         self.retries = retries
         self.max_sleep = max_sleep
         self._sleep = sleep
+        self._should_stop = should_stop
         self.unresolved = 0
         self.resolved = 0
         spec = dataset(binding.dataset)
@@ -125,6 +128,9 @@ class DatasetProvider:
             )
         auth_error: BaseException | None = None
         for unit in self.units:
+            if self._should_stop():
+                ctx.fail_unit(unit.name, "shutdown requested; unit deferred")
+                continue
             if auth_error is not None:
                 ctx.fail_unit(unit.name, AuthRequired(f"skipped after auth failure: {auth_error}"))
                 continue
@@ -154,13 +160,21 @@ class DatasetProvider:
     def _write_unit(
         self, ctx: RunContext, name: str, channel: str, raw_id: UUID | None, capture: RawCapture
     ) -> None:
-        rows = self.adapter.normalize(capture)
+        issue = None
+        try:
+            rows = self.adapter.normalize(capture)
+        except PartialNormalizationError as exc:
+            rows = exc.rows
+            issue = exc
         if self.counts_only:
             self.shadow_rows += len(rows)
             log.info(
                 "[%s] %s: shadow normalized %d row(s); not written", self.pipeline, name, len(rows)
             )
-            ctx.succeed_unit(name, 0)
+            if issue is None:
+                ctx.succeed_unit(name, 0)
+            else:
+                ctx.fail_unit(name, issue)
             return
         provenance = ctx.provenance(
             source_channel=channel, raw_id=raw_id, as_of_time=capture.fetched_at
@@ -171,7 +185,12 @@ class DatasetProvider:
         self.resolved += result.resolved if isinstance(result, WriteResult) else written
         if unresolved:
             log.info("[%s] %s: %d row(s) parked as unresolved", self.pipeline, name, unresolved)
-        ctx.succeed_unit(name, written)
+            if self.binding.dataset == "ref.universe_membership" and self.binding.role != "shadow":
+                issue = ValueError(f"universe snapshot rejected: {unresolved} unresolved member(s)")
+        if issue is None:
+            ctx.succeed_unit(name, written)
+        else:
+            ctx.fail_unit(name, issue, rows_written=written)
 
 
 class ReplayProvider(DatasetProvider):
@@ -242,6 +261,43 @@ def run_binding(
         close = getattr(adapter, "close", None)  # sources holding connections (e.g. IBKR)
         if callable(close):
             close()
+
+
+def collect_binding(
+    ctx: RunContext,
+    binding: Binding,
+    adapter: DatasetSource[Any, Any],
+    sink: ProviderStorage,
+    request: Any,
+    **kwargs: Any,
+) -> tuple[UnitOutcome, ...]:
+    """Collect a dataset within an existing job, retaining its source and run lineage.
+
+    Dependent multi-dataset jobs use one parent run rather than nested storage runs.
+    Each dataset archives and writes under its own binding source; its outcomes are
+    copied to the parent with a dataset prefix so failures cannot disappear.
+    """
+    if not binding.writes:
+        raise ValueError(f"binding {binding.pipeline} is disabled")
+    child = RunContext(sink, ctx.handle, source=binding.source_name, pipeline=binding.pipeline)
+    try:
+        provider = DatasetProvider(binding, adapter, sink, tuple(adapter.plan(request)), **kwargs)
+        provider.collect(child)
+    finally:
+        for outcome in child.units:
+            name = f"{binding.pipeline}/{outcome.name}"
+            if outcome.ok:
+                ctx.succeed_unit(name, outcome.rows_written)
+            else:
+                ctx.fail_unit(
+                    name,
+                    outcome.error or "dataset collection failed",
+                    rows_written=outcome.rows_written,
+                )
+        close = getattr(adapter, "close", None)
+        if callable(close):
+            close()
+    return child.units
 
 
 def replay(
@@ -352,6 +408,7 @@ __all__ = [
     "DatasetProvider",
     "ReplayProvider",
     "bar_request",
+    "collect_binding",
     "reference_request",
     "replay",
     "run_binding",

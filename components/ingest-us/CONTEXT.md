@@ -2,6 +2,9 @@
 
 > US universe resolution and Schwab daily / 1-minute bars into ClickHouse v2 (two services, one image).
 
+Staged membership snapshots publish with the exact Schwab aliases validated for
+the configured union. Bare ticker lookup can be ambiguous in existing references.
+
 ## Purpose
 
 `ingest-us` resolves the configured US equity universe (`universe-us`) and collects prices
@@ -12,8 +15,9 @@ provider response archived to `raw.archive`. It is a writer component (image
 ## Owns and does not own
 
 - Owns: the `factorlab-ingest-us` CLI ([cli.py](src/factorlab/components/ingest_us/cli.py)),
-  the collector and universe daemons under [legacy/](src/factorlab/components/ingest_us/legacy/)
-  (Schwab market client, EODHD client, universe resolvers `github_csv` / `eodhd` / `schwab`),
+  [collector](src/factorlab/components/ingest_us/collector.py),
+  [universe job](src/factorlab/components/ingest_us/universe_daemon.py) and
+  [configured resolvers](src/factorlab/components/ingest_us/universe/engine.py),
   and the providers the image ships ([providers.py](src/factorlab/components/ingest_us/providers.py):
   `schwab`, `eodhd`, `github_csv`, `edgar`).
 - Does not own: Schwab OAuth and token refresh (the Cloudflare Workers), token delivery
@@ -66,6 +70,8 @@ provider response archived to `raw.archive`. It is a writer component (image
   (`version: 2`, `provider`, `daily_source`, `indexes`, `providers`); the universe publish
   guard (the resolver publishes only fully validated membership). The API's US status
   marks the collector stale when `meta.source_status` is older than ten minutes.
+  Version-one EODHD universe publication and its unused normalizers were removed;
+  the CLI accepts only version two. The production collector remains under `legacy/`.
 
 ## Observability
 
@@ -101,6 +107,19 @@ the rollout completes.
 
 ## Pitfalls
 
+- An **exact constituent roster** is a dated, authoritative security list, including
+  multiple share classes. An **ETF holdings proxy** is a fund portfolio and does not
+  establish complete Russell 3000 membership. `constituent_csv` accepts the former;
+  see [the runbook](../../docs/operations/us-russell3000-daily.md).
+- Daily scope is every published member. Only runnable daily recovery blocks minute
+  collection; symbols in retry backoff permit minute work. `US_MINUTE_TIER_SIZE`
+  caps minutes at 0-250 (default 250; 0 disables minutes). Daily partial responses
+  stay queued, and histories receive a weekly full refresh.
+- **Available history** starts at the first valid returned candle, within the calendar
+  horizon (1970 onward). It does not promise pre-listing, delisted, raw/unadjusted,
+  or dividend-adjusted data. Coverage errors remain visible even after a history
+  request has been traversed.
+
 - Changing only `provider` in the universe YAML switches resolvers; there is no automatic
   fallback. Restart `universe-us` after editing (`sudo factorlab-compose restart universe-us`);
   the collector picks up new membership without a restart.
@@ -113,3 +132,16 @@ the rollout completes.
   `data_contract`; never roll back across a contract bump.
 
 **UDP service monitoring:** The manifest declares expected liveness. Set FACTORLAB_MONITOR_ADDR=monitor:9125 after the monitor rollout; empty disables sending. The process reports crashes and deliberate stops, and daemon waits report idle liveness through runtime helpers.
+
+Provider fetch, normalize and write run through the shared engine. The mounted
+universe config selects membership authority for this job; generic runs use global
+bindings. Index snapshots are staged until Schwab validates the entire union.
+Exact operator CSVs archive as files; scheduler priority and frozen pipelines remain.
+
+**Recoverable universe refresh failure**: A failed attempt to validate or publish the
+configured roster while the daemon remains running and awaits its next retry. It is a
+collection error even when heartbeat liveness is healthy, and its reported reason
+remains available during the retry wait.
+
+**Universe refresh recovery**: A later successful validated roster publication.
+Continued process heartbeats and retry waits do not establish this recovery.

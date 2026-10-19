@@ -174,3 +174,18 @@ def test_schema_map_falls_back_to_migration_ddl_preview_when_databases_are_absen
     assert next(table for table in schema.tables if table.name == "research.bars").kind == "view"
     assert schema.warnings[0].startswith("Preview mode:")
     assert len(schema.areas) == len(V2_DATABASES)
+
+
+def test_portfolio_schema_preview_includes_forward_catalog_ownership():
+    from factorlab.components.api.schema_map import _planned_v2_tables
+
+    tables = {table.name: table for table in _planned_v2_tables()}
+    for name in ("book.themes", "book.strategies", "book.trade_names"):
+        assert any(column.name == "user_id" and column.nullable for column in tables[name].columns)
+    assert any(
+        column.name == "theme_id" and column.nullable
+        for column in tables["book.trade_names"].columns
+    )
+    events = tables["book.order_assignment_events"]
+    assert len(events.columns) == 9
+    assert {column.name for column in events.columns} >= {"perm_id", "event_id", "changed_at"}

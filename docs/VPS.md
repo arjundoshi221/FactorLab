@@ -14,6 +14,140 @@ values.
 
 ## Server
 
+Monitoring rollout, 2026-10-16: API candidate and web run commit
+`cb3525b8c7ded794d2cf545600fc524d818ba9bd`, version
+`0.0.0-trial.cb3525b8c7de`. [Verified UI workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/38855967183).
+API image: `sha256:41b9e507a1005f555319a1a26ba42c5c9fdb27c811545a1518e7238cbe65f9fd`;
+web image: `sha256:becf6961078c8759e842165393026d3b25b2e73019c0e0c545d0e08eec7dea8d`.
+The served bundle contains the service grid and error inbox; services, daily history,
+coverage and error APIs passed live checks. The universe-filtered inbox returned
+seven error groups with no unavailable sections. Rollback record:
+`/opt/factorlab/deployment-tests/ui-cb3525b8c7de/`.
+
+US collector and universe services run commit
+`1fe998a3c9af64a4ac33b7eb0d63686dacbc426e`, version
+`0.0.0-test.20261016-1fe998a`, image
+`sha256:cd9879a15abf297099d76273ecc63ced2f288330eeded6cddfe22422974b89b5`.
+[Full CI passed](https://github.com/arjundoshi221/FactorLab/actions/runs/38856343053).
+The component-scoped branch runner passed plan, activation and verification; both
+services had healthy monitor heartbeats and zero restarts after stabilization.
+Private rollback model and protected-container records:
+`/opt/factorlab/deployment-tests/20261016-1fe998a/`.
+
+The first UI attempt (`54447e44c369`) failed the new live coverage check and
+restored the preceding images automatically. Qualified ClickHouse aggregate inputs
+fixed the query before the verified replacement. The US update preserved its
+previously deployed engine baseline and changed only monitoring behavior; CI
+preparation also normalized generated path examples and repository test imports.
+Protected primary API, ClickHouse, India, broker, monitor and secret-agent container
+identities remained unchanged; the ingestion step also protected the new API/web.
+No migrations, data deletion, ports, secret bindings or public routing changes.
+Origin APIs and served assets were verified; authenticated browser testing was not
+available. This remains the supported branch deployment path before component pins.
+
+Portfolio deployment, 2026-10-15: the isolated deployment branch released API and
+web commit `743777d49c1b14eb4fcfafa31ae1b79cf3a010fd`, version
+`0.0.0-trial.743777d49c1b`, via
+[the successful UI trial workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/38764040856).
+Applied schema Waves 12/13 successfully; no unrelated waves were applied. API
+digest `sha256:a62bd2114b66e151fb742456bca7241809e5800cb53192135b6237747e9bdf56`;
+web digest `sha256:9baa294b4c2bbdeb50b0925d1726119450447dd76a4653fa56848be7cb00fe2b`.
+Only candidate API and web containers changed. Protected container identities,
+health, version, existing Market Data reads, all four portfolio routes, and live
+synthetic catalog/assignment/PnL/history/clear checks passed. Rollback records:
+`/opt/factorlab/deployment-tests/ui-743777d49c1b/`. Public Access sign-in redirects
+remain intact; authenticated browser testing was unavailable. No ports, secret
+bindings or routing changed; normal component-pin rollout remains pending.
+
+The `IBKR stream tester` profile/account `SIM_IBKR_STREAM` has events 1-3 seeded:
+AAPL order `1800219929310147`, 4 of 10 shares filled, unassigned for manual testing.
+Demo theme/strategy/trade-name catalogs remain available. The workstation `demo`
+checkpoint must be preserved for resuming this scenario.
+
+Preparation found the root disk full again from a 43.61 GiB ClickHouse Docker
+console log. Archived and verified it before truncation; private compressed
+archive and SHA-256 metadata are under
+`/mnt/factorlab-data/maintenance/portfolio-20261015/`. No database data or rollback
+images were deleted. Reopened ClickHouse's failed file logger with its supported
+SIGHUP signal, stopping the repeated file-access stack traces without a restart.
+The container identity/start time/restart count stayed unchanged. Root free space
+was 36 GiB after release verification. This legacy ClickHouse container still
+needs Docker console rotation at its next planned recreation.
+
+Disk-pressure repair, 2026-10-14 19:05 UTC (October 15 IST): owner-authorized
+cleanup reclaimed about 33 GiB on the root disk. Root use fell from 94% (4.4 GiB
+free) to 49% (38 GiB free). The separate raw/archive disk remained 26% used with
+35 GiB free. Removed unused Docker build cache older than 24 hours and 20 obsolete
+local monolith images through the tested image-retention script. Active and
+stopped-container images, the political cron image, and images referenced by
+saved branch deployment/rollback records were preserved. No market, broker,
+political or raw data was deleted.
+
+The daily image-prune script now includes `factorlab` and `factorlab-test-*`
+repositories and protects image IDs/tags in private branch JSON records. Seven
+focused retention tests passed. Cleared only the accumulated
+`system.processors_profile_log` diagnostics (approximately 7.8 GiB) and changed
+its live and persisted TTL from 30 days to one day; other diagnostic TTLs stay
+seven days. ClickHouse configuration was reloaded without recreating the database.
+Configuration/script backups are private under
+`/opt/factorlab/maintenance/20261015-space/`.
+
+Restarted only the failed US price collector at 19:05:26 UTC on its existing
+`035dd0f` image after its disk-full restart failure. API health remained OK;
+the universe service remained ready with 503 resolved stocks. Existing data
+coverage and provider errors are separate from disk-pressure recovery.
+Final verification: root usage 50% with 37 GiB free, collector/API/universe/monitor
+heartbeats up, and fresh daily market-bar writes after 19:06 UTC. Daily recovery
+still reports pre-existing missing/invalid candle coverage; disk cleanup does not
+claim complete historical coverage. The updated image-prune dry run finds no
+additional eligible images.
+
+US universe fix, 2026-10-14 18:14 UTC: the owner requested deployment of the
+validated-alias publication fix. Replaced only `ingest-us` and `universe-us`
+through the scoped branch runner, reusing the prebuilt image from tracked commit
+`035dd0f64b26557d42960929a4ccf2264d322c4c`, version
+`0.0.0-test.20261001-035dd0f`, image
+`sha256:a8cd8f5d052a66087e6530d2cf37402ef1900adf1f1d05e5c762db128559108c`.
+The preceding US image was `45efcac8855d`. Private backups, immutable image pins,
+scope and verification records are under
+`/opt/factorlab/deployment-tests/20261014-035dd0f/`.
+
+Verification: image command imports and non-root engine validation passed;
+both US containers passed startup stability checks with zero restarts.
+API, web, monitor, ClickHouse, secrets agent, India and IBKR container identities
+were preserved. API health and overview reads passed. Universe run
+`4501e751-bfbd-4b52-8647-bd76e76bf5f3` completed successfully at
+18:15:38 UTC with zero failed series; source status became `ready`, reporting
+503 configured US stocks resolved. Previously, 149 bare constituent tickers were
+unresolved despite having Schwab aliases. The deployed fix publishes using those
+validated aliases. This is a branch-image activation, not a normal tagged release.
+No secret bindings, ports, public routing, schema or data deletion changed.
+Normal release bootstrap, the existing origin bypass and unrelated collector
+errors remain separate work.
+
+IBKR schedule maintenance, 2026-09-30 13:42 UTC: changed only
+`IBKR_SNAPSHOT_TIMES` in `/opt/factorlab/deploy/production.env` to all 24 hourly
+slots (`00:00` through `23:00`, America/New_York, XNYS trading days).
+Recreated only `ibkr-snapshot` with its existing image
+`sha256:0b916b860d54e290def60c0f198c74cc786b66a545e55079cca612485eb72ee6`;
+`--run-on-start` triggered an immediate retry. No secret bindings, ports or
+storage paths changed. The preceding settings are backed up on the host in
+`production.env.before-ibkr-hourly-20260930` (mode `0600`).
+Verification: container healthy; the retry connected to the live Gateway and
+wrote 8 positions and 144 account-state rows at approximately 13:43 UTC.
+The run was still `running` at 13:44:55 UTC; initial positions, account-update
+and execution requests logged timeouts, and completion of the execution stage
+remained unconfirmed. Hourly scheduling takes effect after the current run exits.
+Follow-up retry at approximately 14:10 UTC: a plain restart retained the
+temporary lock left by the blocked prior run. Recreated only `ibkr-snapshot`
+again on the same image to clear its container-local `/tmp` lock and trigger
+a fresh snapshot. The prior run logged Gateway/server connectivity error 1100;
+this is distinct from a pacing violation. Hourly configuration remains in place.
+Fresh retry `c61dfbe9-625d-4ca0-8f9c-83daf33706ae` started at 14:10:48 UTC
+and wrote 8 positions and 144 account-state rows at 14:11:19 UTC. Initial
+subscription/execution requests again timed out; the full run remained pending
+at 14:12 UTC. Partial writes do not establish a complete, fresh account response.
+
 ```text
 Host:       145.239.75.163
 SSH user:   ubuntu
@@ -536,7 +670,7 @@ Docker's `unless-stopped` restart policy.
   not reopen public TCP port `8000` or run a public reverse proxy.
 - Rotate Cloudflare VPS service token before expiry.
 
-## UDP monitoring branch trial â€” 2026-09-30 14:40 UTC
+## UDP monitoring branch trial — 2026-09-30 14:40 UTC
 
 Owner-authorized monitoring deployment extended the current VPS branch trial.
 Images use tracked source `60afea8`, version `0.0.0-test.monitoring`; rollback

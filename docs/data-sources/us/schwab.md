@@ -119,34 +119,45 @@ client = auth.client_from_token_file(
 
 ## Rate limits
 
-### Documented limits
+### Planning assumptions and runtime limits
 | Limit | Value | Notes |
 |-------|-------|-------|
-| Requests per minute | **120** | App-level, set during app creation |
+| Requests per minute | **120 (approximate)** | Not verified as a current market-data contract; the portal order-limit setting is not proof |
 | Streaming connections | **1** per account | WebSocket — reconnect logic required |
 | Throttle response | HTTP 429 | Check `Retry-After` header |
-| Sustained safe rate | ~2 req/sec | Community consensus |
+| Default production pace | 1 req/sec | Conservative local floor, not a provider guarantee |
 
 ### Practical throughput
-- 500-stock daily quote refresh: ~500 requests = ~4 minutes at 2/sec
-- 500-stock 20yr daily backfill: ~500 requests = ~4 minutes (1 req per stock, returns full history)
+- 3,000-stock daily refresh or history pass: at least ~50 minutes at 1/sec,
+  plus response latency, storage and retries (one price-history call per symbol).
+- Quote validation supports batches; it is separate from one-symbol price history.
 - `schwab-py` does NOT auto-retry on 429 — implement backoff yourself
 
 ### Production collector budget (`ingest-us`)
 Measured 2026-09-25 on the VPS: peak 63 req/min, zero 429s. `ingest-us` is the only
 steady consumer; `universe-us` adds about 11 `/quotes` calls a day.
 
+That measurement used the old S&P 500 scope. A Russell roster needs roughly 60
+validation calls. The validator now uses a two-second floor, and the shadow
+provider defaults to one request/second. All consumers share credentials but
+do not have a cross-process limiter; reserve headroom and avoid concurrent
+shadow sweeps. See [the research](../../research/schwab-russell3000-daily-coverage.md).
+
 | Env var | Default | Effect |
 |---------|---------|--------|
 | `SCHWAB_MIN_REQUEST_INTERVAL_SECONDS` | `1.0` | Pacing floor per request (1.0 = at most 60/min) |
 | `US_LIVE_INTERVAL_SECONDS` | `300` | 1-min tier sweep cadence, measured from sweep start |
+| `US_MINUTE_TIER_SIZE` | `250` | 0-250 minute symbols; 0 disables minutes; daily scope stays full |
 
-With the defaults, the 250-symbol tier refreshes about every 5 minutes. Next step once
-`Schwab ... HTTP 429` warnings stay absent: `0.6` / `180` (at most 100 req/min, ~3-minute refresh if ClickHouse writes keep
-up), which leaves ≥20 req/min headroom under the 120/min app limit. Failed daily and minute
-recoveries back off 15m → 30m → … → 24h per symbol instead of retrying every 15 minutes.
+Runnable daily work preempts minute sweeps and minute recovery. Deferred retries
+permit minute work. Increase throughput only after confirming the approved app's
+limits and accounting for all consumers. Failed and partial daily recovery backs
+off 15m → 30m → … → 24h per symbol; weekly full refreshes revisit provider corrections.
+`Retry-After` remains in effect even after a request exhausts its retry budget.
 
 ### Price history data retention
+These are observed availability estimates from the client authors and internal
+preflights, not universal retention guarantees. See the cited investigation above.
 | Frequency | Max lookback |
 |-----------|-------------|
 | 1-minute | ~48 days |

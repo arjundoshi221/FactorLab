@@ -1,14 +1,15 @@
 # factorlab-storage
 
+Political `recent_filings` accepts an optional filing year, filtered before the limit;
+the political bootstrap uses it to keep historical-year PTR requests in scope.
+
 > The DB service: ClickHouse v2 writers used by the production daemons, and the provider-blind dataset sinks and read ports the ingestion engine writes through.
 
 ## Purpose
 
 Everything that writes FactorLab data into ClickHouse v2: raw archive, ingestion
-runs, identity resolution, canonical UUID minting, provenance and versioning. Two
-generations live side by side: the legacy-shaped writers (`v2_*.py`) that the
-components' production daemons call, and `storage.sinks` (doc 07 §7) that implement
-the `factorlab-ingest` sink protocols. Layer:
+runs, identity resolution, canonical UUID minting, provenance and versioning. Production collectors use canonical dataset sinks. The `v2_*.py` classes retain
+raw archiving, run lifecycle, inventory, recovery/coverage state and broker writes. Layer:
 `LIBRARY_LAYERS["storage"] = {"core", "calendars", "clickhouse", "ingest"}`
 ([test_boundaries.py](../../tests/architecture/test_boundaries.py)).
 
@@ -18,7 +19,6 @@ the `factorlab-ingest` sink protocols. Layer:
   `V2IndiaStorage` ([v2_india.py](src/factorlab/storage/v2_india.py)), `V2USStorage`
   ([v2_us.py](src/factorlab/storage/v2_us.py)), `V2BrokerStorage`
   ([v2_broker.py](src/factorlab/storage/v2_broker.py)),
-  `V2PoliticalClickHouseStorage` ([v2_political.py](src/factorlab/storage/v2_political.py)),
   `V2ReferenceWriter` ([v2_reference.py](src/factorlab/storage/v2_reference.py));
   UUID namespaces ([canonical_ids.py](src/factorlab/storage/canonical_ids.py));
   `ClickHouseSinks` ([sinks/clickhouse.py](src/factorlab/storage/sinks/clickhouse.py))
@@ -46,8 +46,12 @@ extends `V2IndiaStorage`); each `V2*Storage.from_environment()`; sink methods
 | Password | secret `CLICKHOUSE_PASSWORD` | `factorlab_dev` (dev) | Secret volume in production |
 
 No direct environment reads in this member.
+The retired version-one US master count/publication methods have been removed;
+configured US resolution uses SchwabListings and canonical reference sinks.
 
 ## Data
+
+**Shared profiles:** `ProfileStorage.sync` retains omitted records and existing strategy/closed-date fields. `V2BrokerStorage` records complete snapshots, including empty ones. `PortfolioBookStorage` validates active profile/catalog ownership and durable orders before writing catalog replacements or append-only assignment events; fills remain unchanged. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md).
 
 - Writes: `raw.archive` (gzip body, `response_sha256`, `content_encoding = 'gzip'`),
   `meta.ingestion_runs` (`source_channel` = the run's `source`), `meta.unresolved_entities`
@@ -115,3 +119,7 @@ does not undo rows already written.
 - Bar session and `trade_date` tagging lives in `sinks/calendar.py` (period bars keyed
   at exchange-local midnight, as production writes); keep it in step with the hours in
   `factorlab-calendars` / orchestration.
+
+Replay requests binary archive bodies before gzip decoding. Listing resolution
+accepts a MIC and preserves the existing exchange code and UUID. Market inserts
+group by country, resolution and five-year window (at most 60 monthly partitions).

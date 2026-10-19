@@ -24,7 +24,28 @@ def _engine(argv: list[str]) -> int:
     return engine_cli.main(argv, providers=PROVIDERS, prog="factorlab-ingest-broker engine")
 
 
+def _profiles(argv: list[str]) -> int:
+    from factorlab.components.ingest_broker.profiles import profiles_cli
+
+    return profiles_cli(argv)
+
+
+def _simulate(argv: list[str]) -> int:
+    from factorlab.components.ingest_broker.profiles import simulate_cli
+
+    return simulate_cli(argv)
+
+
+def _simulate_stream(argv: list[str]) -> int:
+    from factorlab.components.ingest_broker.stream_simulation import cli
+
+    return cli(argv)
+
+
 COMMANDS = {
+    "simulate-stream": Command("replay timed synthetic orders, fills and quotes", _simulate_stream),
+    "profiles": Command("register shared test profiles and account ownership", _profiles),
+    "simulate": Command("ingest synthetic paper broker responses (no Gateway)", _simulate),
     "snapshot": Command("account snapshot (one run or the scheduled daemon)", _snapshot),
     "engine": Command("provider-agnostic engine: validate, run, daemon, replay", _engine),
 }

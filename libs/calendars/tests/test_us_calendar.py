@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime, time
 
 import pytest
 
-from factorlab.calendars.us import is_session, next_scheduled_run
+from factorlab.calendars.us import is_session, next_scheduled_run, previous_scheduled_run
 
 SLOTS = (time(6, 0), time(16, 30))
 
@@ -42,3 +42,36 @@ def test_rejects_naive_and_empty_schedules():
         next_scheduled_run(datetime(2026, 9, 24, 12, 0), SLOTS)
     with pytest.raises(ValueError):
         next_scheduled_run(datetime(2026, 9, 24, 12, 0, tzinfo=UTC), ())
+
+
+def test_previous_slot_same_day():
+    # Thu 2026-09-24 21:00 UTC = 17:00 EDT -> the 16:30 EDT slot (20:30 UTC)
+    assert previous_scheduled_run(datetime(2026, 9, 24, 21, 0, tzinfo=UTC), SLOTS) == datetime(
+        2026, 9, 24, 20, 30, tzinfo=UTC
+    )
+
+
+def test_previous_slot_includes_exact_slot():
+    at = datetime(2026, 9, 24, 10, 0, tzinfo=UTC)  # 06:00 EDT
+    assert previous_scheduled_run(at, SLOTS) == at
+
+
+def test_previous_slot_over_weekend_is_friday_close_slot():
+    # Sun 2026-09-27 -> Fri 2026-09-25 16:30 EDT
+    assert previous_scheduled_run(datetime(2026, 9, 27, 15, 0, tzinfo=UTC), SLOTS) == datetime(
+        2026, 9, 25, 20, 30, tzinfo=UTC
+    )
+
+
+def test_previous_slot_skips_holiday():
+    # Thanksgiving 2026-11-26 midday -> Wed 2026-11-25 16:30 EST
+    assert previous_scheduled_run(datetime(2026, 11, 26, 18, 0, tzinfo=UTC), SLOTS) == datetime(
+        2026, 11, 25, 21, 30, tzinfo=UTC
+    )
+
+
+def test_previous_rejects_naive_and_empty_schedules():
+    with pytest.raises(ValueError):
+        previous_scheduled_run(datetime(2026, 9, 24, 12, 0), SLOTS)
+    with pytest.raises(ValueError):
+        previous_scheduled_run(datetime(2026, 9, 24, 12, 0, tzinfo=UTC), ())

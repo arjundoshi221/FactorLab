@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import Mock
 
 import pytest
 
@@ -351,3 +352,28 @@ def test_write_without_run_is_refused():
 
 def test_settings_base_model_is_permissive():
     assert ProviderSettings.model_validate({"name": "x", "extra": 1}).name == "x"
+
+
+def test_shutdown_defers_remaining_units_without_fetching():
+    sink = InMemorySink()
+    seed(sink, rows=(("K1", "RELIANCE"), ("K2", "SECOND")))
+    source = FakeBars("up")
+    adapter = Mock(
+        provider=source.provider, dataset=source.dataset, capabilities=source.capabilities
+    )
+    adapter.plan = source.plan
+    adapter.fetch = source.fetch
+    adapter.normalize = source.normalize
+    summary = run_binding(
+        binding("up"),
+        adapter,
+        sink,
+        bars_request(("up_key", "K1"), ("up_key", "K2")),
+        should_stop=lambda: bool(source.fetches),
+    )
+    assert source.fetches == ["K1"]
+    assert summary.status == "partial"
+    assert summary.rows_written == 1
+    assert len(summary.failed_units) == 1
+    assert summary.failed_units[0].error is not None
+    assert "shutdown requested" in summary.failed_units[0].error

@@ -5,8 +5,12 @@ import { IndiaMarkets } from "./pages/IndiaMarkets";
 import { IndiaInstrumentDetail } from "./pages/IndiaInstrumentDetail";
 import { PoliticalData } from "./pages/PoliticalData";
 import { USMarkets } from "./pages/USMarkets";
+import { MarketData } from "./pages/InstrumentExplorer";
+import { TradeLedger } from "./pages/TradeLedger";
 import { Monitoring } from "./pages/Monitoring";
 import { DockerImages } from "./pages/DockerImages";
+import { Portfolio } from "./pages/Portfolio";
+import { PortfolioGroups } from "./pages/PortfolioBook";
 
 import { StatusPill, type HubStatus } from "./components/ui";
 import { formatBytes, formatCompact, formatDate, formatTime } from "./shared/format";
@@ -122,6 +126,8 @@ function Shell({ children }: { children: React.ReactNode }) {
           <a className={path.startsWith("/schema") ? "active" : ""} href="/schema">Schema</a>
           <a className={path === "/data/pipelines" ? "active" : ""} href="/data/pipelines">Pipelines</a>
           <a className={path === "/monitoring" ? "active" : ""} href="/monitoring">Monitoring</a>
+          <a className={path === "/market-data" ? "active" : ""} href="/market-data">Market data</a>
+          <a className={path === "/portfolio" || path.startsWith("/portfolio/") ? "active" : ""} href="/portfolio">Portfolios</a>
           <details className={`nav-menu${inOperations ? " is-active" : ""}`}>
             <summary>Operations</summary>
             <div className="nav-menu__panel">
@@ -448,6 +454,11 @@ function Roadmap() {
 export function App() {
   const path = window.location.pathname;
   const indiaInstrumentMatch = path.match(/^\/india\/instruments\/([0-9a-f-]+)$/i);
+  if (path === "/portfolio") return <Shell><Portfolio /></Shell>;
+  if (path === "/portfolio/trades") return <Shell><TradeLedger /></Shell>;
+  if (path === "/portfolio/themes") return <Shell><PortfolioGroups kind="themes" /></Shell>;
+  if (path === "/portfolio/strategies") return <Shell><PortfolioGroups kind="strategies" /></Shell>;
+  if (path === "/portfolio/trade-names") return <Shell><PortfolioGroups kind="trade-names" /></Shell>;
   const tableMatch = path.match(/^\/data\/tables\/([a-z_]+\.[a-z0-9_]+)$/);
   if (path === "/data") return <Shell><DataHome /></Shell>;
   if (path === "/data/pipelines") return <Shell><Pipelines /></Shell>;
@@ -471,7 +482,7 @@ export function App() {
   }
   return (
     <Shell>
-      {path === "/monitoring" ? <Monitoring /> : path === "/roadmap" ? <Roadmap /> : path === "/docker-images" ? <DockerImages /> : indiaInstrumentMatch ? <IndiaInstrumentDetail listingId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
+      {path === "/market-data" ? <MarketData /> : path === "/monitoring" ? <Monitoring /> : path === "/roadmap" ? <Roadmap /> : path === "/docker-images" ? <DockerImages /> : indiaInstrumentMatch ? <IndiaInstrumentDetail listingId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
     </Shell>
   );
 }

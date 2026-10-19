@@ -5,37 +5,36 @@
 ## Purpose
 
 The `api` component serves the private hub's JSON API (`/hub/api/v1/*`), the bearer-key
-research API (`/api/v1/*`) and `/health`. It only reads ClickHouse and the host's
-Docker image snapshot; it writes no data. It is a deployable component (image
+research API (`/api/v1/*`) and `/health`. It reads ClickHouse and the host's Docker
+snapshot, and writes profile catalogs/order assignments through storage. Deployable image:
 `ghcr.io/arjundoshi221/factorlab-api`, manifest [component.yaml](component.yaml)).
 
 ## Owns and does not own
 
-- Owns: HTTP routes in [app.py](src/factorlab/components/api/app.py) and the routers and
-  repositories beside it (catalog, schema map, India, US, political, Docker images), the
-  response models, the bearer check in [auth.py](src/factorlab/components/api/auth.py),
-  and the catalog descriptions (`catalog_descriptions.json`, `catalog_curated.json`).
-- Does not own: the UI (`web`; the monolith image still bundles it), ClickHouse and the
-  compose base (`platform`, [deploy/](../../deploy/)), schema DDL and readiness
-  (`schema-migrator` / `libs/schema`), runtime secrets (`secrets-agent`), the tunnel and
-  Access policy (Cloudflare dashboard, [deploy/edge/README.md](../../deploy/edge/README.md)).
+- Owns: HTTP routes in [app.py](src/factorlab/components/api/app.py) and the routers and repositories beside it (catalog, schema map, India, US, political, Docker images), the response models, the bearer check in [auth.py](src/factorlab/components/api/auth.py), and the catalog descriptions (`catalog_descriptions.json`, `catalog_curated.json`).
+- Does not own: the UI (`web`; the monolith image still bundles it), ClickHouse and the compose base (`platform`, [deploy/](../../deploy/)), schema DDL and readiness (`schema-migrator` / `libs/schema`), runtime secrets (`secrets-agent`), the tunnel and Access policy (Cloudflare dashboard, [deploy/edge/README.md](../../deploy/edge/README.md)).
 
 ## Entry points
 
-- Console script `factorlab-api` ([`__main__.py`](src/factorlab/components/api/__main__.py)):
-  uvicorn on `--host`/`--port` (default `0.0.0.0:8000` in the container), JSON logging,
-  uvicorn access log off.
+- Console script `factorlab-api` ([`__main__.py`](src/factorlab/components/api/__main__.py)): uvicorn on `--host`/`--port` (default `0.0.0.0:8000` in the container), JSON logging, uvicorn access log off.
 - Compose service `api` ([deploy/compose.yaml](deploy/compose.yaml)), published on
   `127.0.0.1:8000` only, `read_only`, `mem_limit: 512m`, network `backend`.
 - Routes: `GET /health`; `/hub/api/v1/overview`, `/hub/api/v1/catalog`,
   `/hub/api/v1/catalog/pipelines[/{pipeline_id}/runs]`,
   `/hub/api/v1/catalog/tables/{name}[/rows|/rows.csv|/stats|/activity]`,
   `/hub/api/v1/schema-map[/v2]`, `/hub/api/v1/docker-images`,
-  `/hub/api/v1/india/*`, `/hub/api/v1/us/*`, `/hub/api/v1/political/*`; and
+  `/hub/api/v1/india/*`, `/hub/api/v1/us/*`, `/hub/api/v1/market-data/*`, `/hub/api/v1/political/*`; and
   `/api/v1/india/*`, `/api/v1/us/*`, `/api/v1/political/*` (these require
   `Authorization: Bearer <FACTORLAB_API_KEY>`). FastAPI's `/docs` and `/openapi.json` are on.
-- SPA fallbacks (`/`, `/data`, `/schema`, `/india`, `/us`, `/political`, `/docker-images`,
+- SPA fallbacks (`/`, `/data`, `/schema`, `/india`, `/us`, `/market-data`, `/political`, `/docker-images`,
   `/roadmap`, ...) return `index.html` from `FACTORLAB_WEB_DIST`, or 503 if it is absent.
+
+The private `/hub/api/v1/market-data/universe` routes list active configured US/India tickers and fetch per-ticker stored coverage. Daily reads use a rolling 30-calendar-day window; historical reads use the full stored range. Both resolve membership from
+`meta.expected_series` and coverage from canonical bars, with recovery state reported
+separately. Search and has-data filters run before pagination. Ticker detail counts missing
+market sessions within up to the latest 365 days of its stored range.
+Indian futures are keyed by contract ID as well as listing ID so their counts do not
+merge with the underlying equity.
 
 ## Configuration and secrets
 
@@ -55,7 +54,8 @@ Secret resolution is [`factorlab.core.secrets.get_secret`](../../libs/core/src/f
 
 ## Data
 
-Reads only. Tables include `meta.ingestion_runs`, `meta.expected_series`,
+**Portfolios:** `/hub/api/v1/portfolio/*` adds GET catalogs/orders/pnl/history, POST/PUT catalogs and PUT order assignments. Independent profile tags use forward Wave 13; FIFO stock/ETF PnL is per exact tag triple/currency, with explicit missing-history/mark/cost states. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md). **Trade ledger** (`portfolio_ledger.py`, F-040): `GET /hub/api/v1/portfolio/ledger?user_id=` groups the profile's de-duplicated fills (via `Book`) into one row per order with tags, exact-decimal quantity/average price, per-currency commissions and broker-reported realized PnL (null if any fill lacks it). Filters apply across full history before paging; tag-status counts ignore the tag filter. The 20-account and 20,000-fill bounds apply.
+Successful empty snapshots clear holdings; failures retain data. Filtering is not authorization. Tables include `meta.ingestion_runs`, `meta.expected_series`,
 `meta.session_coverage`, `meta.source_status`, `meta.recovery_state`,
 `meta.schema_migrations`, `market.bars`, `alt.political_*`, `ref.*` and `raw.archive`
 metadata (the catalog reads every v2 table it lists). Catalog queries carry `readonly=2`,
@@ -65,8 +65,7 @@ at most three preview queries run at once. Host path: `/var/lib/factorlab/docker
 
 ## Dependencies and contracts
 
-- Workspace: `factorlab-core`, `factorlab-clickhouse`, `factorlab-schema`, `factorlab-calendars`
-  ([pyproject.toml](pyproject.toml)). Third-party: `fastapi`, `uvicorn[standard]`, `pandas`,
+- Workspace: `factorlab-core`, `factorlab-clickhouse`, `factorlab-schema`, `factorlab-storage`, `factorlab-calendars` ([pyproject.toml](pyproject.toml)). Third-party: `fastapi`, `uvicorn[standard]`, `pandas`,
   `pydantic`, `pydantic-settings`, `exchange-calendars`, `tzdata`. `fastapi` and `uvicorn`
   may ship only in this image ([tools/verify_image.py](../../tools/verify_image.py)).
 - Contracts: the response models consumed by `web` (`components/web/src/*Types.ts`); route
@@ -124,4 +123,28 @@ tags ([release.yml](../../.github/workflows/release.yml), `deploy-release.sh`).
 - New tables need catalog descriptions, or `tests/test_catalog_descriptions.py` fails
   (`python scripts/generate_catalog_descriptions.py`).
 
-**UDP service monitoring:** `/hub/api/v1/monitoring/services` joins latest ClickHouse statuses with the mounted service registry; `/events` supports service/type/since/limit filters. The API marks monitor offline after 15 seconds without a status update. Its lifespan sends heartbeats and a deliberate stop. No monitor daemon connection is needed for reads.
+**UDP service monitoring:** `/hub/api/v1/monitoring/services` joins latest ClickHouse statuses with the mounted service registry; `/events` supports service/type/since/limit filters. The API marks monitor offline after 15 seconds without a status update. Its lifespan sends heartbeats and a deliberate stop. No monitor daemon connection is needed for reads. **Status verdict:** `/monitoring/summary` (`monitoring_summary.py`) rolls services, source status, pipelines, coverage feeds and broker snapshots of active non-simulated accounts into linked checks and a verdict (critical, then attention, then unknown, then ok); a failed gatherer is `unknown`, never `ok`; cached 15s. **Schedule-aware freshness** (`source_health.py`): IBKR is stale only when a slot at least 1 h old has no snapshot after it, using `IBKR_SNAPSHOT_TIMES` (default `06:00,16:30`; must match `ibkr-snapshot`, production is hourly). The same rule drives IBKR source status, its pipeline card, portfolio `freshness` and PnL `stale_price`; `waiting` is normal; `ibkr` maps to `ibkr-snapshot`. [F-038](../../docs/features/F-038-monitoring-status-verdict.md).
+
+`/monitoring/daily` counts stored service reports/errors/warnings/restarts/down transitions over seven UTC
+calendar days, including today, without sampling the event log. `/monitoring/coverage`
+aggregates the latest recorded session per country/source/resolution within 30 days from
+`meta.session_coverage FINAL`. It also joins active non-contract listing series from
+`meta.expected_series FINAL` to checks for that feed's latest recorded date to count
+unreported series; active feeds without checks are returned with null session/check dates.
+These reads are bounded and read-only with 5s per-query deadlines. They evaluate recorded
+checks, not exchange calendars or entirely absent expected sessions; recorded bar
+percentages cannot establish whole-universe completeness. Failed queries return 503.
+
+**Stored error group**: Repeated reports with the same service, severity, error type
+and message, or failed runs with the same pipeline, provider, status and error.
+First/last occurrence and counts are scoped to the selected history window.
+
+**Current source problem**: The latest source status is not ready, or its report is
+older than ten minutes. It remains relevant outside the error-history window and has
+no inferred first failure time or count.
+
+**Later successful run**: A recorded successful run of the same pipeline and provider
+after a group's latest failed run. This is evidence of progress rather than proof of
+complete data recovery; historical errors remain visible.
+
+**Instrument explorer:** **All tickers** is the default reference inventory, including inactive/empty listings and contracts. **Collection coverage** retains configured daily/history views. **Direct match** uses the selected canonical ID; security/issuer/underlying context stays separate. **Instrument coverage** means scoped lifetime stored counts, not collection intent. **Investigation candidates** have supporting alias scope/validity but never establish confirmed coverage. **Recorded provenance** follows raw/run/computation IDs; absent evidence remains unavailable. Filters and selection are shareable. [Specification and API contracts](../../docs/features/F-037-instrument-explorer.md). **Data matrix** (`instrument_matrix.py`, F-039): `GET /hub/api/v1/market-data/matrix` returns listings x columns with one set-based query per column group over the page IDs (bars per configured country/source/resolution vs the exchange's latest completed session + 2h grace, futures by underlying, issuer fundamentals, political trades by most specific identity, latest-manifest holdings per account and currency, orders and owner-profile tag status with fills de-duplicated by `argMax(version)`). A failed group is `unavailable`. Attention filters (`bars`, `untagged`) apply before paging; configuration and lagging sets are cached 60s and also feed the monitoring summary's tickers check.

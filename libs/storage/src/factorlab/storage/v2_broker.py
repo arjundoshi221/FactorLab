@@ -18,10 +18,12 @@ from __future__ import annotations
 import dataclasses
 import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
 from factorlab.ingest.provider import Provenance
+from factorlab.storage import clickhouse as storage_connection
 from factorlab.storage.clickhouse import _decimal, _version
 from factorlab.storage.v2_us import V2USStorage
 
@@ -93,6 +95,42 @@ def _fact_columns(row: Any) -> dict[str, Any]:
 
 class V2BrokerStorage(V2USStorage):
     """Writes broker mirror rows for US-booked accounts."""
+
+    def start_ingestion_run(self, **kwargs: Any) -> storage_connection.IngestionRunHandle:
+        self._broker_snapshots: list[dict[str, Any]] = []
+        return super().start_ingestion_run(**kwargs)
+
+    def record_broker_snapshot(
+        self,
+        accounts: Sequence[str],
+        *,
+        broker_code: str,
+        dataset: str,
+        snapshot_time: datetime,
+        provenance: Provenance,
+        simulated: bool = False,
+    ) -> None:
+        self._check_lineage(provenance)
+        for account in accounts:
+            self._broker_snapshots.append(
+                {
+                    "broker_code": broker_code,
+                    "account_id": account,
+                    "dataset": dataset,
+                    "snapshot_time": snapshot_time.isoformat(),
+                    "source_channel": provenance.source_channel,
+                    "raw_id": str(provenance.raw_id),
+                    "simulated": simulated,
+                }
+            )
+
+    def finish_ingestion_run(
+        self, handle: storage_connection.IngestionRunHandle, **kwargs: Any
+    ) -> None:
+        metadata = dict(handle.metadata)
+        if self._broker_snapshots:
+            metadata["broker_snapshots"] = self._broker_snapshots
+        super().finish_ingestion_run(replace(handle, metadata=metadata), **kwargs)
 
     def _check_lineage(self, provenance: Provenance) -> None:
         if self._active_run_id is None or provenance.ingest_run_id != self._active_run_id:

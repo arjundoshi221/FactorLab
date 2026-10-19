@@ -72,7 +72,7 @@ Research and backtest runs should record code version, config hash, data snapsho
 
 - Not a low-latency execution system
 - Not a public SaaS product
-- Not a multi-user platform
+- Shared test-user profiles and account ownership are supported; per-user login and privacy enforcement are deferred.
 
 ---
 

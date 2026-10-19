@@ -13,13 +13,13 @@ from factorlab.runtime.supervised import supervised
 
 
 def _daemon(argv: list[str]) -> int | None:
-    from factorlab.components.ingest_us.legacy.daemon import main
+    from factorlab.components.ingest_us.collector import main
 
     return main(argv)
 
 
 def _universe(argv: list[str]) -> int | None:
-    from factorlab.components.ingest_us.legacy.universe_daemon import main
+    from factorlab.components.ingest_us.universe_daemon import main
 
     return main(argv)
 

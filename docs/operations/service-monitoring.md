@@ -3,6 +3,94 @@
 F-035 adds a UDP monitor on the private backend network. The hub primary navigation links
 to `/monitoring`; its API reads ClickHouse independently of the monitor process.
 
+## Hub page
+
+The health overview counts healthy, delayed/missing, awaiting-report and deliberately
+stopped services. Service cards put delayed/missing heartbeats first and distinguish
+scheduled jobs awaiting their first monitored run from services missing a heartbeat.
+Null report ages display "Not yet reported"; unavailable instance uptime displays a dash.
+Select a card to filter its events, or use the service, event type and time range controls.
+The log shows the latest 100 matching events, with timestamps in the browser's local
+timezone. Clear filters returns to the full event history.
+
+The page refreshes every 15 seconds and supports manual refresh. Loading, empty history,
+an offline monitor and failed API requests have separate messages. Failed refreshes
+retain the previous successful snapshot and its checked time; changing filters hides
+the preceding filter's events until a matching response arrives.
+
+## Operations grid
+
+Service cards include errors/warnings in the last hour, packet gaps and configured
+heartbeat or job deadlines. Search by name/ID or enable **Needs attention only** to
+include late/down/unknown services, unregistered senders and recent errors/warnings.
+An on-time heartbeat can coexist with ingestion errors. The seven-day strips count
+stored reports, errors, warnings, restarts and down transitions by UTC calendar day; focus or hover a day
+for its counts. Grey means no stored reports, not a healthy day. Green denotes reports
+without error packets or down transitions, not continuous uptime. Daily error totals use all stored events,
+independently of the latest 100 events and their filters.
+
+**Data completeness** shows each feed's latest recorded session within 30 days: recorded
+missing bars, affected series, checked series, expected bars and check timestamp. Active
+non-contract listing series without a record for that feed's latest recorded session are
+counted separately. A registered active feed with no checks still appears with no session
+and unknown bar coverage. The bar percentage excludes unreported series. This view does
+not infer exchange holidays or detect an entirely absent expected session; check the
+displayed session date and pipeline schedule when interpreting coverage.
+
+**Daily ingestion** reuses the catalog's schedule-aware pipeline health. Cards summarize
+rolling 24-hour runs, failed/partial runs and rows, plus seven calendar days of UTC activity.
+Expand recent problems to see run errors and failed series. **Problems only** includes
+attention/missing pipeline statuses and any failed/partial run in the last 24 hours.
+The catalog can cache these results for 60 seconds. Links open coverage records and the
+pipeline explorer for investigation.
+
+Each operations panel refreshes independently every 15 seconds, and **Refresh now**
+refreshes all panels. A failed panel retains a marked stale snapshot without preventing
+the other panels from updating. The service grid marks heartbeat statuses stale when
+the monitor is offline or the service/event refresh fails. No new schema migration is
+required for these read APIs; deploy API and web together to expose the new panels.
+
+## Error inbox and collection failures
+
+The page puts reported source problems above the health overview. A universe source
+error marks `universe-us` as needing attention even if the daemon's heartbeat is on
+time and its last-hour error counter is zero. Source reports older than ten minutes
+are shown as stale rather than fresh collection health. Use the **Error inbox** link
+to investigate; process liveness does not establish successful collection.
+
+The inbox reads `/hub/api/v1/monitoring/errors` independently of the latest 100 event
+activity rows. Select the last 24 hours, 7 days (default), or 30 days, a service and a
+severity. The API accepts `hours` (1-720), `service_id`, `severity` (`all`, `error`,
+`fatal`, `warning`) and `limit` (1-200, default 100). It aggregates all matching stored
+error/warning packets and failed/partial ingestion runs before applying the group
+limit. Service filtering maps `us_universe_sync` to `universe-us`. Current source
+problems appear even if their last report predates the selected history window.
+
+Expand a group for its message, first/last occurrence within the window, count, latest
+affected run ID or host/instance, failed-series count across those runs, and recovery
+evidence. Counts can represent repeated attempts for the same symbol, not distinct
+affected symbols. Matching service telemetry and ingestion runs remain separate
+evidence and must not be added as a single incident count. A later successful run of
+the same pipeline and provider is labeled **Later successful run**; the inbox does not
+assert that all missing records are repaired. Telemetry errors have unconfirmed recovery.
+Source statuses have no invented occurrence count or first-failure timestamp.
+
+The inbox displays at most the latest 100 groups; narrow the service/time filters if
+truncated. Text search applies to loaded groups. Failed refreshes retain a marked stale
+snapshot. Individual failed queries produce an **Incomplete error history** notice,
+so missing results never imply a clear history. Query failures do not expose connection
+details, and messages use the catalog's credential redaction. Reads are read-only,
+bounded by the history window, with 5-second per-query deadlines and resource limits.
+
+Caught universe daemon refresh failures now emit `universe_refresh_failed` error packets
+with pipeline/provider/retry context; invalid configuration emits `universe_config_invalid`.
+The retry wait preserves the redacted failure reason in source status. These error
+packets use the monitor's existing notification and deduplication path. The one-shot
+command also reports caught failures. UDP remains best effort, so the inbox additionally
+reads persisted failed runs and source status, including historical failures from before
+this instrumentation was deployed. Deploy `ingest-us`, API and web through their normal
+release workflows to activate all changes; implementation alone does not deploy them.
+
 ## Rollout
 
 Complete F-007's per-component release cutover first. Release runtime consumers with

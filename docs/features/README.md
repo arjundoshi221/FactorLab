@@ -17,6 +17,10 @@ when anything here is stale or invalid. The `feature` skill
 |---|---|---|---|---|---|
 | [F-001](F-001-data-health.md) | Data health | in-progress | P1 | — | api, web |
 | [F-035](F-035-udp-service-monitoring.md) | Heartbeat, warning and error monitoring over UDP | review | P1 | — | runtime, ingest, schema, platform, api, web |
+| [F-037](F-037-instrument-explorer.md) | Canonical instrument data explorer | review | P1 | — | api, web |
+| [F-038](F-038-monitoring-status-verdict.md) | One status verdict at the top of monitoring | review | P1 | — | api, web, calendars |
+| [F-039](F-039-ticker-data-matrix.md) | Ticker × dataset matrix linking each ticker's data, holdings and trades | review | P1 | — | api, web |
+| [F-040](F-040-trade-ledger.md) | Cross-account trade ledger with strategy, theme and trade-name tags | review | P1 | — | api, web |
 | [F-006](F-006-restore-edge-access-invariants.md) | Restore the Cloudflare Access invariants on the hub hostname | planned | P0 | 2026-S20 | platform, api |
 | [F-007](F-007-per-component-rollout.md) | Roll out per-component releases (R0–R5) | planned | P0 | 2026-S20 | platform, api, web, secrets-agent, schema-migrator, ingest-india, ingest-us, ingest-political, ingest-broker |
 | [F-002](F-002-data-explorer.md) | Data explorer | planned | P2 | — | api, web |
@@ -50,4 +54,5 @@ when anything here is stale or invalid. The `feature` skill
 | [F-023](F-023-commodities-squeeze-signals.md) | Commodity squeeze-signal sleeve | idea | P3 | — | ingest-us |
 | [F-024](F-024-hyperliquid-after-hours.md) | Hyperliquid tokenized-equity perps as an after-hours signal | idea | P3 | — | ingest-us |
 | [F-032](F-032-worker-ci-deploys.md) | Decide on CI deploys for the Cloudflare Workers | idea | P3 | — | upstox-auth-worker, upstox-oauth-callback-worker |
+| [F-036](F-036-portfolio-tagging-pnl.md) | Profile-owned order tags and portfolio PnL | shipped | P1 | — | schema, storage, api, web |
 <!-- END GENERATED: features index -->

@@ -55,6 +55,8 @@ No ClickHouse access.
 
 - Dev dependencies only: `wrangler`, `typescript`, `@cloudflare/workers-types`;
   `compatibility_date = "2026-07-26"`.
+  The lockfile uses patched Wrangler/Miniflare development dependencies;
+  `npm audit` is clean following the October 1 audit.
 - Shared with the auth Worker: KV key names, the record shapes, `TOKEN_ENCRYPTION_KEY`
   (base64, 32 bytes), and the sealed Schwab state format (12-byte IV + AES-GCM JSON with
   `provider: "schwab"`, `issued_at`, `nonce` of at least 32 characters). Change both Workers
@@ -69,10 +71,11 @@ page and, on the VPS, in the secrets agent's sync log line. Liveness: `GET /heal
 
 ## Tests
 
-No unit tests. CI type-checks and bundles:
+CI type-checks, tests asynchronous callback error handling, and bundles:
 
 ```bash
 cd cloudflare/upstox-oauth-callback-worker && npm ci && npm run check
+npm test
 npx wrangler deploy --dry-run --config wrangler.example.toml --outdir dist
 ```
 
@@ -95,7 +98,7 @@ by deploying the previous tag. There is no host rollback class.
   registration together.
 - The legacy KV path for Schwab state is kept only for logins that began before the sealed
   format; do not build on it.
-- The route handlers are returned without `await`, so an exception inside a callback escapes
-  the `try` block and surfaces as the runtime's generic error, not `OAuth callback failed.`.
+- Callback handlers are awaited inside the route's `try` block so asynchronous
+  failures return `OAuth callback failed.` with status 500.
 - A new Upstox login overwrites `upstox/current-token`; the VPS picks it up on the agent's
   next poll (60 s).

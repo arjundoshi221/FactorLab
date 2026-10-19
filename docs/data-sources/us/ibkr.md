@@ -307,9 +307,17 @@ Full tag list captured in `playground/data/ibkr/account_values_full.json` — re
 - Returns `Fill` objects with `contract`, `execution` (exec_id, order_id, perm_id, side, shares, price, exchange, time), and `commissionReport`.
 - **`perm_id` is the durable key** — `order_id` resets per Gateway session.
 
-### 5.6 Open orders — `openTrades()`, `reqOpenOrders()`
+### 5.6 Open orders — `reqAllOpenOrders()`
 
-- With `Download open orders on connection` enabled + master API enabled, `openTrades()` shows orders placed by any client (including the trade engine).
+- Each capture requests current open orders across clients explicitly with
+  `reqAllOpenOrders()`. This works with our read-only connection, whose library
+  skips automatic order downloads; reading `openTrades()` alone can return an
+  unpopulated cache.
+- The request times out after 15 seconds and restores the previous timeout.
+  A timeout fails the dataset rather than recording zero orders. A completed
+  empty response is still a valid snapshot when there are no working orders.
+- This is a one-time snapshot, not a subscription; filled/cancelled orders
+  are outside its scope.
 - Read-only from our side — we just observe them for reconciliation.
 
 ### 5.7 What we do NOT use

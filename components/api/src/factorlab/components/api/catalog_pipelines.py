@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-Market = Literal["India", "US", "Political"]
+Market = Literal["India", "US", "Political", "Broker"]
 SessionCalendar = Literal["XBOM", "XNYS"]
 
 COMMON_TABLES = ("raw.archive", "meta.ingestion_runs")
@@ -27,6 +27,8 @@ class PipelineInfo:
     scheduled: bool = True
     # One run per symbol: summarize, never list every run.
     per_symbol_runs: bool = False
+    # Runs at the IBKR_SNAPSHOT_TIMES New York slots on XNYS sessions (source_health).
+    slot_schedule: bool = False
 
 
 PIPELINES: tuple[PipelineInfo, ...] = (
@@ -168,6 +170,43 @@ PIPELINES: tuple[PipelineInfo, ...] = (
             "ref.legislator_terms",
             *COMMON_TABLES,
         ),
+    ),
+    PipelineInfo(
+        id="ibkr_broker_snapshot",
+        label="IBKR broker snapshot",
+        market="Broker",
+        source="IBKR Gateway",
+        description="Snapshots positions, balances, open orders and recent executions from the paper and live IBKR Gateways.",
+        schedule="At the IBKR_SNAPSHOT_TIMES New York slots on NYSE trading days (default 06:00 and 16:30).",
+        expected_interval_seconds=None,
+        session_calendar="XNYS",
+        tables_written=(
+            "broker.positions_snapshot",
+            "broker.account_state_snapshot",
+            "broker.open_orders_snapshot",
+            "broker.executions",
+            "meta.source_status",
+            *COMMON_TABLES,
+        ),
+        slot_schedule=True,
+    ),
+    PipelineInfo(
+        id="ibkr_broker_simulation",
+        label="IBKR simulated accounts",
+        market="Broker",
+        source="Synthetic IBKR responses",
+        description="Ingests synthetic broker responses for the shared test profiles' simulated accounts.",
+        schedule="Manual; run by an operator for test profiles.",
+        expected_interval_seconds=None,
+        session_calendar=None,
+        tables_written=(
+            "broker.positions_snapshot",
+            "broker.account_state_snapshot",
+            "broker.open_orders_snapshot",
+            "broker.executions",
+            *COMMON_TABLES,
+        ),
+        scheduled=False,
     ),
 )
 

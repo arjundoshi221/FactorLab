@@ -8,6 +8,7 @@ dependencies = [
     "factorlab-runtime",
     "factorlab-clickhouse",
     "factorlab-schema",
+    "factorlab-storage",
     "factorlab-calendars",
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
@@ -26,6 +27,7 @@ factorlab-core = { workspace = true }
 factorlab-runtime = { workspace = true }
 factorlab-clickhouse = { workspace = true }
 factorlab-schema = { workspace = true }
+factorlab-storage = { workspace = true }
 factorlab-calendars = { workspace = true }
 
 [build-system]

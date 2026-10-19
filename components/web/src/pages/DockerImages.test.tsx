@@ -28,7 +28,7 @@ it("shows the running release, service pins, totals, and history", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
   render(<DockerImages />);
   expect(await screen.findByRole("heading", { name: release.id })).toBeInTheDocument();
-  expect(screen.getByText("Verified release")).toBeInTheDocument();
+  expect(screen.getByText("Release recorded")).toBeInTheDocument();
   expect(screen.getAllByRole("link", { name: commit.slice(0, 12) })[0]).toHaveAttribute("href", expect.stringContaining(`/commit/${commit}`));
   const services = screen.getByRole("heading", { name: "What each service runs" }).closest("section")!;
   expect(within(services).getByText("api")).toBeInTheDocument();
@@ -36,7 +36,7 @@ it("shows the running release, service pins, totals, and history", async () => {
   expect(screen.getByText("3.0 MB")).toBeInTheDocument();
   expect(screen.getByText("2.0 MB", { selector: "strong" })).toBeInTheDocument();
   const history = screen.getByRole("heading", { name: "Release history" }).closest("section")!;
-  expect(within(history).getByText("Running")).toBeInTheDocument();
+  expect(within(history).getByText("Recorded current")).toBeInTheDocument();
   expect(within(history).getByText("Not activated")).toBeInTheDocument();
 });
 
@@ -45,7 +45,7 @@ it("filters, searches, sorts, and refreshes stored images", async () => {
   vi.stubGlobal("fetch", fetchMock);
   render(<DockerImages />);
   const images = (await screen.findByRole("heading", { name: "Stored images" })).closest("section")!;
-  expect(within(images).getByText("factorlab:latest")).toBeInTheDocument();
+  expect(within(images).getByText("factorlab:latest", { selector: "strong" })).toBeInTheDocument();
   expect(within(images).getByText("Untagged")).toBeInTheDocument();
   expect(within(images).getByText("Current release")).toBeInTheDocument();
   expect(within(images).getByRole("button", { name: "Created" })).toBeInTheDocument();
@@ -53,7 +53,7 @@ it("filters, searches, sorts, and refreshes stored images", async () => {
   expect(within(images).getByRole("button", { name: "Release activated" })).toBeInTheDocument();
 
   fireEvent.click(within(images).getByRole("button", { name: "Not running" }));
-  expect(within(images).queryByText("factorlab:latest")).not.toBeInTheDocument();
+  expect(within(images).queryByText("factorlab:latest", { selector: "strong" })).not.toBeInTheDocument();
   expect(within(images).getByText("Untagged")).toBeInTheDocument();
   fireEvent.click(within(images).getByRole("button", { name: "All" }));
 
@@ -116,4 +116,33 @@ it("hides the components table on a host without per-component releases", async 
   render(<DockerImages />);
   await screen.findByRole("heading", { name: release.id });
   expect(screen.queryByRole("heading", { name: "Running components" })).not.toBeInTheDocument();
+});
+
+it("shows full image metadata and distinguishes stopped references from unreferenced images", async () => {
+  const stopped = {
+    ...snapshot.images[0], current_release: false,
+    digests: [release.image],
+    labels: { revision: commit, version: "1.2.0", component: "api", title: "FactorLab API", source: "https://github.com/example/image-source", created: "2026-09-20T00:00:00Z" },
+    containers: [{ ...snapshot.images[0].containers[0], status: "exited" }],
+  };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ...snapshot, images: [stopped, snapshot.images[1]] }) }));
+  render(<DockerImages />);
+  const images = (await screen.findByRole("heading", { name: "Stored images" })).closest("section")!;
+  expect(within(images).getByText("Stopped containers")).toBeInTheDocument();
+  expect(within(images).getByText("Unreferenced")).toBeInTheDocument();
+  const row = within(images).getByText("factorlab:latest", { selector: "strong" }).closest("tr")!;
+  const details = row.querySelector("details")!;
+  fireEvent.click(within(details).getByText("Image details"));
+  expect(details).toHaveAttribute("open");
+  expect(within(details).getByText(stopped.id)).toBeInTheDocument();
+  expect(within(details).getAllByText(release.image)).toHaveLength(2);
+  expect(within(details).getByText("api · FactorLab API")).toBeInTheDocument();
+  expect(within(details).getByText("10,48,576 bytes")).toBeInTheDocument();
+  fireEvent.click(within(images).getByRole("button", { name: "Not running" }));
+  expect(within(images).getByText("factorlab:latest", { selector: "strong" })).toBeInTheDocument();
+  fireEvent.change(screen.getByPlaceholderText("Search images, services, or commits"), { target: { value: "image-source" } });
+  expect(within(images).getByText("factorlab:latest", { selector: "strong" })).toBeInTheDocument();
+  expect(within(images).queryByText("Untagged")).not.toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "How to understand the images" })).toBeInTheDocument();
+  expect(screen.queryByText("Reclaimable")).not.toBeInTheDocument();
 });

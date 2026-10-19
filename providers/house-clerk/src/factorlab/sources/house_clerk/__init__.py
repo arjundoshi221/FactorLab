@@ -1,7 +1,6 @@
 """House Clerk provider adapter (STOCK Act filing index and PTR transactions).
 
-Importing this package registers its sources. ``parse`` holds the pure parsers
-shared with the legacy bootstrap fetchers in ``sources.political.house_clerk``.
+Importing this package registers its sources. ``parse`` holds their pure parsers.
 """
 
 from factorlab.ingest.registry import register_source

@@ -61,4 +61,35 @@ def next_scheduled_run(now: datetime, at: Sequence[time], *, horizon_days: int =
     raise RuntimeError(f"No XNYS session within {horizon_days} days of {now.isoformat()}")
 
 
-__all__ = ["NY", "bounds", "calendar", "is_session", "latest_completed", "next_scheduled_run"]
+def previous_scheduled_run(
+    now: datetime, at: Sequence[time], *, horizon_days: int = 14
+) -> datetime:
+    """Return the latest New York wall-clock slot in ``at`` at or before ``now`` on an XNYS session.
+
+    The mirror of :func:`next_scheduled_run`: the slot a scheduled job should already have run.
+    """
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    if not at:
+        raise ValueError("at least one scheduled time is required")
+    local_day = now.astimezone(NY).date()
+    for offset in range(horizon_days + 1):
+        day = local_day - timedelta(days=offset)
+        if not is_session(day):
+            continue
+        for slot in sorted(at, reverse=True):
+            candidate = datetime.combine(day, slot, tzinfo=NY).astimezone(UTC)
+            if candidate <= now:
+                return candidate
+    raise RuntimeError(f"No XNYS session within {horizon_days} days before {now.isoformat()}")
+
+
+__all__ = [
+    "NY",
+    "bounds",
+    "calendar",
+    "is_session",
+    "latest_completed",
+    "next_scheduled_run",
+    "previous_scheduled_run",
+]

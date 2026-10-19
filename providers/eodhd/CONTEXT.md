@@ -6,7 +6,7 @@
 
 This is a provider member. It implements `plan -> fetch -> normalize` ([07 §6](../../docs/architecture/07-ingestion-provider-abstraction.md)) for `ref.listings`, `ref.universe_membership` and `market.bars` (daily) in market `USA`.
 Importing `factorlab.sources.eodhd` registers `EodhdListings`, `EodhdUniverse` and `EodhdDailyBars` ([`__init__.py`](src/factorlab/sources/eodhd/__init__.py)).
-All bindings are `shadow`. Production universe and listing work still runs through the legacy `ingest-us` modules.
+EODHD feeds remain shadow for generic engine runs. The production universe job uses EodhdUniverse only when the mounted config explicitly selects EODHD.
 
 ## Owns and does not own
 
@@ -67,7 +67,7 @@ All bindings are `shadow`. Production universe and listing work still runs throu
 ## Release and rollback
 
 - A provider is never released alone. It ships inside the `ingest-us` image ([component.yaml](../../components/ingest-us/component.yaml), [providers.py](../../components/ingest-us/src/factorlab/components/ingest_us/providers.py)). Rollback class is `writer`.
-- Production is still the legacy path. `ingest-us universe --config /app/config/us-universe.yaml --daemon` runs [legacy/universe_daemon.py](../../components/ingest-us/src/factorlab/components/ingest_us/legacy/universe_daemon.py) with `legacy/eodhd/` and `legacy/universe/`.
+- Production collection uses the maintained component scheduler and these dataset sources through the shared engine.
 - Bindings changes are config, not code. `configs/` is baked into the image, so they ship with an `ingest-us` image. Cutover follows 07 §15.2.
 
 ## Pitfalls

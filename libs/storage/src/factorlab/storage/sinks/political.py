@@ -1,9 +1,7 @@
 """ClickHouse sinks for the political datasets (docs/architecture/07 §5.5, P5).
 
-Column mappings follow ``storage.v2_political.V2PoliticalClickHouseStorage``
-(the production writer) so the tables read the same; what moves out of the
-DB service is provider knowledge (vendor JSON shapes, title parsing, the
-in-memory name resolver). Two behaviour fixes over the legacy writer:
+Canonical records keep vendor JSON shapes and title parsing in providers.
+Two behaviour fixes over the retired writer:
 
 * re-syncing a filing index keeps each filing's ``trade_count`` instead of
   resetting it to 0;
@@ -503,13 +501,19 @@ class PoliticalSinkMixin:
         return WriteResult(len(records), len(orphans), len(records) - len(unmatched))
 
     def recent_filings(
-        self, *, chamber: str, limit: int, country_code: str = "US"
+        self, *, chamber: str, limit: int, country_code: str = "US", filing_year: int | None = None
     ) -> list[FilingRef]:
         rows = self.client.query(
             "SELECT filing_id, filing_year, filing_url FROM alt.political_filings FINAL "
             "WHERE country_code = {country:String} AND chamber = {chamber:String} "
-            "ORDER BY filing_date DESC, filing_id DESC LIMIT {limit:UInt32}",
-            parameters={"country": country_code, "chamber": chamber, "limit": limit},
+            + ("AND filing_year = {year:UInt16} " if filing_year is not None else "")
+            + "ORDER BY filing_date DESC, filing_id DESC LIMIT {limit:UInt32}",
+            parameters={
+                "country": country_code,
+                "chamber": chamber,
+                "limit": limit,
+                **({"year": filing_year} if filing_year is not None else {}),
+            },
         ).result_rows
         return [FilingRef(_decoded_text(r[0]), int(r[1]), _decoded_text(r[2])) for r in rows]
 

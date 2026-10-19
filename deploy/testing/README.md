@@ -10,6 +10,12 @@ from tracked source commit `d59940263ca008d5ac09462eb1e36a039236e7d6`, using the
 component Dockerfiles and frozen workspace lock. No `.env` or untracked files
 were included in the source archive. `main` was not changed.
 
+When extracting with Python's tar `data` filter under umask 077, restore tracked
+source directory modes to 0755 before building. Keep the enclosing test directory
+0700 and runtime backups 0600. Otherwise Docker copies nested config directories
+as root-only and UID 10001 cannot load bindings. Validate each built image with
+`engine validate` as its default user, in addition to command imports.
+
 ## Host layout
 
 The private, root-owned test directory is
@@ -51,17 +57,26 @@ and recreates ingestion daemons using `--no-deps`. It checks startup stability
 and unchanged API, ClickHouse and secret-agent container identities. A startup
 failure restores the saved model and preceding ingestion images.
 
+For an explicitly requested replacement of one ingestion component, add
+`--component ingest-us` (or `ingest-india` / `ingest-broker`) to `plan` in a new
+private test directory. The scope is saved in `scope.json`; later `apply`,
+`verify` and `restore` reuse it and reject a different component. Only the selected
+component's services are recreated and its image is smoke-tested. The other
+ingestion daemons join the protected container list. An existing unscoped plan
+cannot be narrowed. This remains the branch deployment path, not a tagged release.
+To reuse an already built candidate in a fresh plan, add
+`--image-test-id <earlier-test-id>` to `plan`. Image component and commit labels
+must still match the new plan; its saved model pins the immutable image ID.
+
 The installed resolved model also makes the existing political cron use the new
 political image. Do not run a normal release concurrently with this test.
 
 ## Compatibility and verification limits
 
-The currently installed secret agent renders files as root-owned `0400`; the
-new component images declare user `10001`. The test runner uses a `0:0` user
-override to consume existing secret volumes and runtime data without changing
-their permissions. This validates the component images' runtime behavior with
-the current host, but does not validate the eventual non-root rollout or the
-per-component host deployer.
+The October 1 ingestion runner preserves the installed service UID and operator
+runtime environment. The earlier trial used root before the remaining component
+rollout; the current collectors run as UID 10001. API, web, monitor, ClickHouse and
+secret-agent identities are protected during a collector replacement.
 
 Check new `meta.ingestion_runs` records and raw-to-curated lineage, provider
 status, configured universe, logs and restarts. India needs an open-session
@@ -76,8 +91,8 @@ sudo python3 /opt/factorlab/deployment-tests/20260930-d599402/ingestion_test.py 
 ```
 
 This restores deployment configuration and code, not database contents. No
-schema migrations or data deletion are part of this workflow. Collector code
-under component `legacy/` directories remains in use and cannot yet be removed.
+schema migrations or data deletion are part of this workflow. The October 1 source revision removes collector legacy modules after replay parity;
+preceding image pins remain available for operational restoration.
 
 ## Remaining components and non-root operation
 

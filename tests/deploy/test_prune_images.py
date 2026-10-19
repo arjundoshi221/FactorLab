@@ -114,3 +114,54 @@ def test_unavailable_docker_prunes_nothing(tmp_path):
         return subprocess.CompletedProcess(command, 1, "", "Cannot connect")
 
     assert prune.prune(host(tmp_path, pin=1), run=broken, log=lambda line: None) == 1
+
+
+def test_local_images_keep_live_cron_and_trial_rollback_pins(tmp_path):
+    root = host(tmp_path, pin=1)
+    local = []
+    for n in range(1, 7):
+        item = image(n, "factorlab-test-ingest-political")
+        item["RepoDigests"] = []
+        local.append(item)
+    (root / "deploy").mkdir()
+    (root / "deploy/compose.production.yml").write_text(
+        json.dumps({"services": {"ingest-political": {"image": local[0]["Id"]}}})
+    )
+    backup = root / "deployment-tests/test"
+    backup.mkdir(parents=True)
+    (backup / "rollback.compose.json").write_text(
+        json.dumps({"services": {"ingest-political": {"image": local[1]["Id"]}}})
+    )
+    docker = FakeDocker(local)
+    prune.prune(root, run=docker, log=lambda line: None)
+    assert docker.removed == [local[2]["Id"]]
+
+
+def test_local_monolith_is_pruned_but_rollback_tag_is_preserved(tmp_path):
+    root = host(tmp_path, pin=1)
+    local = [image(n, "factorlab") for n in range(1, 7)]
+    backup = root / "deployment-tests/test"
+    backup.mkdir(parents=True)
+    (backup / "rollback.compose.json").write_text(
+        json.dumps({"services": {"api": {"image": local[0]["RepoTags"][0]}}})
+    )
+    docker = FakeDocker(local)
+    prune.prune(root, run=docker, log=lambda line: None)
+    assert set(docker.removed) == {local[1]["Id"], local[2]["Id"]}
+
+
+def test_preserves_images_in_remaining_rollout_and_container_records(tmp_path):
+    root = host(tmp_path, pin=1)
+    local = [image(n, "factorlab-test-web") for n in range(1, 7)]
+    backup = root / "deployment-tests/test"
+    backup.mkdir(parents=True)
+    (backup / "remaining-before.json").write_text(
+        json.dumps({"services": {"web": {"image": local[0]["Id"]}}})
+    )
+    (backup / "web-before.json").write_text(json.dumps([{"Image": local[1]["Id"]}]))
+    (backup / "remaining-rollback-check.json").write_text(
+        json.dumps({"previous_web_image": local[2]["RepoTags"][0]})
+    )
+    docker = FakeDocker(local)
+    prune.prune(root, run=docker, log=lambda line: None)
+    assert docker.removed == []

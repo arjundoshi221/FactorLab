@@ -62,12 +62,14 @@ def test_mode_specific_port_used(monkeypatch):
         assert captured["readonly"] is True
         assert captured["clientId"] == 7
         assert ib_paper._factorlab_mode == "paper"
+        assert ib_paper.RequestTimeout == client.DEFAULT_TIMEOUT_SEC
 
         captured.clear()
-        ib_live = client.connect(mode="live", client_id=99)
+        ib_live = client.connect(mode="live", client_id=99, timeout=9)
         assert captured["port"] == 4001
         assert captured["clientId"] == 99
         assert ib_live._factorlab_mode == "live"
+        assert ib_live.RequestTimeout == 9
 
 
 def test_env_parse_error_wrapped(monkeypatch):

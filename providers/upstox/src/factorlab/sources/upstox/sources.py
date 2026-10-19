@@ -143,10 +143,15 @@ class _UpstoxBars(_UpstoxSource):
         for window in request.series:
             ref = window.instrument
             today = window.end.astimezone(IST).date()
+            as_of = (
+                datetime.fromisoformat(request.params.get("as_of") or window.end.isoformat())
+                .astimezone(IST)
+                .date()
+            )
             first = window.start.astimezone(IST).date()
             for start, stop in historical_windows(
                 first,
-                today - timedelta(days=1),
+                today if today < as_of else today - timedelta(days=1),
                 available_from=self.settings.history_available_from,
                 chunk_days=self.settings.historical_chunk_days,
             ):
@@ -158,19 +163,23 @@ class _UpstoxBars(_UpstoxSource):
                             "endpoint": "historical",
                             "from": start.isoformat(),
                             "to": stop.isoformat(),
+                            "require_complete": request.params.get("require_complete", False),
                         },
                         instruments=(ref,),
-                        start=_ist_midnight(start),
-                        end=_ist_midnight(stop + timedelta(days=1)),
+                        start=max(window.start, _ist_midnight(start)),
+                        end=min(window.end, _ist_midnight(stop + timedelta(days=1))),
                     )
                 )
             today_start = _ist_midnight(today)
-            if window.end > today_start:
+            if today == as_of and window.end > today_start:
                 units.append(
                     FetchUnit(
                         f"{ref.alias_value}:intraday:{today}",
                         self._channel("v3_intraday"),
-                        params={"endpoint": "intraday"},
+                        params={
+                            "endpoint": "intraday",
+                            "require_complete": request.params.get("require_complete", False),
+                        },
                         instruments=(ref,),
                         start=max(window.start, today_start),
                         end=window.end,
@@ -188,7 +197,10 @@ class _UpstoxBars(_UpstoxSource):
                 FetchUnit(
                     f"quote:{batch[0].alias_value}..{batch[-1].alias_value}",
                     self._channel("v3_quote_ohlc"),
-                    params={"endpoint": "quote"},
+                    params={
+                        "endpoint": "quote",
+                        "require_complete": request.params.get("require_complete", False),
+                    },
                     instruments=batch,
                 )
             )
@@ -216,6 +228,11 @@ class _UpstoxBars(_UpstoxSource):
         for key in ("from", "to"):
             if key in unit.params:
                 metadata[key] = unit.params[key]
+        metadata["require_complete"] = unit.params.get("require_complete", False)
+        if unit.start is not None:
+            metadata["start"] = unit.start.isoformat()
+        if unit.end is not None:
+            metadata["end"] = unit.end.isoformat()
         return self.client.get(self._url(unit), request_key=unit.name, metadata=metadata)
 
     def normalize(self, capture: RawCapture) -> Sequence[Any]:

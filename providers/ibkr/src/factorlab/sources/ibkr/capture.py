@@ -39,6 +39,7 @@ CONTENT_TYPE = "application/json"
 TRANSPORT = "tcp_socket"
 # ExecutionFilter.time in IBKR's explicit-UTC form ("yyyymmdd-hh:mm:ss").
 EXECUTION_FILTER_TIME_FMT = "%Y%m%d-%H:%M:%S"
+OPEN_ORDERS_TIMEOUT_SEC = 15.0
 
 CaptureKind = Literal["portfolio", "account_values", "executions", "open_orders"]
 CAPTURE_KINDS: tuple[CaptureKind, ...] = (
@@ -150,15 +151,23 @@ def capture_executions(
 
 
 def capture_open_orders(ib: IB, *, fetched_at: datetime | None = None) -> RawCapture:
-    """``ib.openTrades()`` — contract, order parameters and status (observe only)."""
+    """Request all clients' current open orders, including on read-only connections."""
     stamp = _utc(fetched_at)
+    # readonly=True skips ib_async's startup order download. Request a fresh
+    # snapshot explicitly instead of interpreting an unpopulated cache as empty.
+    previous_timeout = ib.RequestTimeout
+    try:
+        ib.RequestTimeout = OPEN_ORDERS_TIMEOUT_SEC
+        trades = ib.reqAllOpenOrders()
+    finally:
+        ib.RequestTimeout = previous_timeout
     data = [
         {
             "contract": to_jsonable(getattr(trade, "contract", None)),
             "order": to_jsonable(getattr(trade, "order", None)),
             "orderStatus": to_jsonable(getattr(trade, "orderStatus", None)),
         }
-        for trade in ib.openTrades()
+        for trade in trades
     ]
     return _capture("open_orders", mode_of(ib), stamp, data)
 

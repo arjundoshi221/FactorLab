@@ -2,6 +2,10 @@
     <!-- Sampling traces and mirrored text logs exhausted the VPS root disk. -->
     <trace_log remove="1" />
     <text_log remove="1" />
+    <!-- High-volume processor diagnostics previously retained 30 days. -->
+    <processors_profile_log>
+        <ttl>event_date + INTERVAL 1 DAY DELETE</ttl>
+    </processors_profile_log>
 
     <!-- Keep useful operational history bounded on this single-node deployment. -->
     <query_log>

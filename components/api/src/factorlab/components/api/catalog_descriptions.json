@@ -89,6 +89,9 @@
       },
       "description": "broker.executions.strategy_id tells you which strategy generated a fill. It does *not* tell you which trade_name under that strategy the fill belongs to — a mean-reversion strategy can be running five pair trade_names simultaneously and a single AMD fill could belong to any of them. Without this bridge, trade_name-level PnL requires guessing from timestamp + ticker, and any theme-level rollup requires the same guess."
     },
+    "book.order_assignment_events": {
+      "description": "Append-only audit of complete assignments or clears on a durable broker order. Latest (changed_at, event_id) wins per broker/account/perm_id. Joining at read time covers existing and future partial fills; retagging restates recorded-history PnL. The older fill-level book.attribution contract remains separate. user_id is the owning profile, not an authenticated actor identity."
+    },
     "book.strategies": {
       "columns": {
         "author_entity_id": "who authored it (points at ref.entities for a person)",
@@ -430,6 +433,23 @@
         "volume_factor": "multiply raw volumes by this"
       },
       "description": "Materialized/computed daily-cumulative adjustment factors per listing."
+    },
+    "ref.app_users": {
+      "columns": {
+        "active": "Administrative lifecycle flag; not an access permission",
+        "display_name": "Human-readable tester name; renaming preserves user_id",
+        "user_id": "Stable application profile ID, not a broker login"
+      },
+      "description": "Named application profiles with stable user IDs, independent of broker logins. Profiles organize shared testing data; they do not enforce privacy."
+    },
+    "ref.broker_account_owners": {
+      "columns": {
+        "account_id": "Native broker account ID; SIM_ reserved for simulation",
+        "broker_code": "Broker namespace, combined with account_id",
+        "simulated": "Synthetic responses, not actual Gateway data",
+        "user_id": "Logical FK ref.app_users"
+      },
+      "description": "The application profile responsible for each broker account. One profile can own several accounts; each account has one owner. Simulation status distinguishes scripted test responses from actual broker data."
     },
     "ref.broker_accounts": {
       "columns": {

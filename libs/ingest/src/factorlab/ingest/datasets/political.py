@@ -169,7 +169,7 @@ class PoliticalTradeSink(ProviderStorage, Protocol):
 @runtime_checkable
 class PoliticalReader(Protocol):
     def recent_filings(
-        self, *, chamber: str, limit: int, country_code: str = "US"
+        self, *, chamber: str, limit: int, country_code: str = "US", filing_year: int | None = None
     ) -> list[FilingRef]:
         """Newest filings by ``filing_date`` (the documents a trades run should fetch)."""
         ...

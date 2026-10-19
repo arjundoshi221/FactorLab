@@ -22,6 +22,9 @@ DEFAULT_EXCHANGES = {
     "NASDAQ GLOBAL MARKET": "XNAS",
     "NASDAQ GLOBAL SELECT": "XNAS",
     "NASDAQ CAPITAL MARKET": "XNAS",
+    "Z": "BATS",
+    "CBOE": "BATS",
+    "CBOE BZX": "BATS",
 }
 
 
@@ -49,3 +52,4 @@ class SchwabSettings(ProviderSettings):
     exchanges: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_EXCHANGES))
     minute_max_lookback_days: int = Field(default=48, ge=1)
     minute_chunk_days: int = Field(default=10, ge=1, le=10)
+    quote_batch_size: int = Field(default=50, ge=1, le=50)

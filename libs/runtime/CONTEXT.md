@@ -57,8 +57,11 @@ they may only shrink.
 ## Data
 
 No ClickHouse access. Files: heartbeat files `<FACTORLAB_HEARTBEAT_ROOT>/<service>`
-(liveness by mtime), lock files (JSON `{"pid", "started_at"}`, stolen after
-`stale_seconds`), and the always-on audit log `<FACTORLAB_LOG_ROOT>/notify.jsonl`.
+(liveness by mtime), lock records (JSON `{"pid", "started_at", "lock_version"}`)
+and persistent `.guard` files, and the audit log `<FACTORLAB_LOG_ROOT>/notify.jsonl`.
+OS locks exclude live collectors regardless of age and release on process death.
+`stale_seconds` applies only to old JSON-only records. Stop old collectors before
+upgrading; never delete `.guard` files while a collector can use them.
 
 ## Dependencies and contracts
 

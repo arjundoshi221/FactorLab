@@ -1,122 +1,14 @@
-from datetime import date
 from unittest.mock import Mock
 from uuid import uuid4
 
-import pytest
-
-from factorlab.components.ingest_us.legacy import daemon as runner
-from factorlab.components.ingest_us.legacy.eodhd.us_universe import (
-    canonical_symbol,
-    normalize_bulk,
-    normalize_daily,
-    normalize_master,
-    schwab_symbol,
-)
+from factorlab.components.ingest_us import collector as runner
+from factorlab.sources.schwab.normalize import canonical_symbol
+from factorlab.sources.schwab.normalize import provider_symbol as schwab_symbol
 
 
-def master_item(code, *, exchange="NASDAQ", kind="Common Stock", currency="USD"):
-    return {
-        "Code": code,
-        "Name": f"{code} Incorporated",
-        "Exchange": exchange,
-        "Type": kind,
-        "Currency": currency,
-        "Isin": None,
-    }
-
-
-def test_master_keeps_selected_common_stock_venues_and_adrs():
-    result = normalize_master(
-        [
-            master_item("AAPL"),
-            master_item("BABA", exchange="NYSE"),
-            master_item("SMALL", exchange="NYSE MKT"),
-            master_item("SPY", kind="ETF"),
-            master_item("OTC", exchange="PINK"),
-            master_item("CAD", currency="CAD"),
-        ]
-    )
-    assert [item["symbol"] for item in result] == ["AAPL", "BABA", "SMALL"]
-    assert [item["exchange_code"] for item in result] == ["XNAS", "XNYS", "XASE"]
-
-
-def test_symbol_mapping_and_daily_validation():
-    assert canonical_symbol("brk/b.us") == "BRK-B"
+def test_symbol_mapping():
+    assert canonical_symbol("brk/b") == "BRK-B"
     assert schwab_symbol("BRK-B") == "BRK/B"
-    frame = normalize_daily(
-        [
-            {
-                "date": "2026-09-14",
-                "open": 10,
-                "high": 12,
-                "low": 9,
-                "close": 11,
-                "adjusted_close": 10.5,
-                "volume": 100,
-            }
-        ]
-    )
-    assert frame.iloc[0]["trade_date"] == date(2026, 9, 14)
-    assert frame.iloc[0]["adj_close"] == 10.5
-    with pytest.raises(ValueError):
-        normalize_daily(
-            [{"date": "2026-09-14", "open": 10, "high": 8, "low": 9, "close": 11, "volume": 100}]
-        )
-
-
-def test_bulk_is_scoped_to_active_master_and_deduplicated():
-    identifier = uuid4()
-    records = [
-        {
-            "code": "AAPL",
-            "date": "2026-09-14",
-            "open": 10,
-            "high": 12,
-            "low": 9,
-            "close": 11,
-            "adjusted_close": 10.5,
-            "volume": 100,
-        },
-        {
-            "code": "OTC",
-            "date": "2026-09-14",
-            "open": 1,
-            "high": 1,
-            "low": 1,
-            "close": 1,
-            "volume": 1,
-        },
-    ]
-    result = normalize_bulk(records, {"AAPL": identifier}, "raw")
-    assert len(result) == 1
-    assert result[0]["instrument_id"] == identifier
-    assert result[0]["raw_id"] == "raw"
-
-
-def test_bulk_skips_one_malformed_row_without_losing_snapshot():
-    identifiers = {symbol: uuid4() for symbol in ("AAPL", "MSFT")}
-    records = [
-        {
-            "code": "AAPL",
-            "date": "2026-09-14",
-            "open": 10,
-            "high": 12,
-            "low": 9,
-            "close": 11,
-            "volume": 100,
-        },
-        {
-            "code": "MSFT",
-            "date": "2026-09-14",
-            "open": 10,
-            "high": 8,
-            "low": 9,
-            "close": 11,
-            "volume": 100,
-        },
-    ]
-    result = normalize_bulk(records, identifiers)
-    assert [item["symbol"] for item in result] == ["AAPL"]
 
 
 def test_pending_daily_includes_incomplete_stale_and_error_states():
@@ -136,7 +28,12 @@ def test_pending_daily_includes_incomplete_stale_and_error_states():
             "error": None,
         },
         identifiers[2]: {"history_complete": True, "checked_through": target, "error": "retry"},
-        identifiers[3]: {"history_complete": True, "checked_through": target, "error": None},
+        identifiers[3]: {
+            "history_complete": True,
+            "checked_through": target,
+            "full_refreshed_at": now,
+            "error": None,
+        },
     }
     assert [
         item["instrument_id"] for item in runner.pending_daily(items, states, target_day)
