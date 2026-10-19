@@ -14,6 +14,16 @@ values.
 
 ## Server
 
+Market Data rollouts, 2026-10-19: UI trial `ui-trial/208af21cd7f3` (Market Data page
+redesign, [workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/39277105860)),
+then `ui-trial/29bda76225d5` (unresolved political trades link by filing ticker; committees
+link through trading legislators,
+[CI](https://github.com/arjundoshi221/FactorLab/actions/runs/39278250560),
+[workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/39282612960)). Both
+workflows succeeded; only api-candidate and web changed. The political identity repair
+(`docs/operations/identity-repair.md`) is not deployed: `ingest-political` still runs the
+monolith image.
+
 Merged-branch rollout, 2026-10-19: API candidate and web run commit
 `314faa41b7ac` (merge of all local work with both deployment branches), version
 `0.0.0-trial.314faa41b7ac`. [CI](https://github.com/arjundoshi221/FactorLab/actions/runs/39266181438);
