@@ -432,6 +432,8 @@ def test_duplicate_listings_retire_and_political_trades_reresolve():
 
     applied = sinks.reresolve_political_trades(apply=True)
     assert (applied["relinked"], applied["still_unresolved"]) == (3, 0)
+    # The sort key includes entity_id: relinking must replace, not add, a row per trade.
+    assert len(db.rows("alt.political_trades")) == 3
     rows = {t["ticker_raw"]: t for t in db.rows("alt.political_trades")}
     assert rows["AAPL"]["listing_id"] == canonical["listing_id"]
     assert {t["resolution_confidence"] for t in rows.values()} == {"exact"}
@@ -441,3 +443,30 @@ def test_duplicate_listings_retire_and_political_trades_reresolve():
     )
     assert again.retirements == []
     assert sinks.reresolve_political_trades()["candidates"] == 0
+
+
+def test_dedupe_deletes_versions_superseded_under_another_identity():
+    from uuid import UUID
+
+    db = FakeClickHouse(exchanges=US)
+    sinks = ClickHouseSinks(V2USStorage(db))
+    old = _trade("AAPL", date(2026, 7, 10))
+    # A relinked version with another entity_id lands as a second row (the sort key
+    # includes entity_id); an untouched trade stays single.
+    new = {**old, "listing_id": UUID(int=7), "entity_id": UUID(int=8), "version": 2}
+    single = _trade("MSFT", date(2026, 7, 11))
+    db.insert(
+        "alt.political_trades",
+        [list(t.values()) for t in (old, new, single)],
+        column_names=list(old),
+    )
+    assert len(db.rows("alt.political_trades")) == 3
+
+    dry = sinks.dedupe_political_trades()
+    assert (dry["applied"], dry["duplicated_trades"], dry["stale_rows"]) == (False, 1, 1)
+    assert len(db.rows("alt.political_trades")) == 3
+    done = sinks.dedupe_political_trades(apply=True)
+    assert done["stale_rows"] == 1
+    remaining = {(t["ticker_raw"], t["version"]) for t in db.rows("alt.political_trades")}
+    assert remaining == {("AAPL", 2), ("MSFT", 1)}
+    assert sinks.dedupe_political_trades()["stale_rows"] == 0

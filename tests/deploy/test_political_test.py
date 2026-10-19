@@ -51,8 +51,13 @@ def harness(monkeypatch, tmp_path, reports, *, fail_on=None):
     return root, calls, installed
 
 
-def reports(retired=150, relinked=340):
+def reports(retired=150, relinked=340, stale=433):
     return {
+        "dedupe-political-trades": [
+            {"stale_rows": stale, "ambiguous": 0},
+            {"stale_rows": 0, "ambiguous": 0},
+        ],
+        "dedupe-political-trades --apply": [{"stale_rows": stale, "applied": True}],
         "retire-duplicate-listings": [{"retired_listings": retired}, {"retired_listings": 0}],
         "reresolve-political-trades": [{"relinked": relinked}, {"relinked": 0}],
         "retire-duplicate-listings --apply": [{"retired_listings": retired, "applied": True}],
@@ -62,12 +67,15 @@ def reports(retired=150, relinked=340):
 
 def test_apply_runs_dry_runs_then_repair_then_verification(monkeypatch, tmp_path, capsys):
     root, calls, installed = harness(monkeypatch, tmp_path, reports())
-    political_test.apply(root, COMMIT, "unused", 200)
+    political_test.apply(root, COMMIT, "unused", 200, 500)
     assert calls == [
+        "dedupe-political-trades",
         "retire-duplicate-listings",
         "reresolve-political-trades",
+        "dedupe-political-trades --apply",
         "retire-duplicate-listings --apply",
         "reresolve-political-trades --apply",
+        "dedupe-political-trades",
         "retire-duplicate-listings",
         "reresolve-political-trades",
     ]
@@ -85,8 +93,8 @@ def test_a_dry_run_over_the_limit_restores_the_model_and_writes_nothing(
 ):
     root, calls, installed = harness(monkeypatch, tmp_path, reports(retired=500))
     with pytest.raises(RuntimeError, match="limit is 200"):
-        political_test.apply(root, COMMIT, "unused", 200)
-    assert calls == ["retire-duplicate-listings"]
+        political_test.apply(root, COMMIT, "unused", 200, 500)
+    assert calls == ["dedupe-political-trades", "retire-duplicate-listings"]
     assert installed == ["candidate.json", "before.json"]
     assert "FACTORLAB_RESULT_ROLLBACK=restored" in capsys.readouterr().out
 
@@ -96,7 +104,7 @@ def test_a_failure_after_data_writes_does_not_swap_the_image_back(monkeypatch, t
         monkeypatch, tmp_path, reports(), fail_on="reresolve-political-trades --apply"
     )
     with pytest.raises(RuntimeError, match="job failed"):
-        political_test.apply(root, COMMIT, "unused", 200)
+        political_test.apply(root, COMMIT, "unused", 200, 500)
     assert installed == ["candidate.json"]
     assert "not-possible-after-data-writes" in capsys.readouterr().out
 
@@ -111,3 +119,11 @@ def test_a_failure_after_data_writes_does_not_swap_the_image_back(monkeypatch, t
 def test_only_digest_pinned_political_images_are_accepted(image):
     with pytest.raises(RuntimeError, match="Invalid"):
         political_test.image_id(image, COMMIT, "0.0.0-trial.aaaaaaaaaaaa")
+
+
+def test_too_many_superseded_rows_stops_before_any_write(monkeypatch, tmp_path):
+    root, calls, installed = harness(monkeypatch, tmp_path, reports(stale=5000))
+    with pytest.raises(RuntimeError, match="limit is 500"):
+        political_test.apply(root, COMMIT, "unused", 200, 500)
+    assert calls == ["dedupe-political-trades"]
+    assert installed == ["candidate.json", "before.json"]

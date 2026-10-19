@@ -7,9 +7,11 @@ recreated. Under the release and political locks it:
 1. pulls the image by digest, checks its labels and runtime user, and smoke-tests the
    production subcommands with no network;
 2. installs the candidate model;
-3. runs ``retire-duplicate-listings`` and ``reresolve-political-trades`` as dry runs,
-   refuses to apply when retirements exceed ``--max-retire``, then applies both;
-4. verifies that dry runs find nothing left to retire or relink.
+3. runs ``dedupe-political-trades``, ``retire-duplicate-listings`` and
+   ``reresolve-political-trades`` as dry runs, refuses to apply above ``--max-delete``
+   superseded rows, any ambiguous trade or ``--max-retire`` retirements, then applies
+   all three in that order;
+4. verifies that dry runs find nothing left to delete, retire or relink.
 
 A failure before any data write restores the preceding model. Data writes are not
 rolled back (docs/operations/identity-repair.md describes the manual undo).
@@ -31,7 +33,13 @@ SERVICE = "ingest-political"
 IMAGE_RE = re.compile(r"ghcr\.io/arjundoshi221/factorlab-ingest-political@sha256:[0-9a-f]{64}\Z")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 TRIAL_RE = re.compile(r"political-[0-9a-f]{12}\Z")
-COMMANDS = ("bootstrap", "engine", "retire-duplicate-listings", "reresolve-political-trades")
+COMMANDS = (
+    "bootstrap",
+    "engine",
+    "dedupe-political-trades",
+    "retire-duplicate-listings",
+    "reresolve-political-trades",
+)
 
 
 def image_id(image: str, commit: str, version: str) -> str:
@@ -73,7 +81,11 @@ def job(command: str, *, apply: bool) -> dict:
 
 
 def summary(report: dict) -> dict:
-    return {k: v for k, v in report.items() if k not in {"retirements", "unresolved_tickers"}}
+    return {
+        k: v
+        for k, v in report.items()
+        if k not in {"retirements", "unresolved_tickers", "ambiguous_trades"}
+    }
 
 
 def restore(root: Path) -> None:
@@ -81,7 +93,7 @@ def restore(root: Path) -> None:
     print("FACTORLAB_RESULT_ROLLBACK=restored", flush=True)
 
 
-def apply(root: Path, commit: str, image: str, max_retire: int) -> None:
+def apply(root: Path, commit: str, image: str, max_retire: int, max_delete: int) -> None:
     if root.exists():
         raise RuntimeError("Trial ID already exists")
     if (test.DEPLOY.parent / "state/images.env").exists():
@@ -108,6 +120,12 @@ def apply(root: Path, commit: str, image: str, max_retire: int) -> None:
     written = False
     try:
         test.install_model(root / "candidate.json")
+        dedupe = job("dedupe-political-trades", apply=False)
+        if dedupe["ambiguous"] or dedupe["stale_rows"] > max_delete:
+            raise RuntimeError(
+                f"Dry run deletes {dedupe['stale_rows']} rows with {dedupe['ambiguous']} "
+                f"ambiguous trades; limit is {max_delete} and none ambiguous"
+            )
         retire = job("retire-duplicate-listings", apply=False)
         test.store(root / "retire-plan.json", retire)
         if retire["retired_listings"] > max_retire:
@@ -116,9 +134,13 @@ def apply(root: Path, commit: str, image: str, max_retire: int) -> None:
             )
         reresolve = job("reresolve-political-trades", apply=False)
         written = True
+        deduped = job("dedupe-political-trades", apply=True)
         retired = job("retire-duplicate-listings", apply=True)
         relinked = job("reresolve-political-trades", apply=True)
-        test.store(root / "repair.json", {"retire": retired, "reresolve": relinked})
+        test.store(
+            root / "repair.json", {"dedupe": deduped, "retire": retired, "reresolve": relinked}
+        )
+        print(f"FACTORLAB_RESULT_DEDUPE={json.dumps(summary(deduped), sort_keys=True)}")
         print(f"FACTORLAB_RESULT_RETIRE={json.dumps(summary(retired), sort_keys=True)}")
         print(f"FACTORLAB_RESULT_RERESOLVE={json.dumps(summary(relinked), sort_keys=True)}")
         print(f"dry-run re-resolve before retirement: {json.dumps(summary(reresolve))}")
@@ -134,6 +156,8 @@ def apply(root: Path, commit: str, image: str, max_retire: int) -> None:
 
 
 def verify() -> None:
+    if job("dedupe-political-trades", apply=False)["stale_rows"]:
+        raise RuntimeError("Superseded political trade rows remain after the repair")
     if job("retire-duplicate-listings", apply=False)["retired_listings"]:
         raise RuntimeError("Duplicate listings remain after the repair")
     if job("reresolve-political-trades", apply=False)["relinked"]:
@@ -148,6 +172,7 @@ def main() -> None:
     parser.add_argument("--commit")
     parser.add_argument("--image")
     parser.add_argument("--max-retire", type=int, default=200)
+    parser.add_argument("--max-delete", type=int, default=500)
     args = parser.parse_args()
     if os.geteuid() != 0 or not TRIAL_RE.fullmatch(args.test_id):
         raise RuntimeError("Run as root with a political-<12 hex> trial ID")
@@ -164,7 +189,7 @@ def main() -> None:
                 raise RuntimeError("A full commit SHA is required")
             if args.test_id != f"political-{args.commit[:12]}" or not args.image:
                 raise RuntimeError("Trial ID and image must match the commit")
-            apply(root, args.commit, args.image, args.max_retire)
+            apply(root, args.commit, args.image, args.max_retire, args.max_delete)
         elif not root.is_dir():
             raise RuntimeError("Unknown trial ID")
         elif args.command == "verify":

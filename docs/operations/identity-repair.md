@@ -27,8 +27,14 @@ sudo docker compose --env-file production.env -f compose.production.yml \
   --profile jobs run --rm ingest-political reresolve-political-trades
 ```
 
-Order: retire first (dry run, review, `--apply`), then re-resolve (dry run, review,
-`--apply`). Both are idempotent.
+Order: `dedupe-political-trades`, then `retire-duplicate-listings`, then
+`reresolve-political-trades`, each as a dry run, reviewed, then with `--apply`. All three
+are idempotent.
+
+- **Dedupe** deletes, per `political_trade_id`, every row older than its newest version
+  (a lightweight `DELETE`). The table's sort key includes `entity_id`, so a version that
+  resolves to another identity is a second row, not a replacement. Trades with two rows
+  at their newest version are reported as ambiguous and left alone.
 
 - **Retire** only provable duplicates: exactly one listing of the symbol carries the
   canonical alias, all are on one exchange and no two carry different ISINs; others are
@@ -36,8 +42,13 @@ Order: retire first (dry run, review, `--apply`), then re-resolve (dry run, revi
   `ref.listings` version of each orphan with `active = false`, and moves the orphan's open
   aliases to the canonical listing (closing the old ones). Rows stored under an orphan,
   such as legacy bars on three listings, stay where they are.
-- **Re-resolve** rewrites unresolved trades and trades on retired listings under the same
-  `political_trade_id` with a new version, using the writer's lookup.
+- **Re-resolve** rewrites the newest version of unresolved trades and trades on retired
+  listings under the same `political_trade_id` with a new version, using the writer's
+  lookup, then deletes the superseded rows. The writer does the same after each batch.
+
+The first political trial (2026-10-19, `political-trial/342ab392b39c`) retired the 150
+listings and relinked trades but did not yet delete superseded rows: 431 trades kept a
+stale second row (433 rows), and its verification failed. The second trial removes them.
 
 ## Checks
 

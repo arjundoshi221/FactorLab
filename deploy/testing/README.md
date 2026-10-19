@@ -46,8 +46,9 @@ political cron lock, pulls the digest, checks labels and the runtime user, smoke
 the production subcommands with no network, and installs a model that changes only the
 `ingest-political` image (no long-running container is recreated; the daily cron uses
 it). It then runs the [identity repair](../../docs/operations/identity-repair.md):
-dry runs, a refusal above `--max-retire 200` retirements, both applies, and dry runs
-that must find nothing left. A failure before any data write restores the preceding
+dry runs of dedupe, retire and re-resolve; a refusal above `--max-delete 500` superseded
+rows, any ambiguous trade or `--max-retire 200` retirements; the three applies; and dry
+runs that must find nothing left. A failure before any data write restores the preceding
 model; after data writes it reports `not-possible-after-data-writes`. The private
 directory `/opt/factorlab/deployment-tests/political-<SHA>/` keeps `before.json`,
 `candidate.json`, `retire-plan.json` and `repair.json`; `political_test.py restore

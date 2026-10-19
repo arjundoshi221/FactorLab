@@ -108,6 +108,12 @@ def symbol_variants(symbol: str) -> list[str]:
     return sorted({text, text.replace("-", ".").replace("/", "."), text.replace(".", "-")})
 
 
+NEWEST_TRADE_VERSIONS = (
+    "SELECT political_trade_id, max(version) FROM alt.political_trades FINAL "
+    "GROUP BY political_trade_id"
+)
+
+
 class PoliticalSinkMixin:
     """Mixed into ``ClickHouseSinks``; relies on ``client``, ``_insert``, ``_check_lineage``."""
 
@@ -463,6 +469,56 @@ class PoliticalSinkMixin:
         ).result_rows
         return rows[0] if len(rows) == 1 else None
 
+    def _delete_superseded_trades(self, newest: dict[UUID, int]) -> None:
+        # The sort key includes entity_id, so a version with another identity is a new
+        # row rather than a replacement: delete the older versions explicitly.
+        by_version: dict[int, list[UUID]] = {}
+        for trade_id, version in newest.items():
+            by_version.setdefault(int(version), []).append(trade_id)
+        for version, trade_ids in sorted(by_version.items()):
+            ordered = sorted(trade_ids, key=str)
+            for start in range(0, len(ordered), 1000):
+                self.client.command(
+                    "DELETE FROM alt.political_trades "
+                    "WHERE political_trade_id IN {ids:Array(UUID)} AND version < {version:UInt64}",
+                    parameters={"ids": ordered[start : start + 1000], "version": version},
+                )
+
+    def dedupe_political_trades(self, *, apply: bool = False) -> dict[str, Any]:
+        """Delete every row of a trade older than its newest version.
+
+        Rows sharing a trade's newest version (never written by FactorLab) are reported,
+        not guessed. Without ``apply`` nothing is deleted.
+        """
+        rows = self.client.query(
+            "SELECT political_trade_id, version, count() AS rows FROM alt.political_trades FINAL "
+            "GROUP BY political_trade_id, version"
+        ).result_rows
+        versions: dict[UUID, dict[int, int]] = {}
+        for trade_id, version, count in rows:
+            versions.setdefault(trade_id, {})[int(version)] = int(count)
+        newest: dict[UUID, int] = {}
+        ambiguous: list[str] = []
+        stale = 0
+        for trade_id, counts in versions.items():
+            if sum(counts.values()) == 1:
+                continue
+            top = max(counts)
+            if counts[top] > 1:
+                ambiguous.append(str(trade_id))
+                continue
+            newest[trade_id] = top
+            stale += sum(count for version, count in counts.items() if version != top)
+        if apply and newest:
+            self._delete_superseded_trades(newest)
+        return {
+            "applied": apply,
+            "duplicated_trades": len(newest),
+            "stale_rows": stale,
+            "ambiguous": len(ambiguous),
+            "ambiguous_trades": sorted(ambiguous)[:25],
+        }
+
     def reresolve_political_trades(self, *, apply: bool = False) -> dict[str, Any]:
         """Re-resolve unresolved trades and trades on retired duplicate listings.
 
@@ -473,7 +529,8 @@ class PoliticalSinkMixin:
         rows = self.client.query(
             f"SELECT {', '.join(TRADE_COLUMNS)} FROM alt.political_trades FINAL "
             "WHERE contract_id IS NULL AND ifNull(ticker_raw, '') != '' "
-            f"AND (listing_id IS NULL OR listing_id IN ({RETIRED_LISTINGS}))"
+            f"AND (listing_id IS NULL OR listing_id IN ({RETIRED_LISTINGS})) "
+            f"AND (political_trade_id, version) IN ({NEWEST_TRADE_VERSIONS})"
         ).result_rows
         now = datetime.now(UTC)
         listings: dict[tuple[str, str, date], tuple[Any, ...] | None] = {}
@@ -506,8 +563,11 @@ class PoliticalSinkMixin:
                     "version": _version(now),
                 }
             )
-        if apply:
+        if apply and relinked:
             self._insert("alt.political_trades", relinked)  # type: ignore[attr-defined]
+            self._delete_superseded_trades(
+                {t["political_trade_id"]: t["version"] for t in relinked}
+            )
         return {
             "applied": apply,
             "candidates": len(rows),
@@ -531,7 +591,8 @@ class PoliticalSinkMixin:
                 [r.filing_id for r in rows if (r.country_code, r.chamber) == (country, chamber)],
             ).items():
                 filings[(country, chamber, filing_id)] = record
-        records, orphans, unmatched = [], [], []
+        records: list[dict[str, Any]] = []
+        orphans, unmatched = [], []
         listings: dict[tuple[InstrumentRef, date], tuple[Any, ...] | None] = {}
         for row in rows:
             filing = filings.get((row.country_code, row.chamber, row.filing_id))
@@ -589,6 +650,11 @@ class PoliticalSinkMixin:
                 }
             )
         self._insert("alt.political_trades", records)  # type: ignore[attr-defined]
+        if records:
+            # A re-ingested trade can resolve to another identity than its stored version.
+            self._delete_superseded_trades(
+                {record["political_trade_id"]: record["version"] for record in records}
+            )
         counts: dict[tuple[str, str, str], int] = {}
         for record in records:
             key = (record["country_code"], record["chamber"], record["filing_id"])

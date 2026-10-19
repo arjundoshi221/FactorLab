@@ -30,7 +30,14 @@ KEYS = {
         "effective_from",
     ),
     "alt.political_filings": ("country_code", "chamber", "filing_id"),
-    "alt.political_trades": ("political_trade_id",),
+    # The real sort key: a version with another entity_id is a second row.
+    "alt.political_trades": (
+        "country_code",
+        "chamber",
+        "transaction_date",
+        "entity_id",
+        "political_trade_id",
+    ),
 }
 
 
@@ -43,7 +50,7 @@ class FakeClickHouse:
     def __init__(self, exchanges: dict[str, tuple[str, str, str]] | None = None) -> None:
         self.exchanges = exchanges or {"NSE": ("XNSE", "IN", "INR"), "XNAS": ("XNAS", "US", "USD")}
         self.currencies = {currency for _, _, currency in self.exchanges.values()}
-        self.tables: dict[str, dict[tuple, dict[str, Any]]] = defaultdict(dict)
+        self.tables: dict[str, dict[tuple[Any, ...], dict[str, Any]]] = defaultdict(dict)
         self.log: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self.queries: list[str] = []
 
@@ -55,6 +62,17 @@ class FakeClickHouse:
             if table in KEYS:
                 self.tables[table][tuple(record[k] for k in KEYS[table])] = record
 
+    def command(self, sql: str, parameters: dict[str, Any] | None = None) -> None:
+        p = parameters or {}
+        self.queries.append(sql)
+        if sql.startswith("DELETE FROM alt.political_trades WHERE political_trade_id IN"):
+            table = self.tables["alt.political_trades"]
+            for key, row in list(table.items()):
+                if row["political_trade_id"] in p["ids"] and row["version"] < p["version"]:
+                    del table[key]
+            return None
+        raise AssertionError(f"unexpected command: {sql}")
+
     def close(self):
         pass
 
@@ -62,10 +80,10 @@ class FakeClickHouse:
     def rows(self, table: str) -> list[dict[str, Any]]:
         return list(self.tables[table].values()) if table in KEYS else list(self.log[table])
 
-    def _listing(self, listing_id):
+    def _listing(self, listing_id: Any) -> dict[str, Any] | None:
         return self.tables["ref.listings"].get((listing_id,))
 
-    def _security(self, security_id):
+    def _security(self, security_id: Any) -> dict[str, Any] | None:
         return self.tables["ref.securities"].get((security_id,))
 
     def _scoped(self, listing: dict[str, Any], p: dict[str, Any]) -> bool:
@@ -390,6 +408,11 @@ class FakeClickHouse:
                     if listing["listing_id"] in p["ids"]
                 ]
             )
+        if sql.startswith("SELECT political_trade_id, version, count() AS rows"):
+            grouped: dict[tuple[Any, Any], int] = defaultdict(int)
+            for t in self.rows("alt.political_trades"):
+                grouped[(t["political_trade_id"], t["version"])] += 1
+            return Result([(*key, count) for key, count in grouped.items()])
         if sql.startswith("SELECT political_trade_id,") and "ifNull(ticker_raw, '')" in sql:
             columns = sql[len("SELECT ") : sql.index(" FROM ")].split(", ")
             retired = {
@@ -397,11 +420,17 @@ class FakeClickHouse:
                 for m in self.rows("ref.listing_migrations")
                 if m["migration_type"] == "duplicate_identity"
             }
+            newest: dict[Any, Any] = {}
+            for t in self.rows("alt.political_trades"):
+                newest[t["political_trade_id"]] = max(
+                    t["version"], newest.get(t["political_trade_id"], t["version"])
+                )
             return Result(
                 [
                     tuple(t[c] for c in columns)
                     for t in self.rows("alt.political_trades")
-                    if t["contract_id"] is None
+                    if t["version"] == newest[t["political_trade_id"]]
+                    and t["contract_id"] is None
                     and t["ticker_raw"]
                     and (t["listing_id"] is None or t["listing_id"] in retired)
                 ]

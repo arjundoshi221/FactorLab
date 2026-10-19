@@ -31,6 +31,12 @@ def _retire(argv: list[str]) -> int:
     return retire_main(argv)
 
 
+def _dedupe(argv: list[str]) -> int:
+    from factorlab.components.ingest_political.maintenance import dedupe_main
+
+    return dedupe_main(argv)
+
+
 def _reresolve(argv: list[str]) -> int:
     from factorlab.components.ingest_political.maintenance import reresolve_main
 
@@ -42,6 +48,9 @@ COMMANDS = {
     "engine": Command("provider-agnostic engine: validate, run, daemon, replay", _engine),
     "retire-duplicate-listings": Command(
         "retire duplicate listing identities (dry run unless --apply)", _retire
+    ),
+    "dedupe-political-trades": Command(
+        "delete superseded political trade rows (dry run unless --apply)", _dedupe
     ),
     "reresolve-political-trades": Command(
         "re-link unresolved political trades (dry run unless --apply)", _reresolve
