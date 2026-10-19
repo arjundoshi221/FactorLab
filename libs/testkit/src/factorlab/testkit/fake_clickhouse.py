@@ -332,16 +332,95 @@ class FakeClickHouse:
             return Result(
                 [(f["filing_id"], f["filing_year"], f["filing_url"]) for f in found[: p["limit"]]]
             )
+        if sql.startswith("SELECT l.listing_id, l.trading_symbol, l.exchange_code, ifNull(s.isin"):
+            # identity_repair.plan_duplicate_listings
+            retired = {
+                m["old_listing_id"]
+                for m in self.rows("ref.listing_migrations")
+                if m["migration_type"] == "duplicate_identity"
+            }
+            canonical = {
+                a["target_id"]
+                for a in self.rows("ref.identifier_aliases")
+                if a["alias_kind"] == p["kind"]
+                and a["target_kind"] == "listing"
+                and a["valid_to"] is None
+            }
+            active = [
+                listing
+                for listing in self.rows("ref.listings")
+                if listing["country_code"] == p["country"] and listing["active"]
+            ]
+            counts: dict[str, int] = defaultdict(int)
+            for listing in active:
+                counts[listing["trading_symbol"]] += 1
+            securities = {row["security_id"]: row for row in self.rows("ref.securities")}
+            out: list[tuple[Any, ...]] = []
+            for listing in active:
+                if listing["listing_id"] in retired or counts[listing["trading_symbol"]] < 2:
+                    continue
+                security = securities.get(listing["security_id"], {})
+                out.append(
+                    (
+                        listing["listing_id"],
+                        listing["trading_symbol"],
+                        listing["exchange_code"],
+                        security.get("isin") or "",
+                        listing["listing_id"] in canonical,
+                    )
+                )
+            return Result(sorted(out, key=lambda row: (row[1], str(row[0]))))
+        if sql.startswith("SELECT alias_kind, alias_value,") and "target_id IN" in sql:
+            columns = sql[len("SELECT ") : sql.index(" FROM ")].split(", ")
+            return Result(
+                [
+                    tuple(a[c] for c in columns)
+                    for a in self.rows("ref.identifier_aliases")
+                    if a["target_kind"] == "listing"
+                    and a["target_id"] in p["ids"]
+                    and a["valid_to"] is None
+                ]
+            )
+        if sql.startswith("SELECT listing_id, security_id,") and "WHERE listing_id IN" in sql:
+            columns = sql[len("SELECT ") : sql.index(" FROM ")].split(", ")
+            return Result(
+                [
+                    tuple(listing[c] for c in columns)
+                    for listing in self.rows("ref.listings")
+                    if listing["listing_id"] in p["ids"]
+                ]
+            )
+        if sql.startswith("SELECT political_trade_id,") and "ifNull(ticker_raw, '')" in sql:
+            columns = sql[len("SELECT ") : sql.index(" FROM ")].split(", ")
+            retired = {
+                m["old_listing_id"]
+                for m in self.rows("ref.listing_migrations")
+                if m["migration_type"] == "duplicate_identity"
+            }
+            return Result(
+                [
+                    tuple(t[c] for c in columns)
+                    for t in self.rows("alt.political_trades")
+                    if t["contract_id"] is None
+                    and t["ticker_raw"]
+                    and (t["listing_id"] is None or t["listing_id"] in retired)
+                ]
+            )
         if sql.startswith("SELECT DISTINCT l.listing_id, l.security_id, s.entity_id"):
+            retired = {
+                m["old_listing_id"]
+                for m in self.rows("ref.listing_migrations")
+                if m["migration_type"] == "duplicate_identity"
+            }
             out = []
             for listing in self.rows("ref.listings"):
                 s_ = self._security(listing["security_id"])
                 if (
                     s_
-                    and listing["trading_symbol"] == p["ticker"]
+                    and listing["trading_symbol"] in p["tickers"]
                     and listing["country_code"] == p["country"]
-                    and (listing["first_traded"] is None or listing["first_traded"] <= p["day"])
                     and (listing["last_traded"] is None or listing["last_traded"] >= p["day"])
+                    and listing["listing_id"] not in retired
                 ):
                     out.append(
                         (

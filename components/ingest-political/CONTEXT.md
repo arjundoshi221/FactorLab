@@ -30,6 +30,9 @@ it daily at 02:15 UTC. It is a writer component (image
   - `bootstrap [--year <YYYY>] [--ptr-limit N] [--congress 119]`: one run. `--ptr-limit 0`
     (the parser default) stores the filing index only.
   - `engine`: the provider-agnostic engine (validate, run, daemon, replay).
+  - `retire-duplicate-listings [--country US] [--canonical-alias schwab_symbol] [--apply]`
+    and `reresolve-political-trades [--apply]`: one-off identity repairs, dry run unless
+    `--apply` ([runbook](../../docs/operations/identity-repair.md)).
 - Compose service `ingest-political` ([deploy/compose.yaml](deploy/compose.yaml)), profile
   `jobs`, `restart: "no"`, command `bootstrap --ptr-limit ${POLITICAL_PTR_LIMIT:-20}`,
   network `backend`, no ports; waits on `bootstrap` (`service_completed_successfully`).

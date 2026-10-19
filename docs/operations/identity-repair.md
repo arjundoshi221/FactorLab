@@ -1,0 +1,47 @@
+# Identity repair: duplicate listings and political trade re-resolution
+
+Every dataset should link to one FactorLab listing per ticker. Cutover-era code minted a
+second `ref.listings` identity for 150 US symbols (production read, 2026-10-19): same
+exchange and symbol, a different security, no `schwab_symbol` alias. Market data collects
+on the listing that carries `schwab_symbol`; 340 political trades pointed at the orphan,
+and trades written after the second identity appeared were left unresolved as ambiguous.
+
+The political writer also rejected trades dated before `first_traded`, which records when
+FactorLab first saw a listing, not when it listed, and could not match filing tickers such
+as `BRK-B` to the listing `BRK.B`. Both are fixed in `sinks/political.py`.
+
+## Commands
+
+Run inside the `ingest-political` image, which has the writer credentials. Each command is
+a dry run unless `--apply` is given and prints a JSON report.
+
+```bash
+sudo docker compose --env-file production.env -f compose.production.yml \
+  --profile jobs run --rm ingest-political retire-duplicate-listings
+sudo docker compose --env-file production.env -f compose.production.yml \
+  --profile jobs run --rm ingest-political reresolve-political-trades
+```
+
+Order: retire first (dry run, review, `--apply`), then re-resolve (dry run, review,
+`--apply`). Both are idempotent.
+
+- **Retire** only provable duplicates: exactly one listing of the symbol carries the
+  canonical alias, all are on one exchange and no two carry different ISINs; others are
+  listed under `skipped`. It writes `ref.listing_migrations` (`duplicate_identity`), a new
+  `ref.listings` version of each orphan with `active = false`, and moves the orphan's open
+  aliases to the canonical listing (closing the old ones). Rows stored under an orphan,
+  such as legacy bars on three listings, stay where they are.
+- **Re-resolve** rewrites unresolved trades and trades on retired listings under the same
+  `political_trade_id` with a new version, using the writer's lookup.
+
+## Checks
+
+Expected from the 2026-10-19 dry-run preview: 150 retirements, 3 aliases moved, nothing
+skipped. Afterwards, no US symbol has two active listings that are not retired, and
+`alt.political_trades` has no `listing_id` among retired listings.
+
+## Undo
+
+Write a new `ref.listings` version with `active = true` for the orphan, a superseding
+`ref.listing_migrations` row with another `migration_type`, and reopen the closed alias.
+Re-resolved trades keep their history in older versions until merges collapse them.

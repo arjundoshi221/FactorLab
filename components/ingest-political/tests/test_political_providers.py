@@ -331,3 +331,113 @@ def test_recent_filings_filters_year_before_limiting():
     assert [
         f.filing_id for f in sink.recent_filings(chamber="house", limit=1, filing_year=2025)
     ] == ["old"]
+
+
+def _trade(ticker, day):
+    from uuid import uuid4
+
+    from factorlab.storage.sinks.political import TRADE_COLUMNS
+
+    trade = dict.fromkeys(TRADE_COLUMNS)
+    return {
+        **trade,
+        "political_trade_id": uuid4(),
+        "country_code": "US",
+        "chamber": "house",
+        "filing_id": "20000001",
+        "transaction_date": day,
+        "ticker_raw": ticker,
+        "resolution_confidence": "unresolved",
+        "version": 1,
+    }
+
+
+def test_duplicate_listings_retire_and_political_trades_reresolve():
+    from uuid import UUID
+
+    from factorlab.storage.identity_repair import retire_duplicate_listings
+
+    db = FakeClickHouse(exchanges=US)
+    sinks = ClickHouseSinks(V2USStorage(db))
+    # first_traded is when FactorLab first saw each listing: after every trade below.
+    records = [
+        InstrumentRecord(
+            ref=InstrumentRef("eodhd_symbol", f"{alias}.US", ex, symbol, "US"),
+            name=symbol,
+            product_type="common",
+            currency="USD",
+            first_traded=date(2026, 9, 24),
+        )
+        for alias, symbol, ex in (
+            ("AAPL", "AAPL", "XNAS"),
+            ("AMZN", "AMZN", "XNAS"),
+            ("BRK-B", "BRK.B", "XNYS"),
+        )
+    ]
+    with ingestion_run(sinks, pipeline="seed", source="eodhd", market_code="USA") as ctx:
+        sinks.upsert_instruments(
+            records,
+            provenance=ctx.provenance(source_channel="eodhd:seed", raw_id=None, as_of_time=NOW),
+        )
+        ctx.succeed_unit("seed", len(records))
+    [canonical] = [r for r in db.rows("ref.listings") if r["trading_symbol"] == "AAPL"]
+    # A cutover-era duplicate: same exchange and symbol, another security, a legacy alias.
+    orphan, security = UUID(int=1), UUID(int=2)
+    db.insert(
+        "ref.securities",
+        [[security, security, "common", None]],
+        column_names=["security_id", "entity_id", "security_type", "isin"],
+    )
+    duplicate = {**canonical, "listing_id": orphan, "security_id": security}
+    db.insert("ref.listings", [list(duplicate.values())], column_names=list(duplicate))
+    [alias] = [a for a in db.rows("ref.identifier_aliases") if a["alias_value"] == "AAPL.US"]
+    legacy = {
+        **alias,
+        "alias_kind": "upstox_instrument_key",
+        "alias_value": "schwab:USA:AAPL",
+        "target_id": orphan,
+        "valid_from": date(2026, 9, 18),
+    }
+    db.insert("ref.identifier_aliases", [list(legacy.values())], column_names=list(legacy))
+    day = date(2026, 7, 10)
+    trades = [_trade(t, day) for t in ("AAPL", "AMZN", "BRK.B")]
+    db.insert(
+        "alt.political_trades", [list(t.values()) for t in trades], column_names=list(trades[0])
+    )
+
+    # Filings spell class shares BRK-B; trades predate first_traded.
+    assert sinks._listing_on(InstrumentRef("", "", "", "BRK-B", "US"), day) is not None
+    dry = sinks.reresolve_political_trades()
+    assert (dry["applied"], dry["candidates"], dry["relinked"]) == (False, 3, 2)
+    assert dry["unresolved_tickers"] == {"AAPL": 1}  # two AAPL listings: never guess
+    assert all(t["listing_id"] is None for t in db.rows("alt.political_trades"))
+
+    plan = retire_duplicate_listings(db, country="US", canonical_alias_kind="eodhd_symbol")
+    assert [(r.symbol, r.orphan, r.canonical) for r in plan.retirements] == [
+        ("AAPL", orphan, canonical["listing_id"])
+    ]
+    assert (plan.aliases_moved, plan.applied) == (1, False)
+    assert not db.rows("ref.listing_migrations")
+    done = retire_duplicate_listings(
+        db, country="US", canonical_alias_kind="eodhd_symbol", apply=True, now=NOW
+    )
+    assert done.applied and len(db.rows("ref.listing_migrations")) == 1
+    assert {r["listing_id"]: r["active"] for r in db.rows("ref.listings")}[orphan] is False
+    moved = {
+        (a["target_id"], a["valid_to"])
+        for a in db.rows("ref.identifier_aliases")
+        if a["alias_value"] == "schwab:USA:AAPL"
+    }
+    assert moved == {(orphan, NOW.date()), (canonical["listing_id"], None)}
+
+    applied = sinks.reresolve_political_trades(apply=True)
+    assert (applied["relinked"], applied["still_unresolved"]) == (3, 0)
+    rows = {t["ticker_raw"]: t for t in db.rows("alt.political_trades")}
+    assert rows["AAPL"]["listing_id"] == canonical["listing_id"]
+    assert {t["resolution_confidence"] for t in rows.values()} == {"exact"}
+    # Both steps are idempotent.
+    again = retire_duplicate_listings(
+        db, country="US", canonical_alias_kind="eodhd_symbol", apply=True, now=NOW
+    )
+    assert again.retirements == []
+    assert sinks.reresolve_political_trades()["candidates"] == 0

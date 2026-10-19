@@ -25,9 +25,27 @@ def _engine(argv: list[str]) -> int:
     return engine_cli.main(argv, providers=PROVIDERS, prog="factorlab-ingest-political engine")
 
 
+def _retire(argv: list[str]) -> int:
+    from factorlab.components.ingest_political.maintenance import retire_main
+
+    return retire_main(argv)
+
+
+def _reresolve(argv: list[str]) -> int:
+    from factorlab.components.ingest_political.maintenance import reresolve_main
+
+    return reresolve_main(argv)
+
+
 COMMANDS = {
     "bootstrap": Command("one political collection run (host cron schedules it)", _bootstrap),
     "engine": Command("provider-agnostic engine: validate, run, daemon, replay", _engine),
+    "retire-duplicate-listings": Command(
+        "retire duplicate listing identities (dry run unless --apply)", _retire
+    ),
+    "reresolve-political-trades": Command(
+        "re-link unresolved political trades (dry run unless --apply)", _reresolve
+    ),
 }
 
 

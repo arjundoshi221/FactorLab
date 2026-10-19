@@ -31,6 +31,7 @@ from factorlab.ingest.identifiers import legislator_name_key
 from factorlab.ingest.provider import Provenance
 from factorlab.storage.canonical_ids import committee_id, legislator_id, political_trade_id
 from factorlab.storage.clickhouse import _decoded_text, _version
+from factorlab.storage.identity_repair import RETIRED_LISTINGS
 
 FILING_COLUMNS = (
     "filing_id",
@@ -58,6 +59,53 @@ FILING_COLUMNS = (
     "ingested_at",
     "version",
 )
+
+
+TRADE_COLUMNS = (
+    "political_trade_id",
+    "country_code",
+    "chamber",
+    "filing_id",
+    "filing_url",
+    "filing_date",
+    "transaction_date",
+    "notification_date",
+    "legislator_name_raw",
+    "bioguide_id",
+    "legislator_entity_id",
+    "bioguide_confidence",
+    "ticker_raw",
+    "asset_name_raw",
+    "filing_asset_type_code",
+    "security_type",
+    "listing_id",
+    "contract_id",
+    "security_id",
+    "entity_id",
+    "resolution_confidence",
+    "transaction_type",
+    "owner_code",
+    "filer_type",
+    "amount_bucket_id",
+    "amount_min",
+    "amount_max",
+    "amount_currency",
+    "amount_str_raw",
+    "source",
+    "source_channel",
+    "parser_version",
+    "raw_id",
+    "ingest_run_id",
+    "as_of_time",
+    "ingested_at",
+    "version",
+)
+
+
+def symbol_variants(symbol: str) -> list[str]:
+    """Filings write class shares as ``BRK-B``; FactorLab listings keep ``BRK.B``."""
+    text = symbol.strip().upper()
+    return sorted({text, text.replace("-", ".").replace("/", "."), text.replace(".", "-")})
 
 
 class PoliticalSinkMixin:
@@ -397,16 +445,78 @@ class PoliticalSinkMixin:
 
     # -- alt.political_trades ------------------------------------------------------
     def _listing_on(self, ref: InstrumentRef, day: date) -> tuple[Any, ...] | None:
+        # first_traded is when FactorLab first saw the listing, not when it listed, so only
+        # the delisting bound applies. Retired duplicate identities never match.
         rows = self.client.query(
             "SELECT DISTINCT l.listing_id, l.security_id, s.entity_id, s.security_type "
             "FROM ref.listings AS l FINAL "
             "INNER JOIN ref.securities AS s FINAL ON s.security_id = l.security_id "
-            "WHERE l.trading_symbol = {ticker:String} AND l.country_code = {country:String} "
-            "AND (l.first_traded IS NULL OR l.first_traded <= {day:Date}) "
-            "AND (l.last_traded IS NULL OR l.last_traded >= {day:Date})",
-            parameters={"ticker": ref.trading_symbol, "country": ref.country_code, "day": day},
+            "WHERE l.trading_symbol IN {tickers:Array(String)} "
+            "AND l.country_code = {country:String} "
+            "AND (l.last_traded IS NULL OR l.last_traded >= {day:Date}) "
+            f"AND l.listing_id NOT IN ({RETIRED_LISTINGS})",
+            parameters={
+                "tickers": symbol_variants(ref.trading_symbol),
+                "country": ref.country_code,
+                "day": day,
+            },
         ).result_rows
         return rows[0] if len(rows) == 1 else None
+
+    def reresolve_political_trades(self, *, apply: bool = False) -> dict[str, Any]:
+        """Re-resolve unresolved trades and trades on retired duplicate listings.
+
+        A relinked trade is rewritten under the same ``political_trade_id`` with a new
+        version, so ReplacingMergeTree keeps the corrected identity. Without ``apply``
+        nothing is written.
+        """
+        rows = self.client.query(
+            f"SELECT {', '.join(TRADE_COLUMNS)} FROM alt.political_trades FINAL "
+            "WHERE contract_id IS NULL AND ifNull(ticker_raw, '') != '' "
+            f"AND (listing_id IS NULL OR listing_id IN ({RETIRED_LISTINGS}))"
+        ).result_rows
+        now = datetime.now(UTC)
+        listings: dict[tuple[str, str, date], tuple[Any, ...] | None] = {}
+        relinked: list[dict[str, Any]] = []
+        unresolved: dict[str, int] = {}
+        for row in rows:
+            trade = dict(zip(TRADE_COLUMNS, row, strict=True))
+            ticker = _decoded_text(trade["ticker_raw"]).strip().upper()
+            country = _decoded_text(trade["country_code"])
+            key = (ticker, country, trade["transaction_date"])
+            if key not in listings:
+                listings[key] = self._listing_on(
+                    InstrumentRef("", "", "", ticker, country), trade["transaction_date"]
+                )
+            listing = listings[key]
+            if listing is None:
+                unresolved[ticker] = unresolved.get(ticker, 0) + 1
+                continue
+            if listing[0] == trade["listing_id"]:
+                continue
+            relinked.append(
+                {
+                    **trade,
+                    "listing_id": listing[0],
+                    "security_id": listing[1],
+                    "entity_id": listing[2],
+                    "security_type": _decoded_text(listing[3]),
+                    "resolution_confidence": "exact",
+                    "ingested_at": now,
+                    "version": _version(now),
+                }
+            )
+        if apply:
+            self._insert("alt.political_trades", relinked)  # type: ignore[attr-defined]
+        return {
+            "applied": apply,
+            "candidates": len(rows),
+            "relinked": len(relinked),
+            "still_unresolved": sum(unresolved.values()),
+            "unresolved_tickers": dict(
+                sorted(unresolved.items(), key=lambda item: (-item[1], item[0]))[:25]
+            ),
+        }
 
     def write_political_trades(
         self, rows: Sequence[PoliticalTradeRecord], *, provenance: Provenance
