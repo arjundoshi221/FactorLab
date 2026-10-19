@@ -69,6 +69,11 @@ storage rather than receiving a separate physical row count.
 - Political trades use the most specific canonical identity, with disjoint listing,
   security and issuer groups. Filings join matching trades on country, chamber and
   filing ID with the same precedence. Social posts use resolved listing/entity arrays.
+- Trades the political writer left unresolved (no listing, security or issuer) match last,
+  as `filing ticker (unresolved)`, on the filing's ticker and the instrument's country;
+  their filings follow. Shared tickers (two listings, one symbol) show on each listing.
+- Committee memberships and committees are related context, linked through legislators
+  who disclosed a trade in the instrument (or contract) at any linkage level above.
 - Fundamentals are explicitly issuer-level; for contracts they are underlying-issuer
   context. Reference identity and corporate actions retain their actual linkage level.
 - Broker records preserve account, broker, paper/live and source channel. Preview
@@ -135,6 +140,11 @@ availability is intentionally evaluated at request time, not assumed from develo
 
 - 2026-10-16: Implemented registry, private endpoints, instrument explorer, focused tests
   and documentation.
+- 2026-10-19: Unresolved political trades link by filing ticker and country; committee
+  memberships and committees link as related context through trading legislators.
+  Production read: 153 of 625 stock trades were unresolved at ingest (listing
+  `first_traded` after the trade date, listings added after the write, or two listings
+  per symbol); re-resolution in the political writer remains separate work.
 
 ## Deployment record
 

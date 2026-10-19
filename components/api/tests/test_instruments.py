@@ -105,6 +105,30 @@ def test_relationships_are_disjoint_and_filings_use_composite_identity():
     assert scope(registry()["market.bars"], "contract")[0] == "0"
 
 
+def test_unresolved_political_trades_link_by_filing_ticker_last():
+    rules = registry()["alt.political_trades"]["relationships"]["listing"]
+    label, rule = rules[-1]
+    assert label == "filing ticker (unresolved)"
+    # Only rows the writer could not resolve, scoped to the instrument's country.
+    assert "listing_id IS NULL AND security_id IS NULL AND entity_id IS NULL" in rule
+    assert "ticker_raw = {symbol:String} AND country_code = {country:String}" in rule
+    filing, _ = scope(registry()["alt.political_filings"], "listing")
+    assert "ticker_raw = {symbol:String}" in filing
+
+
+@pytest.mark.parametrize(
+    "table", ["alt.political_committee_memberships", "alt.political_committees"]
+)
+def test_committees_are_related_context_through_legislators_who_traded(table):
+    entry = registry()[table]
+    assert entry["classification"] == "related_context"
+    listing, _ = scope(entry, "listing")
+    assert "FROM alt.political_trades FINAL WHERE legislator_entity_id IS NOT NULL" in listing
+    assert "listing_id = {listing_id:UUID}" in listing
+    contract, _ = scope(entry, "contract")
+    assert "contract_id = {id:UUID}" in contract
+
+
 def test_broker_links_are_scoped_and_ambiguous_execution_ids_excluded():
     orders, _ = scope(registry()["book.order_assignment_events"], "contract")
     assert "tuple(broker_code, account_id, perm_id)" in orders

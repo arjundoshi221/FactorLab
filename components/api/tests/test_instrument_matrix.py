@@ -192,6 +192,51 @@ def test_cells_cover_every_state_and_link_security_level_holdings():
     assert result.unavailable == []
 
 
+def test_political_cells_include_unresolved_filing_tickers_by_country():
+    CACHE.clear()
+    repo = MatrixRepository(object(), NOW)
+    rows = [
+        {
+            "listing_id": A,
+            "security_id": A,
+            "entity_id": A,
+            "ticker": None,
+            "country": "US",
+            "trades": 2,
+            "latest": date(2026, 9, 1),
+        },
+        # Unresolved: matches A by ticker and country only; never matched to B's identity.
+        {
+            "listing_id": None,
+            "security_id": None,
+            "entity_id": None,
+            "ticker": "AAA",
+            "country": "US",
+            "trades": 3,
+            "latest": date(2026, 9, 10),
+        },
+        {
+            "listing_id": None,
+            "security_id": None,
+            "entity_id": None,
+            "ticker": "AAA",
+            "country": "IN",
+            "trades": 5,
+            "latest": date(2026, 9, 12),
+        },
+    ]
+    calls = []
+    repo.query = lambda sql, params, max_rows=20_000: calls.append(params) or rows  # type: ignore[method-assign]
+    from factorlab.components.api.instruments import Instrument
+
+    cells = repo.political([Instrument(**listing(A, "AAA")), Instrument(**listing(B, "BBB"))])
+    a, b = cells[str(A)]["political"], cells[str(B)]["political"]
+    assert a.count == 5 and a.latest == date(2026, 9, 10)
+    assert "filing ticker" in a.detail and "direct" in a.detail
+    assert b.state == "none" and b.count == 0
+    assert calls[0]["symbols"] == ["AAA", "BBB"]
+
+
 def test_query_count_does_not_grow_with_the_page():
     repo, small = make([listing(A, "AAA")])
     page(repo)

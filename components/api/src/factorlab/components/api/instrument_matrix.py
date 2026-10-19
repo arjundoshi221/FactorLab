@@ -511,17 +511,23 @@ class MatrixRepository:
         return result
 
     def political(self, instruments: list[Instrument]) -> dict[str, dict[str, MatrixCell]]:
+        # Trades the political writer could not resolve to any identity still carry the
+        # filing's ticker; match those on (country, ticker) and label them as such.
+        unresolved = "listing_id IS NULL AND security_id IS NULL AND entity_id IS NULL"
         rows = self.query(
-            "SELECT listing_id, security_id, entity_id, count() AS trades, "
-            "max(transaction_date) AS latest FROM alt.political_trades FINAL "
+            "SELECT listing_id, security_id, entity_id, "
+            f"if({unresolved}, ticker_raw, NULL) AS ticker, toString(country_code) AS country, "
+            "count() AS trades, max(transaction_date) AS latest FROM alt.political_trades FINAL "
             "WHERE contract_id IS NULL AND (listing_id IN {listings:Array(UUID)} "
             "OR (listing_id IS NULL AND security_id IN {securities:Array(UUID)}) "
-            "OR (listing_id IS NULL AND security_id IS NULL AND entity_id IN {entities:Array(UUID)})) "
-            "GROUP BY listing_id, security_id, entity_id",
+            "OR (listing_id IS NULL AND security_id IS NULL AND entity_id IN {entities:Array(UUID)}) "
+            f"OR ({unresolved} AND ticker_raw IN {{symbols:Array(String)}})) "
+            "GROUP BY listing_id, security_id, entity_id, ticker, country",
             {
                 "listings": ids(i.id for i in instruments),
                 "securities": ids(i.security_id for i in instruments),
                 "entities": ids(i.entity_id for i in instruments),
+                "symbols": sorted({i.symbol for i in instruments if i.symbol}),
             },
         )
         result = {}
@@ -533,6 +539,7 @@ class MatrixRepository:
                     r
                     for r in rows
                     if r["listing_id"] is None
+                    and r["security_id"] is not None
                     and str(r["security_id"]) == str(instrument.security_id)
                 ],
                 "issuer": [
@@ -540,7 +547,17 @@ class MatrixRepository:
                     for r in rows
                     if r["listing_id"] is None
                     and r["security_id"] is None
+                    and r["entity_id"] is not None
                     and str(r["entity_id"]) == str(instrument.entity_id)
+                ],
+                "filing ticker": [
+                    r
+                    for r in rows
+                    if r["listing_id"] is None
+                    and r["security_id"] is None
+                    and r["entity_id"] is None
+                    and r.get("ticker") == instrument.symbol
+                    and r.get("country") == instrument.country
                 ],
             }
             found = [(label, r) for label, items in matches.items() for r in items]

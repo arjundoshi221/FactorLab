@@ -1,8 +1,21 @@
 {
   "alt.political_committee_memberships": {
     "group": "Alternative & political",
-    "classification": "unsupported",
-    "relationships": {},
+    "classification": "related_context",
+    "relationships": {
+      "listing": [
+        [
+          "legislator who traded it",
+          "legislator_entity_id IN (SELECT assumeNotNull(legislator_entity_id) FROM alt.political_trades FINAL WHERE legislator_entity_id IS NOT NULL AND contract_id IS NULL AND (listing_id = {listing_id:UUID} OR (listing_id IS NULL AND security_id = {security_id:UUID}) OR (listing_id IS NULL AND security_id IS NULL AND entity_id = {entity_id:UUID}) OR (listing_id IS NULL AND security_id IS NULL AND entity_id IS NULL AND ticker_raw = {symbol:String} AND country_code = {country:String})))"
+        ]
+      ],
+      "contract": [
+        [
+          "legislator who traded it",
+          "legislator_entity_id IN (SELECT assumeNotNull(legislator_entity_id) FROM alt.political_trades FINAL WHERE legislator_entity_id IS NOT NULL AND contract_id = {id:UUID})"
+        ]
+      ]
+    },
     "time_column": "effective_from",
     "dimensions": [
       "source"
@@ -31,8 +44,21 @@
   },
   "alt.political_committees": {
     "group": "Alternative & political",
-    "classification": "unsupported",
-    "relationships": {},
+    "classification": "related_context",
+    "relationships": {
+      "listing": [
+        [
+          "committee of a legislator who traded it",
+          "committee_entity_id IN (SELECT committee_entity_id FROM alt.political_committee_memberships FINAL WHERE legislator_entity_id IN (SELECT assumeNotNull(legislator_entity_id) FROM alt.political_trades FINAL WHERE legislator_entity_id IS NOT NULL AND contract_id IS NULL AND (listing_id = {listing_id:UUID} OR (listing_id IS NULL AND security_id = {security_id:UUID}) OR (listing_id IS NULL AND security_id IS NULL AND entity_id = {entity_id:UUID}) OR (listing_id IS NULL AND security_id IS NULL AND entity_id IS NULL AND ticker_raw = {symbol:String} AND country_code = {country:String}))))"
+        ]
+      ],
+      "contract": [
+        [
+          "committee of a legislator who traded it",
+          "committee_entity_id IN (SELECT committee_entity_id FROM alt.political_committee_memberships FINAL WHERE legislator_entity_id IN (SELECT assumeNotNull(legislator_entity_id) FROM alt.political_trades FINAL WHERE legislator_entity_id IS NOT NULL AND contract_id = {id:UUID}))"
+        ]
+      ]
+    },
     "time_column": "effective_from",
     "dimensions": [
       "source"
@@ -76,6 +102,10 @@
         [
           "issuer trade filing",
           "(tuple(country_code, chamber, filing_id) IN (SELECT country_code, chamber, filing_id FROM alt.political_trades FINAL WHERE contract_id IS NULL AND listing_id IS NULL AND security_id IS NULL AND entity_id = {entity_id:UUID})) AND NOT (tuple(country_code, chamber, filing_id) IN (SELECT country_code, chamber, filing_id FROM alt.political_trades FINAL WHERE contract_id IS NULL AND listing_id = {id:UUID})) AND NOT (tuple(country_code, chamber, filing_id) IN (SELECT country_code, chamber, filing_id FROM alt.political_trades FINAL WHERE contract_id IS NULL AND listing_id IS NULL AND security_id = {security_id:UUID}))"
+        ],
+        [
+          "unresolved ticker trade filing",
+          "(tuple(country_code, chamber, filing_id) IN (SELECT country_code, chamber, filing_id FROM alt.political_trades FINAL WHERE contract_id IS NULL AND listing_id IS NULL AND security_id IS NULL AND entity_id IS NULL AND ticker_raw = {symbol:String} AND country_code = {country:String}))"
         ]
       ],
       "contract": [
@@ -135,6 +165,10 @@
         [
           "issuer",
           "contract_id IS NULL AND listing_id IS NULL AND security_id IS NULL AND entity_id = {entity_id:UUID}"
+        ],
+        [
+          "filing ticker (unresolved)",
+          "contract_id IS NULL AND listing_id IS NULL AND security_id IS NULL AND entity_id IS NULL AND ticker_raw = {symbol:String} AND country_code = {country:String}"
         ]
       ],
       "contract": [
