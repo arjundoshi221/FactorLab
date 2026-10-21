@@ -57,7 +57,7 @@ political-<SHA>` reinstalls the preceding model (image only, not data).
 ## Automated ingestion trial
 
 `./deploy/release-ui-trial.ps1 -Trial ingest -Scope <scope>` (scope `futures-us`,
-`ingest-us`, `ingest-india` or `ingest-broker`) pushes `ingest-trial/<scope>/<12-char SHA>`
+`indexes-us`, `ingest-us`, `ingest-india` or `ingest-broker`) pushes `ingest-trial/<scope>/<12-char SHA>`
 from the CI-green tip of `restructure/deploy-market-data-ui` and starts
 [branch-ingest-deploy.yml](../../.github/workflows/branch-ingest-deploy.yml). It builds and
 publishes the unit image (`0.0.0-trial.<SHA>`) through the image workflow, transfers
@@ -74,8 +74,8 @@ publishes the unit image (`0.0.0-trial.<SHA>`) through the image workflow, trans
 The job summary reports plan, verification, recovery and the running services, plus the
 restore command (`ingest_trial.py restore <test-id>` in the trial directory). Schema
 migrations are never run: apply any wave the image needs first. The image version is
-immutable, so one commit gets one trial per image unit (`futures-us` and `ingest-us`
-share the `ingest-us` image); push a new commit for another scope.
+immutable, so one commit gets one trial per image unit (`futures-us`, `indexes-us` and
+`ingest-us` share the `ingest-us` image); push a new commit for another scope.
 
 ## Ingestion trial
 
@@ -216,3 +216,7 @@ F-043) and leaves `ingest-us` and `universe-us` running their current image; the
 protected list. The live model need not define the service yet: `apply` stops nothing and
 starts it from the candidate model, and `restore` removes its container before reinstalling
 the preceding model. Apply `wave_15_schema_futures_quotes` before `apply`.
+
+`--component indexes-us` works the same way for the F-042 `indexes-us` daemon (`indexes
+--daemon`). It needs wave 14. After the first daily-history backfill, run `indexes --rebuild`
+once from the same image (F-042 rollout step 4).

@@ -28,7 +28,7 @@ SERVICES = {
 ALL_SERVICES = dict(SERVICES)
 # Service-only scopes: add one new service and leave the unit's running services alone
 # (they join the protected list). The service may be absent from the live model.
-SERVICE_SCOPES = {"futures-us": "ingest-us"}
+SERVICE_SCOPES = {"futures-us": "ingest-us", "indexes-us": "ingest-us"}
 DAEMONS = [name for name in SERVICES if name != "ingest-political"]
 PROTECTED = [
     "factorlab-api-1",
@@ -197,7 +197,7 @@ def plan(root: Path, test_id: str, *, image_test_id: str | None = None) -> None:
     # Import every production subcommand before stopping any live process.
     for unit, subcommands in {
         "ingest-india": ["daemon", "premarket", "engine"],
-        "ingest-us": ["daemon", "universe", "futures", "engine"],
+        "ingest-us": ["daemon", "universe", "futures", "indexes", "engine"],
         "ingest-broker": ["snapshot", "engine"],
         "ingest-political": ["bootstrap", "engine"],
     }.items():

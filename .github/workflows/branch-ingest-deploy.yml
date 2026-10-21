@@ -3,7 +3,8 @@ name: Branch ingestion trial release
 # A tagged, CI-green commit on the dedicated branch replaces (or adds) the ingestion
 # services of one scope through deploy/testing/ingest_trial.py: plan, apply, verify,
 # with the preceding model restored on a failed startup. Tag ingest-trial/<scope>/<sha12>,
-# scope one of futures-us (adds only futures-us), ingest-us, ingest-india, ingest-broker.
+# scope one of futures-us or indexes-us (each adds only that service), ingest-us,
+# ingest-india, ingest-broker.
 # Main and normal release tags are untouched; schema migrations are never run here.
 on:
   push:
@@ -38,11 +39,11 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          [[ $TAG =~ ^ingest-trial/(futures-us|ingest-us|ingest-india|ingest-broker)/([0-9a-f]{12})$ ]] || {
+          [[ $TAG =~ ^ingest-trial/(futures-us|indexes-us|ingest-us|ingest-india|ingest-broker)/([0-9a-f]{12})$ ]] || {
             echo "Invalid ingestion trial tag" >&2; exit 1; }
           scope=${BASH_REMATCH[1]}
           short=${BASH_REMATCH[2]}
-          case $scope in futures-us) unit=ingest-us ;; *) unit=$scope ;; esac
+          case $scope in futures-us|indexes-us) unit=ingest-us ;; *) unit=$scope ;; esac
           commit=$(git rev-parse HEAD)
           [[ ${commit:0:12} == "$short" ]] || { echo "Tag does not name its commit" >&2; exit 1; }
           git fetch --no-tags origin restructure/deploy-market-data-ui

@@ -29,6 +29,7 @@ import ingestion_test as test
 UNITS = {
     "ingest-us": "ingest-us",
     "futures-us": "ingest-us",
+    "indexes-us": "ingest-us",
     "ingest-india": "ingest-india",
     "ingest-broker": "ingest-broker",
 }

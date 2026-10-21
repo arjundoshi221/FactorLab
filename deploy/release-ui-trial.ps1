@@ -13,14 +13,14 @@ applies the identity repair (docs/operations/identity-repair.md).
 
 With -Trial ingest -Scope <scope>, the ingest-trial/<scope>/<short SHA> tag starts
 branch-ingest-deploy.yml: it plans, applies and verifies one ingestion scope through
-deploy/testing/ingest_trial.py (futures-us adds only the futures-us service). Apply
+deploy/testing/ingest_trial.py (futures-us and indexes-us each add only that service). Apply
 any schema wave the image needs first; the trial never migrates.
 #>
 [CmdletBinding()]
 param(
     [ValidateSet("ui", "political", "ingest")]
     [string]$Trial = "ui",
-    [ValidateSet("futures-us", "ingest-us", "ingest-india", "ingest-broker")]
+    [ValidateSet("futures-us", "indexes-us", "ingest-us", "ingest-india", "ingest-broker")]
     [string]$Scope
 )
 

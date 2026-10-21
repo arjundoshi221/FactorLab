@@ -33,16 +33,17 @@ def test_us_scope_persists_and_protects_other_writers(runner, tmp_path):
         runner.configure_scope(tmp_path, "ingest-india", planning=False)
 
 
-def test_service_scope_adds_one_service_and_protects_its_unit(runner, tmp_path):
-    runner.configure_scope(tmp_path, "futures-us", planning=True)
-    assert runner.SERVICES == {"futures-us": "ingest-us"}
-    assert runner.DAEMONS == ["futures-us"]
+@pytest.mark.parametrize("service", ["futures-us", "indexes-us"])
+def test_service_scope_adds_one_service_and_protects_its_unit(runner, tmp_path, service):
+    runner.configure_scope(tmp_path, service, planning=True)
+    assert {service: "ingest-us"} == runner.SERVICES
+    assert [service] == runner.DAEMONS
     assert "factorlab-ingest-us-1" in runner.PROTECTED
     assert "factorlab-universe-us-1" in runner.PROTECTED
-    assert "factorlab-futures-us-1" not in runner.PROTECTED
+    assert f"factorlab-{service}-1" not in runner.PROTECTED
     # The new service is absent from the live model: nothing to stop or pin for rollback.
     assert runner.live({"services": {"ingest-us": {}, "universe-us": {}}}) == []
-    assert runner.live({"services": {"futures-us": {}}}) == ["futures-us"]
+    assert runner.live({"services": {service: {}}}) == [service]
     with pytest.raises(RuntimeError, match="differs"):
         runner.configure_scope(tmp_path, "ingest-us", planning=False)
 
