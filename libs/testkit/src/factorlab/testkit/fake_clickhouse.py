@@ -20,6 +20,10 @@ KEYS = {
     "meta.unresolved_entities": ("source", "alias_kind", "alias_value"),
     "ref.universes": ("universe_id",),
     "ref.universe_membership": ("universe_id", "effective_from", "listing_id"),
+    "ref.security_sector_history": ("classification", "listing_id", "effective_from"),
+    "ref.sectors": ("classification", "sector_id"),
+    "fundamentals.shares_outstanding": ("listing_id", "as_of_date", "source"),
+    "market.futures_quotes": ("country_code", "contract_id", "source", "observed_at"),
     "ref.legislator_terms": ("bioguide_id", "term_start"),
     "alt.political_committees": ("committee_id", "effective_from"),
     "alt.political_committee_memberships": (
@@ -281,6 +285,22 @@ class FakeClickHouse:
                     (m["listing_id"], m["effective_from"])
                     for m in self.rows("ref.universe_membership")
                     if m["universe_id"] == p["universe"] and m["effective_to"] is None
+                ]
+            )
+        if "FROM ref.security_sector_history FINAL" in sql and "effective_to IS NULL" in sql:
+            return Result(
+                [
+                    (h["listing_id"], h["sector_id"], h["effective_from"])
+                    for h in self.rows("ref.security_sector_history")
+                    if h["classification"] == p["classification"] and h["effective_to"] is None
+                ]
+            )
+        if sql.startswith("SELECT sector_id FROM ref.sectors FINAL"):
+            return Result(
+                [
+                    (s["sector_id"],)
+                    for s in self.rows("ref.sectors")
+                    if s["classification"] == p["classification"]
                 ]
             )
         if "FROM ref.universes FINAL WHERE universe_id" in sql:

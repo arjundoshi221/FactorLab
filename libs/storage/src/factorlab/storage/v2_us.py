@@ -14,19 +14,33 @@ from factorlab.storage.v2_india import V2IndiaStorage
 US_EXTRA_EXCHANGES = {
     "NYSE American": ("XASE", "NYSE American"),
     "Cboe BZX": ("BATS", "Cboe BZX Exchange"),
+    # Pseudo venue for published index values ($SPX, $COMPX, ...); nothing trades here.
+    "US Index": ("INDX", "US index values"),
 }
+# Futures venues (F-043), coded by MIC: ref.contracts must share the exchange_code of
+# the root listing it hangs under, so no name-to-MIC mapping may sit in between.
+US_FUTURES_EXCHANGES = {
+    "XCME": ("XCME", "Chicago Mercantile Exchange"),
+    "XCBT": ("XCBT", "Chicago Board of Trade"),
+    "XNYM": ("XNYM", "New York Mercantile Exchange"),
+    "XCEC": ("XCEC", "Commodity Exchange"),
+    "XCBF": ("XCBF", "Cboe Futures Exchange"),
+    "IFUS": ("IFUS", "ICE Futures U.S."),
+}
+_EQUITY_SESSIONS = {"regular": {"open": "09:30", "close": "16:00"}}
+_GLOBEX_SESSIONS = {"regular": {"open": "18:00", "close": "17:00"}}
 
 
 class V2USStorage(V2IndiaStorage):
     country_code = "US"
 
     def seed_us_reference_data(self) -> None:
-        """Ensure the approved auxiliary US stock venues exist without changing schema."""
-        for exchange in US_EXTRA_EXCHANGES:
+        """Ensure the approved auxiliary US venues exist without changing schema."""
+        for exchange in (*US_EXTRA_EXCHANGES, *US_FUTURES_EXCHANGES):
             self._ensure_us_exchange(exchange)
 
     def _ensure_us_exchange(self, exchange: str) -> None:
-        definition = US_EXTRA_EXCHANGES.get(exchange)
+        definition = US_EXTRA_EXCHANGES.get(exchange) or US_FUTURES_EXCHANGES.get(exchange)
         if definition is None:
             return
         exists = self.client.query(
@@ -36,6 +50,7 @@ class V2USStorage(V2IndiaStorage):
         if exists:
             return
         mic, name = definition
+        sessions = _GLOBEX_SESSIONS if exchange in US_FUTURES_EXCHANGES else _EQUITY_SESSIONS
         now = datetime.now(UTC)
         self._insert_dicts(
             "ref.exchanges",
@@ -47,7 +62,7 @@ class V2USStorage(V2IndiaStorage):
                     "country_code": "US",
                     "currency_code": "USD",
                     "timezone": "America/New_York",
-                    "sessions": json.dumps({"regular": {"open": "09:30", "close": "16:00"}}),
+                    "sessions": json.dumps(sessions),
                     "active": True,
                     "version": _version(now),
                     "ingested_at": now,
@@ -379,3 +394,51 @@ class V2USStorage(V2IndiaStorage):
                 )
         self._insert_daily_by_five_years("meta.session_coverage", records)
         return sum(item["missing"] for item in records)
+
+    # -- US futures (F-043) ----------------------------------------------------
+    def futures_session_closes(self, day: date, *, source: str) -> list[dict[str, Any]]:
+        """The last recorded quote of each contract in Globex session ``day``."""
+        return rows(
+            self.client.query(
+                "SELECT contract_id, argMax(source_symbol, observed_at) AS source_symbol, "
+                "argMax(day_open, observed_at) AS day_open, "
+                "argMax(day_high, observed_at) AS day_high, "
+                "argMax(day_low, observed_at) AS day_low, "
+                "argMax(last_price, observed_at) AS last_price, "
+                "argMax(day_volume, observed_at) AS day_volume, "
+                "argMax(oi, observed_at) AS oi, argMax(raw_id, observed_at) AS raw_id, "
+                "max(observed_at) AS observed_at "
+                "FROM market.futures_quotes FINAL "
+                "WHERE country_code = 'US' AND source = {source:String} "
+                "AND trade_date = {day:Date} GROUP BY contract_id",
+                parameters={"source": source, "day": day},
+            )
+        )
+
+    def futures_settlements(
+        self, day: date, *, after: datetime, source: str
+    ) -> dict[uuid.UUID, Any]:
+        """Each contract's settlement for session ``day``: the first one reported after it.
+
+        Quotes report the latest settlement, so the first non-null value in a later
+        session (within the next four days, covering a weekend) is ``day``'s. Quotes
+        before ``after`` are ignored: early in a session the vendor may still show the
+        settlement before ``day``'s.
+        """
+        result = rows(
+            self.client.query(
+                "SELECT contract_id, argMin(settlement_price, observed_at) AS settlement "
+                "FROM market.futures_quotes FINAL "
+                "WHERE country_code = 'US' AND source = {source:String} "
+                "AND trade_date > {day:Date} AND trade_date <= {last:Date} "
+                "AND observed_at >= {after:DateTime64(6)} "
+                "AND settlement_price IS NOT NULL GROUP BY contract_id",
+                parameters={
+                    "source": source,
+                    "day": day,
+                    "last": day + timedelta(days=4),
+                    "after": after.astimezone(UTC),
+                },
+            )
+        )
+        return {item["contract_id"]: item["settlement"] for item in result}

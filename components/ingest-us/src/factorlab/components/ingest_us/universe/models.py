@@ -8,7 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-_SYMBOL = re.compile(r"^[A-Z0-9][A-Z0-9-]{0,13}$")
+# A leading "$" marks an index value ($SPX, $COMPX), as Schwab spells it.
+_SYMBOL = re.compile(r"^\$?[A-Z0-9][A-Z0-9-]{0,13}$")
 
 
 def normalize_symbol(value: object) -> str:
@@ -33,6 +34,7 @@ class UniverseRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9_-]*$")
     indexes: tuple[IndexRequest, ...] = ()
     explicit_symbols: tuple[str, ...] = ()
+    max_unvalidated: int = Field(default=0, ge=0)
 
     @field_validator("explicit_symbols", mode="before")
     @classmethod

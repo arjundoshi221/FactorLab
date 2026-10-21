@@ -5,6 +5,7 @@ import { IndiaMarkets } from "./pages/IndiaMarkets";
 import { IndiaInstrumentDetail } from "./pages/IndiaInstrumentDetail";
 import { PoliticalData } from "./pages/PoliticalData";
 import { USMarkets } from "./pages/USMarkets";
+import { Indexes } from "./pages/Indexes";
 import { MarketData } from "./pages/InstrumentExplorer";
 import { TradeLedger } from "./pages/TradeLedger";
 import { Monitoring } from "./pages/Monitoring";
@@ -103,6 +104,7 @@ const operationsLinks = [
   { href: "/", label: "Dashboard", active: (path: string) => path === "/" },
   { href: "/india", label: "India markets", active: (path: string) => path.startsWith("/india") },
   { href: "/us", label: "US markets", active: (path: string) => path === "/us" },
+  { href: "/indexes", label: "Indexes", active: (path: string) => path === "/indexes" },
   { href: "/political", label: "Political", active: (path: string) => path === "/political" },
   { href: "/docker-images", label: "Docker images", active: (path: string) => path === "/docker-images" },
   { href: "/roadmap", label: "Roadmap", active: (path: string) => path === "/roadmap" },
@@ -482,7 +484,7 @@ export function App() {
   }
   return (
     <Shell>
-      {path === "/market-data" ? <MarketData /> : path === "/monitoring" ? <Monitoring /> : path === "/roadmap" ? <Roadmap /> : path === "/docker-images" ? <DockerImages /> : indiaInstrumentMatch ? <IndiaInstrumentDetail listingId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
+      {path === "/market-data" ? <MarketData /> : path === "/monitoring" ? <Monitoring /> : path === "/roadmap" ? <Roadmap /> : path === "/docker-images" ? <DockerImages /> : indiaInstrumentMatch ? <IndiaInstrumentDetail listingId={indiaInstrumentMatch[1]} /> : path === "/india" ? <IndiaMarkets /> : path === "/us" ? <USMarkets /> : path === "/indexes" ? <Indexes /> : path === "/political" ? <PoliticalData /> : <Dashboard />}
     </Shell>
   );
 }

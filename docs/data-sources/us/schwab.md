@@ -122,7 +122,7 @@ client = auth.client_from_token_file(
 ### Planning assumptions and runtime limits
 | Limit | Value | Notes |
 |-------|-------|-------|
-| Requests per minute | **120 (approximate)** | Not verified as a current market-data contract; the portal order-limit setting is not proof |
+| Requests per minute | **120 (approximate)** per app | Not verified as a current market-data contract; the portal order-limit setting is not proof |
 | Streaming connections | **1** per account | WebSocket — reconnect logic required |
 | Throttle response | HTTP 429 | Check `Retry-After` header |
 | Default production pace | 1 req/sec | Conservative local floor, not a provider guarantee |
@@ -145,7 +145,7 @@ shadow sweeps. See [the research](../../research/schwab-russell3000-daily-covera
 
 | Env var | Default | Effect |
 |---------|---------|--------|
-| `SCHWAB_MIN_REQUEST_INTERVAL_SECONDS` | `1.0` | Pacing floor per request (1.0 = at most 60/min) |
+| `SCHWAB_MIN_REQUEST_INTERVAL_SECONDS` | `1.0` | Pacing floor per pooled account (1.0 = at most 60/min per account) |
 | `US_LIVE_INTERVAL_SECONDS` | `300` | 1-min tier sweep cadence, measured from sweep start |
 | `US_MINUTE_TIER_SIZE` | `250` | 0-250 minute symbols; 0 disables minutes; daily scope stays full |
 
@@ -154,6 +154,14 @@ permit minute work. Increase throughput only after confirming the approved app's
 limits and accounting for all consumers. Failed and partial daily recovery backs
 off 15m → 30m → … → 24h per symbol; weekly full refreshes revisit provider corrections.
 `Retry-After` remains in effect even after a request exhausts its retry budget.
+
+**Account pool.** `api.accounts` lists several Schwab developer apps, and each app
+has its own token and its own rate limits. The transport sends each request to the
+ready account with the most free budget. A 429 benches that account for its
+`Retry-After`. A 401 on an unrotated token benches it for up to 5 minutes. In both cases
+the request moves on to another account. Each `raw.archive` row records the account
+that served it in `metadata.schwab_account`. Setup:
+[05 §Pooled Schwab accounts](../../architecture/05-secrets-and-upstox-auth.md#pooled-schwab-accounts).
 
 ### Price history data retention
 These are observed availability estimates from the client authors and internal
@@ -342,6 +350,37 @@ No `X-RateLimit-*` headers under budget; only `Retry-After` on 429.
 - Non-US market data — use EODHD/IBKR
 - Bulk download (entire exchange) — use EODHD
 - Level 2 / depth of book — use IBKR
+- **Futures price history** — `/pricehistory` serves no futures. Futures are only quotes (REST) or streaming bars (`CHART_FUTURES`, not built: F-021). FactorLab records its own history from quotes (below).
+
+## Futures (REST quotes, F-043)
+
+Schwab can't supply futures history, so `ingest-us`'s `futures-us` service records it from
+`/marketdata/v1/quotes` ([feature](../../features/F-043-us-futures-quotes.md), roster
+[us_futures.yaml](../../../configs/universes/us_futures.yaml)):
+
+- **Coverage.** 16 roots, front and next contract each: equity index, energy, metals,
+  rates, VIX, EUR and DX. All of them fit in one quotes call, so recording costs about
+  1 request a minute through the Globex week.
+- **Symbols.** A root is `/ES`. A dated contract is `/ESZ26`: root, CME month code,
+  two-digit year. Quoting a root returns its active contract in
+  `reference.futureActiveSymbol`.
+- **Fields used.** From `quote`: `lastPrice`, `lastSize`, `bidPrice`/`askPrice` with
+  sizes, `openPrice`/`highPrice`/`lowPrice`, `totalVolume`, `openInterest`,
+  `quoteTime`, `tradeTime`, `tick` and `settlementPrice`. From `reference`:
+  `futureExpirationDate`, `futureMultiplier` and `futureSettlementPrice`. These names
+  come from Schwab's schema and still need confirming against a recorded production
+  capture. That capture also becomes the conformance fixture.
+- **Outputs.**
+  - `market.futures_quotes` holds one row per contract and vendor quote time.
+  - `market.futures_contract_bars` holds one daily bar per contract and Globex trade
+    date. The close is the last price, then the settlement once the next session reports
+    it.
+- **Limits.**
+  - Nothing exists before the recorder starts.
+  - Prices are stored at 6 decimals, so `/6J` is excluded.
+  - ICE US (`/DX`) may need a separate data agreement.
+  - There are no continuous or back-adjusted series.
+  - It never calls `/trader/v1`, so the no-trading rule above holds.
 
 ## Edge cases & gotchas
 - **Weekly re-auth required** — 7-day refresh token. Must complete browser OAuth + MFA every week.
@@ -464,3 +503,11 @@ The `Schwab-Live` cron fires every hour and grabs the last 2h of 1m bars for the
 ```
 
 **Why a cron, not a daemon?** Schwab's 2 req/sec safe rate means a single pass over SP500 takes ~4 minutes — too long for per-minute polling, and a long-running daemon with internal sleep loop adds crash/restart complexity for no latency win. An hourly cron with 2h overlap delivers the same data freshness in practice (1m bars don't need sub-hourly catchup), and the cron model is self-healing on Task Scheduler restart.
+
+## Index symbols (F-042)
+
+Schwab uses schwab.com symbology for index values: a `$` prefix with no `.X` suffix.
+FactorLab collects `$SPX`, `$COMPX`, `$NDX`, `$DJI`, `$RUT` and `$VIX` through
+`/quotes` (asset type `INDEX`, exchange name `Index`) and `/pricehistory`. Index candles
+carry zero volume. They are stored as `product_type = 'index'` on the pseudo venue
+`INDX`. See [ADR-0017](../../decisions/0017-sector-index-methodology.md).

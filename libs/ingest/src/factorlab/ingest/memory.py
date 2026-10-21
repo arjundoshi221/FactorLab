@@ -20,10 +20,16 @@ from factorlab.ingest.datasets import (
     BarRecord,
     ConstituentRecord,
     ContractBarRecord,
+    ContractQuoteRecord,
     ContractRecord,
     InstrumentRecord,
     InstrumentRef,
     WriteResult,
+)
+from factorlab.ingest.datasets.classification import (
+    SectorRecord,
+    SharesOutstandingRecord,
+    diff_sectors,
 )
 from factorlab.ingest.datasets.political import (
     CommitteeRecord,
@@ -62,6 +68,9 @@ class InMemorySink(NullProviderStorage):
         self._raw: dict[UUID, ArchivedCapture] = {}
         # universe_code -> listing -> [effective_from, effective_to | None]
         self.memberships: dict[str, dict[UUID, list[Any]]] = {}
+        # classification -> listing -> [[sector_id, effective_from, effective_to | None], ...]
+        self.sector_history: dict[str, dict[UUID, list[list[Any]]]] = {}
+        self.sectors: dict[tuple[str, str], str] = {}  # (classification, sector_id) -> name
         # political: (alias_kind, alias_value) -> entity ids; filings by (chamber, filing_id)
         self.entity_aliases: dict[tuple[str, str], set[UUID]] = {}
         self.committees: set[str] = set()
@@ -124,6 +133,9 @@ class InMemorySink(NullProviderStorage):
         if ref.has_alias and (ref.alias_kind, ref.alias_value) in self.aliases:
             return self.aliases[(ref.alias_kind, ref.alias_value)]
         return self._natural_match(ref)
+
+    def resolve_contract(self, ref: InstrumentRef) -> UUID | None:
+        return self.contract_aliases.get((ref.alias_kind, ref.alias_value))
 
     def _park(self, source: str, ref: InstrumentRef, reason: str) -> None:
         self.unresolved.append((source, ref.label(), reason))
@@ -241,6 +253,52 @@ class InMemorySink(NullProviderStorage):
                 members[listing] = [diff.effective_from, None]
             written += len(diff.add) + len(diff.close)
         return WriteResult(written, unresolved, resolved)
+
+    def write_sectors(
+        self,
+        rows: Sequence[SectorRecord],
+        *,
+        provenance: Provenance,
+        mode: ReferenceMode = "authoritative",
+    ) -> WriteResult:
+        self._check_lineage(provenance)
+        as_of = provenance.as_of_time.astimezone(UTC).date()
+        snapshots: dict[str, dict[UUID, str]] = {}
+        unresolved = 0
+        for row in rows:
+            snapshot = snapshots.setdefault(row.classification, {})
+            if mode == "authoritative":
+                self.sectors.setdefault((row.classification, row.sector_id), row.sector_name)
+            listing = self.resolve_listing(row.instrument)
+            if listing is None:
+                self._park(provenance.source, row.instrument, "ref.security_sectors: unresolved")
+                unresolved += 1
+                continue
+            snapshot[listing] = row.sector_id
+        resolved = sum(len(snapshot) for snapshot in snapshots.values())
+        if mode != "authoritative":
+            return WriteResult(0, unresolved, resolved)
+        written = 0
+        for classification, snapshot in snapshots.items():
+            history = self.sector_history.setdefault(classification, {})
+            current = {
+                lid: (spans[-1][0], spans[-1][1])
+                for lid, spans in history.items()
+                if spans[-1][2] is None
+            }
+            diff = diff_sectors(current, snapshot, as_of=as_of)
+            for listing, _, _ in diff.close:
+                history[listing][-1][2] = diff.effective_to
+            for listing, sector in diff.open:
+                history.setdefault(listing, []).append([sector, diff.effective_from, None])
+            written += len(diff.open) + len(diff.close)
+        return WriteResult(written, unresolved, resolved)
+
+    def sector_on(self, listing: UUID, day: date, classification: str = "gics") -> str | None:
+        for sector, start, end in self.sector_history.get(classification, {}).get(listing, []):
+            if start <= day and (end is None or day <= end):
+                return sector
+        return None
 
     # -- political -------------------------------------------------------------
     def write_legislators(
@@ -385,6 +443,17 @@ class InMemorySink(NullProviderStorage):
             written += 1
         return WriteResult(written, unresolved, written)
 
+    def write_shares_outstanding(
+        self, rows: Sequence[SharesOutstandingRecord], *, provenance: Provenance
+    ) -> WriteResult:
+        return self._write_facts(
+            "fundamentals.shares_outstanding",
+            rows,
+            [r.instrument for r in rows],
+            provenance,
+            self.resolve_listing,
+        )
+
     def write_bars(self, rows: Sequence[BarRecord], *, provenance: Provenance) -> WriteResult:
         return self._write_facts(
             "market.bars", rows, [r.instrument for r in rows], provenance, self.resolve_listing
@@ -398,7 +467,18 @@ class InMemorySink(NullProviderStorage):
             rows,
             [r.contract for r in rows],
             provenance,
-            lambda ref: self.contract_aliases.get((ref.alias_kind, ref.alias_value)),
+            self.resolve_contract,
+        )
+
+    def write_contract_quotes(
+        self, rows: Sequence[ContractQuoteRecord], *, provenance: Provenance
+    ) -> WriteResult:
+        return self._write_facts(
+            "market.futures_quotes",
+            rows,
+            [r.contract for r in rows],
+            provenance,
+            self.resolve_contract,
         )
 
     # -- read ports ----------------------------------------------------------

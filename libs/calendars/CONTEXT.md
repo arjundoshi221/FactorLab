@@ -31,6 +31,12 @@ None (library). Public API:
 - `factorlab.calendars.window.MarketWindow(calendar_key, open_time=, close_time=, tz=,
   pre_open_min=0)`: `is_trading_day`, `now_local`, `open_dt`, `close_dt`,
   `poll_start`, `next_open` (walks at most 30 days).
+- `factorlab.calendars.globex` (US futures, F-043): the CME Globex week, Sunday 18:00
+  to Friday 17:00 New York with a daily 17:00-18:00 break. A session opening at 18:00
+  belongs to the next day's trade date. Functions: `trade_date(at)` (`None` when
+  closed), `session_date(at)` (the open session or the one that last closed),
+  `is_open`, `session_close(day)` and `next_open(at)`. Exchange holidays are not
+  modelled.
 
 Known callers: `storage/v2_us.py`, the eodhd and schwab providers, the api `us.py`
 routes, `ingest-broker` `snapshot.py` (`next_scheduled_run`) and

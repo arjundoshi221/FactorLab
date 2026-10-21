@@ -211,3 +211,36 @@ def test_weekly_full_daily_refresh_is_scheduled_even_when_current():
         "error": None,
     }
     assert collector.pending_daily([{"instrument_id": ident}], {ident: state}, now.date())
+
+
+def test_roster_publish_writes_sectors_for_validated_members_only(monkeypatch):
+    from factorlab.components.ingest_us.universe.engine import RosterSink
+    from factorlab.ingest.datasets import ConstituentRecord, InstrumentRef, SectorRecord
+
+    storage, _, db, identifier, *_ = setup(monkeypatch)
+    sink = RosterSink(storage)
+
+    def bare(symbol):
+        return InstrumentRef("", "", "", symbol, "US")
+
+    with ingestion_run(
+        sink, pipeline="us_universe_sync", source="ishares", market_code="USA"
+    ) as ctx:
+        provenance = ctx.provenance(source_channel="ishares:holdings", raw_id=None, as_of_time=NOW)
+        sink.write_constituents(
+            [ConstituentRecord("r3k_iwv", bare(s)) for s in ("AAPL", "UWMC")],
+            provenance=provenance,
+        )
+        sink.write_sectors(
+            [
+                SectorRecord(bare("AAPL"), "45", "Information Technology"),
+                SectorRecord(bare("UWMC"), "40"),
+            ],
+            provenance=provenance,
+        )
+        sink.publish([InstrumentRef("schwab_symbol", "AAPL", "", "AAPL", "US")])
+    history = db.rows("ref.security_sector_history")
+    assert [(row["listing_id"], row["sector_id"]) for row in history] == [(identifier, "45")]
+    assert [row["name"] for row in db.rows("ref.sectors")] == ["Information Technology"]
+    members = db.rows("ref.universe_membership")
+    assert [(row["universe_id"], row["listing_id"]) for row in members] == [("r3k_iwv", identifier)]

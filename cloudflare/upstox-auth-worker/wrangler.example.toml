@@ -71,8 +71,23 @@ secret_name = "FACTORLAB_API_KEY"
 # store_id = "REPLACE_WITH_SECRETS_STORE_ID"
 # secret_name = "IBKR_VNC_PASSWORD"
 
+# Extra pooled Schwab accounts (one developer app each), optional. For account id
+# `acct2`, create SCHWAB_APP_KEY_ACCT2 / SCHWAB_APP_SECRET_ACCT2 in the store, uncomment,
+# and list the id in SCHWAB_ACCOUNTS (in both Workers). An id without bindings shows
+# as "unconfigured".
+# [[secrets_store_secrets]]
+# binding = "SCHWAB_APP_KEY_ACCT2"
+# store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+# secret_name = "SCHWAB_APP_KEY_ACCT2"
+#
+# [[secrets_store_secrets]]
+# binding = "SCHWAB_APP_SECRET_ACCT2"
+# store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+# secret_name = "SCHWAB_APP_SECRET_ACCT2"
+
 [vars]
 UPSTOX_REDIRECT_URL = "https://factorlab-upstox-oauth-callback.YOUR_SUBDOMAIN.workers.dev/oauth/callback"
 SCHWAB_CALLBACK_URL = "https://factorlab-upstox-oauth-callback.YOUR_SUBDOMAIN.workers.dev/oauth/schwab/callback"
+SCHWAB_ACCOUNTS = "primary"  # e.g. "primary,acct2"
 CF_ACCESS_TEAM_DOMAIN = "YOUR_TEAM.cloudflareaccess.com"
 CF_ACCESS_AUD = "REPLACE_WITH_ACCESS_APPLICATION_AUD"

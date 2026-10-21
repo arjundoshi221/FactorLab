@@ -35,6 +35,7 @@ interface SchwabOAuthState {
   provider?: string;
   issued_at?: number;
   nonce?: string;
+  account?: string;  // pooled Schwab account; absent in states sealed before pooling
 }
 
 const TOKEN_KEY = "upstox/current-token";
@@ -47,6 +48,29 @@ const SCHWAB_TOKEN_URL = "https://api.schwabapi.com/v1/oauth/token";
 const CALLBACK_URL = "https://factorlab-upstox-oauth-callback.kairo-jai.workers.dev/oauth/callback";
 const SCHWAB_REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const SCHWAB_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+// Pooled Schwab accounts: `primary` keeps the legacy names; any other id uses
+// SCHWAB_APP_KEY_<ID> / SCHWAB_APP_SECRET_<ID> and KV schwab/accounts/<id>/current-token.
+const SCHWAB_PRIMARY_ACCOUNT = "primary";
+const SCHWAB_ACCOUNT_ID = /^[a-z0-9_]{1,32}$/;
+
+function schwabTokenKey(account: string): string {
+  return account === SCHWAB_PRIMARY_ACCOUNT ? SCHWAB_TOKEN_KEY : `schwab/accounts/${account}/current-token`;
+}
+function schwabBindingName(base: string, account: string): string {
+  return account === SCHWAB_PRIMARY_ACCOUNT ? base : `${base}_${account.toUpperCase()}`;
+}
+async function schwabCredentials(env: Env, account: string): Promise<[string, string] | null> {
+  const bindings = env as unknown as Record<string, SecretBinding | undefined>;
+  const read = async (base: string): Promise<string> => {
+    try {
+      return (await bindings[schwabBindingName(base, account)]?.get()) ?? "";
+    } catch {
+      return "";
+    }
+  };
+  const [appKey, appSecret] = await Promise.all([read("SCHWAB_APP_KEY"), read("SCHWAB_APP_SECRET")]);
+  return appKey.trim() && appSecret.trim() ? [appKey, appSecret] : null;
+}
 
 function base64Encode(bytes: Uint8Array): string {
   let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary);
@@ -82,10 +106,10 @@ function basicAuthorization(appKey: string, appSecret: string): string {
   return `Basic ${base64Encode(new TextEncoder().encode(`${appKey}:${appSecret}`))}`;
 }
 
-async function validSealedSchwabState(env: Env, state: string): Promise<boolean> {
+async function validSealedSchwabState(env: Env, state: string): Promise<string | null> {
   try {
     const sealed = new Uint8Array(base64UrlDecode(state));
-    if (sealed.byteLength <= 28) return false;
+    if (sealed.byteLength <= 28) return null;
     const plaintext = await crypto.subtle.decrypt(
       { name: "AES-GCM", iv: sealed.slice(0, 12) },
       await key(env),
@@ -93,23 +117,28 @@ async function validSealedSchwabState(env: Env, state: string): Promise<boolean>
     );
     const payload = JSON.parse(new TextDecoder().decode(plaintext)) as SchwabOAuthState;
     const age = Date.now() - Number(payload.issued_at);
-    return payload.provider === "schwab" &&
+    const account = payload.account ?? SCHWAB_PRIMARY_ACCOUNT;
+    const valid = payload.provider === "schwab" &&
       typeof payload.nonce === "string" && payload.nonce.length >= 32 &&
-      Number.isFinite(age) && age >= -60_000 && age <= SCHWAB_OAUTH_STATE_TTL_MS;
+      Number.isFinite(age) && age >= -60_000 && age <= SCHWAB_OAUTH_STATE_TTL_MS &&
+      SCHWAB_ACCOUNT_ID.test(account);
+    return valid ? account : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
-async function consumeSchwabState(env: Env, state: string): Promise<boolean> {
-  if (await validSealedSchwabState(env, state)) return true;
+/** The Schwab account the login was started for, or null for an invalid state. */
+async function consumeSchwabState(env: Env, state: string): Promise<string | null> {
+  const account = await validSealedSchwabState(env, state);
+  if (account) return account;
 
   // Accept the old KV-backed format during rolling deployment and for logins
   // that began just before this version was published.
   const legacyKey = `${SCHWAB_OAUTH_STATE_KEY_PREFIX}${state}`;
-  if (!await env.RUNTIME_STATE.get(legacyKey)) return false;
+  if (!await env.RUNTIME_STATE.get(legacyKey)) return null;
   await env.RUNTIME_STATE.delete(legacyKey);
-  return true;
+  return SCHWAB_PRIMARY_ACCOUNT;
 }
 
 function oauthErrorDetail(payload: unknown): string {
@@ -145,7 +174,8 @@ async function schwabCallback(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const code = url.searchParams.get("code") ?? "";
   const state = url.searchParams.get("state") ?? "";
-  if (!state || !await consumeSchwabState(env, state)) {
+  const account = state ? await consumeSchwabState(env, state) : null;
+  if (!account) {
     return text("Invalid or expired OAuth state.", 400);
   }
   const authorizationError = url.searchParams.get("error_description") || url.searchParams.get("error");
@@ -154,10 +184,9 @@ async function schwabCallback(request: Request, env: Env): Promise<Response> {
   }
   if (!code) return text("Schwab authorization did not return a code.", 400);
 
-  const [appKey, appSecret] = await Promise.all([
-    env.SCHWAB_APP_KEY.get(),
-    env.SCHWAB_APP_SECRET.get(),
-  ]);
+  const credentials = await schwabCredentials(env, account);
+  if (!credentials) return text(`Schwab account ${account} has no app credentials configured.`, 400);
+  const [appKey, appSecret] = credentials;
   const exchange = await fetch(SCHWAB_TOKEN_URL, {
     method: "POST",
     headers: {
@@ -195,7 +224,7 @@ async function schwabCallback(request: Request, env: Env): Promise<Response> {
     token_type: payload.token_type || "Bearer",
     scope: payload.scope || "",
   };
-  await env.RUNTIME_STATE.put(SCHWAB_TOKEN_KEY, JSON.stringify(record));
+  await env.RUNTIME_STATE.put(schwabTokenKey(account), JSON.stringify(record));
   return Response.redirect(env.MANAGEMENT_URL, 303);
 }
 export default { async fetch(request: Request, env: Env): Promise<Response> {

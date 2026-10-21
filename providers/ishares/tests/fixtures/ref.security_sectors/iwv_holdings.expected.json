@@ -1,0 +1,240 @@
+[
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "AMZN",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "25",
+  "sector_name": "Consumer Discretionary",
+  "classification": "gics"
+ },
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "BRK-B",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "40",
+  "sector_name": "Financials",
+  "classification": "gics"
+ },
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "CAT",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "20",
+  "sector_name": "Industrials",
+  "classification": "gics"
+ },
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "CBOE",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "40",
+  "sector_name": "Financials",
+  "classification": "gics"
+ },
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "GOOGL",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "50",
+  "sector_name": "Communication Services",
+  "classification": "gics"
+ },
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "JPM",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "40",
+  "sector_name": "Financials",
+  "classification": "gics"
+ },
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "LIN",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "15",
+  "sector_name": "Materials",
+  "classification": "gics"
+ },
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "NEE",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "55",
+  "sector_name": "Utilities",
+  "classification": "gics"
+ },
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "NVDA",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "45",
+  "sector_name": "Information Technology",
+  "classification": "gics"
+ },
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "PG",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "30",
+  "sector_name": "Consumer Staples",
+  "classification": "gics"
+ },
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "PLD",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "60",
+  "sector_name": "Real Estate",
+  "classification": "gics"
+ },
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "UEC",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "10",
+  "sector_name": "Energy",
+  "classification": "gics"
+ },
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "UNH",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "35",
+  "sector_name": "Health Care",
+  "classification": "gics"
+ },
+ {
+  "_type": "SectorRecord",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "XOM",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "sector_id": "10",
+  "sector_name": "Energy",
+  "classification": "gics"
+ }
+]

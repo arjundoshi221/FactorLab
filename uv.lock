@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.12.*"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -20,6 +20,7 @@ members = [
     "factorlab-component-schema-migrator",
     "factorlab-component-secrets-agent",
     "factorlab-core",
+    "factorlab-indexes",
     "factorlab-ingest",
     "factorlab-orchestration",
     "factorlab-provider-congress-legislators",
@@ -28,6 +29,7 @@ members = [
     "factorlab-provider-github-csv",
     "factorlab-provider-house-clerk",
     "factorlab-provider-ibkr",
+    "factorlab-provider-ishares",
     "factorlab-provider-schwab",
     "factorlab-provider-upstox",
     "factorlab-runtime",
@@ -621,6 +623,7 @@ dependencies = [
     { name = "factorlab-calendars" },
     { name = "factorlab-clickhouse" },
     { name = "factorlab-core" },
+    { name = "factorlab-indexes" },
     { name = "factorlab-runtime" },
     { name = "factorlab-schema" },
     { name = "factorlab-storage" },
@@ -638,6 +641,7 @@ requires-dist = [
     { name = "factorlab-calendars", editable = "libs/calendars" },
     { name = "factorlab-clickhouse", editable = "libs/clickhouse" },
     { name = "factorlab-core", editable = "libs/core" },
+    { name = "factorlab-indexes", editable = "libs/indexes" },
     { name = "factorlab-runtime", editable = "libs/runtime" },
     { name = "factorlab-schema", editable = "libs/schema" },
     { name = "factorlab-storage", editable = "libs/storage" },
@@ -745,11 +749,13 @@ source = { editable = "components/ingest-us" }
 dependencies = [
     { name = "factorlab-calendars" },
     { name = "factorlab-core" },
+    { name = "factorlab-indexes" },
     { name = "factorlab-ingest" },
     { name = "factorlab-orchestration" },
     { name = "factorlab-provider-edgar" },
     { name = "factorlab-provider-eodhd" },
     { name = "factorlab-provider-github-csv" },
+    { name = "factorlab-provider-ishares" },
     { name = "factorlab-provider-schwab" },
     { name = "factorlab-runtime" },
     { name = "factorlab-storage" },
@@ -763,11 +769,13 @@ dependencies = [
 requires-dist = [
     { name = "factorlab-calendars", editable = "libs/calendars" },
     { name = "factorlab-core", editable = "libs/core" },
+    { name = "factorlab-indexes", editable = "libs/indexes" },
     { name = "factorlab-ingest", editable = "libs/ingest" },
     { name = "factorlab-orchestration", editable = "libs/orchestration" },
     { name = "factorlab-provider-edgar", editable = "providers/edgar" },
     { name = "factorlab-provider-eodhd", editable = "providers/eodhd" },
     { name = "factorlab-provider-github-csv", editable = "providers/github-csv" },
+    { name = "factorlab-provider-ishares", editable = "providers/ishares" },
     { name = "factorlab-provider-schwab", editable = "providers/schwab" },
     { name = "factorlab-runtime", editable = "libs/runtime" },
     { name = "factorlab-storage", editable = "libs/storage" },
@@ -841,6 +849,23 @@ dependencies = [
 requires-dist = [
     { name = "pydantic", specifier = ">=2.5" },
     { name = "pydantic-settings", specifier = ">=2.1" },
+]
+
+[[package]]
+name = "factorlab-indexes"
+version = "0.1.0"
+source = { editable = "libs/indexes" }
+dependencies = [
+    { name = "factorlab-core" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "factorlab-core", editable = "libs/core" },
+    { name = "pydantic", specifier = ">=2.5" },
+    { name = "pyyaml", specifier = ">=6.0" },
 ]
 
 [[package]]
@@ -995,6 +1020,25 @@ requires-dist = [
     { name = "factorlab-ingest", editable = "libs/ingest" },
     { name = "ib-async", specifier = ">=2.1" },
     { name = "pydantic", specifier = ">=2.5" },
+]
+
+[[package]]
+name = "factorlab-provider-ishares"
+version = "0.1.0"
+source = { editable = "providers/ishares" }
+dependencies = [
+    { name = "factorlab-core" },
+    { name = "factorlab-ingest" },
+    { name = "pydantic" },
+    { name = "requests" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "factorlab-core", editable = "libs/core" },
+    { name = "factorlab-ingest", editable = "libs/ingest" },
+    { name = "pydantic", specifier = ">=2.5" },
+    { name = "requests", specifier = ">=2.32.3" },
 ]
 
 [[package]]

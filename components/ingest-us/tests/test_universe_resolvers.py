@@ -90,6 +90,13 @@ def test_base_resolver_normalizes_deduplicates_and_validates_complete_union():
     assert normalize_symbol("BRK.B") == normalize_symbol("BRK/B") == "BRK-B"
 
 
+def test_normalize_symbol_keeps_index_dollar_prefix():
+    assert normalize_symbol("$spx") == "$SPX"
+    for bad in ("$", "$$SPX", "S$PX"):
+        with pytest.raises(ValueError, match="Unsupported US symbol"):
+            normalize_symbol(bad)
+
+
 def test_base_resolver_rejects_minimum_and_partial_validation():
     validator = Mock()
     resolver = Resolver({"sp500": ["AAPL"]}, validator)
@@ -104,3 +111,54 @@ def test_base_resolver_rejects_minimum_and_partial_validation():
     resolver.records["sp500"] = ["AAPL", "MSFT"]
     with pytest.raises(ValueError, match="could not validate"):
         resolver.resolve(request)
+
+
+def ishares_payload(**changes):
+    value = payload(
+        provider="ishares",
+        indexes=[{"name": "r3k_iwv", "minimum_constituents": 2}],
+        providers={
+            "ishares": {
+                "indexes": {
+                    "r3k_iwv": {
+                        "url": "https://www.ishares.com/us/products/239714/x/latest-holdings.csv"
+                    }
+                }
+            }
+        },
+        extra_symbols=["$SPX", "XLK"],
+        max_unvalidated=1,
+        sector_provider="ishares",
+    )
+    value.update(changes)
+    return value
+
+
+def test_ishares_config_is_the_only_one_allowed_to_drop_members():
+    config = UniverseConfig.model_validate(ishares_payload())
+    assert config.request().max_unvalidated == 1
+    assert config.extra_symbols == ["$SPX", "XLK"]
+    with pytest.raises(ValidationError, match="only to holdings proxies"):
+        UniverseConfig.model_validate(payload(max_unvalidated=3))
+    with pytest.raises(ValidationError, match="sector_provider ishares must map"):
+        UniverseConfig.model_validate(payload(sector_provider="ishares"))
+
+
+def test_proxy_drops_unvalidated_members_within_allowance_but_never_extras():
+    validator = Mock()
+    validator.validate.return_value = [constituent("AAPL"), constituent("MSFT")]
+    resolver = Resolver({"r3k_iwv": ["AAPL", "MSFT", "UWMC"]}, validator)
+    request = UniverseRequest(
+        name="test",
+        indexes=(IndexRequest(name="r3k_iwv", minimum_constituents=2),),
+        max_unvalidated=1,
+    )
+    result = resolver.resolve(request)
+    assert [item.symbol for item in result.constituents] == ["AAPL", "MSFT"]
+    assert result.provenance["unvalidated"] == ["UWMC"]
+    tight = request.model_copy(update={"max_unvalidated": 0})
+    with pytest.raises(ValueError, match="could not validate 1"):
+        resolver.resolve(tight)
+    extra = request.model_copy(update={"explicit_symbols": ("$SPX",)})
+    with pytest.raises(ValueError, match="could not validate"):
+        resolver.resolve(extra)  # $SPX is unvalidated and explicit: always fatal

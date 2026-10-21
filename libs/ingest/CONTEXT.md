@@ -58,7 +58,7 @@ No environment reads and no secrets here. Provider YAML holds secret *names* onl
 Defines, but does not write, the dataset ids and their tables: `ref.listings`,
 `ref.contracts`, `ref.universe_membership`, `ref.legislators`,
 `alt.political_filings`, `alt.political_trades`, `fundamentals.filings`,
-`broker.snapshot`, `market.bars`, `market.futures_contract_bars` (see
+`broker.snapshot`, `market.bars`, `market.futures_contract_bars`, `market.futures_quotes` (see
 `DatasetSpec.tables`). Frozen strings it produces:
 
 - `Binding.source_name`: the provider name (`upstox`, `schwab`, ...), or
@@ -121,3 +121,20 @@ Dataset collection checks cancellation before each fetch. PartialNormalizationEr
 preserves usable rows while recording a unit failure. Completeness remains explicit.
 Authoritative universe snapshots with unresolved members fail their unit and leave
 existing membership intact; shadow comparisons retain resolution counts.
+
+**Classification datasets (F-042):**
+
+- `ref.security_sectors` (`SectorRecord`, sink `write_sectors`) holds complete snapshots
+  per classification. They are diffed by the pure `diff_sectors` into effective-dated
+  rows, and a snapshot that changes more than 20% of assignments is refused.
+- `fundamentals.shares_outstanding` (`SharesOutstandingRecord`, sink
+  `write_shares_outstanding`) is source-keyed.
+- Both live in [datasets/classification.py](src/factorlab/ingest/datasets/classification.py).
+  `InMemorySink` implements both, and also `sector_on`.
+
+**US futures (F-043):** `market.futures_quotes` (`ContractQuoteRecord`, sink
+`write_contract_quotes`, source-keyed) takes a `ReferenceRequest` whose
+`params.contracts` names the contracts. `observed_at` is the vendor quote time.
+`FUTURE_PRODUCT_TYPES` adds `commodity_future`, `rate_future` and `fx_future`, which are
+valid for both listings and contracts. `InMemorySink.resolve_contract` resolves contracts
+by alias.

@@ -56,7 +56,7 @@ applied by a reviewed, operator-run migration; the `schema-migrator` component's
 
 ## Data
 
-Forward Waves 12/13 add application profiles/account ownership, nullable catalog profile IDs and append-only durable-order assignments. These migrations are separate operator operations; applied waves stay frozen. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md).
+Forward Waves 12/13 add application profiles/account ownership, nullable catalog profile IDs and append-only durable-order assignments. These migrations are separate operator operations; applied waves stay frozen. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md). Forward Wave 15 adds `market.futures_quotes` (US futures snapshots, no TTL; [F-043](../../docs/features/F-043-us-futures-quotes.md)).
 
 - Databases: `ref`, `market`, `fundamentals`, `alt`, `book`, `risk`, `derived`,
   `broker`, `meta`, `raw`, `research`.

@@ -61,7 +61,7 @@ configured US resolution uses SchwabListings and canonical reference sinks.
   `meta.source_status`, `ref.entities`, `ref.securities`, `ref.listings`,
   `ref.contracts`, `ref.identifier_aliases`, `ref.universes`,
   `ref.universe_membership`, `ref.legislator_terms`, `ref.source_priorities`,
-  `market.bars`, `market.futures_contract_bars`, `alt.political_filings`,
+  `market.bars`, `market.futures_contract_bars`, `market.futures_quotes`, `alt.political_filings`,
   `alt.political_trades`, `alt.political_committees`,
   `alt.political_committee_memberships`, `fundamentals.filings`,
   `fundamentals.line_items`, `broker.positions_snapshot`,
@@ -125,3 +125,19 @@ does not undo rows already written.
 Replay requests binary archive bodies before gzip decoding. Listing resolution
 accepts a MIC and preserves the existing exchange code and UUID. Market inserts
 group by country, resolution and five-year window (at most 60 monthly partitions).
+
+**Indexes (F-042):**
+
+- `ClassificationSinkMixin` ([sinks/classification.py](src/factorlab/storage/sinks/classification.py))
+  writes `ref.security_sector_history`, seeds missing `ref.sectors` names, and writes
+  `fundamentals.shares_outstanding`. Unresolved sector tickers are parked; they do not
+  block the snapshot.
+- `IndexStorage` ([indexes.py](src/factorlab/storage/indexes.py)):
+  - reads universe and sector spans, shares observations, and daily closes from
+    `market.bars` for a caller-given source, one calendar year per query;
+  - writes `derived.index_levels`, `derived.index_weights` (100k-row batches) and
+    `derived.computations`.
+- `seed_us_reference_data` also adds the pseudo venue `US Index` (MIC `INDX`) for index
+  values.
+
+**US futures (F-043):** `ClickHouseSinks.write_contract_quotes` resolves contracts by alias and writes `market.futures_quotes` with `trade_date = globex.session_date(observed_at)`, parking unresolved ones. `V2USStorage.seed_us_reference_data` also seeds `US_FUTURES_EXCHANGES` (`XCME`, `XCBT`, `XNYM`, `XCEC`, `XCBF`, `IFUS`; sessions 18:00-17:00) with `exchange_code` equal to the MIC, because `upsert_future` requires a contract to share its root listing's exchange code. `futures_session_closes(day, source=)` returns each contract's last snapshot in a session; `futures_settlements(day, after=, source=)` returns the first settlement reported in a later session at or after `after`.

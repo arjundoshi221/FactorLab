@@ -17,6 +17,12 @@ from factorlab.ingest.datasets.broker import (
     PositionSnapshot,
     SnapshotRequest,
 )
+from factorlab.ingest.datasets.classification import (
+    SectorRecord,
+    SectorSink,
+    SharesOutstandingRecord,
+    SharesOutstandingSink,
+)
 from factorlab.ingest.datasets.common import (
     RESOLUTIONS,
     Capabilities,
@@ -38,6 +44,8 @@ from factorlab.ingest.datasets.market import (
     BarSink,
     ContractBarRecord,
     ContractBarSink,
+    ContractQuoteRecord,
+    ContractQuoteSink,
     SeriesWindow,
 )
 from factorlab.ingest.datasets.political import (
@@ -111,6 +119,25 @@ DATASETS: dict[str, DatasetSpec] = {
             sink_method="write_constituents",
             reference=True,
             requires_alias=False,  # constituent lists are often bare tickers
+        ),
+        DatasetSpec(
+            id="ref.security_sectors",
+            tables=("ref.security_sector_history", "ref.sectors"),
+            request_type=ReferenceRequest,
+            record_types=(SectorRecord,),
+            sink_protocol=SectorSink,
+            sink_method="write_sectors",
+            reference=True,
+            requires_alias=False,  # holdings files carry bare tickers
+        ),
+        DatasetSpec(
+            id="fundamentals.shares_outstanding",
+            tables=("fundamentals.shares_outstanding",),
+            request_type=ReferenceRequest,
+            record_types=(SharesOutstandingRecord,),
+            sink_protocol=SharesOutstandingSink,
+            sink_method="write_shares_outstanding",
+            source_keyed=True,
         ),
         DatasetSpec(
             id="ref.legislators",
@@ -189,6 +216,16 @@ DATASETS: dict[str, DatasetSpec] = {
             has_resolution=True,
             source_keyed=True,
         ),
+        DatasetSpec(
+            id="market.futures_quotes",
+            tables=("market.futures_quotes",),
+            # params.symbols names the contracts to quote; quotes need no window.
+            request_type=ReferenceRequest,
+            record_types=(ContractQuoteRecord,),
+            sink_protocol=ContractQuoteSink,
+            sink_method="write_contract_quotes",
+            source_keyed=True,
+        ),
     )
 }
 
@@ -212,6 +249,8 @@ __all__ = [
     "ConstituentRecord",
     "ContractBarRecord",
     "ContractBarSink",
+    "ContractQuoteRecord",
+    "ContractQuoteSink",
     "ContractRecord",
     "ContractSink",
     "DatasetSource",
@@ -225,7 +264,11 @@ __all__ = [
     "OpenOrderSnapshot",
     "PositionSnapshot",
     "ReferenceRequest",
+    "SectorRecord",
+    "SectorSink",
     "SeriesWindow",
+    "SharesOutstandingRecord",
+    "SharesOutstandingSink",
     "SnapshotRequest",
     "UniverseReader",
     "UniverseSink",

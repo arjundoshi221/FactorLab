@@ -10,7 +10,7 @@ The production US collector uses primary Schwab bindings through the shared engi
 
 ## Owns and does not own
 
-- Owns: the market-data transport with bearer auth and token-expiry checks ([transport.py](src/factorlab/sources/schwab/transport.py)), unit planning ([sources.py](src/factorlab/sources/schwab/sources.py)), and the pure mapping from Schwab JSON to records ([normalize.py](src/factorlab/sources/schwab/normalize.py)).
+- Owns: the market-data transport with bearer auth, token-expiry checks and the account pool ([transport.py](src/factorlab/sources/schwab/transport.py)), unit planning ([sources.py](src/factorlab/sources/schwab/sources.py)), and the pure mapping from Schwab JSON to records ([normalize.py](src/factorlab/sources/schwab/normalize.py)).
 - Does not own: the OAuth flow and token refresh (Cloudflare Worker plus secrets agent, [05](../../docs/architecture/05-secrets-and-upstox-auth.md)), the listing master (EODHD is meant to own it), ClickHouse writes (`factorlab-storage` sinks), or the production scheduler (`components/ingest-us`).
 
 ## Entry points
@@ -27,13 +27,14 @@ The production US collector uses primary Schwab bindings through the shared engi
 |---|---|---|---|
 | `api.access_token_env` | `SCHWAB_ACCESS_TOKEN` | same | Bearer token, read through `get_secret` on every request |
 | (derived) | `SCHWAB_ACCESS_TOKEN.expires_at` | - | ISO timestamp. If it is missing, unparseable or in the past, the call raises `AuthRequired`. |
+| `api.accounts` | `SCHWAB_ACCESS_TOKEN_<ID>` (+ `.expires_at`) for ids other than `primary` | `[primary]` | Pooled Schwab apps; each has its own token and limiter. Accounts without a valid token are skipped. |
 | `api.base_url` / `api.timeout` | - | `https://api.schwabapi.com` / 30s | The path prefix is `/marketdata/v1` |
-| `rate_limits.requests_per_second` | - | 1.0 | Truncated to an int for a 1s window |
+| `rate_limits.requests_per_second` | - | 1.0 | Per account; truncated to an int for a 1s window |
 | `rate_limits.requests_per_minute` | - | 120 | Local 60s ceiling; approximate, not a verified Schwab market-data contract |
 | `exchanges` | - | `DEFAULT_EXCHANGES` | Schwab exchange name or code -> `XASE` / `XNYS` / `ARCX` / `XNAS` |
 | `minute_max_lookback_days` / `minute_chunk_days` | - | 48 / 10 (at most 10) | |
 
-Only `SCHWAB_ACCESS_TOKEN` reaches the VPS. The secrets agent writes the token and its `.expires_at` file into the US runtime-secret volume. App credentials and the refresh token stay in Cloudflare.
+Only access tokens (`SCHWAB_ACCESS_TOKEN` and `SCHWAB_ACCESS_TOKEN_<ID>`) reach the VPS. The secrets agent writes the token and its `.expires_at` file into the US runtime-secret volume. App credentials and the refresh token stay in Cloudflare.
 
 ## Data
 
@@ -52,6 +53,16 @@ Only `SCHWAB_ACCESS_TOKEN` reaches the VPS. The secrets agent writes the token a
 - R1/R8 ([test_boundaries.py](../../tests/architecture/test_boundaries.py)): no storage, no other provider, no `pandas`, `clickhouse_connect`, `sqlalchemy` or `fastapi`.
 - `normalize` is pure over the capture and uses `fetched_at` for session cutoffs. A 1min bar is kept only inside the XNYS regular session and once its minute has finished. A daily bar is kept only once its session has closed. A repeated timestamp keeps the last candle.
 - `Set-Cookie` headers are dropped from captures, and `source_url` carries the sorted query parameters.
+- Account pool ([transport.py](src/factorlab/sources/schwab/transport.py)):
+  - Each request goes to the ready account with the most free budget; ties rotate.
+  - A 429 benches the account for `Retry-After` (default 60 s). A 401 on an unrotated
+    token benches it until the token changes, for at most 5 minutes.
+  - After a 429 or 401, the request moves on to another account, trying each account
+    at most once.
+  - With no usable account the transport raises `AuthRequired`, or `RateLimited` when
+    every account is throttled, without making an HTTP call.
+  - `metadata.schwab_account` records the account that served the request.
+  - Setup: [05 §Pooled Schwab accounts](../../docs/architecture/05-secrets-and-upstox-auth.md#pooled-schwab-accounts).
 
 ## Observability
 
@@ -74,9 +85,50 @@ Only `SCHWAB_ACCESS_TOKEN` reaches the VPS. The secrets agent writes the token a
 
 ## Pitfalls
 
-- Shadow traffic shares the production token and its approximate request budget with the
+- Shadow traffic shares the production tokens and their approximate request budgets with the
   collector and universe validator. Limit simultaneous traffic explicitly; separate
   processes do not coordinate pacing. Run shadow off-hours or on a small `--listing` set.
 - Schwab prices are split-adjusted, while EODHD `close` is raw. The two disagree on any day before a split. Decide which is authoritative before `bars_best` (07 §15.1).
 - The `.expires_at` companion has a dotted name. In practice it is readable only as a file (`FACTORLAB_SECRETS_DIR/SCHWAB_ACCESS_TOKEN.expires_at`), not as a plain env var.
 - Pre-1970 daily candles are handled with epoch arithmetic, because `datetime.fromtimestamp` rejects negative values on Windows. Keep it that way.
+
+**Indexes and shares (F-042, [ADR-0017](../../docs/decisions/0017-sector-index-methodology.md)):**
+
+- **Index values.** Quotes and instruments with asset type `INDEX` (`$SPX`, `$COMPX`,
+  `$NDX`, `$DJI`, `$RUT`, `$VIX`) normalize to `product_type = 'index'` on exchange
+  `INDX` (`INDEX_VENUE`; Schwab exchange name `Index`). Their daily bars use the normal
+  `/pricehistory` path.
+- **ETFs on the quotes path.** These stay `common`, because `product_type` is part of the
+  `market.bars` key.
+- **Shares outstanding.** `SchwabSharesOutstanding` (`fundamentals.shares_outstanding`,
+  `/quotes?fields=fundamental` in batches of 50) reads `fundamental.sharesOutstanding`,
+  dated to the capture's New York day. It is not registered with the engine until a
+  recorded production capture becomes its fixture. `universe-us` runs it through an
+  explicit binding (`EngineClient.collect_shares`).
+
+**US futures (F-043, [feature](../../docs/features/F-043-us-futures-quotes.md)):**
+
+- **Quotes only.** `/pricehistory` serves no futures, so everything comes from
+  `/marketdata/v1/quotes`, in batches of up to 50. Nothing here calls `/trader/v1`.
+  Pure helpers live in [futures.py](src/factorlab/sources/schwab/futures.py).
+- **Symbols.** A root is `/ES`; a dated contract is `/ESZ26` (root, CME month code,
+  two-digit year). Roster entries (`FuturesRoot`) carry root, MIC (`FUTURES_VENUES`),
+  product type, listing cycle and depth. MICs double as `ref.exchanges` codes.
+- **Roots.** `SchwabListings` with `params.mode: futures_roots` emits one
+  `ref.listings` record per quoted root.
+- **Contracts.** `SchwabFuturesContracts` (`ref.contracts`) quotes each root together
+  with its next `depth + 2` cycle contracts. It keeps the root's `futureActiveSymbol`
+  and the next ones by `futureExpirationDate`, up to `depth`. `params.as_of` supplies
+  the date, so `plan` stays pure.
+- **Snapshots.** `SchwabFuturesQuotes` (`market.futures_quotes`) maps
+  `params.contracts` (symbol -> MIC) to `ContractQuoteRecord`s. `observed_at` is the
+  vendor `quoteTime`, falling back to `tradeTime` and then `fetched_at`. Settlement is
+  read from `quote.settlementPrice`, then `reference.futureSettlementPrice`.
+- **Missing roots.** A root Schwab does not quote is logged and skipped, which is the
+  expected case for `/DX` without an ICE agreement. A quotes capture with none of its
+  contracts raises `NormalizationError`.
+- **Not registered.** Both futures sources stay unregistered until a recorded
+  production capture becomes their fixture. `ingest-us futures` runs them through
+  explicit bindings (`EngineClient.collect_futures_roster`, `collect_futures_quotes`).
+  The field names come from Schwab's schema and are not yet confirmed against a live
+  response.

@@ -46,13 +46,15 @@ No ClickHouse access. Files written (mode 0444, atomic replace) per volume:
 |---|---|---|
 | `clickhouse_runtime` (`/run/secrets/clickhouse`) | `clickhouse` (`users.d`) | `runtime-users.xml` (user `factorlab`, `password_sha256_hex`), `.agent-ready` |
 | `india_runtime` (`/run/secrets/india`) | `ingest-india` | `CLICKHOUSE_PASSWORD`, `UPSTOX_ACCESS_TOKEN`, `UPSTOX_ACCESS_TOKEN.expires_at` |
-| `us_runtime` (`/run/secrets/us`) | `universe-us`, `ingest-us` | `CLICKHOUSE_PASSWORD`, `EODHD_API_KEY`, `SCHWAB_ACCESS_TOKEN`, `SCHWAB_ACCESS_TOKEN.expires_at` |
+| `us_runtime` (`/run/secrets/us`) | `universe-us`, `ingest-us` | `CLICKHOUSE_PASSWORD`, `EODHD_API_KEY`, `SCHWAB_ACCESS_TOKEN`, `SCHWAB_ACCESS_TOKEN.expires_at`, and `SCHWAB_ACCESS_TOKEN_<ID>` (+ `.expires_at`) per pooled Schwab account |
 | `political_runtime` (`/run/secrets/political`) | `api`, `bootstrap`, `ingest-political` | `CLICKHOUSE_PASSWORD`, `FACTORLAB_API_KEY` |
 | `ibkr_paper_runtime`, `ibkr_live_runtime` | the Gateways | `TWS_PASSWORD`, `VNC_SERVER_PASSWORD` |
 | `ibkr_client_runtime` (`/run/secrets/ibkr-client`) | `ibkr-snapshot` | `CLICKHOUSE_PASSWORD` |
 
 Tokens are written only when the Worker reports `status == "valid"`; otherwise, and when
-the local `expires_at` has passed, the files are removed.
+the local `expires_at` has passed, the files are removed. Pooled-account files whose
+account the Worker no longer lists are removed too. Account ids must match
+`[a-z0-9_]{1,32}`; others are skipped with a warning.
 
 ## Dependencies and contracts
 
@@ -61,14 +63,16 @@ the local `expires_at` has passed, the files are removed.
   `CLICKHOUSE_PASSWORD_SHA256` (must equal SHA-256 of the password), `FACTORLAB_API_KEY`
   (all required), optional `EODHD_API_KEY`, `UPSTOX_ACCESS_TOKEN`, `SCHWAB_ACCESS_TOKEN`,
   `IBKR_PAPER_PASSWORD`, `IBKR_LIVE_PASSWORD`, `IBKR_VNC_PASSWORD`; `upstox.status` /
-  `expires_at`; `schwab.status` / `access_expires_at`. Change it together with
+  `expires_at`; `schwab.status` / `access_expires_at`; optional
+  `schwab_accounts.<id>.{status, access_expires_at}` with `secrets.SCHWAB_ACCESS_TOKEN_<ID>`. Change it together with
   [upstox-auth-worker/src/index.ts](../../cloudflare/upstox-auth-worker/src/index.ts).
 - Design: [docs/architecture/05-secrets-and-upstox-auth.md](../../docs/architecture/05-secrets-and-upstox-auth.md).
 
 ## Observability
 
 - Logs: `/var/log/factorlab/secrets-agent/cloudflare-secrets-agent.jsonl`. Each sync logs
-  `Runtime secrets synchronized; token status: upstox=..., schwab=..., ibkr=...` or
+  `Runtime secrets synchronized; token status: upstox=..., schwab=..., ibkr=...` (with pooled
+  accounts, `schwab=primary:valid,acct2:...`) or
   `Runtime secret synchronization failed: ...`:
   `uv run python tools/read_logs.py tail --component secrets-agent --since 1h`.
 - Health kind `compose`: the fragment's healthcheck requires non-empty

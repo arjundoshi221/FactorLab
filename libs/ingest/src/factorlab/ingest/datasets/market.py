@@ -1,4 +1,7 @@
-"""``market.bars`` and ``market.futures_contract_bars`` dataset contracts (docs/architecture/07 §5.3)."""
+"""``market.bars``, ``market.futures_contract_bars`` and ``market.futures_quotes`` contracts.
+
+Bars follow docs/architecture/07 §5.3; futures quotes are F-043.
+"""
 
 from __future__ import annotations
 
@@ -89,6 +92,52 @@ class ContractBarRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class ContractQuoteRecord:
+    """One vendor quote of a dated futures contract (``market.futures_quotes``).
+
+    ``observed_at`` is the vendor's quote time, so re-polling an unchanged quote
+    yields the same key. ``settlement_price`` is the latest settlement the vendor
+    reports, which during a session is the previous session's.
+    """
+
+    contract: InstrumentRef
+    observed_at: datetime
+    last_price: Decimal | None = None
+    last_size: int | None = None
+    last_trade_at: datetime | None = None
+    bid: Decimal | None = None
+    ask: Decimal | None = None
+    bid_size: int | None = None
+    ask_size: int | None = None
+    day_open: Decimal | None = None
+    day_high: Decimal | None = None
+    day_low: Decimal | None = None
+    day_volume: int | None = None
+    oi: int | None = None
+    settlement_price: Decimal | None = None
+
+    def __post_init__(self) -> None:
+        require_utc("observed_at", self.observed_at)
+        if self.last_trade_at is not None:
+            require_utc("last_trade_at", self.last_trade_at)
+        for name in (
+            "last_price",
+            "bid",
+            "ask",
+            "day_open",
+            "day_high",
+            "day_low",
+            "settlement_price",
+        ):
+            require_decimal(name, getattr(self, name))
+        for name in ("last_size", "bid_size", "ask_size", "day_volume", "oi"):
+            value = getattr(self, name)
+            require_int(name, value)
+            if value is not None and value < 0:
+                raise ValueError(f"{name} must not be negative, got {value}")
+
+
+@dataclass(frozen=True, slots=True)
 class SeriesWindow:
     """Fetch ``instrument`` bars with ``start <= bar_time < end`` (both UTC)."""
 
@@ -129,11 +178,20 @@ class ContractBarSink(ProviderStorage, Protocol):
     ) -> WriteResult: ...
 
 
+@runtime_checkable
+class ContractQuoteSink(ProviderStorage, Protocol):
+    def write_contract_quotes(
+        self, rows: Sequence[ContractQuoteRecord], *, provenance: Provenance
+    ) -> WriteResult: ...
+
+
 __all__ = [
     "BarRecord",
     "BarRequest",
     "BarSink",
     "ContractBarRecord",
     "ContractBarSink",
+    "ContractQuoteRecord",
+    "ContractQuoteSink",
     "SeriesWindow",
 ]

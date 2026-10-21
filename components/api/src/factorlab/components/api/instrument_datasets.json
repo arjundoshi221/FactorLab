@@ -1057,6 +1057,56 @@
     "engine": "ReplacingMergeTree(version)",
     "sorting_key": "(strategy_id, trade_date, account_id)"
   },
+  "derived.index_levels": {
+    "group": "Derived",
+    "classification": "unsupported",
+    "relationships": {},
+    "time_column": "trade_date",
+    "dimensions": [],
+    "columns": [
+      "index_code",
+      "trade_date",
+      "level",
+      "ret_1d",
+      "n_constituents",
+      "coverage",
+      "complete",
+      "methodology_version",
+      "computation_id",
+      "computed_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(index_code, trade_date)"
+  },
+  "derived.index_weights": {
+    "group": "Derived",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "trade_date",
+    "dimensions": [
+      "index_code"
+    ],
+    "columns": [
+      "index_code",
+      "trade_date",
+      "listing_id",
+      "weight",
+      "ret_1d",
+      "contribution",
+      "computation_id",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(index_code, trade_date, listing_id)"
+  },
   "fundamentals.filings": {
     "group": "Fundamentals",
     "classification": "queryable",
@@ -1148,6 +1198,38 @@
     ],
     "engine": "ReplacingMergeTree(version)",
     "sorting_key": "(entity_id, tag, period_end, filing_id)"
+  },
+  "fundamentals.shares_outstanding": {
+    "group": "Fundamentals",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "as_of_date",
+    "dimensions": [
+      "source",
+      "source_channel"
+    ],
+    "columns": [
+      "listing_id",
+      "as_of_date",
+      "shares_outstanding",
+      "market_cap",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(listing_id, as_of_date, source)"
   },
   "market.bars": {
     "group": "Market",
@@ -1305,6 +1387,60 @@
     ],
     "engine": "ReplacingMergeTree(version)",
     "sorting_key": "(country_code, contract_id, resolution, bar_time, source)"
+  },
+  "market.futures_quotes": {
+    "group": "Market",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "underlying",
+          "underlying_listing_id = {id:UUID}"
+        ]
+      ],
+      "contract": [
+        [
+          "direct",
+          "contract_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "observed_at",
+    "dimensions": [
+      "source",
+      "source_channel",
+      "contract_id"
+    ],
+    "columns": [
+      "country_code",
+      "underlying_listing_id",
+      "contract_id",
+      "source_symbol",
+      "observed_at",
+      "trade_date",
+      "last_price",
+      "last_size",
+      "last_trade_at",
+      "bid",
+      "ask",
+      "bid_size",
+      "ask_size",
+      "day_open",
+      "day_high",
+      "day_low",
+      "day_volume",
+      "oi",
+      "settlement_price",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(country_code, contract_id, source, observed_at)"
   },
   "market.fx_rates": {
     "group": "Market",
@@ -2662,6 +2798,35 @@
     ],
     "engine": "ReplacingMergeTree(version)",
     "sorting_key": "security_id"
+  },
+  "ref.security_sector_history": {
+    "group": "Reference & operations",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "direct",
+          "listing_id = {id:UUID}"
+        ]
+      ]
+    },
+    "time_column": "effective_from",
+    "dimensions": [
+      "source"
+    ],
+    "columns": [
+      "listing_id",
+      "classification",
+      "sector_id",
+      "effective_from",
+      "effective_to",
+      "source",
+      "raw_id",
+      "version",
+      "ingested_at"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(classification, listing_id, effective_from)"
   },
   "ref.session_windows_effective": {
     "group": "Reference & operations",

@@ -25,7 +25,7 @@ deployed by hand. Design: [docs/architecture/05-secrets-and-upstox-auth.md](../.
 |---|---|---|
 | `GET /` | Access JWT | management page (Upstox and Schwab status, login buttons) |
 | `GET /api/login`, `GET /api/upstox/login` | Access JWT | 302 to the Upstox dialog; one-time state in KV (600 s) |
-| `GET /api/schwab/login` | Access JWT | 302 to Schwab authorize; sealed AES-GCM state (no KV) |
+| `GET /api/schwab/login[?account=<id>]` | Access JWT | 302 to Schwab authorize for that account (default `primary`); sealed AES-GCM state carrying the account (no KV) |
 | `GET /api/status` | Access JWT | token status JSON (no secret values) |
 | `POST /v1/runtime-secrets` | Access JWT (service token) | the runtime-secret bundle; other methods 405 |
 | `GET /health` | none | `{"status":"ok"}` |
@@ -40,6 +40,8 @@ npm scripts ([package.json](package.json)): `check` (`tsc --noEmit`), `deploy`
 | KV | binding `RUNTIME_STATE` | - | shared with the callback Worker |
 | Secrets Store | `UPSTOX_API_KEY`, `UPSTOX_API_SECRET`, `SCHWAB_APP_KEY`, `SCHWAB_APP_SECRET`, `TOKEN_ENCRYPTION_KEY`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_PASSWORD_SHA256`, `EODHD_API_KEY`, `FACTORLAB_API_KEY` | - | required bindings |
 | Optional secrets | `IBKR_PAPER_PASSWORD`, `IBKR_LIVE_PASSWORD`, `IBKR_VNC_PASSWORD` | null | commented out in the example |
+| Optional secrets | `SCHWAB_APP_KEY_<ID>`, `SCHWAB_APP_SECRET_<ID>` | - | one pair per pooled account other than `primary`; missing -> status `unconfigured` |
+| Vars | `SCHWAB_ACCOUNTS` | `primary` | comma-separated pooled account ids (`[a-z0-9_]{1,32}`); `primary` is always included |
 | Vars | `UPSTOX_REDIRECT_URL`, `SCHWAB_CALLBACK_URL` | - | the callback Worker's `/oauth/callback`, `/oauth/schwab/callback` |
 | Vars | `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD` | - | JWT issuer certs and audience; empty -> every protected route 403 |
 
@@ -50,7 +52,8 @@ The real `wrangler.toml` is untracked (`cloudflare/**/wrangler.toml` is git-igno
 KV keys: `upstox/current-token` (AES-GCM encrypted token, `expires_at` = next 03:30 IST),
 `upstox/oauth-state/<state>` (TTL 600 s), `schwab/current-token` (encrypted access and
 refresh tokens; refreshed and rewritten here when the access token is within 5 minutes of
-expiry). No ClickHouse access.
+expiry), `schwab/accounts/<id>/current-token` (same shape, per pooled account,
+[05](../../docs/architecture/05-secrets-and-upstox-auth.md#pooled-schwab-accounts)). No ClickHouse access.
 
 ## Dependencies and contracts
 
@@ -64,8 +67,10 @@ expiry). No ClickHouse access.
   UPSTOX_ACCESS_TOKEN, SCHWAB_ACCESS_TOKEN, EODHD_API_KEY, FACTORLAB_API_KEY,
   IBKR_PAPER_PASSWORD, IBKR_LIVE_PASSWORD, IBKR_VNC_PASSWORD}`, `upstox.{status,
   issued_at, expires_at, user_id}`, `schwab.{status, issued_at, access_expires_at,
-  refresh_expires_at}`. Statuses: Upstox `valid` / `expired` / `missing`; Schwab `valid` /
-  `reauth_required` / `refresh_failed` / `missing`.
+  refresh_expires_at}` (= `primary`). Additively, `secrets.SCHWAB_ACCESS_TOKEN_<ID>` and
+  `schwab_accounts.<id>.{status, issued_at, access_expires_at, refresh_expires_at}` for every
+  listed account. Statuses: Upstox `valid` / `expired` / `missing`; Schwab `valid` /
+  `reauth_required` / `refresh_failed` / `missing` / `unconfigured`.
 - The KV record shapes and `TOKEN_ENCRYPTION_KEY` (base64, 32 bytes) are shared with the
   callback Worker; change both together.
 

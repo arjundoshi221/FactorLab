@@ -55,3 +55,7 @@ bindings:
   - {dataset: alt.political_trades, market: USA, provider: house_clerk, role: primary}
   # Fundamentals (P8). New dataset; no production writer exists yet.
   - {dataset: fundamentals.filings, market: USA, provider: edgar, role: shadow}   # -> primary
+  # ishares: IWV holdings as the Russell 3000 proxy and GICS sectors. universe-us writes
+  # both as the authority its mounted config selects; these bindings serve generic runs.
+  - {dataset: ref.universe_membership, market: USA, provider: ishares, role: shadow, priority: 90}
+  - {dataset: ref.security_sectors, market: USA, provider: ishares, role: shadow, priority: 90}

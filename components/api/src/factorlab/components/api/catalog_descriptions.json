@@ -281,6 +281,18 @@
       },
       "description": "Paper trading only earns its keep if you can score its performance against the backtest that predicted it. This table is the single query surface for *\"strategy X, paper return - backtest return, per day\"* — the primary forward-test health check. Populated daily from broker.nav_daily (paper account associated with the strategy) joined against derived.backtest_returns for the same strategy on the same day. strategy_id is the canonical FactorLab UUID from book.strategies."
     },
+    "derived.index_levels": {
+      "columns": {
+        "coverage": "priced share of start-of-day weight"
+      },
+      "description": "Constructed index levels and the start-of-day constituent weights that produced them. index_code names a definition in libs/indexes/src/factorlab/indexes/catalog_us.yaml (us_gics_<sector>_<ew|cw>, r3k_iwv_<ew|cw>). A day whose priced weight falls below the coverage gate is written with complete = false and recomputed later; readers show only complete days. contribution = weight * ret_1d, so a day's contributions sum to the index return."
+    },
+    "derived.index_weights": {
+      "columns": {
+        "weight": "start-of-day weight"
+      },
+      "description": "Constructed index levels and the start-of-day constituent weights that produced them. index_code names a definition in libs/indexes/src/factorlab/indexes/catalog_us.yaml (us_gics_<sector>_<ew|cw>, r3k_iwv_<ew|cw>). A day whose priced weight falls below the coverage gate is written with complete = false and recomputed later; readers show only complete days. contribution = weight * ret_1d, so a day's contributions sum to the index return."
+    },
     "derived.portfolios": {
       "description": "Same pattern."
     },
@@ -321,6 +333,12 @@
         "unit": "'currency','shares','ratio','count','usd_per_share'"
       }
     },
+    "fundamentals.shares_outstanding": {
+      "columns": {
+        "market_cap": "vendor-reported, vendor units"
+      },
+      "description": "One vendor observation of shares outstanding per listing and day. Snapshots taken daily accumulate a point-in-time history; readers take the latest as_of_date at or before the day they need. market_cap is kept as the vendor reported it, for cross-checks only; index weights use close * shares_outstanding."
+    },
     "market.bars": {
       "columns": {
         "bar_time": "bar OPEN time (convention)",
@@ -346,6 +364,13 @@
         "underlying_listing_id": "'the front NIFTY future' concept"
       },
       "description": "Rolled continuous futures series (front, back, calendar-spread). Derived from market.futures_contract_bars + explicit roll rules. The contract-preserving source table is added by the Wave 4 data-completion extension; migration does not infer a roll method or populate this continuous series."
+    },
+    "market.futures_quotes": {
+      "columns": {
+        "observed_at": "vendor quote time",
+        "trade_date": "Globex session date"
+      },
+      "description": "One vendor quote per contract and vendor quote time; observed_at is the vendor's quoteTime, so polling the same quote again collapses on merge. trade_date is the Globex session date: a quote at or after 18:00 New York time belongs to the next day. settlement_price is the latest settlement the vendor reports, which during session D+1 is the settlement of D. No TTL: about 50k rows a day."
     },
     "market.fx_rates": {
       "columns": {
@@ -628,6 +653,15 @@
         "share_class": "'A','B','C','' (single class)"
       },
       "description": "The claim / instrument layer. ISIN-keyed."
+    },
+    "ref.security_sector_history": {
+      "columns": {
+        "classification": "'gics'",
+        "effective_from": "inclusive",
+        "effective_to": "inclusive; NULL = current",
+        "sector_id": "FK ref.sectors (GICS level 2: '10'..'60')"
+      },
+      "description": "Effective-dated sector assignment, diffed from complete snapshots exactly like ref.universe_membership: a changed or vanished assignment closes the day before the snapshot, a new one opens on it. ref.securities.sector_id keeps the current value for convenience; index rebalances read this table as of their date."
     },
     "ref.sessions": {
       "columns": {

@@ -4,11 +4,11 @@ schema: 1
 name: ingest-us
 kind: python
 package: factorlab-component-ingest-us
-summary: US universe resolution and daily/1-min bars into ClickHouse v2.
+summary: US universe resolution, daily/1-min bars, sector indexes and futures quotes into ClickHouse v2.
 image: ghcr.io/arjundoshi221/factorlab-ingest-us
 dockerfile: components/ingest-us/Dockerfile
 entrypoint: factorlab-ingest-us
-providers: [schwab, eodhd, github_csv, edgar]
+providers: [schwab, eodhd, github_csv, edgar, ishares]
 secrets: [CLICKHOUSE_PASSWORD, SCHWAB_ACCESS_TOKEN, EODHD_API_KEY]
 services:
   - name: universe-us
@@ -18,6 +18,14 @@ services:
   - name: ingest-us
     monitor: {interval_s: 30}
     command: ["daemon", "--universe", "us_listed_equities", "--daemon"]
+    mode: daemon
+  - name: indexes-us
+    monitor: {interval_s: 60}
+    command: ["indexes", "--daemon"]
+    mode: daemon
+  - name: futures-us
+    monitor: {interval_s: 60}
+    command: ["futures"]
     mode: daemon
 health: {kind: running}
 platform:

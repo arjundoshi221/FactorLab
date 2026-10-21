@@ -33,6 +33,20 @@ binding = "TOKEN_ENCRYPTION_KEY"
 store_id = "REPLACE_WITH_SECRETS_STORE_ID"
 secret_name = "TOKEN_ENCRYPTION_KEY"
 
+# Extra pooled Schwab accounts (one developer app each), optional. For account id
+# `acct2`, create SCHWAB_APP_KEY_ACCT2 / SCHWAB_APP_SECRET_ACCT2 in the store, uncomment,
+# and list the id in the auth Worker's SCHWAB_ACCOUNTS. The account comes from the
+# sealed login state, so this Worker needs only the bindings.
+# [[secrets_store_secrets]]
+# binding = "SCHWAB_APP_KEY_ACCT2"
+# store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+# secret_name = "SCHWAB_APP_KEY_ACCT2"
+#
+# [[secrets_store_secrets]]
+# binding = "SCHWAB_APP_SECRET_ACCT2"
+# store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+# secret_name = "SCHWAB_APP_SECRET_ACCT2"
+
 [vars]
 MANAGEMENT_URL = "https://factorlab-upstox-auth.YOUR_SUBDOMAIN.workers.dev/"
 SCHWAB_CALLBACK_URL = "https://factorlab-upstox-oauth-callback.YOUR_SUBDOMAIN.workers.dev/oauth/schwab/callback"

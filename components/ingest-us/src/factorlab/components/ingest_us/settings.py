@@ -14,6 +14,7 @@ class CollectionSettings(FactorLabSettings):
     minute_tier_size: int = Field(default=250, ge=0, le=250)
     live_interval_seconds: int = Field(default=300, ge=1)
     ingest_lock: Path = Path("/app/data/us-ingest.lock")
+    futures_lock: Path = Path("/app/data/us-futures.lock")
     schwab_min_request_interval_seconds: float = Field(
         default=1.0,
         gt=0,

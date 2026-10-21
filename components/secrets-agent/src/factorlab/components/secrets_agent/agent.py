@@ -8,6 +8,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import tempfile
 import time
 from datetime import UTC, datetime
@@ -29,6 +30,9 @@ TOKEN_FILE = INDIA_DIR / "UPSTOX_ACCESS_TOKEN"
 TOKEN_EXPIRY_FILE = INDIA_DIR / "UPSTOX_ACCESS_TOKEN.expires_at"
 SCHWAB_TOKEN_FILE = US_DIR / "SCHWAB_ACCESS_TOKEN"
 SCHWAB_TOKEN_EXPIRY_FILE = US_DIR / "SCHWAB_ACCESS_TOKEN.expires_at"
+# Pooled Schwab accounts beyond `primary` render as SCHWAB_ACCESS_TOKEN_<ID>; the id
+# becomes a file name, so it is validated (same rule as the provider settings).
+SCHWAB_ACCOUNT_ID = re.compile(r"[a-z0-9_]{1,32}")
 # IBKR volumes are optional: rendered only when mounted into this container.
 IBKR_PAPER_DIR = Path("/run/secrets/ibkr-paper")
 IBKR_LIVE_DIR = Path("/run/secrets/ibkr-live")
@@ -146,7 +150,7 @@ def _render_bundle(payload: dict[str, Any]) -> str:
         _remove(TOKEN_FILE)
         _remove(TOKEN_EXPIRY_FILE)
 
-    schwab = payload.get("schwab") if isinstance(payload.get("schwab"), dict) else {}
+    schwab: dict[str, Any] = payload["schwab"] if isinstance(payload.get("schwab"), dict) else {}
     schwab_access_token = secrets.get("SCHWAB_ACCESS_TOKEN")
     schwab_expires_at = schwab.get("access_expires_at")
     if (
@@ -161,11 +165,53 @@ def _render_bundle(payload: dict[str, Any]) -> str:
     else:
         _remove(SCHWAB_TOKEN_FILE)
         _remove(SCHWAB_TOKEN_EXPIRY_FILE)
+    schwab_status = str(schwab.get("status", "missing"))
+    extra_accounts = _render_schwab_accounts(payload, secrets)
+    if extra_accounts:
+        schwab_status = ",".join([f"primary:{schwab_status}", *extra_accounts])
 
     generated_at = payload.get("generated_at", "unknown")
     _atomic_write(CLICKHOUSE_DIR / ".agent-ready", str(generated_at), 0o444)
-    status = f"upstox={upstox.get('status', 'missing')}, schwab={schwab.get('status', 'missing')}"
+    status = f"upstox={upstox.get('status', 'missing')}, schwab={schwab_status}"
     return f"{status}, ibkr={ibkr_status}" if ibkr_status is not None else status
+
+
+def _schwab_account_files(account: str) -> tuple[Path, Path]:
+    token = SCHWAB_TOKEN_FILE.with_name(f"{SCHWAB_TOKEN_FILE.name}_{account.upper()}")
+    return token, token.with_name(f"{token.name}.expires_at")
+
+
+def _render_schwab_accounts(payload: dict[str, Any], secrets: dict[str, Any]) -> list[str]:
+    """Render pooled Schwab accounts other than ``primary``; return ``id:status`` items.
+
+    Files of accounts the Worker no longer lists are removed.
+    """
+    accounts = payload.get("schwab_accounts")
+    accounts = accounts if isinstance(accounts, dict) else {}
+    rendered: set[Path] = set()
+    statuses = []
+    for account, state in sorted(accounts.items()):
+        if account == "primary":
+            continue
+        if not isinstance(account, str) or not SCHWAB_ACCOUNT_ID.fullmatch(account):
+            log.warning("Skipped Schwab account with an invalid id")
+            continue
+        state = state if isinstance(state, dict) else {}
+        token_file, expiry_file = _schwab_account_files(account)
+        token = _optional_secret(secrets, token_file.name)
+        expires_at = state.get("access_expires_at")
+        if state.get("status") == "valid" and token is not None:
+            if not isinstance(expires_at, str) or not expires_at:
+                raise ValueError(f"Valid Schwab {account} token is missing access_expires_at")
+            _atomic_write(token_file, token)
+            _atomic_write(expiry_file, expires_at)
+            rendered.update((token_file, expiry_file))
+        statuses.append(f"{account}:{state.get('status', 'missing')}")
+    if US_DIR.is_dir():
+        for path in US_DIR.glob(f"{SCHWAB_TOKEN_FILE.name}_*"):
+            if path not in rendered:
+                _remove(path)
+    return statuses
 
 
 def _optional_secret(secrets: dict[str, Any], name: str) -> str | None:
@@ -204,10 +250,15 @@ def _render_ibkr(secrets: dict[str, Any], clickhouse_password: str) -> str | Non
 
 
 def _expire_local_token() -> None:
-    for provider, token_path, expiry_path in (
+    tokens = [
         ("Upstox", TOKEN_FILE, TOKEN_EXPIRY_FILE),
         ("Schwab", SCHWAB_TOKEN_FILE, SCHWAB_TOKEN_EXPIRY_FILE),
-    ):
+    ]
+    if US_DIR.is_dir():
+        for expiry_path in sorted(US_DIR.glob(f"{SCHWAB_TOKEN_FILE.name}_*.expires_at")):
+            token_path = expiry_path.with_name(expiry_path.name.removesuffix(".expires_at"))
+            tokens.append(("Schwab", token_path, expiry_path))
+    for provider, token_path, expiry_path in tokens:
         try:
             expires_at = expiry_path.read_text(encoding="utf-8").strip()
             expiry = datetime.fromisoformat(expires_at)

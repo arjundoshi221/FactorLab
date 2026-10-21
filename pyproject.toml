@@ -67,6 +67,8 @@ factorlab-component-ingest-broker = { workspace = true }
 factorlab-component-secrets-agent = { workspace = true }
 factorlab-component-schema-migrator = { workspace = true }
 factorlab-component-monitor = { workspace = true }
+factorlab-provider-ishares = { workspace = true }
+factorlab-indexes = { workspace = true }
 
 [tool.pytest.ini_options]
 # Tests live with the member they test (libs/*/tests, providers/*/tests,

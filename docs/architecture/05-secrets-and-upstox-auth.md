@@ -117,6 +117,34 @@ the US tmpfs volume; the app secret and refresh token stay in Cloudflare. When
 the seven-day refresh-token lifetime ends, the management page reports
 `reauth_required` and browser/MFA authentication must be repeated.
 
+### Pooled Schwab accounts
+
+Several Schwab developer apps can be pooled to add rate budget ([F-041](../features/F-041-schwab-account-pool.md)).
+The auth Worker's `SCHWAB_ACCOUNTS` var lists the account ids, and `primary` is always
+included. `primary` keeps the names above. Any other id `<id>` (`[a-z0-9_]{1,32}`) uses
+its own names:
+
+- Secrets Store bindings `SCHWAB_APP_KEY_<ID>` and `SCHWAB_APP_SECRET_<ID>`. They are
+  optional; an account without them shows as `unconfigured`.
+- KV `schwab/accounts/<id>/current-token`.
+- Runtime secret `SCHWAB_ACCESS_TOKEN_<ID>` (+ `.expires_at`) in the US tmpfs volume.
+
+Each account has its own card and login button
+(`/api/schwab/login?account=<id>`). The sealed state carries the account. Every app
+registers the same callback URL. `/v1/runtime-secrets` adds a `schwab_accounts` map to
+the response, and the legacy `schwab` fields describe `primary`. The provider lists the
+pooled ids in `api.accounts` (`configs/sources/schwab.yaml`). Each account needs its own
+weekly re-authentication, so stagger the logins.
+
+To add an account:
+
+1. Create its app.
+2. Register the callback URL on it.
+3. Add the two secrets to the Secrets Store and bind them in both Workers.
+4. Append the id to `SCHWAB_ACCOUNTS`, then redeploy both Workers.
+5. Log in on the management page.
+6. Add the id to `api.accounts` and release `ingest-us`.
+
 ### Required Upstox Developer setting — pending
 
 When access to the Upstox Developer dashboard is available, set and save this

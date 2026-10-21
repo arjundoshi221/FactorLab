@@ -1,8 +1,12 @@
 api:
   interval_s: 30.0
+futures-us:
+  interval_s: 60.0
 ibkr-snapshot:
   interval_s: 30.0
   profile: ibkr
+indexes-us:
+  interval_s: 60.0
 ingest-india:
   interval_s: 30.0
 ingest-political:

@@ -34,6 +34,7 @@ ALLOWLIST = Path(__file__).with_name("boundary_allowlist.txt")
 
 # Provider names as they appear in `source` columns, and vendor-only codes.
 PROVIDER_TOKENS = (
+    "ishares",
     "upstox",
     "schwab",
     "eodhd",
@@ -64,6 +65,7 @@ LIBRARY_LAYERS = {
     "schema": {"core", "clickhouse"},
     "storage": {"core", "calendars", "clickhouse", "ingest"},
     "orchestration": {"core", "calendars", "clickhouse", "runtime", "ingest", "storage", "schema"},
+    "indexes": {"core"},
 }
 # R8: what a provider may import from the workspace, and third-party stacks it may not.
 PROVIDER_LIBRARIES = {"core", "calendars", "ingest"}

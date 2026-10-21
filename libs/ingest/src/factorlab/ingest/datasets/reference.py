@@ -37,12 +37,25 @@ PRODUCT_TYPES = frozenset(
         "index_future",
         "single_stock_future",
         "vol_future",
+        "commodity_future",
+        "rate_future",
+        "fx_future",
         "vol_etp",
         "option",
         "other",
     }
 )
-CONTRACT_PRODUCT_TYPES = frozenset({"single_stock_future", "index_future", "vol_future", "option"})
+FUTURE_PRODUCT_TYPES = frozenset(
+    {
+        "single_stock_future",
+        "index_future",
+        "vol_future",
+        "commodity_future",
+        "rate_future",
+        "fx_future",
+    }
+)
+CONTRACT_PRODUCT_TYPES = FUTURE_PRODUCT_TYPES | {"option"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +157,7 @@ class ContractSink(ProviderStorage, Protocol):
 
 __all__ = [
     "CONTRACT_PRODUCT_TYPES",
+    "FUTURE_PRODUCT_TYPES",
     "PRODUCT_TYPES",
     "REFERENCE_MODES",
     "ContractRecord",

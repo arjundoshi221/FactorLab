@@ -4,10 +4,12 @@ version = "0.1.0"
 description = "US universe, daily and 1-min bars into ClickHouse v2."
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "factorlab-provider-ishares",
     "factorlab-core",
     "factorlab-runtime",
     "factorlab-calendars",
     "factorlab-ingest",
+    "factorlab-indexes",
     "factorlab-storage",
     "factorlab-orchestration",
     "factorlab-provider-schwab",
@@ -24,8 +26,10 @@ dependencies = [
 factorlab-ingest-us = "factorlab.components.ingest_us.cli:main"
 
 [tool.uv.sources]
+factorlab-provider-ishares = { workspace = true }
 factorlab-core = { workspace = true }
 factorlab-runtime = { workspace = true }
+factorlab-indexes = { workspace = true }
 factorlab-calendars = { workspace = true }
 factorlab-ingest = { workspace = true }
 factorlab-storage = { workspace = true }

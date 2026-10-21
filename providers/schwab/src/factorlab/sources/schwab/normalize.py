@@ -23,7 +23,12 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from factorlab.calendars.us import NY, bounds, calendar
-from factorlab.ingest.datasets import BarRecord, InstrumentRecord, InstrumentRef
+from factorlab.ingest.datasets import (
+    BarRecord,
+    InstrumentRecord,
+    InstrumentRef,
+    SharesOutstandingRecord,
+)
 from factorlab.ingest.errors import NormalizationError, PartialNormalizationError
 from factorlab.ingest.identifiers import isin_from_cusip
 from factorlab.ingest.provider import RawCapture
@@ -35,7 +40,9 @@ COUNTRY = "US"
 # Epoch arithmetic, not datetime.fromtimestamp, which rejects pre-1970 (negative)
 # timestamps on Windows; Schwab daily history can start before 1970.
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-_PRODUCT = {"EQUITY": "common", "ETF": "etf"}
+_PRODUCT = {"EQUITY": "common", "ETF": "etf", "INDEX": "index"}
+# Quotes report ETFs as EQUITY; they stay "common" there (product_type keys market.bars).
+_QUOTE_PRODUCT = {"EQUITY": "common", "INDEX": "index"}
 
 
 def provider_symbol(symbol: str) -> str:
@@ -126,7 +133,7 @@ def normalize_instrument(
 def normalize_quote_listings(
     capture: RawCapture, *, exchanges: Mapping[str, str]
 ) -> list[InstrumentRecord]:
-    """Validate every requested stock from a batched market quote reference."""
+    """Validate every requested stock or index from a batched market quote reference."""
     payload = _json(capture)
     if not isinstance(payload, Mapping):
         raise NormalizationError("quotes response is not an object")
@@ -138,7 +145,8 @@ def normalize_quote_listings(
         if key == "errors" or not isinstance(value, Mapping):
             continue
         symbol = canonical_symbol(str(value.get("symbol") or key))
-        if symbol not in wanted or symbol in invalid or value.get("assetMainType") != "EQUITY":
+        product = _QUOTE_PRODUCT.get(str(value.get("assetMainType") or ""))
+        if symbol not in wanted or symbol in invalid or product is None:
             continue
         reference = value.get("reference") or {}
         venue = (
@@ -161,7 +169,7 @@ def normalize_quote_listings(
         records[symbol] = InstrumentRecord(
             InstrumentRef(ALIAS_KIND, provider_symbol(symbol), exchange, symbol, COUNTRY),
             str(value.get("description") or reference.get("description") or symbol).strip(),
-            "common",
+            product,
             "USD",
         )
     rows = [records[s] for s in sorted(records)]
@@ -170,6 +178,37 @@ def normalize_quote_listings(
             f"Schwab could not validate {len(missing)} configured equities", rows=rows
         )
     return rows
+
+
+# -- fundamentals.shares_outstanding (batched quotes, fundamental block) ----------------
+def normalize_quote_shares(capture: RawCapture) -> list[SharesOutstandingRecord]:
+    """``fundamental.sharesOutstanding`` per requested equity, dated the capture's NY day.
+
+    Indexes and quotes without a positive share count yield nothing: a missing count is
+    not an error (some ETFs and new listings omit it), it just leaves the prior one.
+    """
+    payload = _json(capture)
+    if not isinstance(payload, Mapping):
+        raise NormalizationError("quotes response is not an object")
+    wanted = {canonical_symbol(str(s)) for s in capture.metadata.get("symbols", ())}
+    as_of = capture.fetched_at.astimezone(NY).date()
+    records: dict[str, SharesOutstandingRecord] = {}
+    for key, value in payload.items():
+        if key == "errors" or not isinstance(value, Mapping):
+            continue
+        symbol = canonical_symbol(str(value.get("symbol") or key))
+        if symbol not in wanted or value.get("assetMainType") != "EQUITY":
+            continue
+        fundamental = value.get("fundamental") or {}
+        shares = _decimal(fundamental.get("sharesOutstanding"))
+        if shares is None or shares < 1:
+            continue
+        records[symbol] = SharesOutstandingRecord(
+            InstrumentRef(ALIAS_KIND, provider_symbol(symbol), "", symbol, COUNTRY),
+            as_of,
+            int(shares.to_integral_value()),
+        )
+    return [records[s] for s in sorted(records)]
 
 
 # -- market.bars (price history, one symbol per capture) -------------------------------
@@ -242,6 +281,7 @@ __all__ = [
     "canonical_symbol",
     "normalize_instrument",
     "normalize_pricehistory",
+    "normalize_quote_shares",
     "provider_symbol",
     "ref_from_metadata",
     "ref_to_metadata",

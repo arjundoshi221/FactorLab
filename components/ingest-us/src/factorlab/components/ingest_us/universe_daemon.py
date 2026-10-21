@@ -16,12 +16,17 @@ from clickhouse_connect.driver.exceptions import ClickHouseError
 from factorlab.components.ingest_us.engine_client import EngineClient
 from factorlab.components.ingest_us.universe import UniverseConfig, load_config
 from factorlab.components.ingest_us.universe.base import UniverseResolver
-from factorlab.components.ingest_us.universe.engine import RosterSink, create_resolver
+from factorlab.components.ingest_us.universe.engine import (
+    RosterSink,
+    create_resolver,
+    stage_sectors,
+)
 from factorlab.core.logging import configure_logging, redact
 from factorlab.ingest.datasets import ConstituentRecord, InstrumentRef
 from factorlab.ingest.provider import RawCapture, ingestion_run
 from factorlab.runtime.monitor import MonitoredEvent, monitor_client
 from factorlab.sources.schwab.normalize import provider_symbol
+from factorlab.storage.sinks import ClickHouseSinks
 from factorlab.storage.sinks.identity import IdentityResolver
 from factorlab.storage.v2_us import V2USStorage as USStorage
 
@@ -41,6 +46,22 @@ def safe_status(storage, status: str, detail: str) -> None:
         storage.source_status(status, detail, source="universe")
     except JOB_ERRORS as exc:
         log.error("Universe status write failed: %s", type(exc).__name__)
+
+
+def snapshot_shares(storage: USStorage, client: EngineClient, symbols: list[str]) -> int:
+    """Record today's shares outstanding for published equities; never fails the roster."""
+    equities = [symbol for symbol in symbols if not symbol.startswith("$")]
+    if not equities:
+        return 0
+    sink = ClickHouseSinks(storage)
+    try:
+        with ingestion_run(
+            sink, pipeline="us_shares_outstanding", source="schwab", market_code="USA"
+        ) as ctx:
+            return client.collect_shares(ctx, sink, equities)
+    except JOB_ERRORS as exc:
+        log.warning("Shares outstanding snapshot failed: %s", failure_detail(exc))
+        return 0
 
 
 def sync_once(
@@ -69,6 +90,12 @@ def sync_once(
             )
             try:
                 universe = current.resolve(config.request())
+                try:
+                    stage_sectors(config, ctx, sink)
+                except JOB_ERRORS as exc:
+                    # Sectors are best effort: the roster still publishes without them.
+                    log.warning("Sector refresh failed: %s", failure_detail(exc))
+                    sink.sectors.clear()
                 refs = [
                     InstrumentRef(
                         "schwab_symbol", provider_symbol(item.symbol), "", item.symbol, "US"
@@ -129,6 +156,8 @@ def sync_once(
         safe_status(
             storage, "ready", f"{config.provider}: {len(series)} configured US stocks resolved"
         )
+        if config.shares_outstanding:
+            snapshot_shares(storage, client, [str(item["symbol"]) for item in series])
         return series
     except JOB_ERRORS as exc:
         safe_status(storage, "error", f"Universe refresh failed: {failure_detail(exc)}")

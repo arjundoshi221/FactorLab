@@ -1,14 +1,29 @@
 version: 2
 name: us_configured
-provider: github_csv
+# Russell 3000 via the iShares IWV holdings proxy (~2,580 listed names; IWV samples the
+# index, so this is not the licensed roster). It also supplies GICS sectors for the
+# sector indexes (libs/indexes/src/factorlab/indexes/catalog_us.yaml). To return to
+# S&P 500 scope, set provider: github_csv, index sp500 (minimum 450), and drop the
+# proxy-only keys.
+provider: ishares
 daily_source: schwab
 refresh_interval_minutes: 1440
+# Holdings can include names Schwab cannot quote (fresh spin-offs, halted listings).
+max_unvalidated: 25
+sector_provider: ishares
+shares_outstanding: true
 
 indexes:
-  - name: sp500
-    minimum_constituents: 450
+  - name: r3k_iwv
+    minimum_constituents: 2400
 
 providers:
+  ishares:
+    indexes:
+      r3k_iwv:
+        url: https://www.ishares.com/us/products/239714/ishares-russell-3000-etf/latest-holdings.csv
+        name: Russell 3000 (iShares IWV holdings proxy)
+        max_age_days: 7
   github_csv:
     indexes:
       sp500:
@@ -19,4 +34,39 @@ providers:
       sp500:
         symbol: GSPC.INDX
 
-extra_symbols: []
+# Benchmarks tracked for index and sector views (libs/indexes/src/factorlab/indexes/catalog_us.yaml).
+extra_symbols:
+  # Official index values ($ = Schwab index symbology)
+  - $SPX
+  - $COMPX
+  - $NDX
+  - $DJI
+  - $RUT
+  - $VIX
+  # Sector SPDRs (cap-weighted GICS sector benchmarks)
+  - XLB
+  - XLC
+  - XLE
+  - XLF
+  - XLI
+  - XLK
+  - XLP
+  - XLRE
+  - XLU
+  - XLV
+  - XLY
+  # Invesco equal-weight S&P 500 and sector ETFs
+  - RSP
+  - RSPC
+  - RSPD
+  - RSPF
+  - RSPG
+  - RSPH
+  - RSPM
+  - RSPN
+  - RSPR
+  - RSPS
+  - RSPT
+  - RSPU
+  # Whole-market proxy for the r3k composites
+  - IWV

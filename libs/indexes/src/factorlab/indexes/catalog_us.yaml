@@ -1,0 +1,41 @@
+# US index catalogue: what the hub tracks and what factorlab.indexes constructs.
+#
+# `tracked` series and the sector ETFs are read straight from market.bars (Schwab daily
+# closes); their symbols must also be in the universe's extra_symbols
+# (deploy/us-universe.yaml, enforced by libs/indexes tests). Constructed indexes
+# (two composites, then ew/cw per sector) are computed by `factorlab-ingest-us indexes` into
+# derived.index_levels / derived.index_weights. Methodology:
+# docs/decisions/0017-sector-index-methodology.md.
+version: 1
+
+tracked:
+  - {symbol: $SPX, name: S&P 500, group: index}
+  - {symbol: $COMPX, name: Nasdaq Composite, group: index}
+  - {symbol: $NDX, name: Nasdaq-100, group: index}
+  - {symbol: $DJI, name: Dow Jones Industrial Average, group: index}
+  - {symbol: $RUT, name: Russell 2000, group: index}
+  - {symbol: $VIX, name: Cboe Volatility Index, group: index}
+  - {symbol: IWV, name: iShares Russell 3000 ETF, group: market_etf}
+  - {symbol: RSP, name: Invesco S&P 500 Equal Weight ETF, group: market_etf}
+
+base_date: 2016-01-04
+base_value: 1000
+universe: r3k_iwv
+classification: gics
+# Minimum share of the prior day's index weight that must have a close for the day.
+coverage_gate: 0.98
+
+# GICS level-2 sectors with their cap-weighted (SPDR) and equal-weighted (Invesco)
+# benchmark ETFs. sector_id matches ref.sectors (classification 'gics').
+sectors:
+  - {sector_id: "10", name: Energy, cw_etf: XLE, ew_etf: RSPG}
+  - {sector_id: "15", name: Materials, cw_etf: XLB, ew_etf: RSPM}
+  - {sector_id: "20", name: Industrials, cw_etf: XLI, ew_etf: RSPN}
+  - {sector_id: "25", name: Consumer Discretionary, cw_etf: XLY, ew_etf: RSPD}
+  - {sector_id: "30", name: Consumer Staples, cw_etf: XLP, ew_etf: RSPS}
+  - {sector_id: "35", name: Health Care, cw_etf: XLV, ew_etf: RSPH}
+  - {sector_id: "40", name: Financials, cw_etf: XLF, ew_etf: RSPF}
+  - {sector_id: "45", name: Information Technology, cw_etf: XLK, ew_etf: RSPT}
+  - {sector_id: "50", name: Communication Services, cw_etf: XLC, ew_etf: RSPC}
+  - {sector_id: "55", name: Utilities, cw_etf: XLU, ew_etf: RSPU}
+  - {sector_id: "60", name: Real Estate, cw_etf: XLRE, ew_etf: RSPR}

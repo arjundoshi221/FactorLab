@@ -51,16 +51,26 @@ class UniverseResolver(ABC):
         validated = self.validator.validate(sorted(requested))
         by_symbol = {item.symbol: item for item in validated}
         unresolved = sorted(requested - by_symbol.keys())
-        if unresolved:
+        # A holdings proxy may drop a few members Schwab cannot validate; explicitly
+        # configured symbols and anything beyond the allowance still reject the roster.
+        explicit = set(request.explicit_symbols)
+        if unresolved and (
+            len(unresolved) > request.max_unvalidated or explicit.intersection(unresolved)
+        ):
             preview = ", ".join(unresolved[:10])
             raise ValueError(
                 f"Schwab could not validate {len(unresolved)} configured equities: "
                 f"{preview}{'...' if len(unresolved) > 10 else ''}"
             )
+        provenance: dict[str, object] = {"index_counts": counts, **self._provenance}
+        if unresolved:
+            provenance["unvalidated"] = unresolved
         return ResolvedUniverse(
             provider=self.provider,
             name=request.name,
-            constituents=tuple(by_symbol[symbol] for symbol in sorted(requested)),
+            constituents=tuple(
+                by_symbol[symbol] for symbol in sorted(by_symbol.keys() & requested)
+            ),
             resolved_at=datetime.now(UTC),
-            provenance={"index_counts": counts, **self._provenance},
+            provenance=provenance,
         )

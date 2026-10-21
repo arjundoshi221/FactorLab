@@ -6,6 +6,10 @@ api:
   base_url: https://api.schwabapi.com
   auth_type: cloudflare_managed_oauth2_code_grant
   access_token_env: SCHWAB_ACCESS_TOKEN
+  # Pooled accounts, one Schwab developer app each. `primary` reads SCHWAB_ACCESS_TOKEN;
+  # any other id reads SCHWAB_ACCESS_TOKEN_<ID>. Keep in step with the auth Worker's
+  # SCHWAB_ACCOUNTS var; an account without a valid token is skipped.
+  accounts: [primary, acct2]
 
 auth:
   authorize_url: https://api.schwabapi.com/v1/oauth/authorize
@@ -19,7 +23,7 @@ auth:
   # only SCHWAB_ACCESS_TOKEN through its US tmpfs runtime-secret volume.
   # After 7 days: reauthenticate from the protected management page.
 
-rate_limits:
+rate_limits:                          # per account (per developer app)
   requests_per_minute: 120            # approximate, not officially documented
   requests_per_second: 1.0            # conservative local pacing; shares token with production
   streaming_connections: 1            # one WebSocket per account

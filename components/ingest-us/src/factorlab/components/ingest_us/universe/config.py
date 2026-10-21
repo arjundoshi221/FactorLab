@@ -38,6 +38,18 @@ class EodhdIndex(BaseModel):
         return str(value).strip().upper()
 
 
+class IsharesIndex(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: HttpUrl
+    name: str = ""
+    max_age_days: int = Field(default=7, ge=1)
+
+
+class IsharesProvider(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    indexes: dict[str, IsharesIndex]
+
+
 class GithubCsvProvider(BaseModel):
     model_config = ConfigDict(extra="forbid")
     indexes: dict[str, GithubCsvIndex]
@@ -53,6 +65,7 @@ class ProviderConfigs(BaseModel):
     github_csv: GithubCsvProvider | None = None
     eodhd: EodhdProvider | None = None
     constituent_csv: ConstituentCsvProvider | None = None
+    ishares: IsharesProvider | None = None
 
 
 class UniverseConfig(BaseModel):
@@ -66,6 +79,13 @@ class UniverseConfig(BaseModel):
     indexes: list[ConfiguredIndex] = Field(default_factory=list)
     providers: ProviderConfigs
     extra_symbols: list[str] = Field(default_factory=list)
+    # Index members Schwab may fail to validate before the roster is rejected. Only for
+    # holdings proxies (ishares); exact rosters and extra_symbols must validate fully.
+    max_unvalidated: int = Field(default=0, ge=0)
+    # Publish GICS sectors from this provider's holdings files with the roster.
+    sector_provider: Literal["ishares"] | None = None
+    # Snapshot shares outstanding for every published equity after each refresh.
+    shares_outstanding: bool = False
 
     @field_validator("extra_symbols")
     @classmethod
@@ -79,7 +99,7 @@ class UniverseConfig(BaseModel):
             raise ValueError("index names must be unique")
         if not names and not self.extra_symbols:
             raise ValueError("at least one index or extra symbol is required")
-        if self.provider not in {"github_csv", "eodhd", "constituent_csv"}:
+        if self.provider not in {"github_csv", "eodhd", "constituent_csv", "ishares"}:
             raise ValueError(f"unknown universe provider: {self.provider}")
         provider = getattr(self.providers, self.provider)
         if provider is None:
@@ -89,6 +109,12 @@ class UniverseConfig(BaseModel):
             raise ValueError(
                 f"provider {self.provider} has no mapping for indexes: {', '.join(missing)}"
             )
+        if self.max_unvalidated and self.provider != "ishares":
+            raise ValueError("max_unvalidated applies only to holdings proxies (ishares)")
+        if self.sector_provider:
+            sectors = getattr(self.providers, self.sector_provider)
+            if sectors is None or set(names) - set(sectors.indexes):
+                raise ValueError(f"sector_provider {self.sector_provider} must map every index")
         return self
 
     def request(self) -> UniverseRequest:
@@ -96,6 +122,7 @@ class UniverseConfig(BaseModel):
             name=self.name,
             indexes=tuple(IndexRequest(**item.model_dump()) for item in self.indexes),
             explicit_symbols=tuple(self.extra_symbols),
+            max_unvalidated=self.max_unvalidated,
         )
 
 

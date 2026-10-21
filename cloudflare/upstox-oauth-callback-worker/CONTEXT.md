@@ -25,7 +25,7 @@ returns stored secrets. It is a release unit of kind `worker`, deployed by hand.
 | Route | Does |
 |---|---|
 | `GET /oauth/callback` | Upstox: consume one-time KV state `upstox/oauth-state/<state>`, exchange the code, validate the profile, write `upstox/current-token`, 303 to `MANAGEMENT_URL` |
-| `GET /oauth/schwab/callback` | Schwab: accept a sealed state (10-minute window) or a legacy KV state `schwab/oauth-state/<state>`, exchange the code, write `schwab/current-token`, 303 to `MANAGEMENT_URL` |
+| `GET /oauth/schwab/callback` | Schwab: accept a sealed state (10-minute window) or a legacy KV state `schwab/oauth-state/<state>`, exchange the code with the state's account credentials, write `schwab/current-token` (`primary`) or `schwab/accounts/<id>/current-token`, 303 to `MANAGEMENT_URL` |
 | `GET /health` | `{"status":"ok"}` |
 
 Anything else is 404. npm script ([package.json](package.json)): `check` (`tsc --noEmit`)
@@ -37,6 +37,7 @@ only; there is no `deploy` script here.
 |---|---|---|---|
 | KV | binding `RUNTIME_STATE` | - | the same namespace as the auth Worker |
 | Secrets Store | `UPSTOX_API_KEY`, `UPSTOX_API_SECRET`, `SCHWAB_APP_KEY`, `SCHWAB_APP_SECRET`, `TOKEN_ENCRYPTION_KEY` | - | same store as the auth Worker |
+| Optional secrets | `SCHWAB_APP_KEY_<ID>`, `SCHWAB_APP_SECRET_<ID>` | - | per pooled Schwab account; missing -> the callback returns 400 |
 | Vars | `MANAGEMENT_URL` | - | the auth Worker's `/` |
 | Vars | `SCHWAB_CALLBACK_URL` | - | must equal the registered Schwab redirect and the auth Worker's `SCHWAB_CALLBACK_URL` |
 | Upstox redirect | `CALLBACK_URL` constant in `src/index.ts` | `https://factorlab-upstox-oauth-callback.kairo-jai.workers.dev/oauth/callback` | hard-coded, not a var |
@@ -59,8 +60,8 @@ No ClickHouse access.
   `npm audit` is clean following the October 1 audit.
 - Shared with the auth Worker: KV key names, the record shapes, `TOKEN_ENCRYPTION_KEY`
   (base64, 32 bytes), and the sealed Schwab state format (12-byte IV + AES-GCM JSON with
-  `provider: "schwab"`, `issued_at`, `nonce` of at least 32 characters). Change both Workers
-  together.
+  `provider: "schwab"`, `issued_at`, `nonce` of at least 32 characters, `account`; a
+  missing `account` means `primary`). Change both Workers together.
 
 ## Observability
 

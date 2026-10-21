@@ -4608,3 +4608,139 @@ their own currency. Reports cover available recorded history, not a verified
 inception basis. Snapshot-cutoff quantity reconciliation detects missing history.
 Missing basis/marks and unsupported products yield unavailable totals. FX, other
 cash flows, derivatives PnL and historical charts are outside the first version.
+
+## Sector classification, shares outstanding and indexes (forward Wave 14)
+
+Sector indexes need three inputs the earlier waves left empty or missing: a dated
+sector per listing, a daily shares-outstanding observation for cap weighting, and a
+place for computed index levels. Methodology:
+[ADR 0017](../decisions/0017-sector-index-methodology.md). Official index values
+(`$SPX`, `$COMPX`, ...) need no new table: they are `market.bars` rows with
+`product_type = 'index'` on the pseudo venue `US Index` (MIC `INDX`).
+
+### `ref.security_sector_history`
+
+Effective-dated sector assignment, diffed from complete snapshots exactly like
+`ref.universe_membership`: a changed or vanished assignment closes the day before
+the snapshot, a new one opens on it. `ref.securities.sector_id` keeps the current
+value for convenience; index rebalances read this table as of their date.
+
+```sql
+CREATE TABLE ref.security_sector_history (
+    listing_id      UUID,
+    classification  LowCardinality(String),   -- 'gics'
+    sector_id       LowCardinality(String),   -- FK ref.sectors (GICS level 2: '10'..'60')
+    effective_from  Date,                     -- inclusive
+    effective_to    Nullable(Date),           -- inclusive; NULL = current
+    source          LowCardinality(String),
+    raw_id          Nullable(UUID),
+    version         UInt64,
+    ingested_at     DateTime64(3, 'UTC')
+) ENGINE = ReplacingMergeTree(version)
+ORDER BY (classification, listing_id, effective_from);
+```
+
+### `fundamentals.shares_outstanding`
+
+One vendor observation of shares outstanding per listing and day. Snapshots taken
+daily accumulate a point-in-time history; readers take the latest `as_of_date` at or
+before the day they need. `market_cap` is kept as the vendor reported it, for
+cross-checks only; index weights use `close * shares_outstanding`.
+
+```sql
+CREATE TABLE fundamentals.shares_outstanding (
+    listing_id         UUID,
+    as_of_date         Date,
+    shares_outstanding UInt64,
+    market_cap         Nullable(Float64),      -- vendor-reported, vendor units
+    source, source_channel,
+    raw_id,
+    ingest_run_id,
+    as_of_time, ingested_at,
+    version
+) ENGINE = ReplacingMergeTree(version)
+ORDER BY (listing_id, as_of_date, source);
+```
+
+### `derived.index_levels` and `derived.index_weights`
+
+Constructed index levels and the start-of-day constituent weights that produced
+them. `index_code` names a definition in `libs/indexes/src/factorlab/indexes/catalog_us.yaml`
+(`us_gics_<sector>_<ew|cw>`, `r3k_iwv_<ew|cw>`). A day whose priced weight falls
+below the coverage gate is written with `complete = false` and recomputed later;
+readers show only complete days. `contribution = weight * ret_1d`, so a day's
+contributions sum to the index return.
+
+```sql
+CREATE TABLE derived.index_levels (
+    index_code           LowCardinality(String),
+    trade_date           Date,
+    level                Float64,
+    ret_1d               Nullable(Float64),
+    n_constituents       UInt32,
+    coverage             Float32,               -- priced share of start-of-day weight
+    complete             Bool,
+    methodology_version  LowCardinality(String),
+    computation_id       UUID,
+    computed_at          DateTime64(3, 'UTC'),
+    version              UInt64
+) ENGINE = ReplacingMergeTree(version)
+ORDER BY (index_code, trade_date);
+
+CREATE TABLE derived.index_weights (
+    index_code      LowCardinality(String),
+    trade_date      Date,
+    listing_id      UUID,
+    weight          Float64,                    -- start-of-day weight
+    ret_1d          Nullable(Float64),
+    contribution    Float64,
+    computation_id  UUID,
+    version         UInt64
+) ENGINE = ReplacingMergeTree(version)
+PARTITION BY toYear(trade_date)
+ORDER BY (index_code, trade_date, listing_id);
+```
+
+## US futures quote snapshots (forward Wave 15)
+
+Schwab REST has no futures price history, so US futures are recorded by polling
+`/marketdata/v1/quotes` about once a minute through the Globex week
+([F-043](../features/F-043-us-futures-quotes.md)). `market.quotes` does not fit: it
+is keyed by listing and expires after 90 days, while a futures snapshot belongs to one
+dated contract and is the only intraday record there will ever be. Each root (`/ES`)
+is a `ref.listings` row on its exchange, each dated contract (`/ESZ26`) a
+`ref.contracts` row under it. Daily bars per contract go to the existing
+`market.futures_contract_bars` (`resolution = 'daily'`).
+
+### `market.futures_quotes`
+
+One vendor quote per contract and vendor quote time; `observed_at` is the vendor's
+`quoteTime`, so polling the same quote again collapses on merge. `trade_date` is the
+Globex session date: a quote at or after 18:00 New York time belongs to the next day.
+`settlement_price` is the latest settlement the vendor reports, which during session
+D+1 is the settlement of D. No TTL: about 50k rows a day.
+
+```sql
+CREATE TABLE market.futures_quotes (
+    country_code          FixedString(2),
+    underlying_listing_id UUID,
+    contract_id           UUID,
+    source_symbol         LowCardinality(String),
+    observed_at           DateTime64(6, 'UTC'),      -- vendor quote time
+    trade_date            Date,                      -- Globex session date
+    last_price            Nullable(Decimal(18,6)),
+    last_size             Nullable(UInt32),
+    last_trade_at         Nullable(DateTime64(6, 'UTC')),
+    bid, ask              Nullable(Decimal(18,6)),
+    bid_size, ask_size    Nullable(UInt32),
+    day_open, day_high, day_low  Nullable(Decimal(18,6)),
+    day_volume            Nullable(UInt64),
+    oi                    Nullable(UInt64),
+    settlement_price      Nullable(Decimal(18,6)),
+    source, source_channel, raw_id, ingest_run_id,
+    as_of_time, ingested_at, version
+)
+ENGINE = ReplacingMergeTree(version)
+PARTITION BY toYYYYMM(observed_at)
+ORDER BY (country_code, contract_id, source, observed_at);
+```

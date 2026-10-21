@@ -6,29 +6,45 @@
   identities and attaching ``schwab_symbol`` aliases.
 * ``market.bars`` daily and 1min from ``/pricehistory``, one symbol per unit;
   minute windows are clamped to Schwab's lookback and split into short chunks.
+* US futures (F-043) from ``/quotes`` only, since ``/pricehistory`` serves none:
+  roots as ``ref.listings`` (``mode: futures_roots``), dated contracts as
+  ``ref.contracts`` and snapshots as ``market.futures_quotes``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import replace
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any, ClassVar
 
 from factorlab.ingest.datasets import (
     BarRecord,
     BarRequest,
     Capabilities,
+    ContractQuoteRecord,
+    ContractRecord,
     FetchUnit,
     InstrumentRecord,
     InstrumentRef,
     ReferenceRequest,
+    SharesOutstandingRecord,
 )
 from factorlab.ingest.provider import RawCapture
+from factorlab.sources.schwab.futures import (
+    FuturesRoot,
+    batches,
+    candidate_symbols,
+    futures_ref,
+    normalize_futures_contracts,
+    normalize_futures_quotes,
+    normalize_futures_roots,
+)
 from factorlab.sources.schwab.normalize import (
     normalize_instrument,
     normalize_pricehistory,
     normalize_quote_listings,
+    normalize_quote_shares,
     provider_symbol,
     ref_to_metadata,
 )
@@ -68,6 +84,17 @@ class SchwabListings(_SchwabSource):
     capabilities: ClassVar[Capabilities] = Capabilities(markets=MARKETS, max_batch=50)
 
     def plan(self, request: ReferenceRequest) -> Sequence[FetchUnit]:
+        if request.params.get("mode") == "futures_roots":
+            roots = [FuturesRoot.from_mapping(item) for item in request.params.get("roots", ())]
+            return [
+                FetchUnit(
+                    f"futures_roots:{batch[0].root}..{batch[-1].root}",
+                    self._channel("quotes"),
+                    params={"roots": [root.to_mapping() for root in batch]},
+                    instruments=tuple(root.ref() for root in batch),
+                )
+                for batch in batches(roots, self.settings.quote_batch_size)
+            ]
         symbols = [provider_symbol(ref.trading_symbol) for ref in request.instruments]
         symbols += [provider_symbol(str(s)) for s in request.params.get("symbols", ())]
         symbols = list(dict.fromkeys(symbols))
@@ -93,6 +120,15 @@ class SchwabListings(_SchwabSource):
         ]
 
     def fetch(self, unit: FetchUnit) -> RawCapture:
+        if "roots" in unit.params:
+            roots = unit.params["roots"]
+            symbols = [str(item["root"]) for item in roots]
+            return self.transport.get(
+                "/quotes",
+                {"symbols": ",".join(symbols)},
+                request_key=unit.name,
+                metadata={"symbols": symbols, "roots": roots, "endpoint": "futures_roots"},
+            )
         if "symbols" in unit.params:
             symbols = unit.params["symbols"]
             return self.transport.get(
@@ -110,9 +146,50 @@ class SchwabListings(_SchwabSource):
         )
 
     def normalize(self, capture: RawCapture) -> Sequence[InstrumentRecord]:
+        if capture.metadata.get("endpoint") == "futures_roots":
+            return normalize_futures_roots(capture)
         if capture.metadata.get("endpoint") == "quotes":
             return normalize_quote_listings(capture, exchanges=self.settings.exchanges)
         return normalize_instrument(capture, exchanges=self.settings.exchanges)
+
+
+class SchwabSharesOutstanding(_SchwabSource):
+    """``fundamentals.shares_outstanding`` from batched ``/quotes?fields=fundamental``.
+
+    Not yet registered with the engine: it needs a recorded production capture as its
+    conformance fixture first. ``universe-us`` runs it through an explicit binding.
+    """
+
+    dataset: ClassVar[str] = "fundamentals.shares_outstanding"
+    capabilities: ClassVar[Capabilities] = Capabilities(
+        markets=MARKETS, max_batch=50, alias_kind=ALIAS_KIND
+    )
+
+    def plan(self, request: ReferenceRequest) -> Sequence[FetchUnit]:
+        symbols = list(
+            dict.fromkeys(provider_symbol(str(s)) for s in request.params.get("symbols", ()))
+        )
+        size = self.settings.quote_batch_size
+        return [
+            FetchUnit(
+                f"shares:{batch[0]}..{batch[-1]}",
+                self._channel("quotes"),
+                params={"symbols": batch},
+            )
+            for batch in (symbols[i : i + size] for i in range(0, len(symbols), size))
+        ]
+
+    def fetch(self, unit: FetchUnit) -> RawCapture:
+        symbols = unit.params["symbols"]
+        return self.transport.get(
+            "/quotes",
+            {"symbols": ",".join(symbols), "fields": "fundamental"},
+            request_key=unit.name,
+            metadata={"symbols": symbols, "endpoint": "quotes"},
+        )
+
+    def normalize(self, capture: RawCapture) -> Sequence[SharesOutstandingRecord]:
+        return normalize_quote_shares(capture)
 
 
 class SchwabBars(_SchwabSource):
@@ -188,4 +265,98 @@ class SchwabBars(_SchwabSource):
         return normalize_pricehistory(capture)
 
 
-__all__ = ["SchwabBars", "SchwabListings"]
+class SchwabFuturesContracts(_SchwabSource):
+    """``ref.contracts`` for US futures roots from batched ``/quotes`` (F-043).
+
+    ``params.roots`` holds roster entries and ``params.as_of`` the date the cycle
+    starts from (the caller's clock, so ``plan`` stays pure). Each unit quotes whole
+    roots: a root with its next contracts never spans two captures. Not registered
+    until a recorded production capture backs its conformance fixture.
+    """
+
+    dataset: ClassVar[str] = "ref.contracts"
+    capabilities: ClassVar[Capabilities] = Capabilities(
+        markets=MARKETS, max_batch=50, alias_kind=ALIAS_KIND
+    )
+
+    def plan(self, request: ReferenceRequest) -> Sequence[FetchUnit]:
+        as_of = date.fromisoformat(str(request.params["as_of"]))
+        roots = [FuturesRoot.from_mapping(item) for item in request.params.get("roots", ())]
+        units: list[FetchUnit] = []
+        batch: list[FuturesRoot] = []
+        size = 0
+        for root in [*roots, None]:
+            wanted = len(candidate_symbols(root, as_of)) if root else 0
+            if batch and (root is None or size + wanted > self.settings.quote_batch_size):
+                symbols = [s for item in batch for s in candidate_symbols(item, as_of)]
+                units.append(
+                    FetchUnit(
+                        f"futures_contracts:{batch[0].root}..{batch[-1].root}",
+                        self._channel("quotes"),
+                        params={"symbols": symbols, "roots": [r.to_mapping() for r in batch]},
+                        instruments=tuple(r.ref() for r in batch),
+                    )
+                )
+                batch, size = [], 0
+            if root is not None:
+                batch.append(root)
+                size += wanted
+        return units
+
+    def fetch(self, unit: FetchUnit) -> RawCapture:
+        symbols = unit.params["symbols"]
+        return self.transport.get(
+            "/quotes",
+            {"symbols": ",".join(symbols)},
+            request_key=unit.name,
+            metadata={"symbols": symbols, "roots": unit.params["roots"], "endpoint": "quotes"},
+        )
+
+    def normalize(self, capture: RawCapture) -> Sequence[ContractRecord]:
+        return normalize_futures_contracts(capture)
+
+
+class SchwabFuturesQuotes(_SchwabSource):
+    """``market.futures_quotes`` from batched ``/quotes``; ``params.contracts`` maps symbol -> MIC.
+
+    Not registered until a recorded production capture backs its conformance fixture.
+    """
+
+    dataset: ClassVar[str] = "market.futures_quotes"
+    capabilities: ClassVar[Capabilities] = Capabilities(
+        markets=MARKETS, max_batch=50, alias_kind=ALIAS_KIND, polling=True
+    )
+
+    def plan(self, request: ReferenceRequest) -> Sequence[FetchUnit]:
+        contracts = {str(k).upper(): str(v) for k, v in request.params.get("contracts", {}).items()}
+        symbols = sorted(contracts)
+        return [
+            FetchUnit(
+                f"futures_quotes:{batch[0]}..{batch[-1]}",
+                self._channel("quotes"),
+                params={"contracts": {symbol: contracts[symbol] for symbol in batch}},
+                instruments=tuple(futures_ref(symbol, contracts[symbol]) for symbol in batch),
+            )
+            for batch in batches(symbols, self.settings.quote_batch_size)
+        ]
+
+    def fetch(self, unit: FetchUnit) -> RawCapture:
+        contracts = unit.params["contracts"]
+        return self.transport.get(
+            "/quotes",
+            {"symbols": ",".join(contracts)},
+            request_key=unit.name,
+            metadata={"contracts": contracts, "endpoint": "quotes"},
+        )
+
+    def normalize(self, capture: RawCapture) -> Sequence[ContractQuoteRecord]:
+        return normalize_futures_quotes(capture)
+
+
+__all__ = [
+    "SchwabBars",
+    "SchwabFuturesContracts",
+    "SchwabFuturesQuotes",
+    "SchwabListings",
+    "SchwabSharesOutstanding",
+]

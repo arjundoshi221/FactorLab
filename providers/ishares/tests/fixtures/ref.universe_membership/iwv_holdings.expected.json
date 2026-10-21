@@ -1,0 +1,240 @@
+[
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "AMZN",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.0346"
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "BRK-B",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.0135"
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "CAT",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.0045"
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "CBOE",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.0004"
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "GOOGL",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.0273"
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "JPM",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.0121"
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "LIN",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.0031"
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "NEE",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.0022"
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "NVDA",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.0689"
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "PG",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.005"
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "PLD",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.0016"
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "UEC",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.0001"
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "UNH",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.005"
+ },
+ {
+  "_type": "ConstituentRecord",
+  "universe_code": "r3k_iwv",
+  "instrument": {
+   "_type": "InstrumentRef",
+   "alias_kind": "",
+   "alias_value": "",
+   "exchange_code": "",
+   "trading_symbol": "XOM",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "universe_name": "Russell 3000 (iShares IWV holdings proxy)",
+  "weight": "0.01"
+ }
+]

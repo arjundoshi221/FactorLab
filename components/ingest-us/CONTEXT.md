@@ -1,9 +1,8 @@
 # ingest-us
 
-> US universe resolution and Schwab daily / 1-minute bars into ClickHouse v2 (two services, one image).
+> US universe resolution, Schwab daily / 1-minute bars, sector indexes and futures quotes into ClickHouse v2 (four services, one image).
 
-Staged membership snapshots publish with the exact Schwab aliases validated for
-the configured union. Bare ticker lookup can be ambiguous in existing references.
+Staged membership snapshots publish with the exact Schwab aliases validated for the configured union. Bare ticker lookup can be ambiguous in existing references.
 
 ## Purpose
 
@@ -34,8 +33,7 @@ provider response archived to `raw.archive`. It is a writer component (image
   - `engine`: the provider-agnostic engine (validate, run, daemon, replay).
 - Compose services ([deploy/compose.yaml](deploy/compose.yaml)), network `backend`, no ports:
   - `universe-us`: `universe --config /app/config/us-universe.yaml --daemon`, `mem_limit: 512m`.
-  - `ingest-us`: `daemon --universe us_listed_equities --daemon`, `mem_limit: 1g`,
-    `stop_grace_period: 120s`.
+  - `ingest-us`: `daemon --universe us_listed_equities --daemon`, `mem_limit: 1g`, `stop_grace_period: 120s`.
   Both wait on `bootstrap` (`service_completed_successfully`).
 
 ## Configuration and secrets
@@ -44,10 +42,10 @@ provider response archived to `raw.archive`. It is a writer component (image
 |---|---|---|---|
 | Universe file | `FACTORLAB_US_UNIVERSE_CONFIG` (compose) | `/etc/factorlab/us-universe.yaml` | mounted read-only at `/app/config/us-universe.yaml` |
 | Live cadence | `US_LIVE_INTERVAL_SECONDS` | `300` | measured from the previous sweep's start |
-| Schwab pacing | `SCHWAB_MIN_REQUEST_INTERVAL_SECONDS` | `1.0` | full-universe mode |
+| Schwab pacing | `SCHWAB_MIN_REQUEST_INTERVAL_SECONDS` | `1.0` | full-universe mode; applies per pooled account (`api.accounts`) |
 | Collector lock | `US_INGEST_LOCK` | `/app/data/us-ingest.lock` | one collector at a time (exit 2 if held) |
 | ClickHouse | `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_DATABASE`, `CLICKHOUSE_USERNAME` | compose: `clickhouse`, `8123`, `default`, `factorlab` | |
-| Secrets | `CLICKHOUSE_PASSWORD`, `SCHWAB_ACCESS_TOKEN` (+ `.expires_at`), `EODHD_API_KEY` | - | `us_runtime` tmpfs at `/run/secrets/app` |
+| Secrets | `CLICKHOUSE_PASSWORD`, `SCHWAB_ACCESS_TOKEN` (+ `.expires_at`), `SCHWAB_ACCESS_TOKEN_<ID>` per pooled account, `EODHD_API_KEY` | - | `us_runtime` tmpfs at `/run/secrets/app` |
 | Image pin | `FACTORLAB_INGEST_US_IMAGE` | falls back to `FACTORLAB_US_IMAGE`, then `FACTORLAB_IMAGE` | bridge from the monolith |
 
 ## Data
@@ -123,8 +121,9 @@ the rollout completes.
 - Changing only `provider` in the universe YAML switches resolvers; there is no automatic
   fallback. Restart `universe-us` after editing (`sudo factorlab-compose restart universe-us`);
   the collector picks up new membership without a restart.
-- Schwab needs re-authentication in the auth Worker when its refresh token expires (7 days);
-  until then the collector reports `auth_required` and collects nothing.
+- Each pooled Schwab account needs re-authentication in the auth Worker when its refresh
+  token expires (7 days). An expired account is skipped. Only when no account is usable
+  does the collector report `auth_required` and collect nothing.
 - Only one collector may hold `US_INGEST_LOCK`; a second `daemon` (for example a manual
   backfill in another container sharing `/app/data`) exits 2.
 - `universe-us` has no `/app/data` mount; do not add state that assumes it.
@@ -145,3 +144,7 @@ remains available during the retry wait.
 
 **Universe refresh recovery**: A later successful validated roster publication.
 Continued process heartbeats and retry waits do not establish this recovery.
+
+**Indexes and sectors (F-042, [ADR-0017](../../docs/decisions/0017-sector-index-methodology.md)):** universe provider `ishares` reads IWV holdings as the Russell 3000 proxy `r3k_iwv`; YAML keys `max_unvalidated` (proxy members Schwab cannot quote may drop; extras never), `sector_provider: ishares` (sectors staged and published with the roster onto validated aliases) and `shares_outstanding: true` (daily snapshot after publish, own run `us_shares_outstanding`, non-fatal). `normalize_symbol` accepts a leading `$`. Service `indexes-us` runs `indexes --daemon` ([indexes.py](src/factorlab/components/ingest_us/indexes.py)): at start, then weekdays after 23:30 UTC; each run replays from the catalogue base date and writes the trailing 14 days; `--rebuild` writes everything (run once after the first backfill).
+
+**US futures (F-043, [feature](../../docs/features/F-043-us-futures-quotes.md)):** service `futures-us` runs `futures` ([futures.py](src/factorlab/components/ingest_us/futures.py); `--once`, `--interval` 60 s (min 30), `--config`; lock `US_FUTURES_LOCK` = `/app/data/us-futures.lock`; 256m) over the roster [us_futures.yaml](../../configs/universes/us_futures.yaml) (16 roots, front and next contract; `/6J` excluded because its tick needs 7 decimals, and `/DX` skipped if unquoted). Through the Globex week (`factorlab.calendars.globex`) it refreshes the roster once per session (`us_futures_roster`: root `ref.listings` on MIC-coded venues, then `ref.contracts`), quotes every contract each interval while open (`us_futures_quotes`, one run per poll, about 1 Schwab request/min) into `market.futures_quotes`, writes a provisional daily bar per contract to `market.futures_contract_bars` when a session closes (`us_futures_daily`, close = last), and an hour into the next session rewrites it with close = the reported settlement when that lies within the day's range. `meta.source_status` `source = 'schwab_futures'` (`ok`/`closed`/`error`/`stopped`). The futures sources are unregistered (no `bindings.yaml` entries) and reuse the `ref.listings` binding's credential instance; the separate process does not coordinate pacing with `ingest-us`. Apply `wave_15_schema_futures_quotes` before the first deploy.

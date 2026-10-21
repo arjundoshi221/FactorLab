@@ -34,18 +34,37 @@ class SlidingWindowLimiter:
     def windows(self) -> tuple[tuple[float, int], ...]:
         return self._windows
 
+    def _delay_at(self, now: float) -> float:
+        longest = self._windows[-1][0]
+        while self._requests and now - self._requests[0] >= longest:
+            self._requests.popleft()
+        wait_for = 0.0
+        stamps = list(self._requests)
+        for window, limit in self._windows:
+            recent = [stamp for stamp in stamps if now - stamp < window]
+            if len(recent) >= limit:
+                wait_for = max(wait_for, window - (now - recent[-limit]))
+        return wait_for
+
+    def delay(self) -> float:
+        """Seconds until one more request fits, without reserving it."""
+        return self._delay_at(self._clock())
+
+    def try_acquire(self) -> bool:
+        """Reserve a slot only if one is free now."""
+        now = self._clock()
+        if self._delay_at(now) > 0:
+            return False
+        self._requests.append(now)
+        return True
+
+    def sleep(self, seconds: float) -> None:
+        self._sleep(seconds)
+
     def acquire(self) -> None:
         while True:
             now = self._clock()
-            longest = self._windows[-1][0]
-            while self._requests and now - self._requests[0] >= longest:
-                self._requests.popleft()
-            wait_for = 0.0
-            stamps = list(self._requests)
-            for window, limit in self._windows:
-                recent = [stamp for stamp in stamps if now - stamp < window]
-                if len(recent) >= limit:
-                    wait_for = max(wait_for, window - (now - recent[-limit]))
+            wait_for = self._delay_at(now)
             if wait_for <= 0:
                 self._requests.append(now)
                 return

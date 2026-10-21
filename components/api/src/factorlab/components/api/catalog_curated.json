@@ -32,8 +32,11 @@
     "broker.positions_snapshot": {"title": "Positions", "summary": "Holdings, market values, and broker-reported P&L per broker account and snapshot. A successful empty snapshot clears the portfolio view."},
     "derived.computations": {"title": "Computations", "summary": "Reserved for a record of each reproducible computation run. No data is computed yet."},
     "derived.factors": {"title": "Factors", "summary": "Reserved for computed factor values per listing and date. No data is computed yet."},
+    "derived.index_levels": {"title": "Index levels", "summary": "Daily levels of FactorLab's own indexes: equal- and cap-weighted GICS sector indexes over the Russell 3000 proxy, plus whole-universe composites. Only rows marked complete are final.", "notes": ["index_code names a definition in factorlab.indexes' catalog_us.yaml, e.g. us_gics_45_cw.", "Price return only: there are no dividends in the source bars."]},
+    "derived.index_weights": {"title": "Index weights", "summary": "Each constituent's start-of-day weight in a FactorLab index and its contribution to that day's return. A day's contributions add up to the index return."},
     "derived.forward_test_attribution": {"title": "Forward-test attribution", "summary": "Reserved for scoring paper-trading results against their backtests. No data is computed yet."},
     "fundamentals.filings": {"title": "Company filings", "summary": "Reserved for regulatory filings such as 10-K and 10-Q headers. No data is collected yet."},
+    "fundamentals.shares_outstanding": {"title": "Shares outstanding", "summary": "A daily snapshot of each US equity's shares outstanding as the vendor reports it, used to weight cap-weighted indexes. History builds up one day at a time from the first snapshot."},
     "fundamentals.line_items": {"title": "Financial line items", "summary": "Reserved for individual values from financial statements, as first reported. No data is collected yet."},
     "ref.session_windows_effective": {"title": "Effective session windows", "summary": "A view that combines trading sessions with holiday overrides to give each exchange's actual hours."},
     "risk.budgets": {"title": "Risk budgets", "summary": "Reserved for exposure and loss limits at each level of the fund. No data is collected yet."},
@@ -91,10 +94,11 @@
     },
     "market.futures_contract_bars": {
       "title": "Futures contract bars",
-      "summary": "1-minute bars for individual India single-stock futures contracts, one series per contract and expiry, with open interest.",
+      "summary": "Bars for individual futures contracts, one series per contract and expiry, with open interest: 1-minute India single-stock futures, and daily US futures built from recorded Schwab quotes.",
       "notes": [
         "Each contract is a separate series; no continuous roll is applied.",
-        "Look up the contract's expiry and underlying in ref.contracts."
+        "Look up the contract's expiry and underlying in ref.contracts.",
+        "US daily bars close at the exchange settlement once the next session reports it, and at the last trade until then."
       ],
       "columns": {
         "contract_id": "The futures contract's FactorLab ID in ref.contracts.",
@@ -103,6 +107,19 @@
       }
     },
     "market.futures_continuous": {"title": "Continuous futures", "summary": "Reserved for rolled front- and back-month futures series. Not computed yet."},
+    "market.futures_quotes": {
+      "title": "US futures quotes",
+      "summary": "Snapshots of US futures contracts (equity index, energy, metals, rates, VIX, FX) taken from Schwab about once a minute through the trading week: last trade, bid and ask, the day's range and volume, open interest and settlement.",
+      "notes": [
+        "This is the only intraday record of US futures: Schwab provides no futures price history.",
+        "trade_date is the exchange session date; a quote after 18:00 New York time belongs to the next day."
+      ],
+      "columns": {
+        "observed_at": "When Schwab last updated the quote.",
+        "settlement_price": "The latest official settlement Schwab reports; during a session this is the previous session's.",
+        "oi": "Open interest: contracts outstanding."
+      }
+    },
     "market.fx_rates": {"title": "Currency rates", "summary": "Reserved for foreign exchange rate bars used to convert between currencies. No data is collected yet."},
     "market.options_bars": {"title": "Options bars", "summary": "Reserved for option contract price bars with greeks. No data is collected yet."},
     "market.quotes": {"title": "Quotes", "summary": "Reserved for bid and ask quotes, built when trade execution needs them. No data is collected yet."},
@@ -183,7 +200,8 @@
       "notes": ["Join market.bars.listing_id to ref.listings.listing_id to get symbols and exchanges."],
       "columns": {"trading_symbol": "The symbol traders use, e.g. AAPL or TCS.", "mic": "The exchange's ISO 10383 market code.", "active": "Whether the listing is currently trading."}
     },
-    "ref.sectors": {"title": "Sectors", "summary": "Reserved for industry classifications such as GICS. Not populated yet."},
+    "ref.sectors": {"title": "Sectors", "summary": "Industry classifications such as GICS: the 11 GICS sectors are added as sector snapshots arrive."},
+    "ref.security_sector_history": {"title": "Sector history", "summary": "Which GICS sector each listing belonged to, and from when to when. A reclassification closes the old row and opens a new one."},
     "ref.securities": {"title": "Securities", "summary": "The instruments themselves (a company's common stock, an ETF, a future), independent of where they trade."},
     "ref.sessions": {"title": "Trading sessions", "summary": "Reserved for exchange trading hours by day of week. Not populated yet."},
     "ref.source_priorities": {"title": "Vendor priorities", "summary": "Which data vendor is preferred for each dataset, country, and bar length, synced from the ingestion bindings. Reserved until the wave 10 migration is applied."},

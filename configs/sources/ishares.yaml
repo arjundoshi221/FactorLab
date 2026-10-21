@@ -1,0 +1,10 @@
+# iShares holdings files (non-secret; docs/architecture/07 §9.3).
+# Fund keys are the universe codes written to ref.universe_membership.
+name: ishares
+timeout: 30
+funds:
+  r3k_iwv:
+    url: https://www.ishares.com/us/products/239714/ishares-russell-3000-etf/latest-holdings.csv
+    name: Russell 3000 (iShares IWV holdings proxy)
+    minimum_constituents: 2400
+    max_age_days: 7

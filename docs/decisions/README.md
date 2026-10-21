@@ -74,4 +74,5 @@ list.
 | [ADR-0014](0014-structured-logs-and-retention.md) | Structured JSON logs with host-side retention and a read-only reader | accepted (unconfirmed) | 2026-09-29 |
 | [ADR-0015](0015-host-deployer-and-rollback-classes.md) | Host deployer with per-component rollback classes | accepted (unconfirmed) | 2026-09-29 |
 | [ADR-0016](0016-edge-routing-and-access.md) | Single hub hostname behind Cloudflare Tunnel and one Access application | accepted (unconfirmed) | 2026-09-29 |
+| [ADR-0017](0017-sector-index-methodology.md) | Track official US indexes from Schwab and construct GICS sector indexes over an IWV-based Russell 3000 proxy | proposed (unconfirmed) | 2026-10-21 |
 <!-- END GENERATED: decisions index -->

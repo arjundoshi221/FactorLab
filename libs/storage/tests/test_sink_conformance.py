@@ -19,9 +19,12 @@ from factorlab.ingest.datasets import (
     BarRecord,
     ConstituentRecord,
     ContractBarRecord,
+    ContractQuoteRecord,
     ContractRecord,
     InstrumentRecord,
     InstrumentRef,
+    SectorRecord,
+    SharesOutstandingRecord,
 )
 from factorlab.ingest.memory import InMemorySink
 from factorlab.ingest.provider import RawCapture, ingestion_run
@@ -529,3 +532,138 @@ def test_unresolved_snapshot_preserves_every_existing_membership(harness):
     )
     assert result.unresolved == 1 and result.rows_written == 0
     assert len(before) == 5 and set(harness.sink.universe_members(["test"])) == before
+
+
+# -- ref.security_sectors / fundamentals.shares_outstanding ----------------------------
+def _open_sectors(harness) -> dict[uuid.UUID, str]:
+    if isinstance(harness, MemoryHarness):
+        return {
+            lid: spans[-1][0]
+            for lid, spans in harness.sink.sector_history.get("gics", {}).items()
+            if spans[-1][2] is None
+        }
+    return {
+        h["listing_id"]: h["sector_id"]
+        for h in harness.client.rows("ref.security_sector_history")
+        if h["effective_to"] is None
+    }
+
+
+def _write_sectors(harness, rows, *, day, mode="authoritative"):
+    with run(harness.sink, "ishares") as ctx:
+        provenance = ctx.provenance(
+            source_channel="ishares:holdings",
+            raw_id=None,
+            as_of_time=datetime.combine(day, datetime.min.time(), tzinfo=UTC),
+        )
+        result = harness.sink.write_sectors(rows, provenance=provenance, mode=mode)
+        ctx.succeed_unit("u", result.rows_written)
+    return result
+
+
+def test_sector_snapshots_become_effective_dated_assignments(harness):
+    refs = _seed_universe_listings(harness)
+    bare = [InstrumentRef("", "", "", r.trading_symbol, "IN") for r in refs]
+    sectors = ["45", "45", "40", "40", "10", "35"]
+    first = _write_sectors(
+        harness,
+        [SectorRecord(r, s, "Sector " + s) for r, s in zip(bare, sectors, strict=True)],
+        day=date(2026, 9, 1),
+    )
+    assert (first.rows_written, first.resolved, first.unresolved) == (6, 6, 0)
+    moved = [*sectors[:5], "50"]  # one listing reclassified
+    second = _write_sectors(
+        harness,
+        [SectorRecord(r, s) for r, s in zip(bare, moved, strict=True)],
+        day=date(2026, 9, 24),
+    )
+    assert second.rows_written == 2  # old row closed, new row opened
+    assert sorted(_open_sectors(harness).values()) == sorted(moved)
+    shadow = _write_sectors(
+        harness, [SectorRecord(bare[0], "60")], day=date(2026, 9, 25), mode="resolve_only"
+    )
+    assert (shadow.rows_written, shadow.resolved) == (0, 1)
+    with pytest.raises(ValueError):  # five of six assignments vanish
+        _write_sectors(harness, [SectorRecord(bare[0], "45")], day=date(2026, 9, 26))
+
+
+def test_unresolved_sector_tickers_are_parked(harness):
+    refs = _seed_universe_listings(harness)
+    bare = [InstrumentRef("", "", "", r.trading_symbol, "IN") for r in refs]
+    ghost = InstrumentRef("", "", "", "GHOST", "IN")
+    result = _write_sectors(
+        harness, [SectorRecord(r, "45") for r in [*bare, ghost]], day=date(2026, 9, 1)
+    )
+    assert (result.rows_written, result.unresolved) == (6, 1)
+    assert harness.parked() == 1
+
+
+def test_shares_outstanding_are_facts_on_the_listing(harness):
+    write(harness.sink, "upsert_instruments", [instrument(UPSTOX)])
+    rows = [SharesOutstandingRecord(UPSTOX, date(2026, 9, 24), 13_532_472_634, Decimal("1.9e13"))]
+    ghost = ref("upstox_instrument_key", "NSE_EQ|GHOST", symbol="GHOST", isin=None)
+    result = write(
+        harness.sink,
+        "write_shares_outstanding",
+        [*rows, SharesOutstandingRecord(ghost, date(2026, 9, 24), 5)],
+    )
+    assert (result.rows_written, result.unresolved) == (1, 1)
+
+
+class USFuturesClickHouseHarness(ClickHouseHarness):
+    def __init__(self) -> None:
+        self.client = FakeClickHouse({"XCME": ("XCME", "US", "USD")})
+        self.sink = ClickHouseSinks(V2IndiaStorage(self.client))
+
+
+@pytest.fixture(params=[MemoryHarness, USFuturesClickHouseHarness], ids=lambda h: h.name)
+def us_futures(request):
+    return request.param()
+
+
+def test_futures_root_contract_and_quotes_resolve_by_schwab_alias(us_futures):
+    sink = us_futures.sink
+    root = InstrumentRef("schwab_symbol", "/ES", "XCME", "/ES", "US")
+    future = InstrumentRef("schwab_symbol", "/ESZ26", "XCME", "/ESZ26", "US")
+    write(
+        sink,
+        "upsert_instruments",
+        [InstrumentRecord(root, "E-mini S&P 500", "index_future", "USD")],
+        source="schwab",
+    )
+    contract = ContractRecord(
+        ref=future,
+        underlying=root,
+        product_type="index_future",
+        expiry=date(2026, 12, 18),
+        multiplier=50,
+        tick_size=Decimal("0.25"),
+    )
+    assert write(sink, "upsert_contracts", [contract], source="schwab").rows_written == 1
+    observed = datetime(2026, 10, 19, 23, 0, tzinfo=UTC)  # 19:00 New York, Monday
+    quote = ContractQuoteRecord(
+        future,
+        observed,
+        last_price=Decimal("5800.25"),
+        bid=Decimal(5800),
+        ask=Decimal("5800.5"),
+        day_volume=1200,
+        oi=2_000_000,
+        settlement_price=Decimal("5790.75"),
+    )
+    ghost = ContractQuoteRecord(
+        InstrumentRef("schwab_symbol", "/ESH27", "XCME", "/ESH27", "US"), observed
+    )
+    result = write(sink, "write_contract_quotes", [quote, ghost], source="schwab")
+    assert (result.rows_written, result.unresolved) == (1, 1)
+    write(sink, "write_contract_quotes", [quote], source="schwab")  # re-polled, same quote time
+    assert len({target for target, _, _ in us_futures.bars("market.futures_quotes")}) == 1
+
+
+def test_clickhouse_futures_quotes_carry_the_globex_trade_date():
+    harness = USFuturesClickHouseHarness()
+    test_futures_root_contract_and_quotes_resolve_by_schwab_alias(harness)
+    [row] = harness.client.rows("market.futures_quotes")  # FINAL: the re-poll collapsed
+    assert row["trade_date"] == date(2026, 10, 20)  # an evening quote trades the next day
+    assert row["source_symbol"] == "/ESZ26" and row["settlement_price"] == Decimal("5790.75")
+    assert row["raw_id"] is not None and row["source"] == "schwab"

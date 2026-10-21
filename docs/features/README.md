@@ -16,11 +16,14 @@ when anything here is stale or invalid. The `feature` skill
 | ID | Title | Status | Priority | Sprint | Components |
 |---|---|---|---|---|---|
 | [F-001](F-001-data-health.md) | Data health | in-progress | P1 | — | api, web |
+| [F-041](F-041-schwab-account-pool.md) | Pool several Schwab developer apps so US collection gets their combined rate budget | in-progress | P1 | — | ingest-us, secrets-agent, upstox-auth-worker, upstox-oauth-callback-worker |
+| [F-043](F-043-us-futures-quotes.md) | Record US futures quotes and daily contract bars from Schwab REST | in-progress | P2 | — | ingest-us, schema-migrator, storage |
 | [F-035](F-035-udp-service-monitoring.md) | Heartbeat, warning and error monitoring over UDP | review | P1 | — | runtime, ingest, schema, platform, api, web |
 | [F-037](F-037-instrument-explorer.md) | Canonical instrument data explorer | review | P1 | — | api, web |
 | [F-038](F-038-monitoring-status-verdict.md) | One status verdict at the top of monitoring | review | P1 | — | api, web, calendars |
 | [F-039](F-039-ticker-data-matrix.md) | Ticker × dataset matrix linking each ticker's data, holdings and trades | review | P1 | — | api, web |
 | [F-040](F-040-trade-ledger.md) | Cross-account trade ledger with strategy, theme and trade-name tags | review | P1 | — | api, web |
+| [F-042](F-042-us-indexes-and-sectors.md) | Track official US indexes and show equal- and cap-weighted GICS sector indexes over the Russell 3000 | review | P1 | — | ingest-us, api, web, schema-migrator, storage, platform |
 | [F-006](F-006-restore-edge-access-invariants.md) | Restore the Cloudflare Access invariants on the hub hostname | planned | P0 | 2026-S20 | platform, api |
 | [F-007](F-007-per-component-rollout.md) | Roll out per-component releases (R0–R5) | planned | P0 | 2026-S20 | platform, api, web, secrets-agent, schema-migrator, ingest-india, ingest-us, ingest-political, ingest-broker |
 | [F-002](F-002-data-explorer.md) | Data explorer | planned | P2 | — | api, web |

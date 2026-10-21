@@ -182,3 +182,60 @@ def test_consumer_secrets_are_readable_by_non_root_consumers(tmp_path):
     agent._atomic_write(target, "secret")
     assert stat.S_IMODE(target.stat().st_mode) == 0o444
     assert not list(tmp_path.glob(".CLICKHOUSE_PASSWORD.*")), "no temporary file is left behind"
+
+
+def _schwab_pool_payload(acct2_status, acct2_token):
+    expiry = (datetime.now(UTC) + timedelta(minutes=25)).isoformat()
+    return {
+        "version": 1,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "secrets": {
+            "CLICKHOUSE_PASSWORD": "database-password",
+            "CLICKHOUSE_PASSWORD_SHA256": hashlib.sha256(b"database-password").hexdigest(),
+            "SCHWAB_ACCESS_TOKEN": "primary-token",
+            "SCHWAB_ACCESS_TOKEN_ACCT2": acct2_token,
+            "FACTORLAB_API_KEY": "factorlab-api-key",
+        },
+        "upstox": {"status": "missing"},
+        "schwab": {"status": "valid", "access_expires_at": expiry},
+        "schwab_accounts": {
+            "primary": {"status": "valid", "access_expires_at": expiry},
+            "acct2": {"status": acct2_status, "access_expires_at": expiry},
+            "../escape": {"status": "valid", "access_expires_at": expiry},
+        },
+    }
+
+
+def test_render_bundle_writes_and_removes_pooled_schwab_accounts(tmp_path, monkeypatch):
+    agent = _load_agent_module()
+    _, _, us, _ = _configure_paths(agent, tmp_path, monkeypatch)
+
+    status = agent._render_bundle(_schwab_pool_payload("valid", "second-token"))
+    assert status == "upstox=missing, schwab=primary:valid,acct2:valid"
+    assert (us / "SCHWAB_ACCESS_TOKEN").read_text() == "primary-token"
+    assert (us / "SCHWAB_ACCESS_TOKEN_ACCT2").read_text() == "second-token"
+    assert (us / "SCHWAB_ACCESS_TOKEN_ACCT2.expires_at").exists()
+    assert not (tmp_path / "escape").exists()
+
+
+def test_render_bundle_removes_invalid_and_orphaned_schwab_accounts(tmp_path, monkeypatch):
+    agent = _load_agent_module()
+    _, _, us, _ = _configure_paths(agent, tmp_path, monkeypatch)
+    us.mkdir()
+    for name in ("SCHWAB_ACCESS_TOKEN_ACCT2", "SCHWAB_ACCESS_TOKEN_OLD"):
+        (us / name).write_text("stale")
+        (us / f"{name}.expires_at").write_text("2099-01-01T00:00:00+00:00")
+    status = agent._render_bundle(_schwab_pool_payload("reauth_required", None))
+    assert status == "upstox=missing, schwab=primary:valid,acct2:reauth_required"
+    assert (us / "SCHWAB_ACCESS_TOKEN").read_text() == "primary-token"
+    assert not list(us.glob("SCHWAB_ACCESS_TOKEN_*"))
+
+
+def test_expired_pooled_schwab_token_is_removed_locally(tmp_path, monkeypatch):
+    agent = _load_agent_module()
+    _, _, us, _ = _configure_paths(agent, tmp_path, monkeypatch)
+    us.mkdir()
+    (us / "SCHWAB_ACCESS_TOKEN_ACCT2").write_text("stale")
+    (us / "SCHWAB_ACCESS_TOKEN_ACCT2.expires_at").write_text("2026-01-01T00:00:00+00:00")
+    agent._expire_local_token()
+    assert not list(us.glob("SCHWAB_ACCESS_TOKEN_*"))

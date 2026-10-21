@@ -5,4 +5,4 @@ missing here cannot run in this image; each provider belongs to exactly one comp
 (``tools/components.py check``).
 """
 
-PROVIDERS: tuple[str, ...] = ("schwab", "eodhd", "github_csv", "edgar")
+PROVIDERS: tuple[str, ...] = ("schwab", "eodhd", "github_csv", "edgar", "ishares")

@@ -17,10 +17,12 @@ from decimal import Decimal
 from typing import Any, ClassVar
 from uuid import UUID
 
+from factorlab.calendars import globex
 from factorlab.ingest.datasets import (
     BarRecord,
     ConstituentRecord,
     ContractBarRecord,
+    ContractQuoteRecord,
     ContractRecord,
     InstrumentRecord,
     InstrumentRef,
@@ -33,6 +35,7 @@ from factorlab.ingest.universe_snapshot import diff_snapshot
 from factorlab.storage.canonical_ids import natural_contract_id, natural_listing_ids
 from factorlab.storage.clickhouse import _decimal, _decoded_text, _version
 from factorlab.storage.sinks.calendar import canonical_bar_time, session_for, trade_date_for
+from factorlab.storage.sinks.classification import ClassificationSinkMixin
 from factorlab.storage.sinks.fundamentals import FundamentalsSinkMixin
 from factorlab.storage.sinks.identity import (
     ContractIdentity,
@@ -58,7 +61,7 @@ def _utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
-class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
+class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin, ClassificationSinkMixin):
     """Dataset sinks + ``ReferenceReader`` / ``CheckpointStore`` / ``RawArchiveReader``."""
 
     def __init__(self, storage: Any) -> None:
@@ -564,6 +567,51 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin):
         self._insert_bars("market.futures_contract_bars", records)
         if unresolved:
             self._park(provenance, unresolved, "market.futures_contract_bars: contract unresolved")
+        return WriteResult(len(records), len(unresolved), len(records))
+
+    # -- market.futures_quotes ---------------------------------------------------
+    def write_contract_quotes(
+        self, rows: Sequence[ContractQuoteRecord], *, provenance: Provenance
+    ) -> WriteResult:
+        self._check_lineage(provenance)
+        identities = IdentityResolver(self.client).contracts(row.contract for row in rows)
+        now = datetime.now(UTC)
+        records: list[dict[str, Any]] = []
+        unresolved: list[InstrumentRef] = []
+        for row in rows:
+            identity: ContractIdentity | None = identities.get(row.contract)
+            if identity is None:
+                unresolved.append(row.contract)
+                continue
+            observed = row.observed_at.astimezone(UTC)
+            records.append(
+                {
+                    "country_code": identity.country_code,
+                    "underlying_listing_id": identity.underlying_listing_id,
+                    "contract_id": identity.contract_id,
+                    "source_symbol": row.contract.trading_symbol,
+                    "observed_at": observed,
+                    "trade_date": globex.session_date(observed),
+                    "last_price": _price(row.last_price),
+                    "last_size": row.last_size,
+                    "last_trade_at": row.last_trade_at,
+                    "bid": _price(row.bid),
+                    "ask": _price(row.ask),
+                    "bid_size": row.bid_size,
+                    "ask_size": row.ask_size,
+                    "day_open": _price(row.day_open),
+                    "day_high": _price(row.day_high),
+                    "day_low": _price(row.day_low),
+                    "day_volume": row.day_volume,
+                    "oi": row.oi,
+                    "settlement_price": _price(row.settlement_price),
+                    **provenance.columns(),
+                    "version": _version(now),
+                }
+            )
+        self._insert("market.futures_quotes", records)
+        if unresolved:
+            self._park(provenance, unresolved, "market.futures_quotes: contract unresolved")
         return WriteResult(len(records), len(unresolved), len(records))
 
     # -- read ports --------------------------------------------------------------

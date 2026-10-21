@@ -1,4 +1,4 @@
-"""``factorlab-ingest-us``: US universe resolution and daily/1-min bars into ClickHouse v2.
+"""``factorlab-ingest-us``: US universe, daily/1-min bars and futures quotes into ClickHouse v2.
 
 Each command forwards its remaining arguments to that command's own parser, e.g.
 ``factorlab-ingest-us daemon --help``. ``engine`` runs the provider-agnostic engine
@@ -24,6 +24,18 @@ def _universe(argv: list[str]) -> int | None:
     return main(argv)
 
 
+def _indexes(argv: list[str]) -> int | None:
+    from factorlab.components.ingest_us.indexes import main
+
+    return main(argv)
+
+
+def _futures(argv: list[str]) -> int | None:
+    from factorlab.components.ingest_us.futures import main
+
+    return main(argv)
+
+
 def _engine(argv: list[str]) -> int:
     from factorlab.components.ingest_us.providers import PROVIDERS
     from factorlab.orchestration import cli as engine_cli
@@ -34,6 +46,8 @@ def _engine(argv: list[str]) -> int:
 COMMANDS = {
     "daemon": Command("daily and 1-min bar collection daemon (production path)", _daemon),
     "universe": Command("resolve and publish the configured US universe", _universe),
+    "indexes": Command("compute sector and composite indexes from daily closes", _indexes),
+    "futures": Command("record US futures quotes and daily contract bars", _futures),
     "engine": Command("provider-agnostic engine: validate, run, daemon, replay", _engine),
 }
 
