@@ -127,6 +127,26 @@ describe("FactorLab Hub", () => {
     expect(screen.getByRole("link", { name: "FactorLab Data Hub home" })).toHaveAttribute("href", "/data");
   });
 
+  it("redirects the old indexes page into Market Data", () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: false, status: 503, json: async () => ({ detail: "Down" }) } as Response);
+    window.history.replaceState({}, "", "/indexes");
+    render(<App />);
+    expect(window.location.pathname + window.location.search).toBe("/market-data?view=indexes");
+    expect(screen.getByRole("link", { name: "Market data" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "Indexes" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("link", { name: "Indexes" })).not.toBeInTheDocument();
+  });
+
+  it("opens /futures as the Market Data futures view", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ generated_at: new Date().toISOString(), market_open: false, items: [] }) } as Response);
+    window.history.replaceState({}, "", "/futures");
+    render(<App />);
+    expect(window.location.pathname + window.location.search).toBe("/market-data?view=futures");
+    expect(screen.getByRole("button", { name: "Futures" })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByText("No futures recorded yet")).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url) === "/hub/api/v1/us/futures")).toBe(true);
+  });
+
   it("routes data pages without loading the ops dashboard", async () => {
     vi.mocked(fetch).mockResolvedValue({ ok: false, status: 503, json: async () => ({ detail: "Catalog down" }) } as Response);
     window.history.replaceState({}, "", "/data/tables/market.bars");

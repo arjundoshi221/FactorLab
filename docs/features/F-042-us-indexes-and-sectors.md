@@ -33,12 +33,14 @@ cap. As a result, the hub could show neither index levels nor how sectors are pe
   indexes into `derived.index_levels` and `derived.index_weights` (wave 14).
 - **API.** `/hub/api/v1/us/indexes`, `/indexes/series`, `/indexes/{code}/constituents`
   and `/sectors/performance`.
-- **Hub.** A `/indexes` page with:
+- **Hub.** An **Indexes** tab in Market Data (`/market-data?view=indexes`; `/indexes` redirects) with:
   - a tracked-index strip;
   - a sector returns heatmap (1D to 1Y) with a cap/equal-weight toggle, ETF and S&P
     benchmarks;
   - a rebased comparison chart of our equal- and cap-weighted indexes against both ETFs;
   - top and bottom contributors and the constituents list.
+- **By sector.** A Market Data **By sector** tab grouping listings by current GICS sector
+  (`/market-data/sectors`, `sector`/`kind` inventory filters).
 
 ## Non-goals
 
@@ -74,3 +76,4 @@ cap. As a result, the hub could show neither index levels nor how sectors are pe
 ## Log
 
 - 2026-10-21: created; implemented on the working branch with ADR-0017.
+- 2026-10-21: indexes folded into Market Data as a tab; By-sector tab added.

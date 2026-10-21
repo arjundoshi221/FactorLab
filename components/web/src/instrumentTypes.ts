@@ -3,8 +3,11 @@ export interface Instrument {
   entity_id: string; symbol: string; name: string; country: string; exchange: string;
   instrument_type: string; active: boolean; configured: boolean;
   expiry: string | null; strike: string | null; right: string;
+  sector_id: string; sector: string;
 }
 export interface InstrumentPage { items: Instrument[]; total: number; limit: number; offset: number }
+export interface SectorCount { sector_id: string; sector: string; count: number }
+export interface SectorSummary { items: SectorCount[]; unclassified: number; total: number }
 export interface Dataset {
   table: string; title: string; description: string; group: string; classification: string;
   relationships: string[]; time_column: string | null; dimensions: string[];

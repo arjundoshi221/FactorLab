@@ -11,6 +11,7 @@ from factorlab.components.api.instruments import (
     Instrument,
     InstrumentRepository,
     Kind,
+    current_sector_sql,
     inventory_sql,
     registry,
     repository,
@@ -256,3 +257,54 @@ def test_routes_validate_identifiers_limits_and_dates_without_database():
             start=datetime(2026, 2, 1, tzinfo=UTC),
             end=datetime(2026, 1, 1, tzinfo=UTC),
         )
+
+
+def test_inventory_carries_current_gics_sector_and_filters_by_sector_and_kind():
+    one = {**instrument().model_dump(), "sector_id": "45", "sector": "Information Technology"}
+    two = {**instrument().model_dump(), "id": UUID(int=2), "sector_id": "", "sector": ""}
+    repo = repo_with([{"total": 2}], [one, two])
+    result = repo.inventory("", "US", "", "", "all", "all", 50, 0, sector="none", kind="listing")
+    assert [i.sector for i in result.items] == ["Information Technology", ""]
+    assert isinstance(repo.query, Mock)
+    sql, params = repo.query.call_args.args
+    assert params["sector"] == "none" and params["kind"] == "listing"
+    assert "ref.security_sector_history AS h FINAL" in sql
+    assert "if({sector:String} = 'none', '', {sector:String})" in sql
+    assert "kind = {kind:String}" in sql
+    # Only the open-ended (current) GICS row counts; a closed row is history.
+    assert "effective_to IS NULL" in current_sector_sql()
+    assert "classification = 'gics'" in current_sector_sql()
+
+
+def test_sector_summary_counts_listings_and_separates_unclassified():
+    repo = repo_with(
+        [
+            {"sector_id": "", "sector": "", "count": 3},
+            {"sector_id": "10", "sector": "Energy", "count": 4},
+            {"sector_id": "45", "sector": "Information Technology", "count": 5},
+        ]
+    )
+    result = repo.sectors("app", "US", "yes", "all")
+    assert [(i.sector_id, i.count) for i in result.items] == [("10", 4), ("45", 5)]
+    assert result.unclassified == 3 and result.total == 12
+    assert isinstance(repo.query, Mock)
+    sql, params = repo.query.call_args.args
+    assert params["kind"] == "listing" and params["search"] == "app"
+    assert params["country"] == "US" and params["active"] == "yes"
+    assert "GROUP BY sector_id" in sql
+
+
+def test_sector_routes_validate_and_pass_filters():
+    app = FastAPI()
+    app.include_router(router)
+    repo = Mock()
+    app.dependency_overrides[repository] = lambda: repo
+    client = TestClient(app)
+    assert client.get("/instruments?sector=x'--").status_code == 422
+    assert client.get("/instruments?kind=equity").status_code == 422
+    repo.inventory.return_value = {"items": [], "total": 0, "limit": 50, "offset": 0}
+    assert client.get("/instruments?sector=45&kind=listing").status_code == 200
+    assert repo.inventory.call_args.kwargs == {"sector": "45", "kind": "listing"}
+    repo.sectors.return_value = {"items": [], "unclassified": 0, "total": 0}
+    assert client.get("/sectors?search=%20ai%20").status_code == 200
+    repo.sectors.assert_called_with("ai", "US", "all", "all")

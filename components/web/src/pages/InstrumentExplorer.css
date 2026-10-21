@@ -115,3 +115,16 @@
   .instrument-grid td { display: table-cell; padding: 9px 12px; border-bottom: 1px solid var(--line); }
   .instrument-grid td::before { content: none; }
 }
+
+/* By sector: one collapsible group per current GICS sector. */
+.md-sectors { display: grid; gap: 1px; border: 1px solid var(--line); background: var(--line); }
+.md-sector { background: var(--panel); }
+.md-sector summary { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; list-style: none; }
+.md-sector summary::-webkit-details-marker { display: none; }
+.md-sector summary::before { content: "\25B8"; color: var(--muted); font-size: 11px; transition: transform .15s; }
+.md-sector[open] summary::before { transform: rotate(90deg); }
+.md-sector summary:hover .md-sector__name { color: var(--lime); }
+.md-sector__name { min-width: 0; color: var(--ink); font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.md-sector__code { color: var(--muted); font: 400 10px var(--mono); white-space: nowrap; }
+.md-sector__count { margin-left: auto; padding: 2px 8px; border: 1px solid var(--line); color: var(--ink); font: 600 11px var(--mono); }
+.md-sector__body { padding: 0 16px 16px; }

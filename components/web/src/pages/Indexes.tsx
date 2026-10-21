@@ -36,7 +36,7 @@ function heat(value: number | null, scale: number): string {
 }
 const SCALE: Record<Period, number> = { "1d": 0.02, "1w": 0.04, "1m": 0.08, "3m": 0.15, ytd: 0.3, "1y": 0.35 };
 
-export function Indexes() {
+export function Indexes({ embedded = false }: { embedded?: boolean }) {
   const [weighting, setWeighting] = useState<Weighting>("cw");
   const [overview, setOverview] = useState<IndexOverview | null>(null);
   const [performance, setPerformance] = useState<PerformanceResponse | null>(null);
@@ -77,10 +77,11 @@ export function Indexes() {
     return () => controller.abort();
   }, [sector, range, performance?.as_of]);
 
-  return <main className="indexes">
-    <section className="hero"><div><span className="eyebrow">US indexes · Schwab closes · iShares IWV sectors</span>
+  const Root = embedded ? "section" : "main";
+  return <Root className="indexes" aria-label={embedded ? "Indexes and sectors" : undefined}>
+    {!embedded && <section className="hero"><div><span className="eyebrow">US indexes · Schwab closes · iShares IWV sectors</span>
       <h1>Indexes and sectors</h1>
-      <p>Official US indexes, plus FactorLab's own GICS sector indexes over the Russell 3000 proxy, equal- and cap-weighted.</p></div></section>
+      <p>Official US indexes, plus FactorLab's own GICS sector indexes over the Russell 3000 proxy, equal- and cap-weighted.</p></div></section>}
     {error && <div className="notice notice--error" role="alert">{error}</div>}
     {loading && <p role="status">Loading indexes…</p>}
     {overview && <TrackedStrip overview={overview} />}
@@ -109,7 +110,7 @@ export function Indexes() {
     </section>}
     <p className="us-note">Price return only. Constructed history before the first sector and membership snapshot uses
       today's roster (survivorship bias); see ADR 0017.</p>
-  </main>;
+  </Root>;
 }
 
 function TrackedStrip({ overview }: { overview: IndexOverview }) {

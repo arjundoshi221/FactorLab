@@ -81,3 +81,47 @@ it("keeps the existing collection screen reachable", async () => {
   expect(screen.getByRole("button", { name: "Historical recovery" })).toBeInTheDocument();
   expect(window.location.search).toContain("view=collection");
 });
+
+const sectors = { items: [{ sector_id: "10", sector: "Energy", count: 4 }, { sector_id: "45", sector: "Information Technology", count: 2 }], unclassified: 3, total: 9 };
+
+it("groups listings by GICS sector and lists a sector's tickers on demand", async () => {
+  const tech = { ...item, sector_id: "45", sector: "Information Technology" };
+  const fetcher = vi.fn(async (url: string) => response(url.includes("/sectors") ? sectors
+    : url.includes("/coverage") ? coverage : url.includes(item.id) ? detail(tech) : { items: [tech], total: 1 }));
+  vi.stubGlobal("fetch", fetcher);
+  render(<MarketData />);
+  fireEvent.click(screen.getByRole("button", { name: "By sector" }));
+  const before = fetcher.mock.calls.length;
+  expect(window.location.search).toContain("view=sectors");
+  expect(await screen.findByText("Energy")).toBeInTheDocument();
+  expect(screen.getByText("Unclassified")).toBeInTheDocument();
+  expect(fetcher).toHaveBeenCalledWith(expect.stringContaining("/market-data/sectors?country=US"), expect.anything());
+  // Members load only when a sector is opened.
+  expect(fetcher.mock.calls.slice(before).some(([url]) => String(url).includes("/instruments?"))).toBe(false);
+  fireEvent.click(screen.getByText("Information Technology"));
+  expect(window.location.search).toContain("sector=45");
+  await waitFor(() => expect(fetcher).toHaveBeenCalledWith(expect.stringMatching(/instruments\?.*kind=listing&sector=45/), expect.anything()));
+  fireEvent.click(await screen.findByRole("button", { name: "SAME · NYSE" }));
+  expect(window.location.search).toContain(`id=${item.id}`);
+  expect(await screen.findByRole("heading", { name: "SAME · NYSE" })).toBeInTheDocument();
+});
+
+it("asks for unclassified listings with sector=none", async () => {
+  window.history.replaceState(null, "", "/market-data?view=sectors&sector=none");
+  const fetcher = vi.fn(async (url: string) => response(url.includes("/sectors") ? sectors : { items: [], total: 0 }));
+  vi.stubGlobal("fetch", fetcher);
+  render(<MarketData />);
+  await waitFor(() => expect(fetcher).toHaveBeenCalledWith(expect.stringContaining("sector=none"), expect.anything()));
+  expect(await screen.findByText("No instruments match these filters.")).toBeInTheDocument();
+});
+
+it("embeds the indexes dashboard as a tab without a second page heading", async () => {
+  window.history.replaceState(null, "", "/market-data?view=indexes");
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => response(url.includes("/sectors/performance")
+    ? { as_of: null, weighting: "cw", periods: [], sectors: [], benchmarks: {} }
+    : { tracked: [{ code: "$SPX", name: "S&P 500", group: "index", value: null, change: null, trade_date: null, complete: false }], constructed: [], sectors: [], base_date: "2016-01-04", universe: "r3k_iwv" })));
+  render(<MarketData />);
+  expect(screen.getByRole("button", { name: "Indexes" })).toHaveAttribute("aria-pressed", "true");
+  expect(await screen.findByText("S&P 500")).toBeInTheDocument();
+  expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+});

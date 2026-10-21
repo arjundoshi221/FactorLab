@@ -55,6 +55,8 @@ class Instrument(BaseModel):
     expiry: date | None = None
     strike: str | None = None
     right: str = ""
+    sector_id: str = ""
+    sector: str = ""
 
 
 class InstrumentPage(BaseModel):
@@ -62,6 +64,18 @@ class InstrumentPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class SectorCount(BaseModel):
+    sector_id: str
+    sector: str
+    count: int
+
+
+class SectorSummary(BaseModel):
+    items: list[SectorCount]
+    unclassified: int
+    total: int
 
 
 class Dataset(BaseModel):
@@ -127,6 +141,41 @@ def inventory_sql() -> str:
         LEFT JOIN ref.entities AS e FINAL ON e.entity_id = s.entity_id"""
 
 
+def current_sector_sql() -> str:
+    # Current GICS sector per listing (ADR-0017); contracts inherit their underlying's.
+    return """SELECT h.listing_id AS listing_id, any(h.sector_id) AS sector_id,
+        any(n.name) AS sector
+        FROM ref.security_sector_history AS h FINAL
+        LEFT JOIN (SELECT sector_id, any(name) AS name FROM ref.sectors FINAL
+            WHERE classification = 'gics' GROUP BY sector_id) AS n ON n.sector_id = h.sector_id
+        WHERE h.classification = 'gics' AND h.effective_to IS NULL
+        GROUP BY h.listing_id"""
+
+
+def sectored_inventory_sql() -> str:
+    # An unclassified listing has '' for both sector columns.
+    return f"""SELECT i.*, ifNull(cs.sector_id, '') AS sector_id, ifNull(cs.sector, '') AS sector
+        FROM ({inventory_sql()}) AS i
+        LEFT JOIN ({current_sector_sql()}) AS cs ON cs.listing_id = i.listing_id"""
+
+
+INVENTORY_WHERE = """WHERE ({search:String} = '' OR positionCaseInsensitiveUTF8(symbol, {search:String}) > 0
+    OR positionCaseInsensitiveUTF8(name, {search:String}) > 0 OR toString(id) = {search:String}
+    OR tuple(kind, id) IN (SELECT target_kind, target_id FROM ref.identifier_aliases FINAL
+        WHERE positionCaseInsensitiveUTF8(alias_value, {search:String}) > 0)
+    OR security_id IN (SELECT target_id FROM ref.identifier_aliases FINAL
+        WHERE target_kind = 'security' AND positionCaseInsensitiveUTF8(alias_value, {search:String}) > 0)
+    OR entity_id IN (SELECT target_id FROM ref.identifier_aliases FINAL
+        WHERE target_kind = 'entity' AND positionCaseInsensitiveUTF8(alias_value, {search:String}) > 0))
+    AND ({country:String} = '' OR country = {country:String})
+    AND ({exchange:String} = '' OR exchange = {exchange:String})
+    AND ({instrument_type:String} = '' OR instrument_type = {instrument_type:String})
+    AND ({active:String} = 'all' OR active = ({active:String} = 'yes'))
+    AND ({configured:String} = 'all' OR configured = ({configured:String} = 'yes'))
+    AND ({kind:String} = 'all' OR kind = {kind:String})
+    AND ({sector:String} = '' OR sector_id = if({sector:String} = 'none', '', {sector:String}))"""
+
+
 def scope(dataset: dict[str, Any], kind: Kind) -> tuple[str, str]:
     rules = dataset["relationships"].get(kind, [])
     if not rules:
@@ -168,6 +217,9 @@ class InstrumentRepository:
         configured: str,
         limit: int,
         offset: int,
+        *,
+        sector: str = "",
+        kind: str = "all",
     ) -> InstrumentPage:
         params: dict[str, Any] = {
             "search": search,
@@ -176,23 +228,12 @@ class InstrumentRepository:
             "instrument_type": instrument_type,
             "active": active,
             "configured": configured,
+            "kind": kind,
+            "sector": sector,
             "limit": limit,
             "offset": offset,
         }
-        where = """WHERE ({search:String} = '' OR positionCaseInsensitiveUTF8(symbol, {search:String}) > 0
-            OR positionCaseInsensitiveUTF8(name, {search:String}) > 0 OR toString(id) = {search:String}
-            OR tuple(kind, id) IN (SELECT target_kind, target_id FROM ref.identifier_aliases FINAL
-                WHERE positionCaseInsensitiveUTF8(alias_value, {search:String}) > 0)
-            OR security_id IN (SELECT target_id FROM ref.identifier_aliases FINAL
-                WHERE target_kind = 'security' AND positionCaseInsensitiveUTF8(alias_value, {search:String}) > 0)
-            OR entity_id IN (SELECT target_id FROM ref.identifier_aliases FINAL
-                WHERE target_kind = 'entity' AND positionCaseInsensitiveUTF8(alias_value, {search:String}) > 0))
-            AND ({country:String} = '' OR country = {country:String})
-            AND ({exchange:String} = '' OR exchange = {exchange:String})
-            AND ({instrument_type:String} = '' OR instrument_type = {instrument_type:String})
-            AND ({active:String} = 'all' OR active = ({active:String} = 'yes'))
-            AND ({configured:String} = 'all' OR configured = ({configured:String} = 'yes'))"""
-        base = f"FROM ({inventory_sql()}) {where}"
+        base = f"FROM ({sectored_inventory_sql()}) {INVENTORY_WHERE}"
         total = self.query(f"SELECT count() AS total {base}", params)[0]["total"]
         rows = self.query(
             f"SELECT * {base} ORDER BY symbol, exchange, kind, id LIMIT {{limit:UInt16}} OFFSET {{offset:UInt32}}",
@@ -200,6 +241,32 @@ class InstrumentRepository:
         )
         return InstrumentPage(
             items=[Instrument(**r) for r in rows], total=total, limit=limit, offset=offset
+        )
+
+    def sectors(self, search: str, country: str, active: str, configured: str) -> SectorSummary:
+        """Listing counts per current GICS sector under the same filters as the inventory."""
+        params: dict[str, Any] = {
+            "search": search,
+            "country": country,
+            "exchange": "",
+            "instrument_type": "",
+            "active": active,
+            "configured": configured,
+            "kind": "listing",
+            "sector": "",
+        }
+        rows = self.query(
+            f"""SELECT sector_id, any(sector) AS sector, count() AS count
+                FROM ({sectored_inventory_sql()}) {INVENTORY_WHERE}
+                GROUP BY sector_id ORDER BY sector, sector_id""",
+            params,
+        )
+        items = [SectorCount(**r) for r in rows if r["sector_id"]]
+        unclassified = sum(int(r["count"]) for r in rows if not r["sector_id"])
+        return SectorSummary(
+            items=items,
+            unclassified=unclassified,
+            total=unclassified + sum(i.count for i in items),
         )
 
     def instrument(self, kind: Kind, id: UUID) -> Instrument:
@@ -517,13 +584,38 @@ def instruments(
     instrument_type: Annotated[str, Query(max_length=50)] = "",
     active: Literal["all", "yes", "no"] = "all",
     configured: Literal["all", "yes", "no"] = "all",
+    sector: Annotated[str, Query(max_length=20, pattern=r"^(none|[0-9]{0,8})$")] = "",
+    kind: Literal["all", "listing", "contract"] = "all",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0, le=1000000)] = 0,
 ) -> InstrumentPage:
     try:
         return repo.inventory(
-            search.strip(), country, exchange, instrument_type, active, configured, limit, offset
+            search.strip(),
+            country,
+            exchange,
+            instrument_type,
+            active,
+            configured,
+            limit,
+            offset,
+            sector=sector,
+            kind=kind,
         )
+    except CatalogError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+
+
+@router.get("/sectors", response_model=SectorSummary)
+def sectors(
+    repo: Repo,
+    search: Annotated[str, Query(max_length=200)] = "",
+    country: Annotated[str, Query(max_length=2)] = "US",
+    active: Literal["all", "yes", "no"] = "all",
+    configured: Literal["all", "yes", "no"] = "all",
+) -> SectorSummary:
+    try:
+        return repo.sectors(search.strip(), country, active, configured)
     except CatalogError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
 

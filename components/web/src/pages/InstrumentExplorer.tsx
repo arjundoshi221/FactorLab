@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { errorMessage, fetchJson } from "../shared/api";
-import type { Dataset, DatasetResult, Identity, Instrument, InstrumentPage } from "../instrumentTypes";
+import type { Dataset, DatasetResult, Identity, Instrument, InstrumentPage, SectorSummary } from "../instrumentTypes";
 import { AtAGlance, DataMatrix } from "./DataMatrix";
+import { Futures } from "./Futures";
+import { Indexes } from "./Indexes";
 import { CollectionCoverage } from "./MarketData";
 import "./InstrumentExplorer.css";
 
@@ -12,9 +14,12 @@ const cell = (v: unknown) => v === null || v === undefined ? "—" : typeof v ==
 const states = { stored: "Stored data", empty: "No matching records", missing_table: "Missing table", unavailable: "Query unavailable", unsupported: "Unsupported linkage" };
 const PAGE = 50;
 
-type View = "all" | "matrix" | "collection";
+type View = "all" | "sectors" | "indexes" | "futures" | "matrix" | "collection";
 const views: { key: View; title: string; intro: string }[] = [
   { key: "all", title: "All tickers", intro: "Every registered listing and derivative contract, including inactive instruments and instruments without collected data. Select one to see everything stored for it." },
+  { key: "sectors", title: "By sector", intro: "Every listing grouped by its current GICS sector (iShares IWV holdings). Expand a sector to see its tickers; listings without a sector are grouped as unclassified." },
+  { key: "indexes", title: "Indexes", intro: "Official US indexes, plus FactorLab's own GICS sector indexes over the Russell 3000 proxy, equal- and cap-weighted." },
+  { key: "futures", title: "Futures", intro: "US futures curves: each recorded root's live contracts in expiry order at the latest Schwab quote, with the contract table. No rolls or back-adjustment." },
   { key: "matrix", title: "Data matrix", intro: "Each FactorLab ticker against each dataset. Bars are judged against the exchange's latest completed session; holdings, trades and tags follow the account owner's profile. Select a ticker to see everything linked to it." },
   { key: "collection", title: "Collection coverage", intro: "Every ticker configured for collection in the US and India, with the bars stored for each in daily collection and historical recovery." },
 ];
@@ -183,20 +188,66 @@ function AllTickers({ params, update, select }: { params: URLSearchParams; updat
     {!data && !error && <p role="status" className="md-loading">Loading instruments…</p>}
     {data && <>
       <p className="md-count"><strong>{data.total.toLocaleString()}</strong> instruments</p>
-      <div className="md-table"><table><thead><tr><th>Instrument</th><th>Company</th><th>Country / type</th><th>Status</th><th>Collection</th></tr></thead>
-        <tbody>{data.items.map(i => <tr key={`${i.kind}/${i.id}`} className={selectedId === i.id ? "is-selected" : ""}>
-          <td data-label="Instrument"><button type="button" className="md-symbol" onClick={() => select(i)}>{label(i)}</button>{i.kind === "contract" && <small>Contract</small>}</td>
-          <td data-label="Company">{i.name || "—"}</td>
-          <td data-label="Country / type">{i.country} / {i.instrument_type}</td>
-          <td data-label="Status"><Pill tone={i.active ? "healthy" : undefined}>{i.active ? "Active" : "Inactive"}</Pill></td>
-          <td data-label="Collection">{i.configured ? <Pill tone="healthy">Configured</Pill> : <span className="md-muted">Not configured</span>}</td>
-        </tr>)}</tbody></table>
-        {!data.items.length && <p className="md-empty">No instruments match these filters.</p>}
-      </div>
-      <div className="md-pager"><span>{data.total ? `${(offset + 1).toLocaleString()}–${Math.min(offset + PAGE, data.total).toLocaleString()} of ${data.total.toLocaleString()}` : "0 results"}</span><div>
-        <button type="button" className="md-ghost" disabled={offset === 0} onClick={() => update({ offset: String(Math.max(0, offset - PAGE)) })}>Previous instruments</button>
-        <button type="button" className="md-ghost" disabled={offset + PAGE >= data.total} onClick={() => update({ offset: String(offset + PAGE) })}>Next instruments</button>
-      </div></div>
+      <InstrumentTable data={data} offset={offset} selectedId={selectedId} select={select} page={value => update({ offset: String(value) })} />
+    </>}
+  </>;
+}
+
+function InstrumentTable({ data, offset, selectedId, select, page }: {
+  data: InstrumentPage; offset: number; selectedId: string | null; select: (i: Instrument) => void; page: (offset: number) => void;
+}) {
+  return <>
+    <div className="md-table"><table><thead><tr><th>Instrument</th><th>Company</th><th>Country / type</th><th>Sector</th><th>Status</th><th>Collection</th></tr></thead>
+      <tbody>{data.items.map(i => <tr key={`${i.kind}/${i.id}`} className={selectedId === i.id ? "is-selected" : ""}>
+        <td data-label="Instrument"><button type="button" className="md-symbol" onClick={() => select(i)}>{label(i)}</button>{i.kind === "contract" && <small>Contract</small>}</td>
+        <td data-label="Company">{i.name || "—"}</td>
+        <td data-label="Country / type">{i.country} / {i.instrument_type}</td>
+        <td data-label="Sector">{i.sector || <span className="md-muted">Unclassified</span>}</td>
+        <td data-label="Status"><Pill tone={i.active ? "healthy" : undefined}>{i.active ? "Active" : "Inactive"}</Pill></td>
+        <td data-label="Collection">{i.configured ? <Pill tone="healthy">Configured</Pill> : <span className="md-muted">Not configured</span>}</td>
+      </tr>)}</tbody></table>
+      {!data.items.length && <p className="md-empty">No instruments match these filters.</p>}
+    </div>
+    <div className="md-pager"><span>{data.total ? `${(offset + 1).toLocaleString()}–${Math.min(offset + PAGE, data.total).toLocaleString()} of ${data.total.toLocaleString()}` : "0 results"}</span><div>
+      <button type="button" className="md-ghost" disabled={offset === 0} onClick={() => page(Math.max(0, offset - PAGE))}>Previous instruments</button>
+      <button type="button" className="md-ghost" disabled={offset + PAGE >= data.total} onClick={() => page(offset + PAGE)}>Next instruments</button>
+    </div></div>
+  </>;
+}
+
+function BySector({ params, update, select }: { params: URLSearchParams; update: (values: Record<string, string>) => void; select: (i: Instrument) => void }) {
+  const filters = new URLSearchParams({ country: params.get("country") || "US" });
+  for (const key of ["search", "active", "configured"]) if (params.get(key)) filters.set(key, params.get(key)!);
+  const { data, error } = useLoad<SectorSummary>(`/hub/api/v1/market-data/sectors?${filters}`);
+  const open = params.get("sector");
+  const offset = Math.max(0, Number(params.get("offset")) || 0);
+  const members = new URLSearchParams(filters);
+  if (open) { members.set("kind", "listing"); members.set("sector", open); if (offset) members.set("offset", String(offset)); }
+  const listing = useLoad<InstrumentPage>(open ? `${base}?${members}` : null);
+  const groups = data ? [...data.items, ...(data.unclassified ? [{ sector_id: "none", sector: "Unclassified", count: data.unclassified }] : [])] : [];
+  return <>
+    <div className="instrument-filters">
+      <label className="instrument-filters__search">Search symbol, company, UUID or alias<input type="search" placeholder="e.g. AAPL or Microsoft" value={params.get("search") ?? ""} onChange={e => update({ search: e.target.value, offset: "" })} /></label>
+      <label>Country<input type="text" placeholder="US" value={params.get("country") ?? ""} onChange={e => update({ country: e.target.value, offset: "" })} /></label>
+      {[["active", "Active status"], ["configured", "Collection membership"]].map(([key, title]) => <label key={key}>{title}<select value={params.get(key) ?? "all"} onChange={e => update({ [key]: e.target.value, offset: "" })}><option value="all">All</option><option value="yes">{key === "active" ? "Active" : "Configured"}</option><option value="no">{key === "active" ? "Inactive" : "Not configured"}</option></select></label>)}
+    </div>
+    {error && <p role="alert" className="notice notice--error">{error}</p>}
+    {!data && !error && <p role="status" className="md-loading">Loading sectors…</p>}
+    {data && <>
+      <p className="md-count"><strong>{data.total.toLocaleString()}</strong> listings in <strong>{data.items.length}</strong> sectors</p>
+      {!groups.length && <p className="md-empty">No listings match these filters.</p>}
+      <div className="md-sectors">{groups.map(group => <details key={group.sector_id} className="md-sector" open={open === group.sector_id}>
+        <summary onClick={event => { event.preventDefault(); update({ sector: open === group.sector_id ? "" : group.sector_id, offset: "" }); }}>
+          <span className="md-sector__name">{group.sector}</span>
+          {group.sector_id !== "none" && <code className="md-sector__code">GICS {group.sector_id}</code>}
+          <span className="md-sector__count">{group.count.toLocaleString()}</span>
+        </summary>
+        {open === group.sector_id && <div className="md-sector__body">
+          {listing.error && <p role="alert" className="notice notice--error">{listing.error}</p>}
+          {!listing.data && !listing.error && <p role="status" className="md-loading">Loading {group.sector} listings…</p>}
+          {listing.data && <InstrumentTable data={listing.data} offset={offset} selectedId={params.get("id")} select={select} page={value => update({ offset: String(value) })} />}
+        </div>}
+      </details>)}</div>
     </>}
   </>;
 }
@@ -210,7 +261,8 @@ export function MarketData() {
     for (const [k, v] of Object.entries(values)) { if (v) next.set(k, v); else next.delete(k); }
     window.history.pushState(null, "", `${window.location.pathname}?${next}`); setQuery(`?${next}`);
   }
-  const view: View = params.get("view") === "collection" ? "collection" : params.get("view") === "matrix" ? "matrix" : "all";
+  const requested = params.get("view");
+  const view: View = views.find(v => v.key === requested)?.key ?? "all";
   const select = (i: Instrument) => update({ kind: i.kind, id: i.id });
   const close = () => update({ kind: "", id: "" });
   const current = views.find(v => v.key === view)!;
@@ -223,10 +275,12 @@ export function MarketData() {
     </section>
     <nav className="md-tabs" aria-label="Market Data views">{views.map(v =>
       <button key={v.key} type="button" aria-pressed={view === v.key} className={view === v.key ? "is-active" : ""}
-        onClick={() => update({ view: v.key === "all" ? "" : v.key, offset: "" })}>{v.title}</button>)}
+        onClick={() => update({ view: v.key === "all" ? "" : v.key, offset: "", sector: "", group: "", root: "" })}>{v.title}</button>)}
     </nav>
-    {view === "collection" ? <CollectionCoverage /> : <>
-      {view === "matrix" ? <DataMatrix params={params} update={update} select={select} /> : <AllTickers params={params} update={update} select={select} />}
+    {view === "collection" ? <CollectionCoverage /> : view === "indexes" ? <Indexes embedded /> : view === "futures" ? <Futures embedded /> : <>
+      {view === "matrix" ? <DataMatrix params={params} update={update} select={select} />
+        : view === "sectors" ? <BySector params={params} update={update} select={select} />
+        : <AllTickers params={params} update={update} select={select} />}
       {kind && id && <Detail key={`${kind}/${id}`} kind={kind} id={id} select={select} close={close} />}
     </>}
   </main>;
