@@ -14,6 +14,14 @@ values.
 
 ## Server
 
+Schema waves 14 and 15, 2026-10-21 ~16:30 UTC: applied exactly `wave_14_schema_indexes`
+(F-042) and `wave_15_schema_futures_quotes` (F-043, `market.futures_quotes`) with the
+reviewed runner given only those two IDs, from a `schema-migrator` image built from
+`06b96e9`; both journal entries `succeeded`. `wave_10_schema_source_priorities`,
+`wave_10_views_source_priorities` and `wave_08_rbac` remain pending (not authorized).
+No containers changed. A manual `futures-us` plan (`deployment-tests/20261021-06b96e9`)
+was validated but not applied; the deploy moves to the automated ingestion trial.
+
 Market Data rollouts, 2026-10-19: UI trial `ui-trial/208af21cd7f3` (Market Data page
 redesign, [workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/39277105860)),
 then `ui-trial/29bda76225d5` (unresolved political trades link by filing ticker; committees
