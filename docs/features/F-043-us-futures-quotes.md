@@ -64,3 +64,6 @@ streaming recorder that would deliver 1-minute futures bars (F-021) is unbuilt a
   showed a root is answered by its active contract keyed by the contract symbol (no
   `futureActiveSymbol`), so no root resolved and every roster refresh failed; `/VX` and
   `/DX` return `invalidSymbols` and left the roster (14 roots). Fixed forward.
+- 2026-10-21: the session-close query aliased `max(observed_at)` as `observed_at`
+  (ClickHouse ILLEGAL_AGGREGATION); fixed in `c44df22`. Recording live: 28 contracts
+  quoted every minute into `market.futures_quotes`.

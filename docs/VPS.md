@@ -14,6 +14,13 @@ values.
 
 ## Server
 
+US futures recording live, 2026-10-21 18:11 UTC: `ingest-trial/futures-us/c44df227d860`
+([workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/39650232958), success)
+replaced only `futures-us` (image `0.0.0-trial.c44df227d860`). Roster refreshes and quote
+polls succeed (`us_futures_roster`, `us_futures_quotes` runs `success`); at 18:14 UTC
+`market.futures_quotes` held 1,054 rows for 28 contracts (14 roots x front and next).
+The first daily bars are due after the 17:00 New York close (21:00 UTC).
+
 US futures trial, 2026-10-21 17:25 UTC: `ingest-trial/futures-us/62ebd99e91cf`
 ([workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/39643400484), success)
 added only `futures-us` (image `0.0.0-trial.62ebd99e91cf`); `ingest-us`, `universe-us`,
