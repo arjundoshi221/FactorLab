@@ -10,15 +10,26 @@ api-candidate and web containers. It does not change main or ingestion services.
 With -Trial political, the political-trial/<short SHA> tag starts
 branch-political-deploy.yml instead: it installs the ingest-political image and
 applies the identity repair (docs/operations/identity-repair.md).
+
+With -Trial ingest -Scope <scope>, the ingest-trial/<scope>/<short SHA> tag starts
+branch-ingest-deploy.yml: it plans, applies and verifies one ingestion scope through
+deploy/testing/ingest_trial.py (futures-us adds only the futures-us service). Apply
+any schema wave the image needs first; the trial never migrates.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet("ui", "political")]
-    [string]$Trial = "ui"
+    [ValidateSet("ui", "political", "ingest")]
+    [string]$Trial = "ui",
+    [ValidateSet("futures-us", "ingest-us", "ingest-india", "ingest-broker")]
+    [string]$Scope
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+if (($Trial -eq "ingest") -ne [bool]$Scope) {
+    throw "-Scope is required with -Trial ingest and only valid there."
+}
 
 $repoRoot = (& git rev-parse --show-toplevel).Trim()
 if ($LASTEXITCODE -ne 0 -or -not $repoRoot) { throw "Run from a Git worktree." }
@@ -44,7 +55,7 @@ try {
     })
     if ($green.Count -eq 0) { throw "CI has not passed for $commit." }
     $short = $commit.Substring(0, 12)
-    $tag = "$Trial-trial/$short"
+    $tag = if ($Scope) { "ingest-trial/$Scope/$short" } else { "$Trial-trial/$short" }
     & git show-ref --verify --quiet "refs/tags/$tag"
     if ($LASTEXITCODE -eq 0) { throw "Trial tag already exists locally: $tag" }
     if ($LASTEXITCODE -ne 1) { throw "Could not check local tags." }

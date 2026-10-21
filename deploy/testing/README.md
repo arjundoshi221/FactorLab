@@ -54,6 +54,29 @@ directory `/opt/factorlab/deployment-tests/political-<SHA>/` keeps `before.json`
 `candidate.json`, `retire-plan.json` and `repair.json`; `political_test.py restore
 political-<SHA>` reinstalls the preceding model (image only, not data).
 
+## Automated ingestion trial
+
+`./deploy/release-ui-trial.ps1 -Trial ingest -Scope <scope>` (scope `futures-us`,
+`ingest-us`, `ingest-india` or `ingest-broker`) pushes `ingest-trial/<scope>/<12-char SHA>`
+from the CI-green tip of `restructure/deploy-market-data-ui` and starts
+[branch-ingest-deploy.yml](../../.github/workflows/branch-ingest-deploy.yml). It builds and
+publishes the unit image (`0.0.0-trial.<SHA>`) through the image workflow, transfers
+[`ingest_trial.py`](ingest_trial.py), `ingestion_test.py` and the commit's
+`deploy/compose.production.yml`, and on the host under the release lock:
+
+1. creates `/opt/factorlab/deployment-tests/<YYYYMMDD>-<SHA>/` (root-only) with a backup of
+   the live deployment directory;
+2. pulls the image by digest, checks component, revision, version and UID 10001, and tags
+   it `factorlab-test-<unit>:<test-id>`;
+3. runs `ingestion_test` `plan`, `apply` and `verify` for the scope (the manual steps
+   below). A startup failure restores the preceding model.
+
+The job summary reports plan, verification, recovery and the running services, plus the
+restore command (`ingest_trial.py restore <test-id>` in the trial directory). Schema
+migrations are never run: apply any wave the image needs first. The image version is
+immutable, so one commit gets one trial per image unit (`futures-us` and `ingest-us`
+share the `ingest-us` image); push a new commit for another scope.
+
 ## Ingestion trial
 
 This is an owner-authorized exception for testing ingestion component images on
