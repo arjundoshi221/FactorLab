@@ -304,7 +304,9 @@ def main(argv: list[str] | None = None) -> int:
                         source=STATUS_SOURCE,
                     )
                 except JOB_ERRORS as exc:
-                    log.error("Futures tick failed: %s", type(exc).__name__)
+                    log.error(
+                        "Futures tick failed: %s: %s", type(exc).__name__, redact(str(exc))[:240]
+                    )
                     monitor_client("futures-us").error(
                         "futures_tick_failed",
                         redact(str(exc))[:240],

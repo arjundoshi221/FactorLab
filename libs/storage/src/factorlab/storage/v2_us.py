@@ -407,7 +407,9 @@ class V2USStorage(V2IndiaStorage):
                 "argMax(last_price, observed_at) AS last_price, "
                 "argMax(day_volume, observed_at) AS day_volume, "
                 "argMax(oi, observed_at) AS oi, argMax(raw_id, observed_at) AS raw_id, "
-                "max(observed_at) AS observed_at "
+                # Not "AS observed_at": the alias would shadow the column inside the
+                # argMax calls above (ClickHouse ILLEGAL_AGGREGATION).
+                "max(observed_at) AS last_observed_at "
                 "FROM market.futures_quotes FINAL "
                 "WHERE country_code = 'US' AND source = {source:String} "
                 "AND trade_date = {day:Date} GROUP BY contract_id",
