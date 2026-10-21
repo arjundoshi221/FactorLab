@@ -10,8 +10,8 @@
 # are stored as Decimal(18,6), so adjacent ticks could collapse into one value.
 # /ZT and /ZF ticks also exceed 6 decimals, but they are coarse enough that the
 # rounded price still identifies the tick.
-# /DX trades on ICE US; Schwab may not quote it without an ICE data agreement, in
-# which case it is logged and skipped.
+# /VX (Cboe CFE) and /DX (ICE US) are left out: on 2026-10-21 Schwab answered both
+# roots with errors.invalidSymbols, so this account has no quotes for those venues.
 version: 1
 roots:
   # Equity index
@@ -31,8 +31,5 @@ roots:
   - {root: /ZF, mic: XCBT, product_type: rate_future, months: HMUZ, name: 5-Year T-Note}
   - {root: /ZN, mic: XCBT, product_type: rate_future, months: HMUZ, name: 10-Year T-Note}
   - {root: /ZB, mic: XCBT, product_type: rate_future, months: HMUZ, name: U.S. Treasury Bond}
-  # Volatility
-  - {root: /VX, mic: XCBF, product_type: vol_future, months: FGHJKMNQUVXZ, name: Cboe VIX futures}
   # FX
   - {root: /6E, mic: XCME, product_type: fx_future, months: HMUZ, name: Euro FX}
-  - {root: /DX, mic: IFUS, product_type: fx_future, months: HMUZ, name: US Dollar Index}

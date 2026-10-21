@@ -141,8 +141,9 @@ def _count(value: Any) -> int | None:
 
 
 def _price(value: Any) -> Decimal | None:
+    # Schwab reports 0.0 for a level it does not have (an untraded month's open/high/low).
     number = _decimal(value)
-    return number if number is not None and number >= 0 else None
+    return number if number is not None and number > 0 else None
 
 
 def _futures(payload: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
@@ -158,6 +159,26 @@ def _futures(payload: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
         and value.get("assetMainType") == "FUTURE"
         and str(key).upper() not in invalid
     }
+
+
+def _root_item(
+    quotes: Mapping[str, Mapping[str, Any]], root: FuturesRoot
+) -> tuple[str, Mapping[str, Any]] | None:
+    """The quote Schwab returned for ``root``: its active contract, keyed by that symbol.
+
+    Quoting ``/ES`` answers with ``/ESZ26`` (``reference.product == "/ES"``,
+    ``futureIsActive``), not with an ``/ES`` key; a root key is still accepted.
+    """
+    if (item := quotes.get(root.root)) is not None:
+        return str(item.get("symbol") or root.root).upper(), item
+    for symbol, item in quotes.items():
+        reference = item.get("reference") or {}
+        if (
+            str(reference.get("product") or "").upper() == root.root
+            and reference.get("futureIsActive") is True
+        ):
+            return symbol, item
+    return None
 
 
 def _roots(capture: RawCapture) -> list[FuturesRoot]:
@@ -179,13 +200,13 @@ def normalize_futures_roots(capture: RawCapture) -> list[InstrumentRecord]:
     quotes = _futures(_payload(capture))
     records: list[InstrumentRecord] = []
     for root in _roots(capture):
-        item = quotes.get(root.root)
-        if item is None:
+        found = _root_item(quotes, root)
+        if found is None:
             log.warning(
                 "%s: Schwab returned no quote for futures root %s", capture.request_key, root.root
             )
             continue
-        reference = item.get("reference") or {}
+        reference = found[1].get("reference") or {}
         records.append(
             InstrumentRecord(
                 root.ref(),
@@ -201,9 +222,8 @@ def normalize_futures_roots(capture: RawCapture) -> list[InstrumentRecord]:
 def _contract_rows(
     root: FuturesRoot, quotes: Mapping[str, Mapping[str, Any]], today: date
 ) -> Iterator[ContractRecord]:
-    active = str(
-        ((quotes.get(root.root) or {}).get("reference") or {}).get("futureActiveSymbol") or ""
-    )
+    found = _root_item(quotes, root)
+    active = found[0] if found is not None else ""
     dated: list[tuple[date, str, Mapping[str, Any]]] = []
     for symbol, item in quotes.items():
         parsed = parse_contract(symbol)
@@ -217,7 +237,7 @@ def _contract_rows(
         if expiry >= today:
             dated.append((expiry, symbol, item))
     dated.sort()
-    active_expiry = next((expiry for expiry, symbol, _ in dated if symbol == active.upper()), None)
+    active_expiry = next((expiry for expiry, symbol, _ in dated if symbol == active), None)
     if active_expiry is not None:
         dated = [row for row in dated if row[0] >= active_expiry]
     for expiry, symbol, item in dated[: root.depth]:

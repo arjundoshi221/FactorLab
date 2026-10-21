@@ -36,11 +36,15 @@ EXPIRIES = {
 
 
 def item(symbol: str) -> dict:
-    reference = {"futureMultiplier": 50, "futureSettlementPrice": 5795.5}
-    if symbol == "/ES":
-        reference["futureActiveSymbol"] = "/ESZ26"
-    else:
-        reference["futureExpirationDate"] = expiring(EXPIRIES[symbol])
+    # Schwab's shape (production, 2026-10-21): every contract names its root in
+    # `product`; only the active one has futureIsActive.
+    reference = {
+        "product": "/ES",
+        "futureIsActive": symbol == "/ESZ26",
+        "futureMultiplier": 50,
+        "futureSettlementPrice": 5795.5,
+        "futureExpirationDate": expiring(EXPIRIES[symbol]),
+    }
     return {
         "assetMainType": "FUTURE",
         "symbol": symbol,
@@ -66,7 +70,9 @@ def client_and_sink():
     def get(url, **kwargs):
         assert url.endswith("/marketdata/v1/quotes")
         symbols = kwargs["params"]["symbols"].split(",")
-        payload = {s: item(s) for s in symbols if s == "/ES" or s in EXPIRIES}
+        # A root answers with its active contract, keyed by the contract symbol.
+        wanted = {"/ESZ26" if s == "/ES" else s for s in symbols}
+        payload = {s: item(s) for s in wanted if s in EXPIRIES}
         return Mock(content=json.dumps(payload).encode(), status_code=200, headers={})
 
     http.get.side_effect = get

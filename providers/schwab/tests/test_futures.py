@@ -1,7 +1,9 @@
 """US futures from Schwab quotes (F-043): symbols, discovery, quote normalization.
 
-Payloads are hand-built in Schwab's QuoteFuture/ReferenceFuture shape. They are unit
-inputs, not conformance fixtures: those wait for a recorded production capture.
+Payloads are hand-built in the shape of production responses seen on 2026-10-21: a
+root is answered by its active contract keyed by the contract symbol (``product`` names
+the root, ``futureIsActive`` marks it), and an untraded level is ``0.0``. They are unit
+inputs, not conformance fixtures.
 """
 
 from __future__ import annotations
@@ -43,8 +45,14 @@ def millis(day: date, hour: int = 12) -> int:
     return int(datetime(day.year, day.month, day.day, hour, tzinfo=NY).timestamp() * 1000)
 
 
-def future(symbol: str, expiry: date | None = None, **quote: Any) -> dict[str, Any]:
-    reference: dict[str, Any] = {"product": symbol[:3], "futureMultiplier": 50}
+def future(
+    symbol: str, expiry: date | None = None, *, active: bool = False, **quote: Any
+) -> dict[str, Any]:
+    reference: dict[str, Any] = {
+        "product": symbol[:3],
+        "futureIsActive": active,
+        "futureMultiplier": 50,
+    }
     if expiry is not None:
         reference["futureExpirationDate"] = millis(expiry, 9)
     return {
@@ -121,16 +129,15 @@ def test_contract_plan_keeps_each_root_in_one_capture_and_respects_the_batch() -
 
 def test_discovery_starts_at_the_active_contract_and_skips_unquoted_roots() -> None:
     # Mid-September: the September contract still trades, but December is active.
+    # Quoting /ES returns no "/ES" key: its active contract (/ESZ26) stands in for it.
     payload = {
-        "/ES": future("/ES"),
         "/ESU26": future("/ESU26", date(2026, 9, 18)),
-        "/ESZ26": future("/ESZ26", date(2026, 12, 18)),
+        "/ESZ26": future("/ESZ26", date(2026, 12, 18), active=True),
         "/ESH27": future("/ESH27", date(2027, 3, 19)),
         "/ESM27": future("/ESM27", date(2027, 6, 18)),
         "/ESU25": future("/ESU25", date(2025, 9, 19)),  # long expired: ignored
         "errors": {"invalidSymbols": ["/DX", "/DXU26", "/DXZ26"]},
     }
-    payload["/ES"]["reference"]["futureActiveSymbol"] = "/ESZ26"
     rows = normalize_futures_contracts(capture(payload, roots=[ES.to_mapping(), DX.to_mapping()]))
     assert [(r.ref.alias_value, r.expiry) for r in rows] == [
         ("/ESZ26", date(2026, 12, 18)),
@@ -156,7 +163,12 @@ def test_discovery_without_an_active_symbol_takes_the_nearest_live_contracts() -
 
 
 def test_roots_become_listings_named_from_the_roster() -> None:
-    payload = {"/ES": future("/ES"), "/CL": future("/CL")}
+    payload = {
+        "/ESZ26": future("/ESZ26", active=True),
+        "/ESH27": future("/ESH27"),  # same product, not active: not the root's quote
+        "/CLZ26": future("/CLZ26", active=True),
+        "errors": {"invalidSymbols": ["/DX"]},
+    }
     rows = normalize_futures_roots(
         capture(payload, roots=[ES.to_mapping(), CL.to_mapping(), DX.to_mapping()])
     )
@@ -173,7 +185,11 @@ def test_listing_source_plans_and_normalizes_futures_roots() -> None:
     )
     assert unit.params["roots"] == [ES.to_mapping()]
     rows = source.normalize(
-        capture({"/ES": future("/ES")}, roots=[ES.to_mapping()], endpoint="futures_roots")
+        capture(
+            {"/ESZ26": future("/ESZ26", active=True)},
+            roots=[ES.to_mapping()],
+            endpoint="futures_roots",
+        )
     )
     assert [r.ref.alias_value for r in rows] == ["/ES"]
 
@@ -241,3 +257,21 @@ def test_quote_source_batches_contracts_with_their_venues() -> None:
     )
     assert [len(u.params["contracts"]) for u in units] == [50, 10]
     assert units[1].instruments[0].exchange_code == "XCME"
+
+
+def test_a_zero_level_is_missing_not_a_price() -> None:
+    # An untraded month: Schwab reports open/high/low as 0.0 next to a real last price.
+    payload = {
+        "/ESM27": future(
+            "/ESM27",
+            date(2027, 6, 18),
+            lastPrice=7847.5,
+            openPrice=0.0,
+            highPrice=0.0,
+            lowPrice=0.0,
+            bidPrice=7960.0,
+        )
+    }
+    [row] = normalize_futures_quotes(capture(payload, contracts={"/ESM27": "XCME"}))
+    assert (row.day_open, row.day_high, row.day_low) == (None, None, None)
+    assert (row.last_price, row.bid) == (Decimal("7847.5"), Decimal("7960.0"))

@@ -117,18 +117,22 @@ Only access tokens (`SCHWAB_ACCESS_TOKEN` and `SCHWAB_ACCESS_TOKEN_<ID>`) reach 
 - **Roots.** `SchwabListings` with `params.mode: futures_roots` emits one
   `ref.listings` record per quoted root.
 - **Contracts.** `SchwabFuturesContracts` (`ref.contracts`) quotes each root together
-  with its next `depth + 2` cycle contracts. It keeps the root's `futureActiveSymbol`
-  and the next ones by `futureExpirationDate`, up to `depth`. `params.as_of` supplies
+  with its next `depth + 2` cycle contracts. It keeps the root's active contract (the
+  quote whose `reference.product` is the root and `futureIsActive` is true; Schwab keys
+  it by the contract symbol, not the root) and the next ones by
+  `futureExpirationDate`, up to `depth`. `params.as_of` supplies
   the date, so `plan` stays pure.
 - **Snapshots.** `SchwabFuturesQuotes` (`market.futures_quotes`) maps
   `params.contracts` (symbol -> MIC) to `ContractQuoteRecord`s. `observed_at` is the
   vendor `quoteTime`, falling back to `tradeTime` and then `fetched_at`. Settlement is
   read from `quote.settlementPrice`, then `reference.futureSettlementPrice`.
 - **Missing roots.** A root Schwab does not quote is logged and skipped, which is the
-  expected case for `/DX` without an ICE agreement. A quotes capture with none of its
+  case for `/VX` and `/DX` (`invalidSymbols`; not in the roster). A price of `0.0` is
+  read as missing. A quotes capture with none of its
   contracts raises `NormalizationError`.
 - **Not registered.** Both futures sources stay unregistered until a recorded
   production capture becomes their fixture. `ingest-us futures` runs them through
   explicit bindings (`EngineClient.collect_futures_roster`, `collect_futures_quotes`).
-  The field names come from Schwab's schema and are not yet confirmed against a live
-  response.
+  Field names are confirmed against production responses (2026-10-21); the unit
+  payloads in `tests/test_futures.py` follow that shape. Recording a conformance fixture
+  is still pending.

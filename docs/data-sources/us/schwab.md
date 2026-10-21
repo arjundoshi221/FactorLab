@@ -358,18 +358,22 @@ Schwab can't supply futures history, so `ingest-us`'s `futures-us` service recor
 `/marketdata/v1/quotes` ([feature](../../features/F-043-us-futures-quotes.md), roster
 [us_futures.yaml](../../../configs/universes/us_futures.yaml)):
 
-- **Coverage.** 16 roots, front and next contract each: equity index, energy, metals,
-  rates, VIX, EUR and DX. All of them fit in one quotes call, so recording costs about
+- **Coverage.** 14 roots, front and next contract each: equity index, energy, metals,
+  rates and EUR. All of them fit in one quotes call, so recording costs about
   1 request a minute through the Globex week.
 - **Symbols.** A root is `/ES`. A dated contract is `/ESZ26`: root, CME month code,
-  two-digit year. Quoting a root returns its active contract in
-  `reference.futureActiveSymbol`.
+  two-digit year. Quoting a root returns no root entry: the response holds its active
+  contract, keyed by that contract's symbol (`/ES` -> `/ESZ26`), with
+  `reference.product = "/ES"` and `reference.futureIsActive = true`. There is no
+  `futureActiveSymbol` field. Invalid or expired symbols come back in
+  `errors.invalidSymbols`.
 - **Fields used.** From `quote`: `lastPrice`, `lastSize`, `bidPrice`/`askPrice` with
   sizes, `openPrice`/`highPrice`/`lowPrice`, `totalVolume`, `openInterest`,
-  `quoteTime`, `tradeTime`, `tick` and `settlementPrice`. From `reference`:
-  `futureExpirationDate`, `futureMultiplier` and `futureSettlementPrice`. These names
-  come from Schwab's schema and still need confirming against a recorded production
-  capture. That capture also becomes the conformance fixture.
+  `quoteTime`, `tradeTime` and `tick`. From `reference`: `product`, `futureIsActive`,
+  `futureExpirationDate`, `futureMultiplier` and `futureSettlementPrice`. Confirmed
+  against production responses on 2026-10-21: the quote has no `settlementPrice`
+  (it carries `settleTime`, and `closePrice` is the prior settlement), and an untraded
+  month reports `openPrice`/`highPrice`/`lowPrice` as `0.0`, which is stored as missing.
 - **Outputs.**
   - `market.futures_quotes` holds one row per contract and vendor quote time.
   - `market.futures_contract_bars` holds one daily bar per contract and Globex trade
@@ -378,7 +382,7 @@ Schwab can't supply futures history, so `ingest-us`'s `futures-us` service recor
 - **Limits.**
   - Nothing exists before the recorder starts.
   - Prices are stored at 6 decimals, so `/6J` is excluded.
-  - ICE US (`/DX`) may need a separate data agreement.
+  - Cboe CFE (`/VX`) and ICE US (`/DX`) roots return `invalidSymbols` on this account.
   - There are no continuous or back-adjusted series.
   - It never calls `/trader/v1`, so the no-trading rule above holds.
 

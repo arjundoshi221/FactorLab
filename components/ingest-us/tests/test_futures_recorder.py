@@ -176,5 +176,6 @@ def test_an_empty_roster_refresh_is_an_error(recorder) -> None:
 def test_the_shipped_roster_is_valid() -> None:
     config = Path(__file__).parents[3] / "configs" / "universes" / "us_futures.yaml"
     roots = load_roster(config)
-    assert len(roots) == 16
-    assert "/6J" not in {r.root for r in roots}  # 7-decimal tick; see the roster comment
+    assert len(roots) == 14
+    # /6J: 7-decimal tick; /VX and /DX: Schwab answers invalidSymbols (roster comment).
+    assert not {"/6J", "/VX", "/DX"} & {r.root for r in roots}

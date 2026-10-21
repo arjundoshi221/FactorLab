@@ -23,7 +23,7 @@ streaming recorder that would deliver 1-minute futures bars (F-021) is unbuilt a
 ## Scope
 
 - Poll `/marketdata/v1/quotes` about once a minute through the Globex week for a roster of
-  17 roots (equity index, energy, metals, rates, VIX, FX), front and next contract each.
+  14 roots (equity index, energy, metals, rates, FX), front and next contract each.
 - Root listings in `ref.listings` and dated contracts in `ref.contracts`, alias kind
   `schwab_symbol`; new product types `commodity_future`, `rate_future`, `fx_future`.
 - Intraday snapshots in a new `market.futures_quotes` table (contract keyed, no TTL),
@@ -42,7 +42,7 @@ streaming recorder that would deliver 1-minute futures bars (F-021) is unbuilt a
 ## Acceptance criteria
 
 - [ ] The roster resolves front and next contracts for every root Schwab quotes; an
-      unquoted root (e.g. `/DX` without an ICE agreement) is logged and skipped.
+      unquoted root is logged and skipped.
 - [ ] `market.futures_quotes` fills through a full Globex night with no duplicate quote times.
 - [ ] Each contract has one daily bar per trade date, and its close equals the exchange
       settlement after the next session opens.
@@ -59,3 +59,8 @@ streaming recorder that would deliver 1-minute futures bars (F-021) is unbuilt a
 - 2026-10-21: built (wave 15, sink, Schwab futures sources, `futures-us` service). Futures
   sources stay unregistered until a recorded live `/quotes` capture confirms field names
   and becomes their fixture; `/6J` left out of the roster (7-decimal tick).
+- 2026-10-21: waves 14 and 15 applied in production; `futures-us` deployed by the new
+  automated ingestion trial (`ingest-trial/futures-us/62ebd99e91cf`). Live responses
+  showed a root is answered by its active contract keyed by the contract symbol (no
+  `futureActiveSymbol`), so no root resolved and every roster refresh failed; `/VX` and
+  `/DX` return `invalidSymbols` and left the roster (14 roots). Fixed forward.

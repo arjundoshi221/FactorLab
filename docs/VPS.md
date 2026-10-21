@@ -14,6 +14,13 @@ values.
 
 ## Server
 
+US futures trial, 2026-10-21 17:25 UTC: `ingest-trial/futures-us/62ebd99e91cf`
+([workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/39643400484), success)
+added only `futures-us` (image `0.0.0-trial.62ebd99e91cf`); `ingest-us`, `universe-us`,
+API, ClickHouse and secrets agent unchanged. The service ran but every roster refresh
+failed (no root resolved: Schwab keys a root's quote by its active contract), so no
+quotes were written; fixed forward in the next trial.
+
 Schema waves 14 and 15, 2026-10-21 ~16:30 UTC: applied exactly `wave_14_schema_indexes`
 (F-042) and `wave_15_schema_futures_quotes` (F-043, `market.futures_quotes`) with the
 reviewed runner given only those two IDs, from a `schema-migrator` image built from
