@@ -26,6 +26,9 @@ SERVICES = {
     "ingest-political": "ingest-political",
 }
 ALL_SERVICES = dict(SERVICES)
+# Service-only scopes: add one new service and leave the unit's running services alone
+# (they join the protected list). The service may be absent from the live model.
+SERVICE_SCOPES = {"futures-us": "ingest-us"}
 DAEMONS = [name for name in SERVICES if name != "ingest-political"]
 PROTECTED = [
     "factorlab-api-1",
@@ -48,16 +51,24 @@ def configure_scope(root: Path, component: str | None, *, planning: bool) -> Non
         component = saved
     elif not planning and component is not None:
         raise RuntimeError("Cannot narrow an existing unscoped deployment plan")
-    if component is not None and component not in {"ingest-india", "ingest-us", "ingest-broker"}:
+    if component is not None and component not in {
+        "ingest-india",
+        "ingest-us",
+        "ingest-broker",
+        *SERVICE_SCOPES,
+    }:
         raise RuntimeError("Unknown ingestion component")
     SERVICES.clear()
-    SERVICES.update(
-        {
-            name: unit
-            for name, unit in ALL_SERVICES.items()
-            if component is None or unit == component
-        }
-    )
+    if component in SERVICE_SCOPES:
+        SERVICES[component] = SERVICE_SCOPES[component]
+    else:
+        SERVICES.update(
+            {
+                name: unit
+                for name, unit in ALL_SERVICES.items()
+                if component is None or unit == component
+            }
+        )
     DAEMONS[:] = [name for name in SERVICES if name != "ingest-political"]
     PROTECTED[:] = BASE_PROTECTED + [
         f"factorlab-{name}-1"
@@ -104,7 +115,7 @@ def store(path: Path, value: object) -> None:
 
 
 def inspect(names: list[str]) -> list[dict]:
-    return json.loads(run("docker", "inspect", *names))
+    return json.loads(run("docker", "inspect", *names)) if names else []
 
 
 def public_state(names: list[str]) -> list[dict]:
@@ -119,6 +130,11 @@ def public_state(names: list[str]) -> list[dict]:
         }
         for c in inspect(names)
     ]
+
+
+def live(model: dict) -> list[str]:
+    """Scoped daemons the given (live or rollback) model already defines."""
+    return [name for name in DAEMONS if name in model["services"]]
 
 
 def verify_protected(before: list[dict]) -> None:
@@ -136,7 +152,7 @@ def plan(root: Path, test_id: str, *, image_test_id: str | None = None) -> None:
     if candidate_path.exists():
         raise RuntimeError("Plan already exists; use its saved candidate")
     original = json.loads(compose(DEPLOY / "compose.production.yml", "config", "--format", "json"))
-    running = public_state([f"factorlab-{name}-1" for name in DAEMONS])
+    running = public_state([f"factorlab-{name}-1" for name in live(original)])
     protected = public_state(PROTECTED)
     store(root / "before-containers.json", running)
     store(root / "protected-containers.json", protected)
@@ -154,7 +170,7 @@ def plan(root: Path, test_id: str, *, image_test_id: str | None = None) -> None:
         # Keep operator-specific provider and runtime configuration from the live model.
         definition["environment"] = {
             **definition.get("environment", {}),
-            **original["services"][name].get("environment", {}),
+            **original["services"].get(name, {}).get("environment", {}),
         }
         image = f"factorlab-test-{unit}:{image_test_id}"
         metadata = json.loads(run("docker", "image", "inspect", image))[0]
@@ -168,7 +184,9 @@ def plan(root: Path, test_id: str, *, image_test_id: str | None = None) -> None:
             raise RuntimeError(f"Image revision does not match the test id: {unit}")
         # Keep the already verified secret/data ownership contract. The remaining
         # component rollout installed UID 10001; do not revert it to root.
-        definition["user"] = original["services"][name].get("user") or metadata["Config"]["User"]
+        definition["user"] = (
+            original["services"].get(name, {}).get("user") or metadata["Config"]["User"]
+        )
         definition["image"] = metadata["Id"]
         candidate["services"][name] = definition
         for mount in definition.get("volumes", []):
@@ -179,7 +197,7 @@ def plan(root: Path, test_id: str, *, image_test_id: str | None = None) -> None:
     # Import every production subcommand before stopping any live process.
     for unit, subcommands in {
         "ingest-india": ["daemon", "premarket", "engine"],
-        "ingest-us": ["daemon", "universe", "engine"],
+        "ingest-us": ["daemon", "universe", "futures", "engine"],
         "ingest-broker": ["snapshot", "engine"],
         "ingest-political": ["bootstrap", "engine"],
     }.items():
@@ -216,10 +234,23 @@ def verify(root: Path) -> None:
 
 
 def restore(root: Path) -> None:
+    rollback = json.loads((root / "rollback.compose.json").read_text())
+    # Services the trial added have no preceding definition: remove their containers.
+    for name in DAEMONS:
+        if name not in rollback["services"]:
+            subprocess.run(
+                ("docker", "rm", "-f", f"factorlab-{name}-1"), capture_output=True, check=False
+            )
     install_model(root / "rollback.compose.json")
-    compose(
-        DEPLOY / "compose.production.yml", "up", "-d", "--no-deps", "--force-recreate", *DAEMONS
-    )
+    if previous := live(rollback):
+        compose(
+            DEPLOY / "compose.production.yml",
+            "up",
+            "-d",
+            "--no-deps",
+            "--force-recreate",
+            *previous,
+        )
     (root / "restored").touch(mode=0o600)
     verify_protected(json.loads((root / "protected-containers.json").read_text()))
     print("Previous ingestion images restored; no data or schema rollback performed", flush=True)
@@ -228,14 +259,16 @@ def restore(root: Path) -> None:
 def apply(root: Path) -> None:
     if not (root / "plan-ready").exists() or (root / "applied").exists():
         raise RuntimeError("Need a validated, unapplied plan")
-    if public_state([f"factorlab-{name}-1" for name in DAEMONS]) != json.loads(
+    previous = live(json.loads((root / "rollback.compose.json").read_text()))
+    if public_state([f"factorlab-{name}-1" for name in previous]) != json.loads(
         (root / "before-containers.json").read_text()
     ):
         raise RuntimeError("Production ingestion changed since plan; refusing stale replacement")
     verify_protected(json.loads((root / "protected-containers.json").read_text()))
     try:
         # Stop old writers first. --no-deps prevents recreating shared infrastructure.
-        compose(DEPLOY / "compose.production.yml", "stop", *DAEMONS)
+        if previous:
+            compose(DEPLOY / "compose.production.yml", "stop", *previous)
         install_model(root / "candidate.compose.json")
         compose(
             DEPLOY / "compose.production.yml", "up", "-d", "--no-deps", "--force-recreate", *DAEMONS
@@ -253,7 +286,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("plan", "apply", "verify", "restore"))
     parser.add_argument("test_id")
-    parser.add_argument("--component", choices=("ingest-india", "ingest-us", "ingest-broker"))
+    parser.add_argument(
+        "--component", choices=("ingest-india", "ingest-us", "ingest-broker", *SERVICE_SCOPES)
+    )
     parser.add_argument("--image-test-id", help="Reuse built images from this earlier test id")
     args = parser.parse_args()
     if os.geteuid() != 0 or not re.fullmatch(r"[0-9]{8}-[0-9a-f]{7,40}", args.test_id):

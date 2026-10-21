@@ -33,6 +33,37 @@ def test_us_scope_persists_and_protects_other_writers(runner, tmp_path):
         runner.configure_scope(tmp_path, "ingest-india", planning=False)
 
 
+def test_service_scope_adds_one_service_and_protects_its_unit(runner, tmp_path):
+    runner.configure_scope(tmp_path, "futures-us", planning=True)
+    assert runner.SERVICES == {"futures-us": "ingest-us"}
+    assert runner.DAEMONS == ["futures-us"]
+    assert "factorlab-ingest-us-1" in runner.PROTECTED
+    assert "factorlab-universe-us-1" in runner.PROTECTED
+    assert "factorlab-futures-us-1" not in runner.PROTECTED
+    # The new service is absent from the live model: nothing to stop or pin for rollback.
+    assert runner.live({"services": {"ingest-us": {}, "universe-us": {}}}) == []
+    assert runner.live({"services": {"futures-us": {}}}) == ["futures-us"]
+    with pytest.raises(RuntimeError, match="differs"):
+        runner.configure_scope(tmp_path, "ingest-us", planning=False)
+
+
+def test_restore_removes_services_the_trial_added(runner, tmp_path, monkeypatch):
+    runner.configure_scope(tmp_path, "futures-us", planning=True)
+    (tmp_path / "rollback.compose.json").write_text('{"services": {"ingest-us": {}}}')
+    (tmp_path / "protected-containers.json").write_text("[]")
+    calls = []
+    monkeypatch.setattr(runner.subprocess, "run", lambda args, **_: calls.append(args))
+    monkeypatch.setattr(runner, "install_model", lambda path: calls.append(("install", path.name)))
+    monkeypatch.setattr(runner, "compose", lambda *args: calls.append(("compose", *args)))
+    monkeypatch.setattr(runner, "verify_protected", lambda before: None)
+    runner.restore(tmp_path)
+    assert calls == [
+        ("docker", "rm", "-f", "factorlab-futures-us-1"),
+        ("install", "rollback.compose.json"),
+    ]
+    assert (tmp_path / "restored").exists()
+
+
 def test_legacy_scope_is_preserved_and_cannot_be_narrowed(runner, tmp_path):
     runner.configure_scope(tmp_path, None, planning=False)
     assert set(runner.SERVICES) == set(runner.ALL_SERVICES)

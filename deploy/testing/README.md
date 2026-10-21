@@ -185,3 +185,11 @@ as proof of secret-agent identity, because the agent has intentionally changed.
 ## Component-scoped monitoring rollout
 
 For an authorized US monitoring update, use a fresh private test directory and build only `ingest-us` from tracked source. Run `plan <test-id> --component ingest-us`; the saved scope limits apply/verify/restore to `ingest-us` and `universe-us`, protecting API, web, India, broker, monitor, ClickHouse and secrets-agent identities. Do not run an unscoped plan for this update.
+
+## Service-scoped addition (`futures-us`)
+
+`--component futures-us` adds only the new `futures-us` service (image unit `ingest-us`,
+F-043) and leaves `ingest-us` and `universe-us` running their current image; they join the
+protected list. The live model need not define the service yet: `apply` stops nothing and
+starts it from the candidate model, and `restore` removes its container before reinstalling
+the preceding model. Apply `wave_15_schema_futures_quotes` before `apply`.
