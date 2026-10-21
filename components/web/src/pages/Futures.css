@@ -1,0 +1,35 @@
+.futures .table-scroll { overflow-x: auto; }
+.futures-status { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin: 20px 0 12px; color: var(--muted); font: 400 11px var(--mono); }
+.futures-market { padding: 3px 8px; border: 1px solid var(--line); color: var(--muted); }
+.futures-market.is-open { color: var(--green); border-color: #2d5a45; }
+
+.futures-roots { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin: 20px 0 28px; }
+.futures-chip { display: grid; gap: 3px; padding: 12px 14px; text-align: left; color: var(--ink); background: var(--panel); border: 1px solid var(--line); cursor: pointer; }
+.futures-chip:hover { border-color: #46505a; }
+.futures-chip.active { background: var(--panel-soft); box-shadow: inset 0 -2px 0 var(--lime); }
+.futures-chip strong { font: 600 15px var(--mono); }
+.futures-chip small { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.futures-chip span { font: 500 12px var(--mono); font-variant-numeric: tabular-nums; }
+.futures-chip em { font-style: normal; }
+
+.futures .up { color: var(--green); }
+.futures .down { color: var(--red); }
+
+.futures-shape { margin: 0; color: var(--muted); font: 400 12px var(--mono); }
+.futures-shape strong { color: var(--ink); margin-right: 6px; }
+
+.futures-chart { position: relative; margin: 0 0 24px; padding: 16px; border: 1px solid var(--line); background: var(--panel); }
+.futures-chart figcaption { color: var(--muted); font: 400 11px var(--mono); margin-bottom: 8px; }
+.futures-chart svg[role="img"] { width: 100%; height: auto; display: block; }
+.futures-legend { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
+
+.futures-table { width: 100%; min-width: 860px; }
+.futures-table td, .futures-table th { padding: 9px 12px; text-align: right; }
+.futures-table td:first-child, .futures-table th:first-child,
+.futures-table td:nth-child(2), .futures-table th:nth-child(2) { text-align: left; }
+.futures-table td { font: 400 12px var(--mono); font-variant-numeric: tabular-nums; }
+.futures-table td small { color: var(--muted); }
+.futures-table tr.is-stale td { color: var(--muted); }
+.futures-stale { color: var(--amber); }
+
+@media (max-width: 860px) { .futures-chart .index-tooltip { position: static; margin-top: 8px; } }

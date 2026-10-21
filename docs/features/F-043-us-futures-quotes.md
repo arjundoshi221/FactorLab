@@ -23,7 +23,8 @@ streaming recorder that would deliver 1-minute futures bars (F-021) is unbuilt a
 ## Scope
 
 - Poll `/marketdata/v1/quotes` about once a minute through the Globex week for a roster of
-  14 roots (equity index, energy, metals, rates, FX), front and next contract each.
+  14 roots (equity index, energy, metals, rates, FX), `depth` contracts each (2 at first;
+  3-12 since F-044).
 - Root listings in `ref.listings` and dated contracts in `ref.contracts`, alias kind
   `schwab_symbol`; new product types `commodity_future`, `rate_future`, `fx_future`.
 - Intraday snapshots in a new `market.futures_quotes` table (contract keyed, no TTL),
@@ -46,7 +47,8 @@ streaming recorder that would deliver 1-minute futures bars (F-021) is unbuilt a
 - [ ] `market.futures_quotes` fills through a full Globex night with no duplicate quote times.
 - [ ] Each contract has one daily bar per trade date, and its close equals the exchange
       settlement after the next session opens.
-- [ ] Polling costs about 1 request a minute against the Schwab account pool.
+- [ ] Polling costs about 2 requests a minute against the Schwab account pool (about 72
+      contracts at 50 symbols per `/quotes` call, since F-044 deepened the roster).
 
 ## Rollout
 
@@ -67,3 +69,6 @@ streaming recorder that would deliver 1-minute futures bars (F-021) is unbuilt a
 - 2026-10-21: the session-close query aliased `max(observed_at)` as `observed_at`
   (ClickHouse ILLEGAL_AGGREGATION); fixed in `c44df22`. Recording live: 28 contracts
   quoted every minute into `market.futures_quotes`.
+
+- 2026-10-22: roster deepened for the hub's futures curves (F-044): per-root `depth` 3-12,
+  about 72 contracts and 2 `/quotes` requests a minute. Needs an `ingest-us` release.

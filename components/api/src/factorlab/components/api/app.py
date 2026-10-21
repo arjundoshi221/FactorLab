@@ -37,6 +37,7 @@ from factorlab.components.api.catalog_query import (
     parse_timestamp,
 )
 from factorlab.components.api.docker_images import DockerImagesResponse, read_docker_images_snapshot
+from factorlab.components.api.futures import router as futures_router
 from factorlab.components.api.hub import HubOverview, HubOverviewService, HubRepository
 from factorlab.components.api.indexes import router as indexes_router
 from factorlab.components.api.india import (
@@ -169,6 +170,7 @@ app.include_router(
 )
 app.include_router(us_router, prefix="/hub/api/v1/us", tags=["hub-us"])
 app.include_router(indexes_router, prefix="/hub/api/v1/us", tags=["hub-us"])
+app.include_router(futures_router, prefix="/hub/api/v1/us", tags=["hub-us"])
 app.include_router(instruments_router, prefix="/hub/api/v1/market-data", tags=["hub-market-data"])
 app.include_router(
     instrument_matrix_router, prefix="/hub/api/v1/market-data", tags=["hub-market-data"]
@@ -1459,6 +1461,11 @@ def hub_us_markets() -> FileResponse:
 
 @app.get("/indexes", include_in_schema=False)
 def hub_indexes() -> FileResponse:
+    return _hub_index()
+
+
+@app.get("/futures", include_in_schema=False)
+def hub_futures() -> FileResponse:
     return _hub_index()
 
 

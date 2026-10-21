@@ -4,7 +4,10 @@
 # mic:           venue, seeded in ref.exchanges by V2USStorage (US_FUTURES_EXCHANGES)
 # product_type:  index_future | commodity_future | rate_future | vol_future | fx_future
 # months:        listing cycle as CME month codes (F G H J K M N Q U V X Z = Jan..Dec)
-# depth:         contracts kept per root: the active one and the next depth - 1
+# depth:         contracts kept per root: the active one and the next depth - 1 (default 2).
+#                Deep enough to draw each root's curve on the hub's Futures tab: a year of
+#                quarterlies, a year of monthly energy, every listed rates contract.
+#                About 72 contracts, two 50-symbol /quotes requests a minute.
 #
 # /6J (yen) is left out on purpose: its 0.0000005 tick needs 7 decimals, and prices
 # are stored as Decimal(18,6), so adjacent ticks could collapse into one value.
@@ -15,21 +18,21 @@
 version: 1
 roots:
   # Equity index
-  - {root: /ES, mic: XCME, product_type: index_future, months: HMUZ, name: E-mini S&P 500}
-  - {root: /NQ, mic: XCME, product_type: index_future, months: HMUZ, name: E-mini Nasdaq-100}
-  - {root: /RTY, mic: XCME, product_type: index_future, months: HMUZ, name: E-mini Russell 2000}
-  - {root: /YM, mic: XCBT, product_type: index_future, months: HMUZ, name: E-mini Dow ($5)}
+  - {root: /ES, mic: XCME, product_type: index_future, months: HMUZ, depth: 4, name: E-mini S&P 500}
+  - {root: /NQ, mic: XCME, product_type: index_future, months: HMUZ, depth: 4, name: E-mini Nasdaq-100}
+  - {root: /RTY, mic: XCME, product_type: index_future, months: HMUZ, depth: 4, name: E-mini Russell 2000}
+  - {root: /YM, mic: XCBT, product_type: index_future, months: HMUZ, depth: 4, name: E-mini Dow ($5)}
   # Energy
-  - {root: /CL, mic: XNYM, product_type: commodity_future, months: FGHJKMNQUVXZ, name: WTI crude oil}
-  - {root: /NG, mic: XNYM, product_type: commodity_future, months: FGHJKMNQUVXZ, name: Henry Hub natural gas}
+  - {root: /CL, mic: XNYM, product_type: commodity_future, months: FGHJKMNQUVXZ, depth: 12, name: WTI crude oil}
+  - {root: /NG, mic: XNYM, product_type: commodity_future, months: FGHJKMNQUVXZ, depth: 12, name: Henry Hub natural gas}
   # Metals
-  - {root: /GC, mic: XCEC, product_type: commodity_future, months: GJMQVZ, name: Gold}
-  - {root: /SI, mic: XCEC, product_type: commodity_future, months: HKNUZ, name: Silver}
-  - {root: /HG, mic: XCEC, product_type: commodity_future, months: HKNUZ, name: Copper}
+  - {root: /GC, mic: XCEC, product_type: commodity_future, months: GJMQVZ, depth: 6, name: Gold}
+  - {root: /SI, mic: XCEC, product_type: commodity_future, months: HKNUZ, depth: 5, name: Silver}
+  - {root: /HG, mic: XCEC, product_type: commodity_future, months: HKNUZ, depth: 5, name: Copper}
   # Rates
-  - {root: /ZT, mic: XCBT, product_type: rate_future, months: HMUZ, name: 2-Year T-Note}
-  - {root: /ZF, mic: XCBT, product_type: rate_future, months: HMUZ, name: 5-Year T-Note}
-  - {root: /ZN, mic: XCBT, product_type: rate_future, months: HMUZ, name: 10-Year T-Note}
-  - {root: /ZB, mic: XCBT, product_type: rate_future, months: HMUZ, name: U.S. Treasury Bond}
+  - {root: /ZT, mic: XCBT, product_type: rate_future, months: HMUZ, depth: 3, name: 2-Year T-Note}
+  - {root: /ZF, mic: XCBT, product_type: rate_future, months: HMUZ, depth: 3, name: 5-Year T-Note}
+  - {root: /ZN, mic: XCBT, product_type: rate_future, months: HMUZ, depth: 3, name: 10-Year T-Note}
+  - {root: /ZB, mic: XCBT, product_type: rate_future, months: HMUZ, depth: 3, name: U.S. Treasury Bond}
   # FX
-  - {root: /6E, mic: XCME, product_type: fx_future, months: HMUZ, name: Euro FX}
+  - {root: /6E, mic: XCME, product_type: fx_future, months: HMUZ, depth: 4, name: Euro FX}

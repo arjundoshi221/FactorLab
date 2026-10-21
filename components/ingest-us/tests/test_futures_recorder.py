@@ -179,3 +179,6 @@ def test_the_shipped_roster_is_valid() -> None:
     assert len(roots) == 14
     # /6J: 7-decimal tick; /VX and /DX: Schwab answers invalidSymbols (roster comment).
     assert not {"/6J", "/VX", "/DX"} & {r.root for r in roots}
+    # Deep enough to draw a curve (hub Futures tab), small enough for two /quotes batches.
+    assert all(r.depth >= 3 for r in roots)
+    assert sum(r.depth for r in roots) <= 100

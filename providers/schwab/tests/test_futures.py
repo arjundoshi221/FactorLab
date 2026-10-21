@@ -162,6 +162,29 @@ def test_discovery_without_an_active_symbol_takes_the_nearest_live_contracts() -
     assert [r.ref.alias_value for r in rows] == ["/ESU26", "/ESZ26"]
 
 
+def test_discovery_keeps_depth_contracts_from_the_active_one() -> None:
+    deep = FuturesRoot("/ES", "XCME", "index_future", "HMUZ", "E-mini S&P 500", depth=4)
+    payload = {
+        "/ESU26": future("/ESU26", date(2026, 9, 18)),
+        "/ESZ26": future("/ESZ26", date(2026, 12, 18), active=True),
+        "/ESH27": future("/ESH27", date(2027, 3, 19)),
+        "/ESM27": future("/ESM27", date(2027, 6, 18)),
+        "/ESU27": future("/ESU27", date(2027, 9, 17)),
+        "/ESZ27": future("/ESZ27", date(2027, 12, 17)),
+    }
+    assert candidate_symbols(deep, date(2026, 9, 14)) == [
+        "/ES",
+        "/ESU26",
+        "/ESZ26",
+        "/ESH27",
+        "/ESM27",
+        "/ESU27",
+        "/ESZ27",
+    ]
+    rows = normalize_futures_contracts(capture(payload, roots=[deep.to_mapping()]))
+    assert [r.ref.alias_value for r in rows] == ["/ESZ26", "/ESH27", "/ESM27", "/ESU27"]
+
+
 def test_roots_become_listings_named_from_the_roster() -> None:
     payload = {
         "/ESZ26": future("/ESZ26", active=True),
