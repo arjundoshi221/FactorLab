@@ -66,9 +66,12 @@ def test_series_rejects_unknown_codes_and_reads_both_kinds():
     tracked_sql = client.query.call_args_list[1].args[0]
     assert (
         "alias_kind = 'schwab_symbol'" in tracked_sql
-        and "FROM market.bars AS b FINAL" in tracked_sql
+        and "listing_id IN (SELECT target_id FROM aliases)" in tracked_sql
+        and "do_not_merge_across_partitions_select_final" in tracked_sql
     )
-    assert client.query.call_args_list[1].kwargs["parameters"]["source"] == "schwab"
+    parameters = client.query.call_args_list[1].kwargs["parameters"]
+    assert parameters["source"] == "schwab"
+    assert parameters["t0"] < parameters["t1"]  # bar_time bounds prune partitions
 
 
 def test_sector_performance_shapes_every_sector_with_benchmarks():

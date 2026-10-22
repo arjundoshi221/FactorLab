@@ -126,23 +126,35 @@ class IndexRepository:
         out: dict[str, list[SeriesPoint]] = {symbol: [] for symbol in symbols}
         if not symbols:
             return out
+        # market.bars is filtered to the wanted listings and a bar_time window before the
+        # join: trade_date alone prunes no partitions, and FINAL over every US daily bar
+        # exceeded the server memory limit. Duplicates share bar_time, hence one partition.
         for row in self.query(
-            """SELECT a.alias_value AS symbol, b.trade_date AS trade_date,
-                toFloat64(b.close) AS close
-            FROM market.bars AS b FINAL
-            INNER JOIN (
+            """WITH aliases AS (
                 SELECT alias_value, target_id FROM ref.identifier_aliases FINAL
                 WHERE alias_kind = 'schwab_symbol' AND target_kind = 'listing'
                   AND valid_to IS NULL AND alias_value IN {symbols:Array(String)}
-            ) AS a ON a.target_id = b.listing_id
-            WHERE b.country_code = 'US' AND b.resolution = 'daily'
-              AND b.source = {source:String}
-              AND b.trade_date BETWEEN {start:Date} AND {end:Date}
-            ORDER BY symbol, trade_date""",
+            )
+            SELECT a.alias_value AS symbol, b.trade_date AS trade_date,
+                toFloat64(b.close) AS close
+            FROM (
+                SELECT listing_id, trade_date, close FROM market.bars FINAL
+                WHERE country_code = 'US' AND resolution = 'daily'
+                  AND source = {source:String}
+                  AND listing_id IN (SELECT target_id FROM aliases)
+                  AND bar_time >= {t0:DateTime64(3, 'UTC')}
+                  AND bar_time < {t1:DateTime64(3, 'UTC')}
+                  AND trade_date BETWEEN {start:Date} AND {end:Date}
+            ) AS b
+            INNER JOIN aliases AS a ON a.target_id = b.listing_id
+            ORDER BY symbol, trade_date
+            SETTINGS do_not_merge_across_partitions_select_final = 1""",
             symbols=list(symbols),
             source=DAILY_SOURCE,
             start=start,
             end=end,
+            t0=datetime.combine(start - timedelta(days=1), datetime.min.time(), UTC),
+            t1=datetime.combine(end + timedelta(days=2), datetime.min.time(), UTC),
         ):
             out[row["symbol"]].append(
                 SeriesPoint(trade_date=row["trade_date"], value=float(row["close"]))
