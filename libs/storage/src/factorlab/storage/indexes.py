@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterator, Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -69,13 +69,25 @@ class IndexStorage:
             return
         for year in range(start.year, end.year + 1):
             lo, hi = max(start, date(year, 1, 1)), min(end, date(year, 12, 31))
+            # trade_date is in neither the partition key (toYYYYMM(bar_time)) nor the sort
+            # key, so without the bar_time bounds FINAL merged every daily partition and hit
+            # the server memory limit. Duplicates share bar_time, hence one partition.
             rows = self.client.query(
                 "SELECT trade_date, listing_id, toFloat64(close) FROM market.bars FINAL "
                 "WHERE country_code = 'US' AND resolution = 'daily' "
                 "AND source = {source:String} AND listing_id IN {ids:Array(UUID)} "
+                "AND bar_time >= {t0:DateTime64(3, 'UTC')} AND bar_time < {t1:DateTime64(3, 'UTC')} "
                 "AND trade_date BETWEEN {lo:Date} AND {hi:Date} AND close > 0 "
-                "ORDER BY trade_date",
-                parameters={"source": source, "ids": list(listings), "lo": lo, "hi": hi},
+                "ORDER BY trade_date "
+                "SETTINGS do_not_merge_across_partitions_select_final = 1",
+                parameters={
+                    "source": source,
+                    "ids": list(listings),
+                    "lo": lo,
+                    "hi": hi,
+                    "t0": datetime.combine(lo - timedelta(days=1), time(), UTC),
+                    "t1": datetime.combine(hi + timedelta(days=2), time(), UTC),
+                },
             ).result_rows
             day: date | None = None
             batch: dict[UUID, float] = {}

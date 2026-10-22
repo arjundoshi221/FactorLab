@@ -37,6 +37,9 @@ def test_closes_are_grouped_by_trade_date_and_read_per_year():
         "x",
     )
     assert (second["lo"], second["hi"]) == (date(2026, 1, 1), date(2026, 1, 5))
+    # bar_time bounds prune partitions (FINAL otherwise merges every daily partition)
+    assert (first["t0"].date(), first["t1"].date()) == (date(2025, 11, 30), date(2026, 1, 2))
+    assert "do_not_merge_across_partitions_select_final" in client.query.call_args_list[0].args[0]
 
 
 def test_computation_rows_bracket_a_run():
