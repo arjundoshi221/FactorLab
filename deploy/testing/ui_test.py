@@ -149,6 +149,12 @@ def verify(root: Path) -> None:
         with urllib.request.urlopen(f"http://127.0.0.1:18000{path}", timeout=30) as response:
             if response.status != 200:
                 raise RuntimeError(f"API check failed: {path}")
+    indexes = read_json("http://127.0.0.1:18000/hub/api/v1/us/indexes")
+    if not isinstance(indexes.get("constructed"), list) or not indexes["constructed"]:
+        raise RuntimeError("Invalid US index overview")
+    sectors = read_json("http://127.0.0.1:18000/hub/api/v1/us/sectors/performance?weighting=cw")
+    if not isinstance(sectors.get("sectors"), list) or not sectors["sectors"]:
+        raise RuntimeError("Invalid US sector performance")
     for market in ("US", "IN"):
         for stream in ("daily", "historical"):
             result = read_json(
