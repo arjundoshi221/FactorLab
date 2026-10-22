@@ -761,3 +761,16 @@ container identities stayed unchanged. Root-only rollback models are under
 `/opt/factorlab/deployment-tests/20260930-379c377/`. Public requests now redirect
 to Cloudflare Access sign-in; the authenticated public UI was not browser-verified.
 The legacy bundled UI on loopback port 8000 still exists; the updated web is 8080.
+
+## ClickHouse memory tracker fix — 2026-10-22 18:33 UTC
+
+After six weeks of uptime ClickHouse's total memory tracker read 4.52 GiB while jemalloc
+held 2.29 GiB, so it sat at the 4.5 GiB server limit and refused every query (code 241).
+`ingest-us` crash-looped at startup and the US index API returned 500. Commit `f4335c0`
+adds `clickhouse/config.d/memory.xml` (`memory_worker_correct_memory_tracker`) and raises
+the container limit from 5g to 6g (server limit 5.4 GiB; the host has 7.6 GiB and no
+swap). Applied by hand to the root-owned compose model under the release lock (backup
+`compose.production.yml.bak-clickhouse-memory-*`), then only `clickhouse` was recreated on
+the same image. After restart the tracker read 2.64 GiB against 2.06 GiB RSS; `ingest-us`
+and `futures-us` recovered and the `/us/indexes` and `/us/sectors/performance` routes
+returned 200.
