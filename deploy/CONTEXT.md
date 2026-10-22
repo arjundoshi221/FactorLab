@@ -17,7 +17,8 @@ Owns Compose base (networks, tmpfs secrets, ClickHouse, optional IB Gateways, op
   `collect-docker-images.py`, `prune-images.py`, legacy `deploy-release.sh` /
   `rollback-release.sh`); [logrotate/factorlab](logrotate/factorlab); [systemd/](systemd/);
   [ssh/60-factorlab-logs.conf](ssh/60-factorlab-logs.conf); [cron/](cron/); [clickhouse/](clickhouse/)
-  config; [us-universe.yaml](us-universe.yaml) (seed only); [release.ps1](release.ps1).
+  config; [us-universe.yaml](us-universe.yaml) (seed only); [release.ps1](release.ps1);
+  [ishares-relay.ps1](ishares-relay.ps1) (operator-machine relay of the iShares IWV holdings file).
 - Does not own: each component's fragment `components/<name>/deploy/compose.yaml` and
   manifest; [compose.production.yml](compose.production.yml) is generated from the base plus
   fragments (`uv run python tools/components.py render-compose`), never edited; the tunnel
@@ -65,7 +66,7 @@ Host paths: `/opt/factorlab/{deploy,components/<name>,state/images.env,releases/
 `previous-deploy`), `/var/lib/factorlab/clickhouse`, `/mnt/factorlab-data/clickhouse-raw`
 (must be mounted, else `prepare-host.sh` refuses), `/var/lib/factorlab/app-data`,
 `/var/lib/factorlab/docker-images/snapshot.json`, `/etc/factorlab/identity`,
-`/etc/factorlab/us-universe.yaml`, `/etc/factorlab/constituents` (exact dated US rosters, mounted read-only into `universe-us`), `/etc/factorlab/log-reader/authorized_keys`,
+`/etc/factorlab/us-universe.yaml`, `/etc/factorlab/constituents` (exact dated US rosters and the relayed `iwv-holdings.csv`, mounted read-only into `universe-us`), `/etc/factorlab/log-reader/authorized_keys`,
 `/var/log/factorlab/<component>/` (`<uid>:factorlab-logs`, 2750).
 
 ## Dependencies and contracts

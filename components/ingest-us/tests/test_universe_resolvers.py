@@ -144,6 +144,25 @@ def test_ishares_config_is_the_only_one_allowed_to_drop_members():
         UniverseConfig.model_validate(payload(sector_provider="ishares"))
 
 
+def test_ishares_holdings_can_be_read_from_the_relayed_constituents_mount():
+    from factorlab.components.ingest_us.universe.engine import ishares_settings
+
+    def with_path(path):
+        value = ishares_payload()
+        value["providers"]["ishares"]["indexes"]["r3k_iwv"]["path"] = path
+        return UniverseConfig.model_validate(value)
+
+    relayed = "/app/config/constituents/iwv-holdings.csv"
+    assert ishares_settings(with_path(relayed)).funds["r3k_iwv"].path == relayed
+    assert (
+        ishares_settings(UniverseConfig.model_validate(ishares_payload())).funds["r3k_iwv"].path
+        == ""
+    )
+    for outside in ("/etc/passwd", "/app/config/constituents/../us-universe.yaml", "iwv.csv"):
+        with pytest.raises(ValidationError):
+            with_path(outside)
+
+
 def test_proxy_drops_unvalidated_members_within_allowance_but_never_extras():
     validator = Mock()
     validator.validate.return_value = [constituent("AAPL"), constituent("MSFT")]

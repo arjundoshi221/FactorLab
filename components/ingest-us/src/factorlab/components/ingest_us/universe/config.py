@@ -41,6 +41,9 @@ class EodhdIndex(BaseModel):
 class IsharesIndex(BaseModel):
     model_config = ConfigDict(extra="forbid")
     url: HttpUrl
+    # A relayed copy of ``url`` under the read-only constituents mount, for hosts the
+    # iShares CDN refuses (deploy/ishares-relay.ps1).
+    path: str = Field(default="", pattern=r"^(/app/config/constituents/[A-Za-z0-9._-]+\.csv)?$")
     name: str = ""
     max_age_days: int = Field(default=7, ge=1)
 

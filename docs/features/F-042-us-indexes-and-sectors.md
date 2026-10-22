@@ -69,7 +69,8 @@ cap. As a result, the hub could show neither index levels nor how sectors are pe
 3. Operator: update `/etc/factorlab/us-universe.yaml` from `deploy/us-universe.yaml`
    (provider `ishares`, `max_unvalidated`, `sector_provider`, `shares_outstanding`,
    benchmark `extra_symbols`), then restart `universe-us`. The daily scope grows to about
-   2,600 symbols.
+   2,600 symbols. iShares refuses the VPS address, so first relay the holdings file with
+   `deploy/ishares-relay.ps1` (and `-Register` its scheduled task) on an operator machine.
 4. After the daily history backfill, run `factorlab-ingest-us indexes --rebuild` once.
 5. `api` and `web` releases.
 
@@ -77,3 +78,7 @@ cap. As a result, the hub could show neither index levels nor how sectors are pe
 
 - 2026-10-21: created; implemented on the working branch with ADR-0017.
 - 2026-10-21: indexes folded into Market Data as a tab; By-sector tab added.
+- 2026-10-22: hub tabs live on the branch trial. The first universe swap failed: iShares' Akamai
+  CDN returns HTTP 403 to the OVH VPS address (200 from a residential line), so the config was
+  rolled back to S&P 500. The provider now reads a relayed file (`path`), shipped by
+  `deploy/ishares-relay.ps1` from an operator machine.

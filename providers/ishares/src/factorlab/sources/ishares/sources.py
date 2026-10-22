@@ -12,6 +12,10 @@ The file is a short preamble (fund name, ``Fund Holdings as of``, ...) followed 
 CSV table. Cash, futures, unlisted and OTC lines, placeholder tickers (``-``) and
 rights / warrants / CVRs / escrows are not equities a collector can price, so they
 are dropped. A holdings date older than ``max_age_days`` fails normalization.
+
+iShares' CDN refuses datacenter addresses, so a fund may name a local ``path`` instead:
+the same file, downloaded elsewhere and relayed to the host (deploy/ishares-relay.ps1).
+``url`` stays the provenance; staleness is still judged against the holdings date.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ import re
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import ClassVar
 from urllib.parse import urlparse
 
@@ -67,6 +72,7 @@ class HoldingsFund(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     url: str
+    path: str = ""  # a relayed copy of ``url`` on local disk; read instead of fetching
     name: str = ""
     minimum_constituents: int = Field(ge=1)
     max_age_days: int = Field(default=7, ge=1)
@@ -181,6 +187,8 @@ class _IsharesHoldings:
         code = str(unit.params["universe"])
         fund = self.settings.funds[code]
         validate_url(fund.url)
+        if fund.path:
+            return self._read(unit, code, fund)
         try:
             response = self.session.get(
                 fund.url,
@@ -201,6 +209,26 @@ class _IsharesHoldings:
             content_type=response.headers.get("Content-Type", "text/csv"),
             status_code=response.status_code,
             headers={k: v for k, v in response.headers.items() if k.lower() != "set-cookie"},
+            metadata={"universe": code, **fund.model_dump(mode="json")},
+        )
+
+    def _read(self, unit: FetchUnit, code: str, fund: HoldingsFund) -> RawCapture:
+        path = Path(fund.path)
+        if not path.is_absolute():
+            raise PermanentError("iShares holdings path must be absolute")
+        try:
+            body = path.read_bytes()
+        except FileNotFoundError as exc:
+            raise TransientError(f"iShares holdings file {path} has not been relayed") from exc
+        except OSError as exc:
+            raise TransientError(f"iShares holdings file unreadable: {type(exc).__name__}") from exc
+        return RawCapture(
+            body=body,
+            request_key=unit.name,
+            transport="file",
+            fetched_at=self._clock(),
+            source_url=fund.url,
+            content_type="text/csv",
             metadata={"universe": code, **fund.model_dump(mode="json")},
         )
 

@@ -45,9 +45,15 @@ universe code. The universe YAML builds the same settings for `universe-us`
 | `funds.<code>.minimum_constituents` | - | - | `r3k_iwv`: 2400 |
 | `funds.<code>.max_age_days` | - | 7 | the "Fund Holdings as of" date vs `fetched_at` |
 | `funds.<code>.exchanges` | - | NYSE, NASDAQ, Nyse Mkt Llc, Cboe BZX | iShares `Exchange` labels kept |
+| `funds.<code>.path` | - | empty | read this absolute local file instead of fetching `url` (still the provenance); a missing file is transient |
 | `timeout` | - | 30 s | |
 
 No secrets.
+
+iShares' CDN (Akamai) returns HTTP 403 to the VPS's datacenter address, so production sets `path`:
+[deploy/ishares-relay.ps1](../../deploy/ishares-relay.ps1) downloads the file on an operator machine,
+checks it, and installs it as `/etc/factorlab/constituents/iwv-holdings.csv` (mounted read-only into
+`universe-us` at `/app/config/constituents/`). Captures from it have `transport: file`.
 
 ## Data
 

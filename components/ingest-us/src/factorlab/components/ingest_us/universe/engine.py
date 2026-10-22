@@ -178,6 +178,7 @@ def ishares_settings(config: UniverseConfig) -> IsharesSettings:
         funds={
             name: HoldingsFund(
                 url=str(item.url),
+                path=item.path,
                 name=item.name,
                 minimum_constituents=minimums[name],
                 max_age_days=item.max_age_days,

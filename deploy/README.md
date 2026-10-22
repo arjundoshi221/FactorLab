@@ -428,4 +428,12 @@ restart the resolver:
 docker compose --env-file production.env -f compose.production.yml restart universe-us
 ```
 
+The `ishares` provider reads the IWV holdings file from
+`/etc/factorlab/constituents/iwv-holdings.csv`, because iShares' CDN refuses the VPS
+address (HTTP 403). An operator machine relays it with `deploy/ishares-relay.ps1`: run it
+once by hand, or with `-Register` to install the "FactorLab iShares relay" scheduled task
+(08:30 and 20:30 daily). It ships only a current file of at least 2,400 equities and
+replaces the target atomically. If relays stop, the provider rejects the file once it is
+older than `max_age_days` (7) and the last published roster stays in place.
+
 The collector detects the new membership without a restart.
