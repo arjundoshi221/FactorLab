@@ -18,12 +18,13 @@ services:
     - /mnt/factorlab-data/clickhouse-raw:/var/lib/clickhouse-raw
     - ./clickhouse/config.d/storage.xml:/etc/clickhouse-server/config.d/storage.xml:ro
     - ./clickhouse/config.d/log-retention.xml:/etc/clickhouse-server/config.d/log-retention.xml:ro
+    - ./clickhouse/config.d/memory.xml:/etc/clickhouse-server/config.d/memory.xml:ro
     - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
     - clickhouse_runtime:/etc/clickhouse-server/users.d
     restart: unless-stopped
     networks:
     - backend
-    mem_limit: 5g
+    mem_limit: 6g
     healthcheck:
       test:
       - CMD-SHELL

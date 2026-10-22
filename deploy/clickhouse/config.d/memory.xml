@@ -1,0 +1,6 @@
+<clickhouse>
+    <!-- The total memory tracker drifted ~1.8 GiB above real usage over six weeks of
+         uptime and pinned at the limit, so every query failed with code 241. Resync it
+         with the cgroup RSS so the server limit reflects what is actually allocated. -->
+    <memory_worker_correct_memory_tracker>1</memory_worker_correct_memory_tracker>
+</clickhouse>
