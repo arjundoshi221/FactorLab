@@ -85,3 +85,5 @@ cap. As a result, the hub could show neither index levels nor how sectors are pe
 - 2026-10-22: relay live (ingest-us trial f70f2e1). universe-us published 2,603 symbols (6 holdings
   unvalidated, within `max_unvalidated`); 2,572 US listings carry a GICS sector across all 11
   sectors. Next: `indexes-us` trial, then `indexes --rebuild` after the history backfill.
+- 2026-10-22: `indexes-us` live (ingest-trial 5130f8c). `indexes --rebuild` waits for the history
+  backfill of the new roster.

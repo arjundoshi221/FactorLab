@@ -51,3 +51,5 @@ only front and next contracts per root there is no curve to look at.
 ## Log
 
 - 2026-10-22: created; roster deepened, API endpoint and Market Data Futures view built.
+- 2026-10-22: Futures view live on the branch UI trial (6e25394); deeper roster shipped through the
+  `futures-us` ingest trial.
