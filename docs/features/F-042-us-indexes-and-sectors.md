@@ -82,3 +82,6 @@ cap. As a result, the hub could show neither index levels nor how sectors are pe
   CDN returns HTTP 403 to the OVH VPS address (200 from a residential line), so the config was
   rolled back to S&P 500. The provider now reads a relayed file (`path`), shipped by
   `deploy/ishares-relay.ps1` from an operator machine.
+- 2026-10-22: relay live (ingest-us trial f70f2e1). universe-us published 2,603 symbols (6 holdings
+  unvalidated, within `max_unvalidated`); 2,572 US listings carry a GICS sector across all 11
+  sectors. Next: `indexes-us` trial, then `indexes --rebuild` after the history backfill.
