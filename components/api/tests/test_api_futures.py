@@ -83,7 +83,7 @@ def responses(observed: datetime = NOW - timedelta(minutes=1)):
                 ),
             ],
         ),
-        result(["contract_id", "close"], [(ESH, Decimal(6840)), (ESM, Decimal(6900))]),
+        result(["contract_id", "last_close"], [(ESH, Decimal(6840)), (ESM, Decimal(6900))]),
     ]
 
 

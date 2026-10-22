@@ -152,8 +152,9 @@ class FuturesRepository:
     def last_closes(self, contract_ids: list[Any], before: date) -> dict[Any, Any]:
         if not contract_ids:
             return {}
+        # Not "AS close": the alias would shadow the column in WHERE (ILLEGAL_AGGREGATION)
         result = self.query(
-            """SELECT contract_id, argMax(close, trade_date) AS close
+            """SELECT contract_id, argMax(close, trade_date) AS last_close
             FROM market.futures_contract_bars FINAL
             WHERE country_code = 'US' AND source = {source:String} AND resolution = 'daily'
               AND trade_date < {before:Date} AND close IS NOT NULL
@@ -163,7 +164,7 @@ class FuturesRepository:
             before=before,
             ids=contract_ids,
         )
-        return {row["contract_id"]: row["close"] for row in result}
+        return {row["contract_id"]: row["last_close"] for row in result}
 
 
 def _contract(
