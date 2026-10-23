@@ -52,6 +52,7 @@ def test_ibkr_source_maps_to_its_own_service_and_waiting_is_normal(monkeypatch):
     assert source_service("US", "ibkr") == "ibkr-snapshot"
     assert source_service("US", "schwab") == "ingest-us"
     assert source_service("US", "universe") == "universe-us"
+    assert source_service("US", "schwab_futures") == "futures-us"
     assert source_service("IN", "upstox") == "ingest-india"
     waiting = {"country_code": "US", "source": "ibkr", "status": "waiting"}
     state = source_state({**waiting, "checked_at": THU_0600}, THU_0600 + timedelta(hours=4))
@@ -85,3 +86,11 @@ def test_ibkr_pipeline_is_catalogued_and_slot_aware(monkeypatch):
     missed = pipeline_status(pipeline, values, THU_0600, [], late_evening)
     assert missed[0] == "attention"
     assert pipeline_status(pipeline, {}, None, [], late_evening)[0] == "missing"
+
+
+def test_futures_recorder_is_healthy_while_globex_is_closed():
+    now = THU_0600
+    closed = {"country_code": "US", "source": "schwab_futures", "status": "waiting"}
+    state = source_state({**closed, "checked_at": now - timedelta(minutes=5)}, now)
+    assert state["service_id"] == "futures-us" and not state["problem"]
+    assert source_state({**closed, "status": "ok", "checked_at": now}, now)["problem"]

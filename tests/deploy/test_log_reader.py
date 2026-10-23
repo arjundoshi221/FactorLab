@@ -263,3 +263,4 @@ def test_redaction_patterns_match_the_writer():
 
     assert reader.SECRET_KEY.pattern == core_logging._SECRET_KEY.pattern
     assert reader.SECRET_TEXT.pattern == core_logging._SECRET_TEXT.pattern
+    assert reader.BOT_TOKEN.pattern == core_logging._BOT_TOKEN.pattern

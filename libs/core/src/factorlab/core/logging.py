@@ -56,9 +56,11 @@ _RESERVED = frozenset(vars(logging.makeLogRecord({}))) | {
 }
 _SECRET_KEY = re.compile(r"(?i)pass(word)?|secret|token|api[_-]?key|authorization|cookie")
 _SECRET_TEXT = re.compile(
-    r"(?i)(bearer\s+|access_token=|refresh_token=|api_key=|apikey=|password=|token=)"
+    r"(?i)(bearer\s+|access_token=|refresh_token=|api_key=|apikey=|api_token=|password=|token=)"
     r"[^\s&\"',]+"
 )
+# Telegram puts the bot token in the URL path: /bot<id>:<secret>/sendMessage.
+_BOT_TOKEN = re.compile(r"(/bot)\d+:[\w-]+")
 _MAX_MESSAGE = 16_384
 _MAX_EXCEPTION = 32_768
 _QUIET = ("urllib3", "clickhouse_connect", "httpx", "httpcore", "ib_async", "asyncio")
@@ -67,7 +69,7 @@ _HANDLER_TAG = "_factorlab_handler"
 
 def redact(text: str) -> str:
     """Replace credential-looking values in free text (URLs, headers, messages)."""
-    return _SECRET_TEXT.sub(r"\1[redacted]", text)
+    return _BOT_TOKEN.sub(r"\1[redacted]", _SECRET_TEXT.sub(r"\1[redacted]", text))
 
 
 @contextlib.contextmanager

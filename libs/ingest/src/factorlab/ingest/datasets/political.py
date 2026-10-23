@@ -30,8 +30,13 @@ TransactionType = Literal["purchase", "sale_full", "sale_partial", "exchange"]
 
 
 def congress_number(day: date) -> int:
-    """The Congress in session on ``day`` (the 1st convened in 1789, two-year terms)."""
-    return (day.year - 1789) // 2 + 1
+    """The Congress in session on ``day`` (the 1st convened in 1789, two-year terms).
+
+    Each Congress convenes on 3 January of an odd year, so 1-2 January still belong
+    to the one before.
+    """
+    year = day.year - 1 if day.year % 2 and day < date(day.year, 1, 3) else day.year
+    return (year - 1789) // 2 + 1
 
 
 @dataclass(frozen=True, slots=True)

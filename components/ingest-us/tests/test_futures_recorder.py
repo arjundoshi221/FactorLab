@@ -147,7 +147,7 @@ def test_close_writes_provisional_bars_then_settles_them_next_session(recorder) 
     recorder.tick(ny(2026, 10, 19, 10, 0))
     recorder.storage.settlement = {}  # nothing for Monday until the next session reports it
     wake = recorder.tick(ny(2026, 10, 19, 17, 30))
-    assert wake == ny(2026, 10, 19, 17, 45)
+    assert wake == ny(2026, 10, 19, 17, 35)
     assert len(recorder.client.polls) == 1  # no quotes during the break
     assert bars(recorder)[-1].close == Decimal("5801.25")  # provisional: last price
     recorder.tick(ny(2026, 10, 19, 18, 30))  # Tuesday's session: new roster, too early to settle
@@ -161,7 +161,7 @@ def test_close_writes_provisional_bars_then_settles_them_next_session(recorder) 
 
 def test_weekend_writes_fridays_provisional_bars_once(recorder) -> None:
     wake = recorder.tick(ny(2026, 10, 24, 12, 0))
-    assert wake == ny(2026, 10, 24, 12, 15)
+    assert wake == ny(2026, 10, 24, 12, 5)
     recorder.tick(ny(2026, 10, 24, 12, 15))
     assert recorder.client.polls == []
     assert len(bars(recorder)) == 1

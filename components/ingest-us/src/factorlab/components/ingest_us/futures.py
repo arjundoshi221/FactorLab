@@ -50,7 +50,8 @@ SOURCE = "schwab"
 STATUS_SOURCE = "schwab_futures"
 CHANNEL = "schwab:quotes"
 SETTLEMENT_DELAY = timedelta(hours=1)  # into the next session before settlements are trusted
-CLOSED_RECHECK = timedelta(minutes=15)
+# Below the API's 600 s source freshness limit, so a closed market never reads stale.
+CLOSED_RECHECK = timedelta(minutes=5)
 JOB_ERRORS = (AuthRequired, ClickHouseError, OSError, RuntimeError, ValueError)
 
 
@@ -298,8 +299,9 @@ def main(argv: list[str] | None = None) -> int:
                 now = datetime.now(UTC)
                 try:
                     wake = recorder.tick(now)
+                    # The vocabulary source_health judges: ready, or waiting while closed.
                     storage.source_status(
-                        "ok" if globex.is_open(now) else "closed",
+                        "ready" if globex.is_open(now) else "waiting",
                         f"{len(recorder.contracts)} contracts",
                         source=STATUS_SOURCE,
                     )

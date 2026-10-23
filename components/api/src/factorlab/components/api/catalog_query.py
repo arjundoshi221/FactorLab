@@ -67,7 +67,7 @@ HIDDEN_COLUMNS: dict[str, frozenset[str]] = {
 _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
-            r"(?i)\b(access_token|refresh_token|id_token|token|api_key|apikey|client_secret|secret"
+            r"(?i)\b(access_token|refresh_token|id_token|token|api_token|api_key|apikey|client_secret|secret"
             r"|password|code|sig|signature)=[^&\s\"']+"
         ),
         r"\1=[redacted]",

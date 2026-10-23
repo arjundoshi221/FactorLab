@@ -88,6 +88,13 @@ def test_secrets_are_redacted_in_messages_extras_and_tracebacks():
     assert "abc123" not in first["msg"] and first["access_token"] == "[redacted]"
     assert "abc.def.ghi" not in second["exc"] and "Bearer [redacted]" in second["exc"]
     assert redact("password=hunter2 ok") == "password=[redacted] ok"
+    assert (
+        redact("POST https://api.telegram.org/bot123:AbC-dEf/sendMessage failed")
+        == "POST https://api.telegram.org/bot[redacted]/sendMessage failed"
+    )
+    assert redact("eodhd.com/api/eod?api_token=s3cret&fmt=json") == (
+        "eodhd.com/api/eod?api_token=[redacted]&fmt=json"
+    )
 
 
 def test_file_sink_writes_jsonl_and_survives_rotation(tmp_path):

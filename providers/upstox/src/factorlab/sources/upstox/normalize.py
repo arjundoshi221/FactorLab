@@ -146,7 +146,7 @@ def normalize_listings(
 def _expiry(value: Any) -> date | None:
     if not value:
         return None
-    # Same convention as storage.clickhouse._epoch_ms_to_date: the UTC date of the epoch.
+    # The UTC date of the epoch, as the storage layer has always recorded it.
     return datetime.fromtimestamp(int(value) / 1000, tz=UTC).date()
 
 

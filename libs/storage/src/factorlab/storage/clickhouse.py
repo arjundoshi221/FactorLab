@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -117,25 +117,6 @@ def _decimal(value: Any, scale: int) -> Decimal | None:
     if value is None or pd.isna(value):
         return None
     return Decimal(str(value)).quantize(Decimal(1).scaleb(-scale))
-
-
-def _integer(value: Any) -> int | None:
-    if value is None or pd.isna(value):
-        return None
-    return int(value)
-
-
-def _epoch_ms_to_date(value: Any) -> date | None:
-    if not value:
-        return None
-    return datetime.fromtimestamp(int(value) / 1000, tz=UTC).date()
-
-
-def _as_utc_datetime(value: Any) -> datetime:
-    timestamp = pd.Timestamp(value)
-    if timestamp.tzinfo is None:
-        timestamp = timestamp.tz_localize("UTC")
-    return timestamp.tz_convert("UTC").to_pydatetime()
 
 
 __all__ = [

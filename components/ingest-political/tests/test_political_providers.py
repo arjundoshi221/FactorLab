@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
+import pytest
+
 from factorlab.ingest.bindings import Binding
 from factorlab.ingest.datasets import InstrumentRecord, InstrumentRef, ReferenceRequest
 from factorlab.ingest.datasets.political import FilingsRequest
@@ -470,3 +472,62 @@ def test_dedupe_deletes_versions_superseded_under_another_identity():
     remaining = {(t["ticker_raw"], t["version"]) for t in db.rows("alt.political_trades")}
     assert remaining == {("AAPL", 2), ("MSFT", 1)}
     assert sinks.dedupe_political_trades()["stale_rows"] == 0
+
+
+def _committee_snapshot(sinks, day, members, committees=("HSAG", "HSBA", "HSWM", "HSJU", "HSIF")):
+    from factorlab.ingest.datasets import EntityRef
+    from factorlab.ingest.datasets.political import (
+        CommitteeRecord,
+        LegislatorRecord,
+        LegislatorTerm,
+        MembershipRecord,
+    )
+
+    term = LegislatorTerm("house", "CA", date(2025, 1, 3), date(2027, 1, 3))
+    people = [
+        LegislatorRecord(EntityRef("bioguide", b, "person_legislator"), "Ada", b, (term,))
+        for b in sorted({b for _, b in members})
+    ]
+    batches = (
+        people,
+        [CommitteeRecord(c, f"Committee {c}", "house", 119) for c in committees],
+        [
+            MembershipRecord(c, EntityRef("bioguide", b, "person_legislator"), "member", 119)
+            for c, b in members
+        ],
+    )
+    as_of = datetime.combine(day, NOW.timetz())
+    with ingestion_run(
+        sinks, pipeline="t", source="congress_legislators", market_code="USA"
+    ) as ctx:
+        for batch in batches:
+            sinks.write_legislators(
+                batch, provenance=ctx.provenance(source_channel="t", raw_id=None, as_of_time=as_of)
+            )
+        ctx.succeed_unit("t", 1)
+
+
+def test_committee_reruns_keep_one_open_row_and_close_departures():
+    from factorlab.ingest.universe_snapshot import SnapshotRejected
+
+    db = FakeClickHouse(exchanges=US)
+    sinks = ClickHouseSinks(V2USStorage(db))
+    members = [(c, b) for c in ("HSAG", "HSBA") for b in ("A000001", "B000002", "C000003")]
+    members += [("HSWM", "D000004"), ("HSJU", "E000005"), ("HSIF", "F000006")]
+    for day in (date(2026, 9, 1), date(2026, 9, 2)):
+        _committee_snapshot(sinks, day, members)
+    committees = db.rows("alt.political_committees")
+    memberships = db.rows("alt.political_committee_memberships")
+    assert len(committees) == 5 and len(memberships) == 9
+    assert {r["effective_from"] for r in committees + memberships} == {date(2026, 9, 1)}
+
+    _committee_snapshot(sinks, date(2026, 9, 5), [m for m in members if m != ("HSAG", "A000001")])
+    open_rows = [r for r in db.rows("alt.political_committee_memberships") if not r["effective_to"]]
+    closed = [r for r in db.rows("alt.political_committee_memberships") if r["effective_to"]]
+    assert len(open_rows) == 8
+    assert [(r["bioguide_id"], r["effective_to"]) for r in closed] == [
+        ("A000001", date(2026, 9, 4))
+    ]
+
+    with pytest.raises(SnapshotRejected):  # half the committees vanishing is a broken file
+        _committee_snapshot(sinks, date(2026, 9, 6), members[3:], committees=("HSAG", "HSBA"))

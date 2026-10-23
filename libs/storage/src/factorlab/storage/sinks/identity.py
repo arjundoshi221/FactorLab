@@ -160,9 +160,6 @@ class IdentityResolver:
                 )
         return {ref: self._listings[ref] for ref in refs if ref in self._listings}
 
-    def remember_listing(self, ref: InstrumentRef, identity: ListingIdentity) -> None:
-        self._listings[ref] = identity
-
     # -- contracts -----------------------------------------------------------
     def contracts(self, refs: Iterable[InstrumentRef]) -> dict[InstrumentRef, ContractIdentity]:
         refs = list(dict.fromkeys(refs))
@@ -197,9 +194,6 @@ class IdentityResolver:
             parameters={"listing": underlying_listing_id, "expiry": expiry},
         ).result_rows
         return rows[0][0] if len(rows) == 1 else None
-
-    def remember_contract(self, ref: InstrumentRef, identity: ContractIdentity) -> None:
-        self._contracts[ref] = identity
 
 
 __all__ = ["ContractIdentity", "IdentityResolver", "ListingIdentity"]

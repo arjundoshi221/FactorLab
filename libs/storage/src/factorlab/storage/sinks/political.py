@@ -11,8 +11,8 @@ Two behaviour fixes over the retired writer:
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Sequence
-from datetime import UTC, date, datetime
+from collections.abc import Callable, Iterable, Sequence
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -29,9 +29,67 @@ from factorlab.ingest.datasets.political import (
 from factorlab.ingest.datasets.reference import ReferenceMode
 from factorlab.ingest.identifiers import legislator_name_key
 from factorlab.ingest.provider import Provenance
+from factorlab.ingest.universe_snapshot import MAX_REMOVAL_FRACTION, SnapshotRejected
 from factorlab.storage.canonical_ids import committee_id, legislator_id, political_trade_id
 from factorlab.storage.clickhouse import _decoded_text, _version
 from factorlab.storage.identity_repair import RETIRED_LISTINGS
+
+COMMITTEE_COLUMNS = (
+    "committee_id",
+    "committee_entity_id",
+    "country_code",
+    "congress_number",
+    "parent_committee_id",
+    "chamber",
+    "name",
+    "jurisdiction",
+    "url",
+    "is_subcommittee",
+    "effective_from",
+    "effective_to",
+    "source",
+    "raw_id",
+    "ingest_run_id",
+    "as_of_time",
+    "ingested_at",
+    "version",
+)
+
+MEMBERSHIP_COLUMNS = (
+    "country_code",
+    "congress_number",
+    "committee_id",
+    "committee_entity_id",
+    "bioguide_id",
+    "legislator_entity_id",
+    "role",
+    "majority_status",
+    "rank",
+    "effective_from",
+    "effective_to",
+    "source",
+    "raw_id",
+    "ingest_run_id",
+    "as_of_time",
+    "ingested_at",
+    "version",
+)
+
+type _Key = tuple[Any, ...]
+
+
+def _committee_key(row: dict[str, Any]) -> _Key:
+    return (_decoded_text(row["committee_id"]),)
+
+
+def _membership_key(row: dict[str, Any]) -> _Key:
+    return (
+        _decoded_text(row["country_code"]),
+        int(row["congress_number"]),
+        _decoded_text(row["committee_id"]),
+        _decoded_text(row["bioguide_id"]),
+    )
+
 
 FILING_COLUMNS = (
     "filing_id",
@@ -284,7 +342,8 @@ class PoliticalSinkMixin:
     def _write_committees(self, rows: list[CommitteeRecord], provenance: Provenance) -> int:
         now = datetime.now(UTC)
         today = provenance.as_of_time.astimezone(UTC).date()
-        entities, committees = [], []
+        entities: list[dict[str, Any]] = []
+        committees: list[dict[str, Any]] = []
         for row in rows:
             entity_id = committee_id(row.committee_code)
             version = _version(now)
@@ -325,9 +384,75 @@ class PoliticalSinkMixin:
                     "version": version,
                 }
             )
+        if committees:
+            closed = self._carry_open_rows(
+                "alt.political_committees",
+                COMMITTEE_COLUMNS,
+                _committee_key,
+                committees,
+                {(row.committee_code,) for row in rows},
+                provenance,
+                now,
+            )
+            committees.extend(closed)
         self._insert("ref.entities", entities)  # type: ignore[attr-defined]
         self._insert("alt.political_committees", committees)  # type: ignore[attr-defined]
-        return len(committees)
+        return len(rows)
+
+    def _carry_open_rows(
+        self,
+        table: str,
+        columns: tuple[str, ...],
+        key: Callable[[dict[str, Any]], _Key],
+        records: list[dict[str, Any]],
+        snapshot: set[_Key],
+        provenance: Provenance,
+        now: datetime,
+        guarded: Callable[[_Key], bool] = lambda _: True,
+    ) -> list[dict[str, Any]]:
+        """Treat ``snapshot`` as the complete current set for ``table`` (SCD-2).
+
+        A record that is already open keeps that row's ``effective_from``, so the
+        rewrite replaces it instead of opening a second row. An open row missing
+        from the snapshot is returned closed as of the day before. Open rows for
+        which ``guarded`` holds refuse an implausibly large removal, as universe
+        snapshots do.
+        """
+        open_rows: dict[_Key, dict[str, Any]] = {}
+        result = self.client.query(
+            f"SELECT {', '.join(columns)} FROM {table} FINAL WHERE effective_to IS NULL"
+        ).result_rows
+        for row in result:
+            record = dict(zip(columns, row, strict=True))
+            current = open_rows.get(key(record))
+            # Writers before the fix opened a row per run; the earliest is the real start.
+            if current is None or record["effective_from"] < current["effective_from"]:
+                open_rows[key(record)] = record
+        for record in records:
+            prior = open_rows.get(key(record))
+            if prior is not None:
+                record["effective_from"] = prior["effective_from"]
+        watched = [k for k in open_rows if guarded(k)]
+        dropped = [k for k in watched if k not in snapshot]
+        if watched and len(dropped) > MAX_REMOVAL_FRACTION * len(watched):
+            raise SnapshotRejected(
+                f"{table}: snapshot drops {len(dropped)} of {len(watched)} open rows "
+                f"(> {MAX_REMOVAL_FRACTION:.0%}); refusing as implausible"
+            )
+        closing_day = provenance.as_of_time.astimezone(UTC).date() - timedelta(days=1)
+        return [
+            {
+                **row,
+                "effective_to": max(row["effective_from"], closing_day),
+                "raw_id": provenance.raw_id,
+                "ingest_run_id": provenance.ingest_run_id,
+                "as_of_time": provenance.as_of_time,
+                "ingested_at": now,
+                "version": _version(now),
+            }
+            for k, row in open_rows.items()
+            if k not in snapshot
+        ]
 
     def _write_memberships(
         self, rows: list[MembershipRecord], provenance: Provenance
@@ -338,7 +463,8 @@ class PoliticalSinkMixin:
             [legislator_id(r.legislator.alias_value) for r in rows]
             + [committee_id(r.committee_code) for r in rows]
         )
-        records, missing = [], []
+        records: list[dict[str, Any]] = []
+        missing: list[EntityRef] = []
         for row in rows:
             member = legislator_id(row.legislator.alias_value)
             committee = committee_id(row.committee_code)
@@ -370,10 +496,30 @@ class PoliticalSinkMixin:
                     "version": _version(now),
                 }
             )
+        written = len(records)
+        if rows:
+            # Parked memberships are still current: only absence from the file closes one.
+            snapshot = {
+                ("US", r.congress, r.committee_code, r.legislator.alias_value) for r in rows
+            }
+            congresses = {r.congress for r in rows}
+            records.extend(
+                self._carry_open_rows(
+                    "alt.political_committee_memberships",
+                    MEMBERSHIP_COLUMNS,
+                    _membership_key,
+                    records,
+                    snapshot,
+                    provenance,
+                    now,
+                    # A new Congress legitimately replaces every membership of the last.
+                    guarded=lambda k: k[1] in congresses,
+                )
+            )
         self._insert("alt.political_committee_memberships", records)  # type: ignore[attr-defined]
         if missing:
             self._park_entities(provenance, missing, "membership references an unknown entity")
-        return len(records), len(missing)
+        return written, len(missing)
 
     # -- alt.political_filings -----------------------------------------------------
     def _existing_filings(

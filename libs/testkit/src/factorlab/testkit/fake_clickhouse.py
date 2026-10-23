@@ -355,6 +355,16 @@ class FakeClickHouse:
                     and f["filing_id"] in p["ids"]
                 ]
             )
+        for table in ("alt.political_committees", "alt.political_committee_memberships"):
+            if sql.endswith(f"FROM {table} FINAL WHERE effective_to IS NULL"):
+                columns = sql.removeprefix("SELECT ").split(" FROM ")[0].split(", ")
+                return Result(
+                    [
+                        tuple(r[c] for c in columns)
+                        for r in self.rows(table)
+                        if r["effective_to"] is None
+                    ]
+                )
         if sql.startswith("SELECT filing_id, filing_year, filing_url FROM alt.political_filings"):
             found = sorted(
                 (

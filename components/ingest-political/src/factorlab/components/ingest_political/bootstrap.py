@@ -9,7 +9,7 @@ from factorlab.components.ingest_political.providers import PROVIDERS
 from factorlab.core.logging import configure_logging
 from factorlab.ingest.bindings import Binding, load_bindings, validate_bindings
 from factorlab.ingest.datasets import ReferenceRequest
-from factorlab.ingest.datasets.political import FilingsRequest
+from factorlab.ingest.datasets.political import FilingsRequest, congress_number
 from factorlab.ingest.engine import collect_binding
 from factorlab.ingest.provider import RunContext, ingestion_run
 from factorlab.ingest.registry import REGISTRY, load_providers, source_for
@@ -57,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Ingest congressional references and House PTRs")
     parser.add_argument("--year", type=int, default=datetime.now(UTC).year)
     parser.add_argument("--ptr-limit", type=int, default=0)
-    parser.add_argument("--congress", type=int, default=119)
+    parser.add_argument("--congress", type=int, default=congress_number(datetime.now(UTC).date()))
     args = parser.parse_args(argv)
     if args.ptr_limit < 0 or args.congress < 1 or not 1900 <= args.year <= 9999:
         parser.error(

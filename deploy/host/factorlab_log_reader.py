@@ -57,9 +57,10 @@ LOG_FILE = re.compile(
 # Keep in step with factorlab.core.logging (tests/deploy/test_log_reader.py checks).
 SECRET_KEY = re.compile(r"(?i)pass(word)?|secret|token|api[_-]?key|authorization|cookie")
 SECRET_TEXT = re.compile(
-    r"(?i)(bearer\s+|access_token=|refresh_token=|api_key=|apikey=|password=|token=)"
+    r"(?i)(bearer\s+|access_token=|refresh_token=|api_key=|apikey=|api_token=|password=|token=)"
     r"[^\s&\"',]+"
 )
+BOT_TOKEN = re.compile(r"(/bot)\d+:[\w-]+")
 UUIDISH = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.IGNORECASE
 )
@@ -72,7 +73,7 @@ class UsageError(Exception):
 
 
 def redact(text: str) -> str:
-    return SECRET_TEXT.sub(r"\1[redacted]", text)
+    return BOT_TOKEN.sub(r"\1[redacted]", SECRET_TEXT.sub(r"\1[redacted]", text))
 
 
 def _now() -> datetime:

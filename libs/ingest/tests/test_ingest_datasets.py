@@ -124,3 +124,12 @@ def test_catalogue_is_consistent():
         assert hasattr(spec.sink_protocol, spec.sink_method)
     with pytest.raises(KeyError):
         dataset("market.nope")
+
+
+def test_congress_number_turns_over_on_the_third_of_january():
+    from factorlab.ingest.datasets.political import congress_number
+
+    assert congress_number(date(2026, 10, 23)) == 119
+    assert congress_number(date(2027, 1, 2)) == 119
+    assert congress_number(date(2027, 1, 3)) == 120
+    assert congress_number(date(2028, 1, 1)) == 120
