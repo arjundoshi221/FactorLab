@@ -8,6 +8,7 @@ through one restricted, read-only SSH account.
 | Piece | Where |
 |---|---|
 | Writers | `factorlab.core.logging` writes JSON lines to stderr and to `/var/log/factorlab/<component>/<service>.jsonl` (`FACTORLAB_LOG_DIR`). nginx (web) writes `access.jsonl` and `error.log`. The political cron wrapper writes `cron.log`. |
+| Third-party copies | `deploy/scripts/collect-container-logs.py` (root, `factorlab-container-logs.timer`, every minute) copies `docker logs` of `clickhouse`, the IB Gateways, `uptime-kuma` and `portainer`, and the `factorlab-cloudflared` journal, into `/var/log/factorlab/{clickhouse,ibkr-gateway,ops,edge}/<service>.jsonl`. Lines below INFO are dropped, secrets are redacted, and each source keeps at most 5,000 lines a minute (a WARNING records what was dropped). Cursors are in `/var/lib/factorlab/container-logs/state.json`. |
 | Rotation | `deploy/logrotate/factorlab`: hourly check, daily or at 256 MB, compressed, 30 days. Docker's json-file driver is also capped (20 MB × 5) as a backstop. journald is limited to 1 GB or 30 days. |
 | Ownership | Directories are `<container uid>:factorlab-logs 2750`; files are readable by the `factorlab-logs` group (GID 10002). The deployer fixes ownership on each release. |
 | Reader | `deploy/host/factorlab_log_reader.py`, installed as `/usr/local/bin/factorlab-log-reader`. It is stdlib Python 3.10+ and only reads. |
@@ -70,5 +71,6 @@ prints at most 12 KiB (`--max-bytes` raises this to 64 KiB).
 | `ssh failed ... Permission denied (publickey)` | The key is not in `/etc/factorlab/log-reader/authorized_keys`, the wrong key path is set, or `AllowUsers` excludes the account. |
 | `Host key verification failed` | The VPS is not in `known_hosts`. Add the verified host key; never disable checking. |
 | `no logs for component X` | Nothing has written there yet. The component may still be on the monolith image, which only logs to Docker, or it may not have run since the platform release. |
+| `no logs for component clickhouse` (or `ibkr-gateway`, `ops`, `edge`) | The collector timer is not installed yet (next platform release runs `prepare-host.sh`), the container is not running, or nothing at INFO or above was written. `systemctl status factorlab-container-logs` shows the last run. |
 | A container crashes before it logs anything | Its output is in Docker's log only. An operator can read it with `sudo factorlab-compose logs --tail 200 <service>`. The reader account deliberately cannot. |
 | `sshd rejected ...` during a platform release | The drop-in did not validate on that OpenSSH version. It was removed, and SSH is unchanged. Fix the drop-in and release the platform again. |

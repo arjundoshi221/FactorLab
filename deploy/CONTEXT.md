@@ -5,7 +5,7 @@
 ## Purpose
 
 `deploy/` is the `platform` release unit ([component.yaml](component.yaml)); it ships host files and recreates no services.
-The temporary UI branch trial is documented in [testing/README.md](testing/README.md): `release-ui-trial.ps1` starts an immutable, CI-gated API/web trial without merging the restructure into `main` or starting the component-pin rollout. `release-ui-trial.ps1 -Trial political` starts the political trial ([branch-political-deploy.yml](../.github/workflows/branch-political-deploy.yml), [testing/political_test.py](testing/political_test.py)): it installs the ingest-political image the cron runs and applies the identity repair. `release-ui-trial.ps1 -Trial ingest -Scope <futures-us|ingest-us|ingest-india|ingest-broker>` starts the ingestion trial ([branch-ingest-deploy.yml](../.github/workflows/branch-ingest-deploy.yml), [testing/ingest_trial.py](testing/ingest_trial.py)): it builds the unit image and runs the `ingestion_test.py` plan, apply and verify for that scope; migrations stay separate.
+The temporary UI branch trial is documented in [testing/README.md](testing/README.md): `release-ui-trial.ps1` starts an immutable, CI-gated API/web trial without merging the restructure into `main` or starting the component-pin rollout. `release-ui-trial.ps1 -Trial political` starts the political trial ([branch-political-deploy.yml](../.github/workflows/branch-political-deploy.yml), [testing/political_test.py](testing/political_test.py)): it installs the ingest-political image the cron runs and applies the identity repair. `release-ui-trial.ps1 -Trial ingest -Scope <futures-us|ingest-us|ingest-india|ingest-broker>` starts the ingestion trial ([branch-ingest-deploy.yml](../.github/workflows/branch-ingest-deploy.yml), [testing/ingest_trial.py](testing/ingest_trial.py)): it builds the unit image and runs the `ingestion_test.py` plan, apply and verify for that scope; migrations stay separate. `release-ui-trial.ps1 -Trial platform -Scope <monitor|secrets-agent|schema-migrator>` starts the platform trial ([branch-platform-deploy.yml](../.github/workflows/branch-platform-deploy.yml), [testing/platform_trial.py](testing/platform_trial.py)): it replaces that one service and restores it on a failed check; the migrator only runs its read-only `bootstrap` and `migrate status` checks before it is pinned.
 Owns Compose base (networks, tmpfs secrets, ClickHouse, optional IB Gateways, ops tools), the root-run component deployer, provisioning, log rotation and restricted log reader. Operator runbook: [README.md](README.md).
 
 ## Owns and does not own
@@ -39,6 +39,8 @@ Owns Compose base (networks, tmpfs secrets, ClickHouse, optional IB Gateways, op
   VNC on `127.0.0.1:5900` / `5901`), `uptime-kuma` (profile `ops`, `127.0.0.1:3001`),
   `portainer` (profile `admin`, `127.0.0.1:9443`). Networks `backend`, `edge`.
 - systemd: `factorlab-cloudflared.service`, `factorlab-docker-images.timer` (every minute),
+  `factorlab-container-logs.timer` (every minute: third-party container and tunnel logs to
+  `/var/log/factorlab/{clickhouse,ibkr-gateway,ops,edge}/`),
   `factorlab-image-prune.timer` (03:30 UTC), `logrotate.timer` drop-in (hourly).
 - Log reader: `/usr/local/bin/factorlab-log-reader` (`list`, `tail`, `errors`, `run`), the
   ForceCommand for SSH user `factorlab-logs`; client [tools/read_logs.py](../tools/read_logs.py).

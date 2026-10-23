@@ -41,7 +41,7 @@ def image_re(unit: str) -> re.Pattern[str]:
     return re.compile(rf"ghcr\.io/arjundoshi221/factorlab-{unit}@sha256:[0-9a-f]{{64}}\Z")
 
 
-def install_image(image: str, unit: str, commit: str, test_id: str) -> str:
+def install_image(image: str, unit: str, commit: str, test_id: str, user: str = "10001") -> str:
     if image_re(unit).fullmatch(image) is None:
         raise RuntimeError(f"Invalid {unit} image reference")
     test.run("docker", "pull", image)
@@ -53,13 +53,15 @@ def install_image(image: str, unit: str, commit: str, test_id: str) -> str:
         or labels.get("org.opencontainers.image.version") != f"0.0.0-trial.{commit[:12]}"
     ):
         raise RuntimeError(f"{unit} image labels do not match the trial commit")
-    if metadata["Config"].get("User", "").split(":")[0] != "10001":
+    if metadata["Config"].get("User", "").split(":")[0] != user:
         raise RuntimeError(f"Wrong runtime user in the {unit} image")
     test.run("docker", "tag", metadata["Id"], f"factorlab-test-{unit}:{test_id}")
     return metadata["Id"]
 
 
-def prepare(root: Path, model: Path) -> None:
+def prepare(
+    root: Path, model: Path, runners: tuple[str, ...] = ("ingest_trial.py", "ingestion_test.py")
+) -> None:
     if root.exists():
         raise RuntimeError("Trial ID already exists")
     if (test.DEPLOY.parent / "state/images.env").exists():
@@ -72,7 +74,7 @@ def prepare(root: Path, model: Path) -> None:
     shutil.copytree(test.DEPLOY, root / "backup/deploy", symlinks=True)
     (root / "source/deploy").mkdir(parents=True)
     shutil.copy2(model, root / "source/deploy/compose.production.yml")
-    for filename in ("ingest_trial.py", "ingestion_test.py"):
+    for filename in runners:
         shutil.copy2(Path(__file__).with_name(filename), root / filename)
         (root / filename).chmod(0o600)
 

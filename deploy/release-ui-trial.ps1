@@ -15,20 +15,35 @@ With -Trial ingest -Scope <scope>, the ingest-trial/<scope>/<short SHA> tag star
 branch-ingest-deploy.yml: it plans, applies and verifies one ingestion scope through
 deploy/testing/ingest_trial.py (futures-us and indexes-us each add only that service). Apply
 any schema wave the image needs first; the trial never migrates.
+
+With -Trial platform -Scope <monitor|secrets-agent|schema-migrator>, the
+platform-trial/<scope>/<short SHA> tag starts branch-platform-deploy.yml: it replaces
+one platform service through deploy/testing/platform_trial.py. The schema migrator
+only runs its read-only readiness and status checks and is pinned for later starts.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet("ui", "political", "ingest")]
+    [ValidateSet("ui", "political", "ingest", "platform")]
     [string]$Trial = "ui",
-    [ValidateSet("futures-us", "indexes-us", "ingest-us", "ingest-india", "ingest-broker")]
+    [ValidateSet(
+        "futures-us", "indexes-us", "ingest-us", "ingest-india", "ingest-broker",
+        "monitor", "secrets-agent", "schema-migrator"
+    )]
     [string]$Scope
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-if (($Trial -eq "ingest") -ne [bool]$Scope) {
-    throw "-Scope is required with -Trial ingest and only valid there."
+$scopes = @{
+    ingest   = @("futures-us", "indexes-us", "ingest-us", "ingest-india", "ingest-broker")
+    platform = @("monitor", "secrets-agent", "schema-migrator")
+}
+if ($scopes.ContainsKey($Trial) -ne [bool]$Scope) {
+    throw "-Scope is required with -Trial ingest or platform and only valid there."
+}
+if ($Scope -and $scopes[$Trial] -notcontains $Scope) {
+    throw "Scope $Scope does not belong to the $Trial trial."
 }
 
 $repoRoot = (& git rev-parse --show-toplevel).Trim()
@@ -55,7 +70,7 @@ try {
     })
     if ($green.Count -eq 0) { throw "CI has not passed for $commit." }
     $short = $commit.Substring(0, 12)
-    $tag = if ($Scope) { "ingest-trial/$Scope/$short" } else { "$Trial-trial/$short" }
+    $tag = if ($Scope) { "$Trial-trial/$Scope/$short" } else { "$Trial-trial/$short" }
     & git show-ref --verify --quiet "refs/tags/$tag"
     if ($LASTEXITCODE -eq 0) { throw "Trial tag already exists locally: $tag" }
     if ($LASTEXITCODE -ne 1) { throw "Could not check local tags." }
