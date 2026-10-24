@@ -1,4 +1,4 @@
-"""``broker.snapshot`` dataset contract: broker-mirror facts (docs/architecture/07 §5.5).
+"""``broker.snapshot`` / ``broker.flex_activity`` dataset contracts: broker-mirror facts (07 §5.5).
 
 Moved from ``sources/ibkr/shapes.py`` (which re-exports them) so any broker
 adapter can emit them. Each shape holds only what the broker reported plus the
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -146,7 +146,69 @@ class OpenOrderSnapshot:
         _require_utc("snapshot_time", self.snapshot_time)
 
 
-BrokerRecord = PositionSnapshot | AccountStateRow | ExecutionRecord | OpenOrderSnapshot
+@dataclass(frozen=True, slots=True)
+class OrderEventRecord:
+    """Broker facts for one ``broker.order_events`` row (rehaul §9.6). PK = (perm_id, event_seq)."""
+
+    event_time: datetime
+    broker_code: str  # 'ibkr', ...
+    account_id: str
+    account_mode: Mode
+    country_code: str
+    perm_id: int
+    order_id: int
+    event_seq: int
+    event_type: str  # 'filled', 'partial_fill', 'cancelled_by_api', ...
+    prior_state: str | None
+    new_state: str  # broker status enum ('Filled', 'Cancelled', ...)
+    placed_by_client: int | None
+    order_ref: str | None
+    product_type: ProductType
+    vendor_id: str
+    trading_symbol: str
+    currency: str
+    quantity_after: Decimal | None
+    filled_qty_at_event: Decimal | None
+    avg_fill_price_at_event: Decimal | None
+    remaining_at_event: Decimal | None
+
+    def __post_init__(self) -> None:
+        _require_utc("event_time", self.event_time)
+
+
+@dataclass(frozen=True, slots=True)
+class CashFlowRecord:
+    """Broker facts for one ``broker.cash_flows`` row (rehaul §9.5).
+
+    ``vendor_id`` (the instrument a dividend or withholding refers to, '' when
+    none) is only used to resolve ``security_id``/``listing_id``; it is not a column.
+    """
+
+    event_time: datetime
+    broker_code: str  # 'ibkr', ...
+    account_id: str
+    account_mode: Mode
+    country_code: str
+    cash_flow_type: str  # 'dividend', 'interest', 'deposit', 'withdrawal', 'fee', ...
+    amount: Decimal  # signed; positive = credit
+    currency: str
+    vendor_id: str
+    description: str
+    ex_date: date | None
+    pay_date: date | None
+
+    def __post_init__(self) -> None:
+        _require_utc("event_time", self.event_time)
+
+
+BrokerRecord = (
+    PositionSnapshot
+    | AccountStateRow
+    | ExecutionRecord
+    | OpenOrderSnapshot
+    | OrderEventRecord
+    | CashFlowRecord
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,9 +230,11 @@ __all__ = [
     "AccountStateRow",
     "BrokerRecord",
     "BrokerSink",
+    "CashFlowRecord",
     "ExecutionRecord",
     "Mode",
     "OpenOrderSnapshot",
+    "OrderEventRecord",
     "PositionSnapshot",
     "ProductType",
     "Side",

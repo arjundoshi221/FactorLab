@@ -47,7 +47,10 @@ component (image `ghcr.io/arjundoshi221/factorlab-ingest-broker`, manifest
 | Client id | `IBKR_CLIENT_ID` (declared secret) / `--client-id` | `2` (`SNAPSHOT_CLIENT_ID`) | the CLI passes `--client-id`'s default explicitly |
 | ClickHouse | `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_DATABASE`, `CLICKHOUSE_USERNAME`; secret `CLICKHOUSE_PASSWORD` | compose: `clickhouse`, `8123`, `default`, `factorlab` | `ibkr_client_runtime` tmpfs at `/run/secrets/app` |
 
-No IBKR credentials reach this container; Gateway logins go only to the Gateway volumes.
+| Flex history | secret `IBKR_FLEX_TOKEN`; `IBKR_FLEX_QUERY_ID` (`production.env`) | unset | only for `engine run --dataset broker.flex_activity` |
+
+No IBKR Gateway logins reach this container; they go only to the Gateway volumes. The
+read-only Flex Web Service token does (`ibkr_client_runtime`).
 
 Production override (2026-09-30): `IBKR_SNAPSHOT_TIMES` contains all 24 hourly
 slots (`00:00,01:00,...,23:00`). Snapshots run at the top of every New York hour
@@ -63,6 +66,10 @@ on XNYS trading days; `--run-on-start` also takes an immediate snapshot.
   `broker.open_orders_snapshot`, `raw.archive` (`transport='tcp_socket'`), `ref.*` identity
   rows, `meta.unresolved_entities`, `meta.source_status` (`source` = `ibkr`) and
   `meta.ingestion_runs`. Reads `ref.broker_metrics_map` and `ref.execution_methods`.
+- On demand, `engine run --dataset broker.flex_activity --market USA` backfills
+  `broker.executions`, `broker.order_events` and `broker.cash_flows` from an IBKR Flex statement
+  (`raw.archive` `transport='http'`, `source_channel` = `ibkr:flex_statement`). Run it on the
+  VPS, because the token is IP-restricted: `fl` exec into `ibkr-snapshot`.
 - Pipeline (frozen) `ibkr_broker_snapshot`, `source` = `ibkr`, `universe` = `ibkr_accounts`;
   `source_channel` = `paper_gateway` / `live_gateway`.
 - The hub catalogues both `ibkr_broker_snapshot` and `ibkr_broker_simulation` (market "Broker")

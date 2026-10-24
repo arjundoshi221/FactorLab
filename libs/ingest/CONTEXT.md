@@ -58,7 +58,7 @@ No environment reads and no secrets here. Provider YAML holds secret *names* onl
 Defines, but does not write, the dataset ids and their tables: `ref.listings`,
 `ref.contracts`, `ref.universe_membership`, `ref.legislators`,
 `alt.political_filings`, `alt.political_trades`, `fundamentals.filings`,
-`broker.snapshot`, `market.bars`, `market.futures_contract_bars`, `market.futures_quotes` (see
+`broker.snapshot`, `broker.flex_activity`, `market.bars`, `market.futures_contract_bars`, `market.futures_quotes` (see
 `DatasetSpec.tables`). Frozen strings it produces:
 
 - `Binding.source_name`: the provider name (`upstox`, `schwab`, ...), or

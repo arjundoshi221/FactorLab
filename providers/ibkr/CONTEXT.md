@@ -1,6 +1,6 @@
 # factorlab-provider-ibkr
 
-> Read-only Interactive Brokers adapter that mirrors positions, account state, executions and open orders from the paper and live IB Gateways into `broker.*`.
+> Read-only Interactive Brokers adapter that mirrors positions, account state, executions and open orders from the paper and live IB Gateways into `broker.*`, plus statement history (fills, executed orders, cash) from the Flex Web Service.
 
 ## Purpose
 
@@ -8,6 +8,7 @@ This is a provider member built on `ib_async` over the TWS socket API, not REST.
 
 - `IBKRBrokerProvider` ([provider.py](src/factorlab/sources/ibkr/provider.py)) is the `collect(ctx)` provider that the production snapshot job runs.
 - `IbkrBrokerSnapshot` ([snapshot_source.py](src/factorlab/sources/ibkr/snapshot_source.py)) is the same capture -> archive -> normalize path as an engine dataset source for `broker.snapshot`. It is registered on import ([`__init__.py`](src/factorlab/sources/ibkr/__init__.py)).
+- `IbkrFlexActivity` ([flex_source.py](src/factorlab/sources/ibkr/flex_source.py)) is the engine source for `broker.flex_activity`. It runs a saved Activity Flex Query over HTTPS ([flex.py](src/factorlab/sources/ibkr/flex.py)) and needs no Gateway, login or 2FA. [flex_normalize.py](src/factorlab/sources/ibkr/flex_normalize.py) turns the archived XML into executions, order events and cash flows.
 
 ## Owns and does not own
 
@@ -19,7 +20,8 @@ This is a provider member built on `ib_async` over the TWS socket API, not REST.
 - `IBKRBrokerProvider` (`source = "ibkr"`, `pipeline = "ibkr_broker_snapshot"`, `market_code = "USA"`) with `SnapshotConfig` (modes, `client_id=2`, a 1-day executions lookback).
 - `IbkrBrokerSnapshot` (`provider = "ibkr"`, `dataset = "broker.snapshot"`) with `IbkrSettings`. `plan` makes one unit per `<mode>:<dataset>` for `positions`, `account_state`, `executions` and `open_orders`.
 - Connection helpers: `connect`, `connect_with_retry`, `connected`, `gateway_config`.
-- Through the component: `factorlab-ingest-broker snapshot --daemon --run-on-start` (production), or `factorlab-ingest-broker engine run --dataset broker.snapshot --market USA --dry-run`.
+- `IbkrFlexActivity` (`provider = "ibkr"`, `dataset = "broker.flex_activity"`) with `IbkrFlexSettings` (`timeout` 30s, `poll_interval` 5s, `poll_attempts` 24). `plan` makes one unit, `flex:statement`.
+- Through the component: `factorlab-ingest-broker snapshot --daemon --run-on-start` (production), or `factorlab-ingest-broker engine run --dataset broker.snapshot --market USA --dry-run`. Flex history is on demand: `factorlab-ingest-broker engine run --dataset broker.flex_activity --market USA` (add `--dry-run` first).
 
 ## Configuration and secrets
 
@@ -33,6 +35,8 @@ Gateway endpoints are read with `get_secret`, so they come from a secret file or
 | mode | `IBKR_DEFAULT_MODE` | `paper` | Used only when no mode is passed |
 | `IbkrSettings.modes`, `client_id`, `executions_lookback_hours` | - | `("paper","live")`, 2, 24 | Loaded from [configs/sources/ibkr.yaml](../../configs/sources/ibkr.yaml). The YAML does not set them, so the defaults apply. |
 | `connect_attempts` / `connect_timeout` | - | 3 / 15s | Backoff starts at 5s, doubles, and is capped at 60s |
+| Flex token | secret `IBKR_FLEX_TOKEN` | none | Cloudflare Secrets Store -> secrets agent -> `ibkr_client_runtime`. Never logged or put in `source_url` |
+| Flex query id | `IBKR_FLEX_QUERY_ID` | none | `production.env`, passed through compose. The saved Activity query (XML) needs Trades (Executions + Orders) and Cash Transactions |
 
 The component also reads `IBKR_SNAPSHOT_TIMES`, `IBKR_SNAPSHOT_MODES` and `IBKR_SNAPSHOT_LOCK`. Those belong to the component, not the provider. The client-id plan (0 manual, 1 research, 2 snapshot, 3 historical, 4 watchers, 10+ trade engine) is in `ibkr.yaml`.
 After connecting, blocking requests use the connection timeout (default 15s),
@@ -47,7 +51,8 @@ including execution requests. Gateway outages cannot leave those requests waitin
 - Binding in [bindings.yaml](../../configs/ingestion/bindings.yaml): `{dataset: broker.snapshot, market: USA, provider: ibkr, role: shadow, params: {modes: [paper, live]}}  # -> primary`
 - The tables are `broker.positions_snapshot`, `broker.account_state_snapshot`, `broker.executions` and `broker.open_orders_snapshot`. They have no `source` in their key, so the shadow fetches, archives and normalizes but writes nothing.
 - `source` is `ibkr`. The legacy provider's `source_channel` is `paper_gateway` or `live_gateway`. The engine source's is `<instance>:paper_gateway` or `<instance>:live_gateway`. Switching paths changes that column in `broker.*` (07 §15.1).
-- Captures have `transport="tcp_socket"`, the envelope `{"schema": "ibkr.<kind>.v1", "kind", "mode", "fetched_at", "request", "data"}`, and kinds `portfolio`, `account_values`, `executions` and `open_orders`.
+- Flex (`broker.flex_activity`): binding `role: primary`. It writes `broker.executions`, `broker.order_events` and `broker.cash_flows`. `source_channel` is `<instance>:flex_statement`, and the capture is the statement XML exactly as received (`transport="http"`, `application/xml`). Flex `dateTime` is US/Eastern wall time, converted to UTC. `ibCommission` is negated to match the Gateway sign. `ibOrderID` is the `perm_id`. `order_id` is 0 and `placed_by_client` is 0 when `isAPIOrder="N"`, otherwise `None`. Mode comes from the account id (`D...` is paper). Executed orders become one `filled` event at `event_seq = 2**32-1`. Cash `SUMMARY` rows and `(Ca.)` cancellation legs are skipped.
+- Gateway captures have `transport="tcp_socket"`, the envelope `{"schema": "ibkr.<kind>.v1", "kind", "mode", "fetched_at", "request", "data"}`, and kinds `portfolio`, `account_values`, `executions` and `open_orders`.
 - Open-order captures explicitly call `reqAllOpenOrders()` to retrieve a fresh
   snapshot across clients on read-only connections. The call has a 15-second
   timeout, restores the connection's prior timeout afterward, and propagates
@@ -84,3 +89,5 @@ including execution requests. Gateway outages cannot leave those requests waitin
 - Pacing (client side, [pacing.py](src/factorlab/sources/ibkr/pacing.py)): at most 50 requests per 600s against IBKR's hard 60. There is a 15s cooldown between identical requests, and `BID_ASK` weighs 2. On error 162 the backoff starts at 30s, doubles, and is capped at 300s. `RateLimiter` is not thread-safe.
 - The engine source holds one connection per mode per run. A failed connect marks that mode failed (`PermanentError`) for its remaining units without reconnecting. `close()` disconnects.
 - The live Gateway needs weekly IBKR Mobile 2FA. Until then, live units fail while paper units still land.
+- The Flex token is IP-restricted in the IBKR Portal to the VPS address, so Flex runs only from the VPS. Elsewhere it fails with `AuthRequired` (code 1013). The token expires 2027-09-25; renew it in the Portal and update `IBKR_FLEX_TOKEN`. One statement covers at most 365 days, so older history needs a query with an explicit earlier date range.
+- The broker writer keeps any `exec_id` already in `broker.executions` when the write comes from `flex_statement`, because Gateway rows carry the session order id and client id. Flex fills with an unknown API client get `execution_method_id = 'unmapped_api_client'`.

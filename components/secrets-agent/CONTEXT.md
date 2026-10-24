@@ -49,7 +49,7 @@ No ClickHouse access. Files written (mode 0444, atomic replace) per volume:
 | `us_runtime` (`/run/secrets/us`) | `universe-us`, `ingest-us` | `CLICKHOUSE_PASSWORD`, `EODHD_API_KEY`, `SCHWAB_ACCESS_TOKEN`, `SCHWAB_ACCESS_TOKEN.expires_at`, and `SCHWAB_ACCESS_TOKEN_<ID>` (+ `.expires_at`) per pooled Schwab account |
 | `political_runtime` (`/run/secrets/political`) | `api`, `bootstrap`, `ingest-political` | `CLICKHOUSE_PASSWORD`, `FACTORLAB_API_KEY` |
 | `ibkr_paper_runtime`, `ibkr_live_runtime` | the Gateways | `TWS_PASSWORD`, `VNC_SERVER_PASSWORD` |
-| `ibkr_client_runtime` (`/run/secrets/ibkr-client`) | `ibkr-snapshot` | `CLICKHOUSE_PASSWORD` |
+| `ibkr_client_runtime` (`/run/secrets/ibkr-client`) | `ibkr-snapshot` | `CLICKHOUSE_PASSWORD`, optional `IBKR_FLEX_TOKEN` (removed when absent) |
 
 Tokens are written only when the Worker reports `status == "valid"`; otherwise, and when
 the local `expires_at` has passed, the files are removed. Pooled-account files whose
@@ -62,7 +62,7 @@ account the Worker no longer lists are removed too. Account ids must match
 - Worker response contract (`version: 1`, at most 64 KiB): `secrets.CLICKHOUSE_PASSWORD`,
   `CLICKHOUSE_PASSWORD_SHA256` (must equal SHA-256 of the password), `FACTORLAB_API_KEY`
   (all required), optional `EODHD_API_KEY`, `UPSTOX_ACCESS_TOKEN`, `SCHWAB_ACCESS_TOKEN`,
-  `IBKR_PAPER_PASSWORD`, `IBKR_LIVE_PASSWORD`, `IBKR_VNC_PASSWORD`; `upstox.status` /
+  `IBKR_PAPER_PASSWORD`, `IBKR_LIVE_PASSWORD`, `IBKR_VNC_PASSWORD`, `IBKR_FLEX_TOKEN`; `upstox.status` /
   `expires_at`; `schwab.status` / `access_expires_at`; optional
   `schwab_accounts.<id>.{status, access_expires_at}` with `secrets.SCHWAB_ACCESS_TOKEN_<ID>`. Change it together with
   [upstox-auth-worker/src/index.ts](../../cloudflare/upstox-auth-worker/src/index.ts).

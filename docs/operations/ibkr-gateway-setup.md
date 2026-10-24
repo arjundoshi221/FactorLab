@@ -220,3 +220,22 @@ then lives in Cloudflare Secrets Store and in VPS memory while the Gateway runs.
    `ssh -L 5900:127.0.0.1:5900 -L 5901:127.0.0.1:5901 ubuntu@145.239.75.163`
    and point a VNC viewer at `localhost:5900` (paper) or `localhost:5901`
    (live). Add `--profile ibkr-gateway` to the `fl` helper.
+
+## Appendix: Flex statement history
+
+`broker.flex_activity` backfills fills, executed orders and cash transactions, up to
+365 days, from the IBKR Flex Web Service. It is HTTPS only and does not need a running
+Gateway.
+
+1. In the IBKR Portal, create an Activity Flex Query (XML; Trades with Executions and
+   Orders; Cash Transactions; Account Information; Last 365 Calendar Days), and note its
+   query id. See [ibkr.md §5.7](../data-sources/us/ibkr.md).
+2. Under Settings -> Flex Web Service, generate a token restricted to the VPS IP.
+3. Store the token as `IBKR_FLEX_TOKEN` in Cloudflare Secrets Store and uncomment its
+   binding in `wrangler.toml`, then deploy the Worker. The secrets agent renders it into
+   `ibkr_client_runtime`.
+4. Set `IBKR_FLEX_QUERY_ID=<id>` in `production.env` and release `ingest-broker`.
+5. On the VPS, run `factorlab-ingest-broker engine run --dataset broker.flex_activity
+   --market USA --dry-run` in the `ibkr-snapshot` container, then run it without
+   `--dry-run`. Errors 1012 (expired), 1013 (wrong IP) and 1015 (invalid) mean the token
+   needs attention; 1018 means wait a minute.

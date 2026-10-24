@@ -1008,18 +1008,22 @@ name = "factorlab-provider-ibkr"
 version = "0.1.0"
 source = { editable = "providers/ibkr" }
 dependencies = [
+    { name = "defusedxml" },
     { name = "factorlab-core" },
     { name = "factorlab-ingest" },
     { name = "ib-async" },
     { name = "pydantic" },
+    { name = "requests" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "factorlab-core", editable = "libs/core" },
     { name = "factorlab-ingest", editable = "libs/ingest" },
     { name = "ib-async", specifier = ">=2.1" },
     { name = "pydantic", specifier = ">=2.5" },
+    { name = "requests", specifier = ">=2.32.3" },
 ]
 
 [[package]]

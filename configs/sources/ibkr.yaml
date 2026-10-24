@@ -57,6 +57,16 @@ endpoints:
   account_values: "ib.accountValues()"
   executions: "ib.reqExecutions()"
 
+# Flex Web Service (HTTPS, no Gateway): statement history for broker.flex_activity.
+# Values are code defaults in factorlab.sources.ibkr.flex; listed here for reference.
+flex:
+  base_url: https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService
+  version: 3
+  token_secret: IBKR_FLEX_TOKEN        # Cloudflare Secrets Store; IP-restricted to the VPS
+  query_id_env: IBKR_FLEX_QUERY_ID     # saved Activity Flex Query (XML)
+  max_period_days: 365
+  rate_limit: ~1 request/sec per token  # error 1018 -> RateLimited
+
 # Historical data bar sizes (all supported)
 bar_sizes:
   sub_minute: ["1 secs", "5 secs", "10 secs", "15 secs", "30 secs"]
