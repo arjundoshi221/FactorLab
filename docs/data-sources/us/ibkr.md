@@ -320,7 +320,24 @@ Full tag list captured in `playground/data/ibkr/account_values_full.json` — re
   are outside its scope.
 - Read-only from our side — we just observe them for reconciliation.
 
-### 5.7 What we do NOT use
+### 5.7 Statement history — Flex Web Service
+
+- `reqExecutions()` reaches back about a day. For history, the `broker.flex_activity`
+  dataset runs a saved **Activity Flex Query** over HTTPS (`SendRequest` -> poll
+  `GetStatement`, v3). It needs no Gateway, login or 2FA: only a Flex token and a query id.
+- Query setup (Portal -> Performance & Reports -> Flex Queries -> Activity): format **XML**;
+  sections **Trades** (options *Executions* and *Orders*), **Cash Transactions**,
+  **Account Information**; period *Last 365 Calendar Days*; date format `yyyyMMdd`, time
+  `HHmmss`, separator `;` (any separator parses).
+- Token: Portal -> Settings -> Flex Web Service. The current token is valid until
+  2027-09-25 and is IP-restricted to the VPS. It lives in Cloudflare Secrets Store as
+  `IBKR_FLEX_TOKEN`, and the query id goes in `IBKR_FLEX_QUERY_ID` (`production.env`).
+- Mapping and conventions are documented in
+  [providers/ibkr/CONTEXT.md](../../../providers/ibkr/CONTEXT.md) (Data): Eastern-time
+  `dateTime`, negated `ibCommission`, `ibOrderID` = `perm_id`. Flex only reports orders that
+  executed; unfilled or cancelled orders are absent.
+
+### 5.8 What we do NOT use
 
 - Market-data streaming (`reqMktData`) — Schwab is cheaper for real-time US quotes; skip unless we need IBKR's direct feed.
 - News (`reqNewsProviders` etc.) — Briefing.com articles; not structured; separate econ-calendar sourcing decision (see below).

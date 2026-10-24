@@ -1,0 +1,29 @@
+<FlexQueryResponse queryName="factorlab_activity" type="AF">
+<FlexStatements count="2">
+<FlexStatement accountId="U0000001" fromDate="20251024" toDate="20261023" period="Last365CalendarDays" whenGenerated="20261024;134500">
+<AccountInformation accountId="U0000001" currency="USD" />
+<Trades>
+<Trade accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" conid="265598" listingExchange="NASDAQ" tradeID="900000001" dateTime="20260115;100500" tradeDate="20260115" transactionType="ExchTrade" exchange="NASDAQ" quantity="60" tradePrice="175.32" ibCommission="-0.63" ibCommissionCurrency="USD" fifoPnlRealized="0" buySell="BUY" ibOrderID="987654321" ibExecID="0001f8a3.66eb01c2.01.01" orderReference="" isAPIOrder="Y" levelOfDetail="EXECUTION" />
+<Trade accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" conid="265598" listingExchange="NASDAQ" tradeID="900000002" dateTime="20260115;100501" tradeDate="20260115" transactionType="ExchTrade" exchange="ARCA" quantity="40" tradePrice="175.34" ibCommission="-0.42" ibCommissionCurrency="USD" fifoPnlRealized="0" buySell="BUY" ibOrderID="987654321" ibExecID="0001f8a3.66eb01c2.01.02" orderReference="" isAPIOrder="Y" levelOfDetail="EXECUTION" />
+<Order accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" conid="265598" dateTime="20260115;100501" tradeDate="20260115" quantity="100" tradePrice="175.328" ibCommission="-1.05" ibCommissionCurrency="USD" buySell="BUY" ibOrderID="987654321" orderReference="" isAPIOrder="Y" orderType="LMT" levelOfDetail="ORDER" />
+<Trade accountId="U0000001" currency="USD" assetCategory="STK" symbol="MSFT" conid="272093" listingExchange="NASDAQ" tradeID="900000003" dateTime="2026-07-02;15:59:58" tradeDate="20260702" transactionType="ExchTrade" exchange="IEX" quantity="-25" tradePrice="410.5" ibCommission="-1" ibCommissionCurrency="USD" fifoPnlRealized="812.25" buySell="SELL" ibOrderID="987654400" ibExecID="0001f8a3.66eb01c2.02.01" orderReference="rebalance-2026-07" isAPIOrder="N" levelOfDetail="EXECUTION" />
+<Order accountId="U0000001" currency="USD" assetCategory="STK" symbol="MSFT" conid="272093" dateTime="2026-07-02;15:59:58" tradeDate="20260702" quantity="-25" tradePrice="410.5" ibCommission="-1" ibCommissionCurrency="USD" buySell="SELL" ibOrderID="987654400" orderReference="rebalance-2026-07" isAPIOrder="N" orderType="MOC" levelOfDetail="ORDER" />
+<Trade accountId="U0000001" currency="USD" assetCategory="STK" symbol="MSFT" conid="272093" tradeID="900000004" dateTime="20260703;093000" tradeDate="20260703" transactionType="TradeCancel" exchange="IEX" quantity="25" tradePrice="410.5" ibCommission="1" ibCommissionCurrency="USD" fifoPnlRealized="0" buySell="SELL (Ca.)" ibOrderID="987654400" ibExecID="0001f8a3.66eb01c2.02.99" levelOfDetail="EXECUTION" />
+</Trades>
+<CashTransactions>
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" conid="265598" description="AAPL(US0378331005) CASH DIVIDEND USD 0.26 PER SHARE (Ordinary Dividend)" dateTime="20260212;202000" settleDate="20260212" exDate="20260209" amount="26" type="Dividends" transactionID="800000001" levelOfDetail="DETAIL" />
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" conid="265598" description="AAPL(US0378331005) CASH DIVIDEND USD 0.26 PER SHARE - US TAX" dateTime="20260212;202000" settleDate="20260212" amount="-3.9" type="Withholding Tax" transactionID="800000002" levelOfDetail="DETAIL" />
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="" symbol="" conid="" description="USD CREDIT INT FOR MAR-2026" dateTime="20260403" settleDate="20260403" amount="4.17" type="Broker Interest Received" transactionID="800000003" levelOfDetail="DETAIL" />
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="" symbol="" conid="" description="CASH RECEIPTS / ELECTRONIC FUND TRANSFERS" dateTime="20251103;120000" settleDate="20251103" amount="25000" type="Deposits/Withdrawals" transactionID="800000004" levelOfDetail="DETAIL" />
+<CashTransaction accountId="U0000001" currency="USD" assetCategory="" symbol="" conid="" description="Total Deposits/Withdrawals" dateTime="" amount="25000" type="Deposits/Withdrawals" levelOfDetail="SUMMARY" />
+</CashTransactions>
+</FlexStatement>
+<FlexStatement accountId="DU0000002" fromDate="20251024" toDate="20261023" period="Last365CalendarDays" whenGenerated="20261024;134500">
+<AccountInformation accountId="DU0000002" currency="USD" />
+<Trades />
+<CashTransactions>
+<CashTransaction accountId="DU0000002" currency="USD" assetCategory="" symbol="" conid="" description="DISBURSEMENT INITIATED BY PAPER ACCOUNT" dateTime="20260801;090000" settleDate="20260801" amount="-1000" type="Deposits/Withdrawals" transactionID="800000005" levelOfDetail="DETAIL" />
+</CashTransactions>
+</FlexStatement>
+</FlexStatements>
+</FlexQueryResponse>

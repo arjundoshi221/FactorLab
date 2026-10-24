@@ -35,6 +35,12 @@ POSITIONS_TABLE = "broker.positions_snapshot"
 ACCOUNT_STATE_TABLE = "broker.account_state_snapshot"
 EXECUTIONS_TABLE = "broker.executions"
 OPEN_ORDERS_TABLE = "broker.open_orders_snapshot"
+ORDER_EVENTS_TABLE = "broker.order_events"
+CASH_FLOWS_TABLE = "broker.cash_flows"
+
+# Channels whose fills are statement history (IBKR Flex): they carry no session
+# order id or API client id, so an exec_id the Gateway already wrote is kept as is.
+HISTORY_CHANNELS = frozenset({"flex_statement"})
 
 # Identity columns present in each table's Wave 7 DDL (only positions carry entity_id).
 _IDENTITY_COLUMNS: dict[str, tuple[str, ...]] = {
@@ -47,6 +53,8 @@ _IDENTITY_COLUMNS: dict[str, tuple[str, ...]] = {
     ),
     EXECUTIONS_TABLE: ("listing_id", "security_id", "contract_id", "resolution_confidence"),
     OPEN_ORDERS_TABLE: ("listing_id", "security_id", "contract_id", "resolution_confidence"),
+    ORDER_EVENTS_TABLE: ("listing_id", "security_id", "contract_id", "resolution_confidence"),
+    CASH_FLOWS_TABLE: ("listing_id", "security_id", "contract_id", "resolution_confidence"),
 }
 
 # Decimal scale per column, from the Wave 7 DDL.
@@ -67,6 +75,11 @@ _SCALES = {
     "remaining_quantity": 6,
     "limit_price": 6,
     "aux_price": 6,
+    "quantity_after": 6,
+    "filled_qty_at_event": 6,
+    "avg_fill_price_at_event": 6,
+    "remaining_at_event": 6,
+    "amount": 6,
 }
 
 
@@ -83,10 +96,15 @@ class Identity(NamedTuple):
 
 
 UNRESOLVED = Identity()
+NO_INSTRUMENT = Identity(resolution_confidence="exact")  # e.g. a deposit: nothing to resolve
 
 
-def _fact_columns(row: Any) -> dict[str, Any]:
-    columns = {field.name: getattr(row, field.name) for field in dataclasses.fields(row)}
+def _fact_columns(row: Any, drop: frozenset[str] = frozenset()) -> dict[str, Any]:
+    columns = {
+        field.name: getattr(row, field.name)
+        for field in dataclasses.fields(row)
+        if field.name not in drop
+    }
     for name, scale in _SCALES.items():
         if name in columns:
             columns[name] = _decimal(columns[name], scale)
@@ -142,6 +160,8 @@ class V2BrokerStorage(V2USStorage):
         rows: Sequence[Any],
         provenance: Provenance,
         extra: Callable[[Any], Mapping[str, Any]],
+        *,
+        drop: frozenset[str] = frozenset(),
     ) -> int:
         if not rows:
             return 0
@@ -151,7 +171,7 @@ class V2BrokerStorage(V2USStorage):
         self._insert_dicts(
             table,
             [
-                {**_fact_columns(row), **extra(row), **lineage, "version": _version(now)}
+                {**_fact_columns(row, drop), **extra(row), **lineage, "version": _version(now)}
                 for row in rows
             ],
         )
@@ -289,7 +309,22 @@ class V2BrokerStorage(V2USStorage):
             },
         )
 
+    def existing_exec_ids(self, broker_code: str, exec_ids: Iterable[str]) -> set[str]:
+        values = sorted({value for value in exec_ids if value})
+        if not values:
+            return set()
+        result = self.client.query(
+            f"SELECT DISTINCT exec_id FROM {EXECUTIONS_TABLE} "
+            "WHERE broker_code = {broker:String} AND exec_id IN {ids:Array(String)}",
+            parameters={"broker": broker_code, "ids": values},
+        )
+        return {str(row[0]) for row in result.result_rows}
+
     def write_executions(self, rows: Sequence[Any], *, provenance: Provenance) -> int:
+        history = _is_history(provenance)
+        if history and rows:
+            known = self.existing_exec_ids(rows[0].broker_code, (row.exec_id for row in rows))
+            rows = [row for row in rows if row.exec_id not in known]
         identities = self._identities(rows, provenance)
         methods = self.execution_methods() if rows else {}
         return self._write(
@@ -298,7 +333,7 @@ class V2BrokerStorage(V2USStorage):
             provenance,
             lambda row: {
                 **identities.get(row.vendor_id, UNRESOLVED).columns(EXECUTIONS_TABLE),
-                "execution_method_id": self.execution_method_for(row.placed_by_client, methods),
+                "execution_method_id": self._method(row.placed_by_client, methods, history),
                 "strategy_id": None,  # populated by the trade engine
             },
         )
@@ -316,3 +351,61 @@ class V2BrokerStorage(V2USStorage):
                 "strategy_id": None,
             },
         )
+
+    def write_order_events(self, rows: Sequence[Any], *, provenance: Provenance) -> int:
+        history = _is_history(provenance)
+        identities = self._identities(rows, provenance)
+        methods = self.execution_methods() if rows else {}
+        return self._write(
+            ORDER_EVENTS_TABLE,
+            rows,
+            provenance,
+            lambda row: {
+                **identities.get(row.vendor_id, UNRESOLVED).columns(ORDER_EVENTS_TABLE),
+                "execution_method_id": self._method(row.placed_by_client, methods, history),
+                "strategy_id": None,
+                # Deltas, routing and broker feedback are only known from a live order stream.
+                **dict.fromkeys(_ORDER_EVENT_STREAM_COLUMNS),
+            },
+        )
+
+    def write_cash_flows(self, rows: Sequence[Any], *, provenance: Provenance) -> int:
+        identities = self._identities([row for row in rows if row.vendor_id], provenance)
+        return self._write(
+            CASH_FLOWS_TABLE,
+            rows,
+            provenance,
+            lambda row: {
+                **(
+                    identities.get(row.vendor_id, UNRESOLVED) if row.vendor_id else NO_INSTRUMENT
+                ).columns(CASH_FLOWS_TABLE),
+                "strategy_id": None,
+                "trade_name_id": None,
+                "linked_exec_id": None,
+                "linked_corp_action_id": None,
+            },
+            drop=frozenset({"vendor_id"}),  # resolution input only; not a cash_flows column
+        )
+
+    def _method(self, client_id: int | None, methods: Mapping[int, str], history: bool) -> str:
+        if history and client_id is None:  # Flex does not report the API client id
+            return UNMAPPED_EXECUTION_METHOD
+        return self.execution_method_for(client_id, methods)
+
+
+_ORDER_EVENT_STREAM_COLUMNS = (
+    "limit_price_before",
+    "limit_price_after",
+    "aux_price_before",
+    "aux_price_after",
+    "quantity_before",
+    "route_before",
+    "route_after",
+    "message",
+    "error_code",
+    "warning_text",
+)
+
+
+def _is_history(provenance: Provenance) -> bool:
+    return provenance.source_channel.rpartition(":")[2] in HISTORY_CHANNELS

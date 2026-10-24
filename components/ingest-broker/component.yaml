@@ -9,7 +9,7 @@ image: ghcr.io/arjundoshi221/factorlab-ingest-broker
 dockerfile: components/ingest-broker/Dockerfile
 entrypoint: factorlab-ingest-broker
 providers: [ibkr]
-secrets: [CLICKHOUSE_PASSWORD, IBKR_CLIENT_ID]
+secrets: [CLICKHOUSE_PASSWORD, IBKR_CLIENT_ID, IBKR_FLEX_TOKEN]
 services:
   - name: ibkr-snapshot
     monitor: {interval_s: 30}

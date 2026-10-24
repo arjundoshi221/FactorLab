@@ -454,6 +454,8 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin, ClassificationS
         "AccountStateRow": "write_account_state",
         "ExecutionRecord": "write_executions",
         "OpenOrderSnapshot": "write_open_orders",
+        "OrderEventRecord": "write_order_events",
+        "CashFlowRecord": "write_cash_flows",
     }
 
     def write_snapshot(self, rows: Sequence[Any], *, provenance: Provenance) -> WriteResult:

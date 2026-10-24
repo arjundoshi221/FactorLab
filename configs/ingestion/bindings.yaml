@@ -49,6 +49,9 @@ bindings:
   # shadow fetches, archives and normalizes but writes nothing; the production
   # job is scripts/us/ibkr/us_portfolio_ibkr_snapshot.py (IBKRBrokerProvider).
   - {dataset: broker.snapshot, market: USA, provider: ibkr, role: shadow, params: {modes: [paper, live]}}  # -> primary
+  # Flex statement history (fills, executed orders, cash; up to 365 days), run on demand:
+  # factorlab-ingest-broker engine run --dataset broker.flex_activity --market USA
+  - {dataset: broker.flex_activity, market: USA, provider: ibkr, role: primary}
   # Political bootstrap runs these datasets in dependency order through the engine.
   - {dataset: ref.legislators, market: USA, provider: congress_legislators, role: primary}
   - {dataset: alt.political_filings, market: USA, provider: house_clerk, role: primary}

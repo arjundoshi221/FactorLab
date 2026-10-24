@@ -8,6 +8,8 @@ dependencies = [
     "factorlab-ingest",
     "pydantic>=2.5",
     "ib_async>=2.1",
+    "requests>=2.32.3",
+    "defusedxml>=0.7.1",
 ]
 
 [tool.uv.sources]

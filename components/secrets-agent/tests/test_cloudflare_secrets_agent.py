@@ -162,6 +162,7 @@ def test_render_bundle_writes_ibkr_gateway_and_client_secrets(tmp_path, monkeypa
             "IBKR_PAPER_PASSWORD": "paper-password",
             "IBKR_LIVE_PASSWORD": None,
             "IBKR_VNC_PASSWORD": "vnc-password",
+            "IBKR_FLEX_TOKEN": "flex-token",
         },
         "upstox": {"status": "missing"},
         "schwab": {"status": "missing"},
@@ -173,6 +174,22 @@ def test_render_bundle_writes_ibkr_gateway_and_client_secrets(tmp_path, monkeypa
     assert not (live / "TWS_PASSWORD").exists()
     assert (live / "VNC_SERVER_PASSWORD").read_text() == "vnc-password"
     assert (ibkr_client / "CLICKHOUSE_PASSWORD").read_text() == "database-password"
+    assert (ibkr_client / "IBKR_FLEX_TOKEN").read_text() == "flex-token"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="re-rendering replaces read-only files")
+def test_a_removed_flex_token_is_removed_from_the_client_volume(tmp_path, monkeypatch):
+    agent = _load_agent_module()
+    client = tmp_path / "ibkr-client"
+    client.mkdir()
+    monkeypatch.setattr(agent, "IBKR_CLIENT_DIR", client)
+    monkeypatch.setattr(agent, "IBKR_PAPER_DIR", tmp_path / "absent-paper")
+    monkeypatch.setattr(agent, "IBKR_LIVE_DIR", tmp_path / "absent-live")
+
+    agent._render_ibkr({"IBKR_FLEX_TOKEN": "flex-token"}, "database-password")
+    assert (client / "IBKR_FLEX_TOKEN").read_text() == "flex-token"
+    agent._render_ibkr({"IBKR_FLEX_TOKEN": None}, "database-password")
+    assert not (client / "IBKR_FLEX_TOKEN").exists()
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")

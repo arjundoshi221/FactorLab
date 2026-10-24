@@ -13,9 +13,11 @@ from typing import Literal
 
 from factorlab.ingest.datasets.broker import (
     AccountStateRow,
+    CashFlowRecord,
     ExecutionRecord,
     Mode,
     OpenOrderSnapshot,
+    OrderEventRecord,
     PositionSnapshot,
     ProductType,
     Side,
@@ -46,9 +48,11 @@ __all__ = [
     "SEC_TYPE_TO_PRODUCT",
     "AccountStateRow",
     "BrokerCode",
+    "CashFlowRecord",
     "ExecutionRecord",
     "Mode",
     "OpenOrderSnapshot",
+    "OrderEventRecord",
     "PositionSnapshot",
     "ProductType",
     "Side",

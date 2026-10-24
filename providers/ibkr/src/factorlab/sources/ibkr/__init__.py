@@ -1,13 +1,14 @@
 """Interactive Brokers read-only adapter.
 
 Mirrors broker-side truth (positions, account state, executions, open
-orders) across paper and live IBKR accounts into the ``broker.*`` mirror
-tables through the shared provider contract
-(:mod:`factorlab.ingest.provider`):
+orders, and Flex statement history of fills, orders and cash) across paper
+and live IBKR accounts into the ``broker.*`` mirror tables through the
+shared provider contract (:mod:`factorlab.ingest.provider`):
 
 * :mod:`.capture` — IB Gateway responses -> archivable ``RawCapture`` payloads;
 * :mod:`.normalize` — pure payload -> ``broker.*`` shapes (replayable from raw);
-* :mod:`.provider` — :class:`IBKRBrokerProvider`, the ingestion run per snapshot.
+* :mod:`.provider` — :class:`IBKRBrokerProvider`, the ingestion run per snapshot;
+* :mod:`.flex` / :mod:`.flex_normalize` — Flex Web Service statements (HTTPS, no Gateway).
 
 Order placement is out of scope — see ``docs/data-sources/us/ibkr.md`` §4
 for the three-layer read-only guard.
@@ -117,7 +118,9 @@ __all__ = [
 # Dataset source for the provider-agnostic engine (07 §6, P6). IBKRBrokerProvider above
 # keeps serving scripts/us/ibkr/us_portfolio_ibkr_snapshot.py until the P6 cutover.
 from factorlab.ingest.registry import register_source
+from factorlab.sources.ibkr.flex_source import IbkrFlexActivity
 from factorlab.sources.ibkr.snapshot_source import IbkrBrokerSnapshot
 
 register_source(IbkrBrokerSnapshot)
-__all__ += ["IbkrBrokerSnapshot"]
+register_source(IbkrFlexActivity)
+__all__ += ["IbkrBrokerSnapshot", "IbkrFlexActivity"]

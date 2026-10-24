@@ -65,7 +65,9 @@ configured US resolution uses SchwabListings and canonical reference sinks.
   `alt.political_trades`, `alt.political_committees`,
   `alt.political_committee_memberships`, `fundamentals.filings`,
   `fundamentals.line_items`, `broker.positions_snapshot`,
-  `broker.account_state_snapshot`, `broker.executions`, `broker.open_orders_snapshot`.
+  `broker.account_state_snapshot`, `broker.executions`, `broker.open_orders_snapshot`,
+  `broker.order_events`, `broker.cash_flows`. Executions written under a `HISTORY_CHANNELS`
+  channel (`flex_statement`) skip any `exec_id` already stored.
 - Reads for enrichment: `ref.exchanges`, `ref.currencies`, `ref.broker_metrics_map`,
   `ref.execution_methods`.
 - `country_code` is `IN` for `V2IndiaStorage` and `US` for `V2USStorage` and subclasses.

@@ -39,7 +39,7 @@ npm scripts ([package.json](package.json)): `check` (`tsc --noEmit`), `deploy`
 |---|---|---|---|
 | KV | binding `RUNTIME_STATE` | - | shared with the callback Worker |
 | Secrets Store | `UPSTOX_API_KEY`, `UPSTOX_API_SECRET`, `SCHWAB_APP_KEY`, `SCHWAB_APP_SECRET`, `TOKEN_ENCRYPTION_KEY`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_PASSWORD_SHA256`, `EODHD_API_KEY`, `FACTORLAB_API_KEY` | - | required bindings |
-| Optional secrets | `IBKR_PAPER_PASSWORD`, `IBKR_LIVE_PASSWORD`, `IBKR_VNC_PASSWORD` | null | commented out in the example |
+| Optional secrets | `IBKR_PAPER_PASSWORD`, `IBKR_LIVE_PASSWORD`, `IBKR_VNC_PASSWORD`, `IBKR_FLEX_TOKEN` | null | commented out in the example |
 | Optional secrets | `SCHWAB_APP_KEY_<ID>`, `SCHWAB_APP_SECRET_<ID>` | - | one pair per pooled account other than `primary`; missing -> status `unconfigured` |
 | Vars | `SCHWAB_ACCOUNTS` | `primary` | comma-separated pooled account ids (`[a-z0-9_]{1,32}`); `primary` is always included |
 | Vars | `UPSTOX_REDIRECT_URL`, `SCHWAB_CALLBACK_URL` | - | the callback Worker's `/oauth/callback`, `/oauth/schwab/callback` |
@@ -65,7 +65,7 @@ expiry), `schwab/accounts/<id>/current-token` (same shape, per pooled account,
   [agent.py](../../components/secrets-agent/src/factorlab/components/secrets_agent/agent.py)):
   `version: 1`, `generated_at`, `secrets.{CLICKHOUSE_PASSWORD, CLICKHOUSE_PASSWORD_SHA256,
   UPSTOX_ACCESS_TOKEN, SCHWAB_ACCESS_TOKEN, EODHD_API_KEY, FACTORLAB_API_KEY,
-  IBKR_PAPER_PASSWORD, IBKR_LIVE_PASSWORD, IBKR_VNC_PASSWORD}`, `upstox.{status,
+  IBKR_PAPER_PASSWORD, IBKR_LIVE_PASSWORD, IBKR_VNC_PASSWORD, IBKR_FLEX_TOKEN}`, `upstox.{status,
   issued_at, expires_at, user_id}`, `schwab.{status, issued_at, access_expires_at,
   refresh_expires_at}` (= `primary`). Additively, `secrets.SCHWAB_ACCESS_TOKEN_<ID>` and
   `schwab_accounts.<id>.{status, issued_at, access_expires_at, refresh_expires_at}` for every
