@@ -16,17 +16,20 @@ from factorlab.sources.ibkr.capture import (
     capture_portfolio,
     decode_capture,
 )
+from factorlab.sources.ibkr.flex_normalize import normalize_flex_statement
 from factorlab.sources.ibkr.normalize import (
     normalize_account_state,
     normalize_executions,
     normalize_open_orders,
     normalize_positions,
 )
+from factorlab.sources.ibkr.shapes import CashFlowRecord, ExecutionRecord, OrderEventRecord
 from factorlab.storage.v2_broker import (
     MANUAL_EXECUTION_METHOD,
     UNMAPPED_EXECUTION_METHOD,
     V2BrokerStorage,
 )
+from factorlab.testkit.conformance import cases
 from factorlab.testkit.ibkr import (
     make_account_value,
     make_contract,
@@ -50,6 +53,7 @@ class Client:
 
     def __init__(self):
         self.inserts = []
+        self.known_exec_ids: set[str] = set()
 
     def query(self, sql, parameters=None):
         if "FROM ref.identifier_aliases" in sql:
@@ -64,6 +68,9 @@ class Client:
             return Result([("NetLiquidation", "net_liquidation")])
         if "FROM ref.execution_methods" in sql:
             return Result([(10, "api_trade_engine_v1")])
+        if "FROM broker.executions" in sql:
+            ids = (parameters or {})["ids"]
+            return Result([(i,) for i in ids if i in self.known_exec_ids])
         raise AssertionError(sql)
 
     def insert(self, table, records, column_names):
@@ -80,10 +87,10 @@ def storage():
     return s
 
 
-def _provenance(storage, now_utc):
+def _provenance(storage, now_utc, channel="paper_gateway"):
     return Provenance(
         source="ibkr",
-        source_channel="paper_gateway",
+        source_channel=channel,
         raw_id=uuid.uuid4(),
         ingest_run_id=storage._active_run_id,
         as_of_time=now_utc,
@@ -201,3 +208,52 @@ def test_versions_are_monotonic(storage, mock_ib_paper, now_utc):
     versions = [r["version"] for r in storage.client.rows("broker.positions_snapshot")]
     assert versions == sorted(set(versions))
     assert datetime.now(UTC).timestamp() * 1e9 >= versions[0] - 1e9
+
+
+def _flex_rows(kind):
+    [(_, capture, _)] = cases("ibkr", "broker.flex_activity")
+    return [row for row in normalize_flex_statement(capture.body) if isinstance(row, kind)]
+
+
+def test_flex_executions_keep_gateway_rows_and_mark_unknown_clients(storage, now_utc):
+    storage.client.known_exec_ids = {"0001f8a3.66eb01c2.01.01"}
+    rows = _flex_rows(ExecutionRecord)
+    provenance = _provenance(storage, now_utc, "ibkr:flex_statement")
+
+    assert storage.write_executions(rows, provenance=provenance) == 2
+    api, manual = storage.client.rows("broker.executions")
+    assert set(api) == wave7_columns("broker.executions")
+    assert api["exec_id"] == "0001f8a3.66eb01c2.01.02"
+    assert api["execution_method_id"] == UNMAPPED_EXECUTION_METHOD  # Flex has no client id
+    assert api["listing_id"] == LISTING
+    assert manual["execution_method_id"] == MANUAL_EXECUTION_METHOD  # isAPIOrder="N"
+
+
+def test_gateway_executions_are_not_filtered_by_exec_id(storage, now_utc):
+    storage.client.known_exec_ids = {"0001f8a3.66eb01c2.01.01"}
+    rows = _flex_rows(ExecutionRecord)
+    assert storage.write_executions(rows, provenance=_provenance(storage, now_utc)) == 3
+
+
+def test_order_events_rows_match_ddl(storage, now_utc):
+    rows = _flex_rows(OrderEventRecord)
+    provenance = _provenance(storage, now_utc, "ibkr:flex_statement")
+    storage.write_order_events(rows, provenance=provenance)
+    aapl, _ = storage.client.rows("broker.order_events")
+    assert set(aapl) == wave7_columns("broker.order_events")
+    assert aapl["listing_id"] == LISTING
+    assert aapl["avg_fill_price_at_event"] == Decimal("175.328")
+    assert aapl["execution_method_id"] == UNMAPPED_EXECUTION_METHOD
+    assert aapl["limit_price_before"] is None
+
+
+def test_cash_flows_rows_match_ddl_and_resolve_only_instruments(storage, now_utc):
+    rows = _flex_rows(CashFlowRecord)
+    assert storage.write_cash_flows(rows, provenance=_provenance(storage, now_utc)) == 5
+    written = storage.client.rows("broker.cash_flows")
+    dividend = next(r for r in written if r["cash_flow_type"] == "dividend")
+    deposit = next(r for r in written if r["cash_flow_type"] == "deposit")
+    assert set(dividend) == wave7_columns("broker.cash_flows")
+    assert (dividend["listing_id"], dividend["security_id"]) == (LISTING, SECURITY)
+    assert dividend["amount"] == Decimal("26.000000")
+    assert (deposit["listing_id"], deposit["resolution_confidence"]) == (None, "exact")

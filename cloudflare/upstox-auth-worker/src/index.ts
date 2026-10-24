@@ -17,6 +17,8 @@ interface Env {
   IBKR_PAPER_PASSWORD?: SecretBinding;
   IBKR_LIVE_PASSWORD?: SecretBinding;
   IBKR_VNC_PASSWORD?: SecretBinding;
+  // Optional IBKR Flex Web Service token (statement history for ingest-broker).
+  IBKR_FLEX_TOKEN?: SecretBinding;
   UPSTOX_REDIRECT_URL: string;
   SCHWAB_CALLBACK_URL: string;
   // Comma-separated pooled Schwab accounts; `primary` is always included.
@@ -468,7 +470,7 @@ async function runtimeSecrets(request: Request, env: Env): Promise<Response> {
   const accounts = schwabAccounts(env);
   const [
     clickhousePassword, clickhouseHash, eodhdKey, factorlabApiKey, schwabPool,
-    ibkrPaperPassword, ibkrLivePassword, ibkrVncPassword,
+    ibkrPaperPassword, ibkrLivePassword, ibkrVncPassword, ibkrFlexToken,
   ] = await Promise.all([
     env.CLICKHOUSE_PASSWORD.get(),
     env.CLICKHOUSE_PASSWORD_SHA256.get(),
@@ -478,6 +480,7 @@ async function runtimeSecrets(request: Request, env: Env): Promise<Response> {
     optionalSecret(env.IBKR_PAPER_PASSWORD),
     optionalSecret(env.IBKR_LIVE_PASSWORD),
     optionalSecret(env.IBKR_VNC_PASSWORD),
+    optionalSecret(env.IBKR_FLEX_TOKEN),
   ]);
   const accessToken = valid && record ? await decryptAccessToken(env, record) : null;
   const schwab = schwabPool[0];  // primary keeps the legacy fields below
@@ -497,6 +500,7 @@ async function runtimeSecrets(request: Request, env: Env): Promise<Response> {
       IBKR_PAPER_PASSWORD: ibkrPaperPassword,
       IBKR_LIVE_PASSWORD: ibkrLivePassword,
       IBKR_VNC_PASSWORD: ibkrVncPassword,
+      IBKR_FLEX_TOKEN: ibkrFlexToken,
       ...pooledTokens,
     },
     upstox: record ? {

@@ -12,8 +12,10 @@ from dataclasses import dataclass
 from factorlab.ingest.datasets.broker import (
     AccountStateRow,
     BrokerSink,
+    CashFlowRecord,
     ExecutionRecord,
     OpenOrderSnapshot,
+    OrderEventRecord,
     PositionSnapshot,
     SnapshotRequest,
 )
@@ -197,6 +199,16 @@ DATASETS: dict[str, DatasetSpec] = {
             requires_alias=False,  # rows carry broker_code + vendor_id, resolved in the DB service
         ),
         DatasetSpec(
+            # Broker statement history (IBKR Flex): fills, filled orders and cash movements.
+            id="broker.flex_activity",
+            tables=("broker.executions", "broker.order_events", "broker.cash_flows"),
+            request_type=SnapshotRequest,
+            record_types=(ExecutionRecord, OrderEventRecord, CashFlowRecord),
+            sink_protocol=BrokerSink,
+            sink_method="write_snapshot",
+            requires_alias=False,
+        ),
+        DatasetSpec(
             id="market.bars",
             tables=("market.bars",),
             request_type=BarRequest,
@@ -246,6 +258,7 @@ __all__ = [
     "BarSink",
     "BrokerSink",
     "Capabilities",
+    "CashFlowRecord",
     "ConstituentRecord",
     "ContractBarRecord",
     "ContractBarSink",
@@ -262,6 +275,7 @@ __all__ = [
     "InstrumentRef",
     "InstrumentSink",
     "OpenOrderSnapshot",
+    "OrderEventRecord",
     "PositionSnapshot",
     "ReferenceRequest",
     "SectorRecord",

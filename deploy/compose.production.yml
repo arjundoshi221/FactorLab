@@ -195,6 +195,7 @@ services:
       IBKR_PORT_LIVE: ${IBKR_PORT_LIVE:-4003}
       IBKR_SNAPSHOT_TIMES: ${IBKR_SNAPSHOT_TIMES:-06:00,16:30}
       IBKR_SNAPSHOT_LOCK: /tmp/ibkr-snapshot.lock
+      IBKR_FLEX_QUERY_ID: ${IBKR_FLEX_QUERY_ID:-}
     depends_on:
       bootstrap:
         condition: service_completed_successfully

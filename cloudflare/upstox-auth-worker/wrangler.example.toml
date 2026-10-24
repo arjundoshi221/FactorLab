@@ -71,6 +71,13 @@ secret_name = "FACTORLAB_API_KEY"
 # store_id = "REPLACE_WITH_SECRETS_STORE_ID"
 # secret_name = "IBKR_VNC_PASSWORD"
 
+# Optional IBKR Flex Web Service token (Portal -> Settings -> Flex Web Service);
+# rendered for ingest-broker's broker.flex_activity. Missing binding renders as null.
+# [[secrets_store_secrets]]
+# binding = "IBKR_FLEX_TOKEN"
+# store_id = "REPLACE_WITH_SECRETS_STORE_ID"
+# secret_name = "IBKR_FLEX_TOKEN"
+
 # Extra pooled Schwab accounts (one developer app each), optional. For account id
 # `acct2`, create SCHWAB_APP_KEY_ACCT2 / SCHWAB_APP_SECRET_ACCT2 in the store, uncomment,
 # and list the id in SCHWAB_ACCOUNTS (in both Workers). An id without bindings shows

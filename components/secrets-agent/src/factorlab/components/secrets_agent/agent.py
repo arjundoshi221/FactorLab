@@ -220,13 +220,18 @@ def _optional_secret(secrets: dict[str, Any], name: str) -> str | None:
 
 
 def _render_ibkr(secrets: dict[str, Any], clickhouse_password: str) -> str | None:
-    """Render IB Gateway logins and the snapshot client's ClickHouse password.
+    """Render IB Gateway logins and the broker client's ClickHouse password and Flex token.
 
     Returns ``None`` when no IBKR volume is mounted, else the modes whose
     Gateway password is present (``paper+live``, ``paper``, ``none``...).
     """
     if IBKR_CLIENT_DIR.is_dir():
         _atomic_write(IBKR_CLIENT_DIR / "CLICKHOUSE_PASSWORD", clickhouse_password)
+        flex_token = _optional_secret(secrets, "IBKR_FLEX_TOKEN")
+        if flex_token is None:
+            _remove(IBKR_CLIENT_DIR / "IBKR_FLEX_TOKEN")
+        else:
+            _atomic_write(IBKR_CLIENT_DIR / "IBKR_FLEX_TOKEN", flex_token)
     vnc_password = _optional_secret(secrets, "IBKR_VNC_PASSWORD")
     mounted = False
     ready = []
