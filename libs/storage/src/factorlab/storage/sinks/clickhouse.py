@@ -478,8 +478,9 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin, ClassificationS
     # -- market.bars -----------------------------------------------------------
     def _insert_bars(self, table: str, records: list[dict[str, Any]]) -> None:
         # A long daily history can exceed ClickHouse's 100-partition insert limit.
-        # Five calendar years contain at most 60 monthly partitions per country
-        # and resolution. Keep all lineage columns intact across the batches.
+        # Five calendar years contain at most 60 monthly partitions (5 yearly ones after
+        # wave 16) per country and resolution. Keep all lineage columns intact across the
+        # batches.
         windows: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
         for row in records:
             key = (str(row["country_code"]), str(row["resolution"]), row["trade_date"].year // 5)

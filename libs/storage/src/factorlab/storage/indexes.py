@@ -69,9 +69,10 @@ class IndexStorage:
             return
         for year in range(start.year, end.year + 1):
             lo, hi = max(start, date(year, 1, 1)), min(end, date(year, 12, 31))
-            # trade_date is in neither the partition key (toYYYYMM(bar_time)) nor the sort
-            # key, so without the bar_time bounds FINAL merged every daily partition and hit
-            # the server memory limit. Duplicates share bar_time, hence one partition.
+            # trade_date is in neither the partition key (bar_time's month, or its year
+            # after wave 16) nor the sort key, so without the bar_time bounds FINAL merged
+            # every daily partition and hit the server memory limit. Duplicates share
+            # bar_time, hence one partition.
             rows = self.client.query(
                 "SELECT trade_date, listing_id, toFloat64(close) FROM market.bars FINAL "
                 "WHERE country_code = 'US' AND resolution = 'daily' "

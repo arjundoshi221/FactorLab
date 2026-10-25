@@ -265,7 +265,8 @@ def test_end_to_end_listings_contracts_bars_into_clickhouse_sinks():
     [future_bar] = db.rows("market.futures_contract_bars")
     assert future_bar["underlying_listing_id"] == listing_ids[0] and future_bar["oi"] == 812000
     raw_channels = [row["source_channel"] for row in db.log["raw.archive"]]
-    assert raw_channels.count("upstox:instruments") == 2
+    # Listings and contracts read the same master file; the identical capture is archived once.
+    assert raw_channels.count("upstox:instruments") == 1
     runs = [row for row in db.log["meta.ingestion_runs"] if row["status"] != "running"]
     assert [row["pipeline"] for row in runs] == [
         "ref.listings:upstox",

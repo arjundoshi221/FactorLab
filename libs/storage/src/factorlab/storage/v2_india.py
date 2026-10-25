@@ -7,7 +7,7 @@ import hashlib
 import json
 import uuid
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from factorlab.ingest.provider import RawCapture
@@ -18,6 +18,9 @@ from factorlab.storage.clickhouse import (
     _version,
 )
 from factorlab.storage.v2_reference import UnresolvedReference, V2ReferenceWriter
+
+# How far back an identical capture of the same request is reused instead of re-archived.
+RAW_REUSE_DAYS = 30
 
 
 class V2IndiaStorage(ClickHouseStorage):
@@ -77,7 +80,32 @@ class V2IndiaStorage(ClickHouseStorage):
         )
 
     def archive_raw(self, capture: RawCapture, *, source: str, source_channel: str) -> uuid.UUID:
-        """Persist one provider response to immutable ``raw.archive`` and return its id."""
+        """Persist one provider response to immutable ``raw.archive`` and return its id.
+
+        A byte-identical response to the same request within ``RAW_REUSE_DAYS`` reuses
+        the stored capture: replay stays exact and weekly history refreshes stop
+        re-archiving the same multi-decade payloads.
+        """
+        sha256 = hashlib.sha256(capture.body).hexdigest()
+        stored = self.client.query(
+            "SELECT raw_id FROM raw.archive WHERE source = {source:String} "
+            "AND country_code = {country:String} AND source_channel = {channel:String} "
+            "AND request_key = {key:String} AND response_sha256 = {sha256:String} "
+            "AND fetched_at >= {since:DateTime64(3, 'UTC')} "
+            "AND fetched_at <= {fetched:DateTime64(3, 'UTC')} "
+            "ORDER BY fetched_at DESC LIMIT 1",
+            parameters={
+                "source": source,
+                "country": self.country_code,
+                "channel": source_channel,
+                "key": capture.request_key,
+                "sha256": sha256,
+                "since": capture.fetched_at - timedelta(days=RAW_REUSE_DAYS),
+                "fetched": capture.fetched_at,
+            },
+        ).result_rows
+        if stored:
+            return uuid.UUID(str(stored[0][0]))
         raw_id = uuid.uuid4()
         self._insert_dicts(
             "raw.archive",
@@ -95,7 +123,7 @@ class V2IndiaStorage(ClickHouseStorage):
                     "response_body": gzip.compress(capture.body),
                     "content_type": capture.content_type,
                     "content_encoding": "gzip",
-                    "response_sha256": hashlib.sha256(capture.body).hexdigest(),
+                    "response_sha256": sha256,
                     "fetched_at": capture.fetched_at,
                     "window_start_at": None,
                     "event_count": None,

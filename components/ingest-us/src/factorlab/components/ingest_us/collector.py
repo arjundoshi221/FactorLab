@@ -23,6 +23,7 @@ from factorlab.ingest.errors import AuthRequired
 from factorlab.ingest.provider import ingestion_run
 from factorlab.runtime.monitor import MonitoredEvent
 from factorlab.sources.schwab.normalize import provider_symbol as schwab_symbol
+from factorlab.storage.v2_us import REWRITE_DAYS
 from factorlab.storage.v2_us import V2USStorage as USStorage
 
 log = logging.getLogger("factorlab.schwab")
@@ -94,8 +95,19 @@ def collect(
                 start = min(start, gap)
         if resolution == "1min":
             start = max(start, now - timedelta(days=60))
-    sink = PriceSink(storage)
     binding = client.bindings["market.bars", resolution]
+    if full and not live and resolution == "daily":
+        # The weekly refresh re-reads history since 1970 to catch vendor corrections; write
+        # only the bars that changed, or every listing rewrites ~680 monthly partitions.
+        sink = PriceSink(
+            storage,
+            existing=storage.stored_daily_bars(
+                instrument_id, source=binding.source_name, start=start, end=end
+            ),
+            rewrite_from=end - timedelta(days=REWRITE_DAYS),
+        )
+    else:
+        sink = PriceSink(storage)
     pipeline = "us_live" if live else f"us_recovery_{resolution}"
     fetch_units = (
         1

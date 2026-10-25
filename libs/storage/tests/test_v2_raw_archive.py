@@ -3,10 +3,12 @@
 import gzip
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 from factorlab.ingest.provider import RawCapture
 from factorlab.storage.v2_us import V2USStorage
+from factorlab.testkit.fake_clickhouse import FakeClickHouse
 
 
 class Client:
@@ -15,6 +17,9 @@ class Client:
 
     def insert(self, table, records, column_names):
         self.inserts.append((table, [dict(zip(column_names, row, strict=True)) for row in records]))
+
+    def query(self, sql, parameters=None):
+        return SimpleNamespace(result_rows=[])
 
 
 FETCHED = datetime(2026, 9, 24, 13, 0, tzinfo=UTC)
@@ -88,3 +93,33 @@ def test_archive_http_response_keeps_its_row_shape():
     assert row["status_code"] == 200
     assert row["content_type"] == "application/json"
     assert row["request_key"] == "AAPL"
+
+
+def _capture(body=b"history", key="AAPL:daily", at=FETCHED):
+    return RawCapture(
+        body=body, request_key=key, transport="http", fetched_at=at, source_url="https://api/x"
+    )
+
+
+def test_identical_capture_reuses_the_archived_raw_id():
+    db = FakeClickHouse()
+    storage = V2USStorage(db)
+    first = storage.archive_raw(_capture(), source="schwab", source_channel="schwab")
+    again = storage.archive_raw(
+        _capture(at=FETCHED + timedelta(days=7)), source="schwab", source_channel="schwab"
+    )
+    assert again == first
+    assert len(db.rows("raw.archive")) == 1
+
+
+def test_changed_body_key_or_stale_capture_is_archived_again():
+    db = FakeClickHouse()
+    storage = V2USStorage(db)
+    first = storage.archive_raw(_capture(), source="schwab", source_channel="schwab")
+    for capture in (
+        _capture(body=b"corrected"),
+        _capture(key="MSFT:daily"),
+        _capture(at=FETCHED + timedelta(days=31)),
+    ):
+        assert storage.archive_raw(capture, source="schwab", source_channel="schwab") != first
+    assert len(db.rows("raw.archive")) == 4

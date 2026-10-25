@@ -141,7 +141,8 @@ def test_reference_inventory_selects_nearest_unexpired_futures(monkeypatch):
     assert futures[0].listing_id == alpha.listing_id
     assert len(inventory.call_args.args[0]) == 3
     assert inventory.call_args.kwargs == {"source": "upstox", "universe": "full_nse_eq"}
-    assert len(db.rows("raw.archive")) == 2
+    # Listings and contracts read one master file; the identical capture is archived once.
+    assert len(db.rows("raw.archive")) == 1
     assert db.rows("meta.ingestion_runs")[-1]["pipeline"] == "india_reference_premarket"
     sources.close()
     sink.close()

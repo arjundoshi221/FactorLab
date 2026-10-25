@@ -55,7 +55,9 @@ configured US resolution uses SchwabListings and canonical reference sinks.
 
 **Shared profiles:** `ProfileStorage.sync` retains omitted records and existing strategy/closed-date fields. `V2BrokerStorage` records complete snapshots, including empty ones. `PortfolioBookStorage` validates active profile/catalog ownership and durable orders before writing catalog replacements or append-only assignment events; fills remain unchanged. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md).
 
-- Writes: `raw.archive` (gzip body, `response_sha256`, `content_encoding = 'gzip'`),
+- Writes: `raw.archive` (gzip body, `response_sha256`, `content_encoding = 'gzip'`; a
+  byte-identical response to the same source, channel and request key within
+  `RAW_REUSE_DAYS` (30) returns the stored `raw_id` instead of a new row),
   `meta.ingestion_runs` (`source_channel` = the run's `source`), `meta.unresolved_entities`
   (parked rows), `meta.expected_series`, `meta.recovery_state`, `meta.session_coverage`,
   `meta.source_status`, `ref.entities`, `ref.securities`, `ref.listings`,

@@ -28,7 +28,26 @@ US_FUTURES_EXCHANGES = {
     "IFUS": ("IFUS", "ICE Futures U.S."),
 }
 _EQUITY_SESSIONS = {"regular": {"open": "09:30", "close": "16:00"}}
+# Bar values a history refresh compares before rewriting a stored day.
+DAILY_BAR_VALUES = (
+    "session",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "turnover",
+    "trades_count",
+    "oi",
+    "settlement_price",
+)
+# The trailing days a refresh always rewrites, so coverage keeps a fresh ingested_at.
+REWRITE_DAYS = 7
 _GLOBEX_SESSIONS = {"regular": {"open": "18:00", "close": "17:00"}}
+
+
+def _utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 class V2USStorage(V2IndiaStorage):
@@ -327,13 +346,43 @@ class V2USStorage(V2IndiaStorage):
         )
 
     def _insert_daily_by_five_years(self, table: str, records: list[dict[str, Any]]) -> None:
-        """Bound each insert to at most 60 monthly ClickHouse partitions."""
+        """Bound each insert to 60 monthly (or, after wave 16, 5 yearly) partitions."""
         windows: dict[int, list[dict[str, Any]]] = {}
         for record in records:
             window = record["trade_date"].year // 5
             windows.setdefault(window, []).append(record)
         for window in sorted(windows):
             self._insert_dicts(table, windows[window])
+
+    def stored_daily_bars(
+        self, listing_id: uuid.UUID, *, source: str, start: datetime, end: datetime
+    ) -> dict[datetime, tuple[Any, ...]]:
+        """Stored daily values keyed by UTC ``bar_time``, for skipping unchanged rewrites."""
+        result = self.client.query(
+            f"SELECT bar_time, {', '.join(DAILY_BAR_VALUES)} FROM market.bars FINAL "
+            "WHERE country_code = 'US' AND listing_id = {id:UUID} AND resolution = 'daily' "
+            "AND source = {source:String} AND bar_time >= {start:DateTime64(3, 'UTC')} "
+            "AND bar_time <= {end:DateTime64(3, 'UTC')}",
+            parameters={"id": listing_id, "source": source, "start": start, "end": end},
+        )
+        return {_utc(row[0]): tuple(row[1:]) for row in result.result_rows}
+
+    def stored_coverage(
+        self, listing_id: uuid.UUID, *, source: str, resolution: str, first: date, last: date
+    ) -> dict[date, tuple[int, int]]:
+        result = self.client.query(
+            "SELECT trade_date, expected, actual FROM meta.session_coverage FINAL "
+            "WHERE country_code = 'US' AND source = {source:String} AND listing_id = {id:UUID} "
+            "AND resolution = {resolution:String} AND trade_date BETWEEN {first:Date} AND {last:Date}",
+            parameters={
+                "source": source,
+                "id": listing_id,
+                "resolution": resolution,
+                "first": first,
+                "last": last,
+            },
+        )
+        return {row[0]: (int(row[1]), int(row[2])) for row in result.result_rows}
 
     def coverage(
         self,
@@ -392,8 +441,22 @@ class V2USStorage(V2IndiaStorage):
                         now,
                     )
                 )
+        missing = sum(item["missing"] for item in records)
+        # A full refresh re-derives every day since listing; rewriting the unchanged ones
+        # created ~680 monthly parts per listing and OOM-killed ClickHouse.
+        fresh_from = last - timedelta(days=REWRITE_DAYS)
+        if records and first < fresh_from:
+            stored = self.stored_coverage(
+                instrument_id, source=source, resolution=resolution, first=first, last=last
+            )
+            records = [
+                item
+                for item in records
+                if item["trade_date"] >= fresh_from
+                or stored.get(item["trade_date"]) != (item["expected"], item["actual"])
+            ]
         self._insert_daily_by_five_years("meta.session_coverage", records)
-        return sum(item["missing"] for item in records)
+        return missing
 
     # -- US futures (F-043) ----------------------------------------------------
     def futures_session_closes(self, day: date, *, source: str) -> list[dict[str, Any]]:

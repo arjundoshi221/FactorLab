@@ -111,8 +111,8 @@ the rollout completes.
   see [the runbook](../../docs/operations/us-russell3000-daily.md).
 - Daily scope is every published member. Only runnable daily recovery blocks minute
   collection; symbols in retry backoff permit minute work. `US_MINUTE_TIER_SIZE`
-  caps minutes at 0-250 (default 250; 0 disables minutes). Daily partial responses
-  stay queued, and histories receive a weekly full refresh.
+  caps minutes at 0-250 (default 250; 0 disables minutes). Daily partials stay queued; the
+  weekly full refresh writes only changed days ([why](../../docs/operations/clickhouse-memory.md)).
 - **Available history** starts at the first valid returned candle, within the calendar
   horizon (1970 onward). It does not promise pre-listing, delisted, raw/unadjusted,
   or dividend-adjusted data. Coverage errors remain visible even after a history

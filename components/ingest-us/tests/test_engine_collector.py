@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -244,3 +245,45 @@ def test_roster_publish_writes_sectors_for_validated_members_only(monkeypatch):
     assert [row["name"] for row in db.rows("ref.sectors")] == ["Information Technology"]
     members = db.rows("ref.universe_membership")
     assert [(row["universe_id"], row["listing_id"]) for row in members] == [("r3k_iwv", identifier)]
+
+
+def _full_refresh(storage, client, identifier, state, now):
+    state.update(history_complete=False, full_refreshed_at=None)
+    assert collector.collect(storage, client, ("AAPL", "AAPL", identifier), "daily", now=now)
+
+
+def test_full_refresh_does_not_rewrite_unchanged_history(monkeypatch):
+    storage, client, db, identifier, _, state, _ = setup(monkeypatch)
+    later = NOW + timedelta(days=14)  # the 2026-09-04 bar is now outside the rewrite window
+    _full_refresh(storage, client, identifier, state, later)
+    assert len(db.rows("market.bars")) == 1
+    _full_refresh(storage, client, identifier, state, later)
+    assert len(db.rows("market.bars")) == 1
+    assert db.rows("meta.ingestion_runs")[-1]["rows_written"] == 0
+
+
+def test_full_refresh_writes_corrected_history(monkeypatch):
+    storage, client, db, identifier, http, state, _ = setup(monkeypatch)
+    later = NOW + timedelta(days=14)
+    _full_refresh(storage, client, identifier, state, later)
+    original = http.get.side_effect
+
+    def corrected(url, **kwargs):
+        response = original(url, **kwargs)
+        payload = json.loads(response.content)
+        for candle in payload.get("candles", []):
+            candle["close"] = 10.5  # a vendor correction, e.g. a split adjustment
+        response.content = json.dumps(payload).encode()
+        return response
+
+    http.get.side_effect = corrected
+    _full_refresh(storage, client, identifier, state, later)
+    closes = [row["close"] for row in db.rows("market.bars")]
+    assert len(closes) == 2 and closes[-1] == Decimal("10.5")
+
+
+def test_full_refresh_always_rewrites_the_recent_window(monkeypatch):
+    storage, client, db, identifier, _, state, _ = setup(monkeypatch)
+    _full_refresh(storage, client, identifier, state, NOW)
+    _full_refresh(storage, client, identifier, state, NOW)
+    assert len(db.rows("market.bars")) == 2

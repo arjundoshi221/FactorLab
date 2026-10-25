@@ -524,4 +524,43 @@ class FakeClickHouse:
                         ]
                     )
             return Result([])
+        if sql.startswith("SELECT bar_time, session, open") and "FROM market.bars FINAL" in sql:
+            from factorlab.storage.v2_us import DAILY_BAR_VALUES
+
+            latest: dict[Any, dict[str, Any]] = {}
+            for row in self.rows("market.bars"):
+                if (
+                    row["listing_id"] == p["id"]
+                    and row["source"] == p["source"]
+                    and row["resolution"] == "daily"
+                    and p["start"] <= row["bar_time"] <= p["end"]
+                ):
+                    latest[row["bar_time"]] = row
+            return Result(
+                [(t, *(r[c] for c in DAILY_BAR_VALUES)) for t, r in sorted(latest.items())]
+            )
+        if sql.startswith("SELECT raw_id FROM raw.archive WHERE source = {source:String}"):
+            matches = [
+                row
+                for row in self.rows("raw.archive")
+                if row["source"] == p["source"]
+                and row["country_code"] == p["country"]
+                and row["source_channel"] == p["channel"]
+                and row["request_key"] == p["key"]
+                and row["response_sha256"] == p["sha256"]
+                and p["since"] <= row["fetched_at"] <= p["fetched"]
+            ]
+            archived = max(matches, key=lambda row: row["fetched_at"], default=None)
+            return Result([(archived["raw_id"],)] if archived else [])
+        if sql.startswith("SELECT trade_date, expected, actual FROM meta.session_coverage FINAL"):
+            days: dict[Any, dict[str, Any]] = {}
+            for row in self.rows("meta.session_coverage"):
+                if (
+                    row["listing_id"] == p["id"]
+                    and row["source"] == p["source"]
+                    and row["resolution"] == p["resolution"]
+                    and p["first"] <= row["trade_date"] <= p["last"]
+                ):
+                    days[row["trade_date"]] = row
+            return Result([(d, r["expected"], r["actual"]) for d, r in sorted(days.items())])
         raise AssertionError(f"FakeClickHouse does not understand: {sql}")

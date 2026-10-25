@@ -1,6 +1,7 @@
 """US collection jobs use dataset sources and canonical sinks under one run."""
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import date, datetime
 from typing import Any
 from uuid import UUID
@@ -24,21 +25,50 @@ from factorlab.sources.schwab.sources import (
 from factorlab.sources.schwab.transport import SchwabTransport
 from factorlab.storage.sinks import ClickHouseSinks
 from factorlab.storage.sinks.identity import IdentityResolver
+from factorlab.storage.v2_us import DAILY_BAR_VALUES
 
 
 class PriceSink(ClickHouseSinks):
-    """Retain accepted bars for recovery state and coverage bookkeeping."""
+    """Retain accepted bars for recovery state and coverage bookkeeping.
 
-    def __init__(self, storage: Any) -> None:
+    ``existing`` holds the stored values of a refreshed history (``stored_daily_bars``);
+    bars before ``rewrite_from`` that match them are not written again.
+    """
+
+    def __init__(
+        self,
+        storage: Any,
+        *,
+        existing: Mapping[datetime, tuple[Any, ...]] | None = None,
+        rewrite_from: datetime | None = None,
+    ) -> None:
         super().__init__(storage)
         self.bars: list[BarRecord] = []
+        self.existing = existing or {}
+        self.rewrite_from = rewrite_from
+        self.unchanged = 0
 
     def write_bars(self, rows: Sequence[BarRecord], *, provenance: Provenance) -> WriteResult:
+        skipped = self.unchanged
         result = super().write_bars(rows, provenance=provenance)
         if result.unresolved:
             raise ValueError("price response contains unresolved listing identities")
         self.bars.extend(rows)
-        return result
+        written = result.rows_written - (self.unchanged - skipped)
+        return replace(result, rows_written=written)
+
+    def _insert_bars(self, table: str, records: list[dict[str, Any]]) -> None:
+        if self.existing and self.rewrite_from is not None and table == "market.bars":
+            changed = [
+                record
+                for record in records
+                if record["bar_time"] >= self.rewrite_from
+                or self.existing.get(record["bar_time"])
+                != tuple(record[column] for column in DAILY_BAR_VALUES)
+            ]
+            self.unchanged += len(records) - len(changed)
+            records = changed
+        super()._insert_bars(table, records)
 
 
 class EngineClient:
