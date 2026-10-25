@@ -195,3 +195,35 @@ def test_optional_profile_waits_for_first_packet():
     now[0] += 30
     m.check()
     assert alerts[-1][1]["severity"] == "fail"
+
+
+def test_clickhouse_pressure_alerts_once_and_clears():
+    m, now, alerts, _send = setup_monitor()
+    gib = 2**30
+    m.check_clickhouse(5_000, 900, 1 * gib, 4 * gib)
+    assert not alerts
+    m.check_clickhouse(9_000, 40_000, 1 * gib, 4 * gib)
+    assert alerts[-1][0][0] == "clickhouse: memory pressure"
+    assert "49000 data parts" in alerts[-1][0][1]
+    now[0] += 3600
+    m.check_clickhouse(9_000, 40_000, 3.9 * gib, 4 * gib)
+    assert len(alerts) == 1  # still the same episode
+    m.check_clickhouse(5_000, 900, 1 * gib, 4 * gib)
+    m.check_clickhouse(5_000, 900, 3.5 * gib, 4 * gib)
+    assert len(alerts) == 2 and "memory 3.5 of 4.0 GiB" in alerts[-1][0][1]
+
+
+def test_clickhouse_probe_survives_an_unavailable_server(tmp_path):
+    m, _now, alerts, _send = setup_monitor()
+
+    def offline():
+        raise OSError("ClickHouse offline")
+
+    Storage(m, tmp_path, offline).probe_clickhouse()
+    rows = [(20_000, 0, 0, 0)]
+    online = SimpleNamespace(
+        client=SimpleNamespace(query=lambda sql: SimpleNamespace(result_rows=rows)),
+        close=lambda: None,
+    )
+    Storage(m, tmp_path, lambda: online).probe_clickhouse()
+    assert alerts[-1][0][0] == "clickhouse: memory pressure"

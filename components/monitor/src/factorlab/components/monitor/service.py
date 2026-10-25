@@ -55,6 +55,20 @@ STATUS_COLUMNS = [
 ]
 
 
+# ClickHouse holds ~55 KB per data part, outdated ones included; 50k+ parts from a history
+# rewrite OOM-killed the server on the 7.6 GiB VPS (2026-10). Warn well before that.
+CLICKHOUSE_PROBE_S = 300
+CLICKHOUSE_PARTS_WARN = 15_000
+CLICKHOUSE_MEMORY_WARN = 0.85
+CLICKHOUSE_PROBE_SQL = (
+    "SELECT (SELECT value FROM system.metrics WHERE metric = 'PartsActive'), "
+    "(SELECT value FROM system.metrics WHERE metric = 'PartsOutdated'), "
+    "(SELECT value FROM system.metrics WHERE metric = 'MemoryTracking'), "
+    "(SELECT toInt64OrZero(value) FROM system.server_settings "
+    "WHERE name = 'max_server_memory_usage')"
+)
+
+
 def timestamp(ms):
     return datetime.fromtimestamp(ms / 1000, UTC)
 
@@ -70,6 +84,7 @@ class Monitor:
         self.invalid_packets = 0
         self._warned = set()
         self._alerted = {}
+        self.clickhouse_pressure = False
 
     def _new(self, id):
         return {
@@ -135,6 +150,19 @@ class Monitor:
             self.alert(f"{id}: {subject}", message or subject, severity=severity, source=id)
         except Exception:
             log.exception("Notification failed for %s", id)
+
+    def check_clickhouse(self, active, outdated, memory, limit):
+        """Alert once when ClickHouse part count or memory nears what killed it."""
+        reasons = []
+        if active + outdated >= CLICKHOUSE_PARTS_WARN:
+            reasons.append(f"{active + outdated} data parts ({outdated} outdated)")
+        if limit > 0 and memory >= CLICKHOUSE_MEMORY_WARN * limit:
+            reasons.append(f"memory {memory / 2**30:.1f} of {limit / 2**30:.1f} GiB")
+        if reasons and not self.clickhouse_pressure:
+            self._alert("clickhouse", "memory pressure", "warn", "; ".join(reasons))
+        elif not reasons and self.clickhouse_pressure:
+            log.info("ClickHouse pressure cleared")
+        self.clickhouse_pressure = bool(reasons)
 
     def _transition(self, id, state):
         s = self.services[id]
@@ -355,6 +383,23 @@ class Storage:
             self.spill(events)
         return events
 
+    def probe_clickhouse(self):
+        """Read part and memory gauges on a short-lived connection (flush owns its own)."""
+        try:
+            client = self.connect()
+        except Exception:
+            log.exception("ClickHouse probe cannot connect")
+            return
+        try:
+            active, outdated, memory, limit = client.client.query(CLICKHOUSE_PROBE_SQL).result_rows[
+                0
+            ]
+            self.monitor.check_clickhouse(int(active), int(outdated), int(memory), int(limit))
+        except Exception:
+            log.exception("ClickHouse probe failed")
+        finally:
+            client.close()
+
 
 class Receiver(asyncio.DatagramProtocol):
     def __init__(self, monitor):
@@ -417,9 +462,16 @@ async def run(registry_path, log_dir, port=9125, health_port=9126):
     monitor.services["monitor"] = self_state
     last_flush = 0
     flush_task = None
+    last_probe = 0
+    probe_task = None
     try:
         while not stop.is_set():
             monitor.check()
+            if (probe_task is None or probe_task.done()) and (
+                time.monotonic() - last_probe >= CLICKHOUSE_PROBE_S
+            ):
+                probe_task = asyncio.create_task(asyncio.to_thread(storage.probe_clickhouse))
+                last_probe = time.monotonic()
             if flush_task is not None and flush_task.done():
                 remaining = flush_task.result()
                 monitor.events.extendleft(reversed(remaining))
@@ -443,6 +495,8 @@ async def run(registry_path, log_dir, port=9125, health_port=9126):
         await server.wait_closed()
         if flush_task is not None:
             monitor.events.extendleft(reversed(await flush_task))
+        if probe_task is not None:
+            await probe_task
         self_state["status"] = "stopped"
         self_state["last_seen_at"] = time.time()
         await asyncio.to_thread(storage.flush)

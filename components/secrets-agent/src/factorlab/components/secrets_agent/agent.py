@@ -97,6 +97,8 @@ def _clickhouse_users_xml(password_hash: str) -> str:
       <grants>
         <query>GRANT SELECT, INSERT ON meta.service_events</query>
         <query>GRANT SELECT, INSERT ON meta.service_status</query>
+        <query>GRANT SELECT ON system.metrics</query>
+        <query>GRANT SELECT ON system.server_settings</query>
       </grants>
     </monitor>
   </users>

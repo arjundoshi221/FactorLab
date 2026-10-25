@@ -16,11 +16,11 @@ Owns protocol receiver, state transitions and batched persistence. Runtime owns 
 
 ## Configuration and secrets
 
-CLICKHOUSE_* settings and CLICKHOUSE_PASSWORD from monitor_runtime. Registry defaults to /app/monitor-services.yaml. Warning alert threshold: 10 in 5 minutes. Silence deadlines come from the registry.
+CLICKHOUSE_* settings and CLICKHOUSE_PASSWORD from monitor_runtime. Registry defaults to /app/monitor-services.yaml. Warning alert threshold: 10 in 5 minutes. Silence deadlines come from the registry. Every 5 minutes a short-lived connection reads ClickHouse `PartsActive`, `PartsOutdated`, `MemoryTracking` and `max_server_memory_usage`, and alerts `clickhouse: memory pressure` once per episode at 15,000 parts or 85% of the limit ([runbook](../../docs/operations/clickhouse-memory.md)).
 
 ## Data
 
-INSERT/SELECT meta.service_events and meta.service_status. Failed inserts spill pending-*.jsonl under /var/log/factorlab/monitor and replay on recovery. Delivery is at least once after ambiguous database failures.
+INSERT/SELECT meta.service_events and meta.service_status; SELECT system.metrics and system.server_settings for the ClickHouse probe. Failed inserts spill pending-*.jsonl under /var/log/factorlab/monitor and replay on recovery. Delivery is at least once after ambiguous database failures.
 
 ## Dependencies and contracts
 

@@ -112,4 +112,4 @@ until the rollout completes.
 - The file set checked by the healthcheck is a contract with the consumers; renaming a file
   or volume here breaks ClickHouse start-up and every writer.
 
-**UDP service monitoring:** `monitor_runtime` receives only CLICKHOUSE_PASSWORD. The XML-defined monitor user can SELECT and INSERT only meta.service_events and meta.service_status; no schema or access-management grants.
+**UDP service monitoring:** `monitor_runtime` receives only CLICKHOUSE_PASSWORD. The XML-defined monitor user can SELECT and INSERT only meta.service_events and meta.service_status, and SELECT system.metrics and system.server_settings (the monitor's ClickHouse pressure probe); no schema or access-management grants.
