@@ -355,6 +355,21 @@
       },
       "description": "The primary market data table. All linear products, all resolutions, all countries, all vendors."
     },
+    "market.bars_v16": {
+      "columns": {
+        "bar_time": "bar OPEN time (convention)",
+        "entity_id": "denormalized (may be NULL for indices)",
+        "oi": "open interest, contracts",
+        "product_type": "'common','preferred','adr','etf','etn','reit', 'warrant','index','index_future', 'single_stock_future','vol_future','vol_etp'",
+        "resolution": "'5s','1min','5min','15min','1h','daily','weekly','monthly'",
+        "security_id": "denormalized",
+        "session": "'regular','pre','post','open_auction','close_auction'",
+        "settlement_price": "exchange settlement",
+        "trade_date": "session-local date, denormalized for pruning",
+        "turnover": "listing-currency notional",
+        "volume": "shares (spot) OR contracts (derivative)"
+      }
+    },
     "market.futures_continuous": {
       "columns": {
         "active_contract_id": "which contract this row came from",

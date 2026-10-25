@@ -36,6 +36,11 @@ applied by a reviewed, operator-run migration; the `schema-migrator` component's
   `plan [--phase] [--through-wave]`, `status`,
   `apply --phase schema|backfill|rbac --through-wave N [--yes] [--dry-run] [--lock-timeout 3600]`,
   `validate --through-wave N`; global `--source-database`.
+- `factorlab-db repartition plan|apply --yes` = [repartition.py](src/factorlab/schema/repartition.py):
+  copies `market.bars` and `meta.session_coverage` onto the Wave 16 yearly partitions
+  and swaps names with `EXCHANGE TABLES`. Refuses while either table had writes in the
+  last 120 s; verifies the `FINAL` row count and a sort-key-plus-version hash before
+  the swap. The `*_v16` names keep the pre-swap data until an operator drops them.
 - `codegen.main` via [generate_clickhouse_v2_schema.py](../../scripts/generate_clickhouse_v2_schema.py).
 
 ## Configuration and secrets
@@ -56,7 +61,7 @@ applied by a reviewed, operator-run migration; the `schema-migrator` component's
 
 ## Data
 
-Forward Waves 12/13 add application profiles/account ownership, nullable catalog profile IDs and append-only durable-order assignments. These migrations are separate operator operations; applied waves stay frozen. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md). Forward Wave 15 adds `market.futures_quotes` (US futures snapshots, no TTL; [F-043](../../docs/features/F-043-us-futures-quotes.md)).
+Forward Waves 12/13 add application profiles/account ownership, nullable catalog profile IDs and append-only durable-order assignments. These migrations are separate operator operations; applied waves stay frozen. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md). Forward Wave 15 adds `market.futures_quotes` (US futures snapshots, no TTL; [F-043](../../docs/features/F-043-us-futures-quotes.md)). Hand-written Wave 16 adds `market.bars_v16` and `meta.session_coverage_v16`, identical to the live tables except that daily/weekly/monthly history is partitioned by year ([runbook](../../docs/operations/clickhouse-memory.md)).
 
 - Databases: `ref`, `market`, `fundamentals`, `alt`, `book`, `risk`, `derived`,
   `broker`, `meta`, `raw`, `research`.

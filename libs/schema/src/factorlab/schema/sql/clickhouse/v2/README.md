@@ -52,3 +52,9 @@ own `wave_NN_schema_<suffix>.sql`.
   append-only durable-order assignment events. Catalog changes are generated forward
   ALTERs (`FORWARD_ALTERS`); original applied book table definitions stay frozen.
   Apply profile and portfolio migrations before the portfolio API/web release.
+- **Wave 16** (`*_daily_partitions`, hand-written): `market.bars_v16` and
+  `meta.session_coverage_v16`, copies of the live tables whose daily, weekly and monthly
+  history is partitioned by year instead of month. Applying the schema changes nothing
+  live. `factorlab-db repartition apply --yes`, run with the bar and coverage writers
+  stopped, copies the rows across, verifies them and swaps the names; see
+  [the runbook](../../../../../../../../docs/operations/clickhouse-memory.md).

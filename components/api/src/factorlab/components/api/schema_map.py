@@ -282,7 +282,7 @@ def _planned_v2_tables() -> tuple[SchemaTable, ...]:
         sql = re.sub(r"--[^\r\n]*", "", path.read_text(encoding="utf-8"))
         for statement in _split_v2_sql(sql):
             match = re.search(
-                r"\bCREATE\s+(TABLE|VIEW)\s+IF\s+NOT\s+EXISTS\s+([a-z_]+\.[a-z_]+)",
+                r"\bCREATE\s+(TABLE|VIEW)\s+IF\s+NOT\s+EXISTS\s+([a-z_]+\.[a-z0-9_]+)",
                 statement,
                 flags=re.IGNORECASE,
             )
@@ -351,7 +351,7 @@ def _planned_v2_tables() -> tuple[SchemaTable, ...]:
         sql = re.sub(r"--[^\r\n]*", "", path.read_text(encoding="utf-8"))
         for statement in _split_v2_sql(sql):
             alter = re.fullmatch(
-                r"\s*ALTER TABLE ([a-z_]+\.[a-z_]+) (ADD|MODIFY) COLUMN "
+                r"\s*ALTER TABLE ([a-z_]+\.[a-z0-9_]+) (ADD|MODIFY) COLUMN "
                 r"(?:IF NOT EXISTS )?([a-z_]+) (Nullable\(UUID\))\s*;?\s*",
                 statement,
                 re.IGNORECASE,

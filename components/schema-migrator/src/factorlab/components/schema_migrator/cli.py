@@ -5,6 +5,8 @@
     factorlab-db verify-writes    wait for a fresh raw-to-curated write after a release
     factorlab-db migrate ...      the forward-only wave runner; production waves are a
                                   separate, reviewed, user-requested operation
+    factorlab-db repartition ...  copy bars and coverage onto the wave 16 yearly
+                                  partitions and swap names (writers stopped)
 
 ``bootstrap`` applies no DDL.
 """
@@ -37,12 +39,19 @@ def _migrate(argv: list[str]) -> int:
     return migrate.main(argv)
 
 
+def _repartition(argv: list[str]) -> int:
+    from factorlab.schema import repartition
+
+    return repartition.main(argv)
+
+
 COMMANDS = {
     "bootstrap": Command(
         "check v2 schema readiness and the raw archive storage policy", _bootstrap
     ),
     "verify-writes": Command("wait for a fresh v2 write after a release", _verify_writes),
     "migrate": Command("run the forward-only v2 wave migrations", _migrate),
+    "repartition": Command("move daily history onto yearly partitions", _repartition),
 }
 
 

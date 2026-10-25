@@ -60,6 +60,7 @@
       }
     },
     "alt.social_reddit_posts": {"title": "Reddit posts", "summary": "Reserved for social media posts that mention listed securities. No data is collected yet."},
+    "market.bars_v16": {"title": "Price bars (repartition copy)", "summary": "Swap table for moving price bars onto yearly partitions. After the swap it holds the previous layout as a rollback until it is dropped. Nothing writes to it."},
     "market.bars": {
       "title": "Price bars",
       "summary": "Open, high, low, close, and volume for every collected listing: India NSE equities every minute, and US equities every minute and every day.",
@@ -163,6 +164,7 @@
       "columns": {"expected": "Bars expected for the day.", "actual": "Bars actually stored.", "missing": "Bars still missing."}
     },
     "meta.session_coverage_canonical": {"title": "Daily coverage (pre-cutover copy)", "summary": "A frozen copy of daily coverage from before the v2 cutover. Nothing writes to it."},
+    "meta.session_coverage_v16": {"title": "Daily coverage (repartition copy)", "summary": "Swap table for moving coverage onto yearly partitions. After the swap it holds the previous layout as a rollback until it is dropped. Nothing writes to it."},
     "meta.source_status": {"title": "Source health", "summary": "The latest status each data source reported, such as ready, recovering, or waiting for sign-in, with details."},
     "meta.unresolved_entities": {"title": "Unmatched identifiers", "summary": "Vendor identifiers that could not yet be matched to a FactorLab company, security, or listing, with how often they appeared."},
     "raw.archive": {

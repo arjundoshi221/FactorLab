@@ -138,6 +138,12 @@ until the rollout completes.
 - `prepare-host.sh` removes the sshd drop-in if `sshd -t` rejects it; keep the component list
   in it and in `logrotate/factorlab` in step with `components/*` (tested).
 - Edit fragments, then `render-compose`; CI fails when `compose.production.yml` is stale.
+- No workflow deploys [clickhouse/config.d/](clickhouse/config.d/). Back the host file up,
+  overwrite it in place with `cp` (a single-file bind mount keeps the old inode if the file
+  is replaced), confirm with `docker exec factorlab-clickhouse cat …`, then
+  `docker restart factorlab-clickhouse`. A new config file needs a new bind mount and a
+  recreate. `memory.xml` caps the server at 4.5 GiB and frees outdated parts after 60 s
+  ([runbook](../docs/operations/clickhouse-memory.md)).
 - Image retention includes local monolith/trial images and protects images in branch deployment JSON records. Processor profiling retains one day; other diagnostic TTLs remain seven days.
 
 **UDP service monitoring:** `monitor_runtime` is a separate tmpfs secret volume. Component manifests accept monitor deadlines and optional wall-clock active windows (timezone, ISO weekdays, start/end HH:MM). render-compose also generates monitor-services.yaml; mount it into monitor and api. Enable senders with FACTORLAB_MONITOR_ADDR=monitor:9125 only after schema and monitor releases. UDP 9125 remains on backend with no published host port.
