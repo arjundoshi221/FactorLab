@@ -774,3 +774,31 @@ swap). Applied by hand to the root-owned compose model under the release lock (b
 the same image. After restart the tracker read 2.64 GiB against 2.06 GiB RSS; `ingest-us`
 and `futures-us` recovered and the `/us/indexes` and `/us/sectors/performance` routes
 returned 200.
+
+## Root disk full from ClickHouse logging — 2026-10-24 20:20 UTC
+
+The root filesystem reached 100% (222 MB free). ClickHouse logs at `trace` inside its
+container layer (about 330 MB every 13 minutes). When the disk filled at about 16:15 UTC,
+its file logger failed (`File access error: /var/log/clickhouse-server/clickhouse-server.log`).
+From then on it wrote every message to stderr with a stack trace. The `clickhouse` service
+has no json-file size limit, so its Docker log reached 43.9 GB and grew about 1.8 GB an
+hour. The full disk also failed the `secrets-agent` platform trial, which requires 2 GiB
+free. With the owner's approval, three September monolith images, three NSE universe
+`.tar` exports and superseded unused `factorlab-test-*` images were removed. The
+clickhouse json log was then truncated and `factorlab-clickhouse` restarted (healthy in
+about 9 s). File logging resumed, stderr stopped growing and the disk went to 34%.
+Still open: a `<logger>` level/size cap and json-file limits for `clickhouse`, which
+need a ClickHouse recreate. The image pruner timer reported "0 of 0" images, which also
+needs checking.
+
+## IBKR Flex statement history — 2026-10-24/25
+
+Commit `1e684bc` adds `broker.flex_activity`
+([providers/ibkr/CONTEXT.md](../providers/ibkr/CONTEXT.md)). The `ingest-broker` trial
+`ingest-trial/ingest-broker/1e684bc4c7ba` replaced `ibkr-snapshot` (healthy, image
+`0.0.0-trial.1e684bc4c7ba`). `IBKR_FLEX_QUERY_ID` is set in `production.env` (backup
+`production.env.before-ibkr-flex-*`). On 2026-10-25 the `factorlab-upstox-auth` Worker
+was deployed for the first time since 2026-09-02 (version `4b20974d`; the previous
+version was `25ddd09f`). That deploy shipped the repo's code, with the IBKR and pooled
+Schwab fields, plus the `IBKR_FLEX_TOKEN` Secrets Store binding. The running secrets agent
+kept syncing. The Flex token is IP-restricted to the VPS (`145.239.75.163`).
