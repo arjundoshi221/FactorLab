@@ -143,3 +143,14 @@ def test_the_log_reader_account_is_provisioned_safely():
     ):
         assert rule in dropin, rule
     assert dropin.rstrip().endswith("Match all")
+
+
+def test_clickhouse_memory_config_bounds_the_server_below_the_host():
+    import xml.etree.ElementTree as ET
+
+    root = ET.parse(REPO / "deploy/clickhouse/config.d/memory.xml").getroot()
+    limit = int(root.findtext("max_server_memory_usage") or 0)
+    # The host has 7.6 GiB and no swap; the server must stop short of the kernel OOM killer.
+    assert 0 < limit <= 4.5 * 2**30
+    assert root.findtext("memory_worker_correct_memory_tracker") == "1"
+    assert int(root.findtext("merge_tree/old_parts_lifetime") or 0) <= 120

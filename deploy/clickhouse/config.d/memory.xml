@@ -3,4 +3,16 @@
          uptime and pinned at the limit, so every query failed with code 241. Resync it
          with the cgroup RSS so the server limit reflects what is actually allocated. -->
     <memory_worker_correct_memory_tracker>1</memory_worker_correct_memory_tracker>
+
+    <!-- The 7.6 GiB host has no swap and ~1.8 GiB goes to the other services, so the
+         kernel OOM-killed the server at ~5.4 GB RSS before the default limit (0.9 x the
+         6 GiB cgroup) could fire. 4.5 GiB fails one query instead of killing the server. -->
+    <max_server_memory_usage>4831838208</max_server_memory_usage>
+
+    <merge_tree>
+        <!-- Every part costs ~55 KB of server memory, outdated ones included. During the
+             weekly US history refresh 50k+ merged-away parts waited the default 480 s and
+             held ~3 GiB; freeing them after 60 s keeps that bounded. -->
+        <old_parts_lifetime>60</old_parts_lifetime>
+    </merge_tree>
 </clickhouse>
