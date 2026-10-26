@@ -76,6 +76,7 @@ jobs:
       image: ghcr.io/arjundoshi221/factorlab-${{ needs.authorize.outputs.unit }}
       dockerfile: components/${{ needs.authorize.outputs.unit }}/Dockerfile
       commit: ${{ needs.authorize.outputs.commit }}
+      reuse_if_present: true
 
   deploy:
     needs: [authorize, image]

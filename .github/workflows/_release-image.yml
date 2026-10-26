@@ -12,6 +12,9 @@ on:
       dockerfile: {type: string, required: true}
       commit: {type: string, required: true}
       reuse: {type: boolean, default: false}
+      # Trial versions name only the unit and commit, so scopes sharing a unit (ingest-us,
+      # futures-us, indexes-us) build the same image: reuse it when present, else build.
+      reuse_if_present: {type: boolean, default: false}
     outputs:
       digest:
         description: The published image digest (sha256:...).
@@ -52,13 +55,14 @@ jobs:
         id: existing
         env:
           REUSE: ${{ inputs.reuse }}
+          REUSE_IF_PRESENT: ${{ inputs.reuse_if_present }}
         run: |
           set -euo pipefail
           digest=""
           if manifest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}' 2>/dev/null); then
             digest=$(jq -r '.digest' <<<"$manifest")
           fi
-          if [[ -n $digest && $REUSE != true ]]; then
+          if [[ -n $digest && $REUSE != true && $REUSE_IF_PRESENT != true ]]; then
             echo "$IMAGE:$VERSION already exists and will not be overwritten" >&2
             exit 1
           fi
