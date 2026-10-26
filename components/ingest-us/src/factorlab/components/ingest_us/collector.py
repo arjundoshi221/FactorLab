@@ -96,9 +96,10 @@ def collect(
         if resolution == "1min":
             start = max(start, now - timedelta(days=60))
     binding = client.bindings["market.bars", resolution]
-    if full and not live and resolution == "daily":
-        # The weekly refresh re-reads history since 1970 to catch vendor corrections; write
-        # only the bars that changed, or every listing rewrites ~680 monthly partitions.
+    if not live and resolution == "daily":
+        # The weekly refresh re-reads history since 1970 to catch vendor corrections, and a
+        # retained coverage gap re-reads from that gap on every recovery; write only the bars
+        # that changed, or every listing rewrites up to ~680 monthly partitions each time.
         sink = PriceSink(
             storage,
             existing=storage.stored_daily_bars(

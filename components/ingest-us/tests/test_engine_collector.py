@@ -282,6 +282,18 @@ def test_full_refresh_writes_corrected_history(monkeypatch):
     assert len(closes) == 2 and closes[-1] == Decimal("10.5")
 
 
+def test_gap_recovery_does_not_rewrite_unchanged_history(monkeypatch):
+    storage, client, db, identifier, _, state, _ = setup(monkeypatch)
+    later = NOW + timedelta(days=14)
+    _full_refresh(storage, client, identifier, state, later)
+    # A gap Schwab never fills (a dropped invalid candle) re-reads history on every recovery.
+    state.update(error="Coverage incomplete: 1 missing bars", full_refreshed_at=later)
+    monkeypatch.setattr(storage, "gap_start", Mock(return_value=datetime(1990, 1, 2, tzinfo=UTC)))
+    assert collector.collect(storage, client, ("AAPL", "AAPL", identifier), "daily", now=later)
+    assert len(db.rows("market.bars")) == 1
+    assert db.rows("meta.ingestion_runs")[-1]["rows_written"] == 0
+
+
 def test_full_refresh_always_rewrites_the_recent_window(monkeypatch):
     storage, client, db, identifier, _, state, _ = setup(monkeypatch)
     _full_refresh(storage, client, identifier, state, NOW)
