@@ -18,7 +18,8 @@ const instrument = { listing_id: "id", symbol: "AAPL", name: "Apple", exchange_c
 afterEach(() => vi.unstubAllGlobals());
 it("shows coverage, searches instruments, and loads daily history", async () => {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, json: async () =>
-    url.includes("dashboard") ? dashboard : url.includes("/candles/") ? { items: [{ trade_date: "2026-09-04", open: 10, high: 12, low: 9, close: 11, volume: 100 }], next_cursor: null } :
+    url.includes("dashboard") ? dashboard : url.includes("/candles/") ? { items: [{ trade_date: "2026-09-04", open: 10, high: 12, low: 9, close: 11, volume: 100 },
+      { trade_date: null, bar_time: "2026-09-04T13:30:00Z", open: 0.5, high: 0.5, low: 0.5, close: 0.1234, volume: 5 }], next_cursor: null } :
       url.includes("/days") ? { items: [] } : url.includes("search=MSFT") ?
         { items: [], total: 0, offset: 0 } : { items: [instrument], total: 1, offset: 0 } })));
   render(<USMarkets />);
@@ -28,7 +29,9 @@ it("shows coverage, searches instruments, and loads daily history", async () => 
   expect(await screen.findByText("No US instruments match this view.")).toBeInTheDocument();
   fireEvent.change(screen.getByPlaceholderText("Symbol or company"), { target: { value: "" } });
   fireEvent.click(await screen.findByRole("button", { name: "AAPL" }));
-  await screen.findByText("11.0000");
+  await screen.findByText("$11.00");
+  expect(screen.getByText("$0.1234")).toBeInTheDocument();
+  expect(screen.getByText("2026-09-04 13:30 UTC")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Older prices" })).toBeDisabled();
 });
 it("renders an empty collection", async () => {

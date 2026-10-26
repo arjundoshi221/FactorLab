@@ -9,6 +9,10 @@ import type {
   USCandle, USDashboard, USDay, USInstrument, USPage, USResolution, USScope,
 } from "../usTypes";
 
+// Up to four decimals so sub-dollar stocks keep their tick precision.
+const dollars = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 4 });
+const utcTime = (value: string) => `${new Date(value).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+
 async function read<T>(url: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`US market data could not load (${response.status}).`);
@@ -117,10 +121,10 @@ export function USMarkets() {
         <option value="daily">Daily prices</option><option value="1min">Selected session · one minute</option></select></label></div>
       {detailError && <p role="alert" className="notice notice--error">{detailError}</p>}
       {detailLoading ? <p role="status">Loading instrument history…</p> : <>
-        <p className="us-note">Daily and minute data are supplied by Schwab. Prices are USD.</p>
-        <div className="table-scroll"><table><thead><tr><th>Session / time (New York)</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th></tr></thead>
-          <tbody>{candles.map((candle, index) => <tr key={index}><td>{candle.trade_date || new Date(candle.bar_time!).toLocaleString("en-US", { timeZone: "America/New_York" })}</td>
-            {[candle.open, candle.high, candle.low, candle.close].map((value, position) => <td key={position}>{Number(value).toFixed(4)}</td>)}
+        <p className="us-note">Daily and minute data are supplied by Schwab. Times are UTC.</p>
+        <div className="table-scroll"><table><thead><tr><th>Session / time (UTC)</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th></tr></thead>
+          <tbody>{candles.map((candle, index) => <tr key={index}><td>{candle.trade_date || utcTime(candle.bar_time!)}</td>
+            {[candle.open, candle.high, candle.low, candle.close].map((value, position) => <td key={position}>{dollars.format(Number(value))}</td>)}
             <td>{candle.volume.toLocaleString()}</td></tr>)}</tbody></table></div>
         {!candles.length && <p className="notice">No candles available for this selection.</p>}
         <div className="table-tools"><button disabled={!cursor} onClick={() => setCursor(null)}>Latest prices</button>
