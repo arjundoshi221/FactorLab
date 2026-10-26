@@ -57,7 +57,7 @@ jobs:
           {
             echo "commit=$commit"
             echo "version=0.0.0-trial.$short"
-            echo "test_id=$(date -u +%Y%m%d)-$short"
+            echo "test_id=$(date -u +%Y%m%d%H%M%S)-$short"
             echo "scope=$scope"
             echo "unit=$unit"
           } >> "$GITHUB_OUTPUT"

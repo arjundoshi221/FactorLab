@@ -34,7 +34,7 @@ UNITS = {
     "ingest-broker": "ingest-broker",
 }
 COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
-TRIAL_RE = re.compile(r"[0-9]{8}-[0-9a-f]{12}\Z")
+TRIAL_RE = re.compile(r"[0-9]{8}(?:[0-9]{6})?-[0-9a-f]{12}\Z")
 
 
 def image_re(unit: str) -> re.Pattern[str]:

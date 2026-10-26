@@ -70,7 +70,7 @@ PROTECTED = (
 API = "http://127.0.0.1:18000"
 AGENT_READY = "/run/secrets/clickhouse/.agent-ready"
 HEALTH_TIMEOUT = 180
-TRIAL_RE = re.compile(r"[0-9]{8}-[0-9a-f]{12}\Z")
+TRIAL_RE = re.compile(r"[0-9]{8}(?:[0-9]{6})?-[0-9a-f]{12}\Z")
 
 
 def container(service: str) -> str:

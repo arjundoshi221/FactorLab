@@ -291,10 +291,11 @@ def main() -> None:
     )
     parser.add_argument("--image-test-id", help="Reuse built images from this earlier test id")
     args = parser.parse_args()
-    if os.geteuid() != 0 or not re.fullmatch(r"[0-9]{8}-[0-9a-f]{7,40}", args.test_id):
+    if os.geteuid() != 0 or not re.fullmatch(r"[0-9]{8}(?:[0-9]{6})?-[0-9a-f]{7,40}", args.test_id):
         parser.error("Run as root with YYYYMMDD-<commit> test id")
     if args.image_test_id and (
-        args.action != "plan" or not re.fullmatch(r"[0-9]{8}-[0-9a-f]{7,40}", args.image_test_id)
+        args.action != "plan"
+        or not re.fullmatch(r"[0-9]{8}(?:[0-9]{6})?-[0-9a-f]{7,40}", args.image_test_id)
     ):
         parser.error("--image-test-id is only valid for plan with YYYYMMDD-<commit>")
     root = BASE / args.test_id
