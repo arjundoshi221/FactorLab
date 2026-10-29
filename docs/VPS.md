@@ -14,6 +14,17 @@ values.
 
 ## Server
 
+IBKR Flex positions and statement rows, 2026-10-29: trials `platform-trial/schema-migrator`,
+`ingest-trial/ingest-broker` and `ui-trial` at `71d1e8e83df2` (all success) replaced the
+schema-migrator pin, `ibkr-snapshot` (image `0.0.0-trial.71d1e8e83df2`), `api-candidate` and
+`web`. Applied exactly `wave_17_schema_broker_statement_rows` (`broker.statement_rows`) with
+the reviewed runner given only that ID; `wave_10_schema_source_priorities`,
+`wave_10_views_source_priorities`, `wave_16_schema_daily_partitions` and `wave_08_rbac` remain
+pending. The first Flex run (`2e8736a4`, success, 5,031 rows) wrote 66 daily statements
+(query period `LastQuarter`, 2026-07-01..09-30): end-of-day positions, 37 fills, 11 cash
+flows and every statement row. The live Gateway (`100.73.244.81:4001`) has timed out since
+2026-10-24 20:24 UTC.
+
 US futures recording live, 2026-10-21 18:11 UTC: `ingest-trial/futures-us/c44df227d860`
 ([workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/39650232958), success)
 replaced only `futures-us` (image `0.0.0-trial.c44df227d860`). Roster refreshes and quote
