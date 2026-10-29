@@ -38,7 +38,7 @@ from factorlab.core import paths
 from factorlab.core.logging import configure_logging, redact
 from factorlab.ingest.datasets import ContractBarRecord, ContractRecord, WriteResult
 from factorlab.ingest.errors import AuthRequired
-from factorlab.ingest.provider import Provenance, ingestion_run
+from factorlab.ingest.provider import ConfigValue, Provenance, ingestion_run, run_config
 from factorlab.runtime.monitor import MonitoredEvent, monitor_client
 from factorlab.sources.schwab.futures import FuturesRoot, futures_ref, parse_contract
 from factorlab.storage.sinks import ClickHouseSinks
@@ -49,8 +49,11 @@ stop = MonitoredEvent()
 SOURCE = "schwab"
 STATUS_SOURCE = "schwab_futures"
 CHANNEL = "schwab:quotes"
+# Universe id on every futures run: the roster file's name.
+UNIVERSE = "us_futures"
 SETTLEMENT_DELAY = timedelta(hours=1)  # into the next session before settlements are trusted
-CLOSED_RECHECK = timedelta(minutes=15)
+# Below the API's 600 s source freshness limit, so a closed market never reads stale.
+CLOSED_RECHECK = timedelta(minutes=5)
 JOB_ERRORS = (AuthRequired, ClickHouseError, OSError, RuntimeError, ValueError)
 
 
@@ -171,10 +174,23 @@ class FuturesRecorder:
         self.provisional: set[date] = set()
         self.final: set[date] = set()
 
+    def collection_config(self) -> dict[str, ConfigValue]:
+        """The roster and cadence in use, recorded on each run for the hub's collection plan."""
+        return run_config(
+            roots=[root.root for root in self.roots],
+            contracts=len(self.contracts),
+            interval_s=int(self.interval.total_seconds()),
+        )
+
     # -- steps -------------------------------------------------------------------
     def refresh_roster(self, now: datetime) -> None:
         with ingestion_run(
-            self.sink, pipeline="us_futures_roster", source=SOURCE, market_code="USA"
+            self.sink,
+            pipeline="us_futures_roster",
+            source=SOURCE,
+            market_code="USA",
+            universe=UNIVERSE,
+            config=self.collection_config(),
         ) as ctx:
             self.sink.roster = {}
             self.client.collect_futures_roster(
@@ -196,7 +212,9 @@ class FuturesRecorder:
             pipeline="us_futures_quotes",
             source=SOURCE,
             market_code="USA",
+            universe=UNIVERSE,
             requested_series=len(self.contracts),
+            config=self.collection_config(),
         ) as ctx:
             self.client.collect_futures_quotes(ctx, self.sink, self.contracts)
 
@@ -226,7 +244,12 @@ class FuturesRecorder:
             return 0
         written = 0
         with ingestion_run(
-            self.sink, pipeline="us_futures_daily", source=SOURCE, market_code="USA"
+            self.sink,
+            pipeline="us_futures_daily",
+            source=SOURCE,
+            market_code="USA",
+            universe=UNIVERSE,
+            config=self.collection_config(),
         ) as ctx:
             for raw_id, bars in groups.items():
                 provenance = ctx.provenance(source_channel=CHANNEL, raw_id=raw_id, as_of_time=now)
@@ -298,8 +321,9 @@ def main(argv: list[str] | None = None) -> int:
                 now = datetime.now(UTC)
                 try:
                     wake = recorder.tick(now)
+                    # The vocabulary source_health judges: ready, or waiting while closed.
                     storage.source_status(
-                        "ok" if globex.is_open(now) else "closed",
+                        "ready" if globex.is_open(now) else "waiting",
                         f"{len(recorder.contracts)} contracts",
                         source=STATUS_SOURCE,
                     )

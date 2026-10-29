@@ -37,6 +37,8 @@ def test_closes_are_grouped_by_trade_date_and_read_per_year():
         "x",
     )
     assert (second["lo"], second["hi"]) == (date(2026, 1, 1), date(2026, 1, 5))
+    sql = client.query.call_args_list[0].args[0]
+    assert "bar_time >=" in sql and "bar_time <" in sql  # prunes monthly partitions
 
 
 def test_computation_rows_bracket_a_run():

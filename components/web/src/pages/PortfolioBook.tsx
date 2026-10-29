@@ -23,23 +23,66 @@ export function PortfolioTabs({ active, userId = "", account = "" }: { active: "
   </nav>;
 }
 
-/** The theme / strategy / trade-name selects shared by every tag editor. */
-export function TagSelectors({ tags, onChange, catalogs, disabled = false, name }: {
-  tags: OrderAssignment; onChange: (tags: OrderAssignment) => void; catalogs: Record<CatalogKind, CatalogEntry[]>;
-  disabled?: boolean; name: string;
+const NEW_ENTRY = "__new__";
+
+/** One tag select; with a ``userId`` its last option creates a catalog entry in place and selects it. */
+function TagSelect({ kind, value, onChange, entries, disabled, name, userId, onCreated }: {
+  kind: CatalogKind; value: string | null; onChange: (value: string | null) => void; entries: CatalogEntry[];
+  disabled: boolean; name: string; userId?: string; onCreated?: (kind: CatalogKind) => void;
 }) {
-  return <div className="portfolio-tag-selectors">{kinds.map(kind => <label className="portfolio-selector" key={kind}><span>{singular[kind]}</span>
-    <select aria-label={`${labels[kind]} for ${name}`} value={tags[fields[kind]] ?? ""} disabled={disabled}
-      onChange={event => onChange({ ...tags, [fields[kind]]: event.target.value || null })}>
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  // Entries created here stay selectable until the catalog refresh brings them back.
+  const [created, setCreated] = useState<CatalogEntry[]>([]);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (adding) input.current?.focus(); }, [adding]);
+  const options = [...entries, ...created.filter(entry => !entries.some(item => item.id === entry.id))];
+  function cancel() { setAdding(false); setDraft(""); setError(""); }
+  async function create() {
+    const label = draft.trim();
+    if (!label || !userId) return;
+    setBusy(true); setError("");
+    try {
+      const entry = await fetchJson<{ id: string }>(`${API}/catalogs/${kind}?user_id=${encodeURIComponent(userId)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: label, description: "", active: true }),
+      });
+      setCreated(list => [...list, { id: entry.id, user_id: userId, name: label, description: "", active: true }]);
+      onChange(entry.id); setAdding(false); setDraft(""); onCreated?.(kind);
+    } catch (caught) { setError(errorMessage(caught, `Could not create ${singular[kind]}.`)); }
+    finally { setBusy(false); }
+  }
+  return <div className="portfolio-selector"><span>{singular[kind]}</span>
+    {adding ? <div className="portfolio-new-entry">
+      <input ref={input} aria-label={`New ${singular[kind]} name for ${name}`} maxLength={200} placeholder={`New ${singular[kind]} name`} value={draft} disabled={busy || disabled}
+        onChange={event => setDraft(event.target.value)}
+        onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); void create(); } else if (event.key === "Escape") { event.preventDefault(); cancel(); } }} />
+      <button type="button" className="portfolio-button portfolio-button--primary" disabled={busy || disabled || !draft.trim()} onClick={() => void create()}>{busy ? "Adding…" : "Add"}</button>
+      <button type="button" className="portfolio-button portfolio-button--ghost" disabled={busy} onClick={cancel}>Cancel</button>
+    </div> : <select aria-label={`${labels[kind]} for ${name}`} value={value ?? ""} disabled={disabled}
+      onChange={event => { if (event.target.value === NEW_ENTRY) setAdding(true); else onChange(event.target.value || null); }}>
       <option value="">Select {singular[kind]}</option>
-      {catalogs[kind].filter(item => item.active || item.id === tags[fields[kind]]).map(item =>
+      {options.filter(item => item.active || item.id === value).map(item =>
         <option key={item.id} value={item.id} disabled={!item.active}>{item.name}{!item.active ? " (archived)" : ""}</option>)}
-    </select>
-  </label>)}</div>;
+      {userId && <option value={NEW_ENTRY}>+ New {singular[kind]}…</option>}
+    </select>}
+    {error && <small className="portfolio-field-error" role="alert">{error}</small>}
+  </div>;
 }
 
-function OrderEditor({ order, userId, base, catalogs, refresh }: {
+/** The theme / strategy / trade-name selects shared by every tag editor. */
+export function TagSelectors({ tags, onChange, catalogs, disabled = false, name, userId, onCreated }: {
+  tags: OrderAssignment; onChange: (tags: OrderAssignment) => void; catalogs: Record<CatalogKind, CatalogEntry[]>;
+  disabled?: boolean; name: string; userId?: string; onCreated?: (kind: CatalogKind) => void;
+}) {
+  return <div className="portfolio-tag-selectors">{kinds.map(kind => <TagSelect key={kind} kind={kind} value={tags[fields[kind]]} entries={catalogs[kind]}
+    disabled={disabled} name={name} userId={userId} onCreated={onCreated} onChange={value => onChange({ ...tags, [fields[kind]]: value })} />)}</div>;
+}
+
+function OrderEditor({ order, userId, base, catalogs, refresh, onCreated }: {
   order: TaggedOrder; userId: string; base: string; catalogs: Record<CatalogKind, CatalogEntry[]>; refresh: (message: string) => void;
+  onCreated: (kind: CatalogKind) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [tags, setTags] = useState<OrderAssignment>({ theme_id: order.theme_id, strategy_id: order.strategy_id, trade_name_id: order.trade_name_id });
@@ -70,11 +113,11 @@ function OrderEditor({ order, userId, base, catalogs, refresh }: {
     </div>
     {!editing && assigned && <dl className="portfolio-tag-summary">{kinds.map(kind => <div key={kind}><dt>{singular[kind]}</dt><dd>{catalogs[kind].find(entry => entry.id === order[fields[kind]])?.name ?? "Archived entry"}</dd></div>)}</dl>}
     {editing && <form className="portfolio-tag-form" onSubmit={event => { event.preventDefault(); void save(); }}>
-      <TagSelectors tags={tags} onChange={setTags} catalogs={catalogs} disabled={busy} name={`order ${order.perm_id}`} />
+      <TagSelectors tags={tags} onChange={setTags} catalogs={catalogs} disabled={busy} name={`order ${order.perm_id}`} userId={userId} onCreated={onCreated} />
       <div className="portfolio-actions"><button className="portfolio-button portfolio-button--primary" disabled={busy || !complete || !dirty}>{busy ? "Saving…" : "Save tags"}</button>
         <button className="portfolio-button portfolio-button--secondary" type="button" disabled={busy} onClick={() => { setEditing(false); setError(""); }}>Cancel</button>
         {assigned && <button className="portfolio-button portfolio-button--ghost portfolio-clear" type="button" disabled={busy} onClick={() => void save(true)}>Clear tags</button>}</div>
-      <p className="portfolio-footnote">All existing and future fills use these tags. Select all three to save.</p>
+      <p className="portfolio-footnote">All existing and future fills use these tags. Select all three to save, or pick “+ New” to create one.</p>
     </form>}
     {!order.taggable && <p className="portfolio-footnote">A registered profile and durable broker order ID are required for tagging.</p>}
     {error && <p className="portfolio-notice portfolio-notice--error" role="alert">{error}</p>}
@@ -100,6 +143,7 @@ export function OrderTagging({ account, revision = 0 }: { account: BrokerAccount
   const orders = useRemote<OrdersPage>(userId ? `${base}/orders${suffix}&offset=${offset}&limit=50` : null, 60_000);
   usePortfolioRefresh(revision, themes.refresh, strategies.refresh, names.refresh, orders.refresh);
   const catalogs = { themes: themes.data?.items ?? [], strategies: strategies.data?.items ?? [], "trade-names": names.data?.items ?? [] };
+  const refreshCatalog = (kind: CatalogKind) => ({ themes, strategies, "trade-names": names })[kind].refresh();
   const pending = [themes, strategies, names, orders];
   const items = orders.data?.items ?? [];
   const filtered = items.filter(order => `${order.trading_symbol} ${order.perm_id}`.toLowerCase().includes(search.trim().toLowerCase()) && (filter === "all" || hasTags(order) === (filter === "tagged")));
@@ -115,7 +159,7 @@ export function OrderTagging({ account, revision = 0 }: { account: BrokerAccount
         {items.length > 0 && <div className="portfolio-order-tools"><label className="portfolio-search"><PortfolioIcon name="search" /><input aria-label="Search orders on this page" placeholder="Search symbol or order ID" value={search} onChange={event => setSearch(event.target.value)} /></label>
           <select aria-label="Order tag status" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All orders</option><option value="unassigned">Needs tags</option><option value="tagged">Tagged</option></select></div>}
         {items.length > 0 && <p className="portfolio-list-meta">{filtered.length} of {items.length} orders on this page</p>}
-        <div className="portfolio-order-list">{filtered.map(order => <OrderEditor key={order.key} order={order} userId={userId} base={base} catalogs={catalogs} refresh={message => { setNotice(message); orders.refresh(); }} />)}</div>
+        <div className="portfolio-order-list">{filtered.map(order => <OrderEditor key={order.key} order={order} userId={userId} base={base} catalogs={catalogs} onCreated={refreshCatalog} refresh={message => { setNotice(message); orders.refresh(); }} />)}</div>
         {orders.data && !filtered.length && <EmptyState title={items.length ? "No matching orders" : "No orders yet"}>{items.length ? "Try another symbol, order ID or tag status." : "Working and executed orders will appear here as they arrive."}</EmptyState>}
         {(offset > 0 || orders.data?.has_more) && <div className="portfolio-pagination"><button className="portfolio-button portfolio-button--secondary" disabled={offset === 0} onClick={() => { setOffset(Math.max(0, offset - 50)); setSearch(""); }}>Previous orders</button>
           <span>Page {Math.floor(offset / 50) + 1}</span><button className="portfolio-button portfolio-button--secondary" disabled={!orders.data?.has_more} onClick={() => { setOffset(offset + 50); setSearch(""); }}>Next orders</button></div>}

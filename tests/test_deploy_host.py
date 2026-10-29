@@ -14,6 +14,27 @@ REPO = Path(__file__).resolve().parents[1]
 PREPARE_HOST = REPO / "deploy" / "scripts" / "prepare-host.sh"
 
 
+def _host_log_directories() -> set[str]:
+    match = re.search(
+        r'^FACTORLAB_HOST_LOGS="([^"]+)"', PREPARE_HOST.read_text(encoding="utf-8"), re.MULTILINE
+    )
+    assert match, "prepare-host.sh must list FACTORLAB_HOST_LOGS"
+    return set(match.group(1).split())
+
+
+def test_host_collected_logs_match_the_collector():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "collect_container_logs", REPO / "deploy/scripts/collect-container-logs.py"
+    )
+    assert spec and spec.loader
+    collector = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(collector)
+    assert _host_log_directories() == set(collector.LOG_DIRECTORIES)
+    assert not _host_log_directories() & _manifest_names()
+
+
 def _manifest_names() -> set[str]:
     return {
         yaml.safe_load(p.read_text(encoding="utf-8"))["name"]
@@ -56,7 +77,9 @@ def test_logrotate_covers_every_component_directory_exactly_once():
         for directory in {p.rsplit("/", 1)[0] for p in paths}:
             assert directory.startswith("/var/log/factorlab/") and "*" not in directory
             seen[directory] = seen.get(directory, 0) + 1
-    expected = {f"/var/log/factorlab/{name}" for name in _manifest_names()}
+    expected = {
+        f"/var/log/factorlab/{name}" for name in _manifest_names() | _host_log_directories()
+    }
     assert set(seen) == expected
     assert all(count == 1 for count in seen.values()), seen
 
@@ -65,7 +88,8 @@ def test_only_nginx_logs_are_rotated_in_place():
     for paths, body in _logrotate_stanzas():
         web = any(p.startswith("/var/log/factorlab/web/") for p in paths)
         assert ("copytruncate" in body) == web
-        agent = any(p.startswith("/var/log/factorlab/secrets-agent/") for p in paths)
+        root_owned = {"secrets-agent", *_host_log_directories()}
+        agent = any(p.split("/")[4] in root_owned for p in paths)
         assert ("create 0640 factorlab factorlab-logs" in body) == (not web and not agent)
         assert ("create 0640 root factorlab-logs" in body) == agent
 

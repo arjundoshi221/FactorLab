@@ -63,3 +63,40 @@ listing (for example VIK, TSM, NVO) and link once reference data adds them. Afte
 Write a new `ref.listings` version with `active = true` for the orphan, a superseding
 `ref.listing_migrations` row with another `migration_type`, and reopen the closed alias.
 Re-resolved trades keep their history in older versions until merges collapse them.
+A purged orphan cannot be restored this way (see below).
+
+## Purge retired tombstones
+
+Retirement left the 150 orphans in `ref.listings` as inactive rows, and the hub's
+**All tickers** inventory listed them beside their canonical listing: one row with a sector,
+one without. The inventory now excludes listings retired as duplicates, and
+`purge-retired-listings` deletes them. Run it last, after re-resolve, as a dry run and then
+with `--apply`:
+
+```bash
+sudo docker compose --env-file production.env -f compose.production.yml \
+  --profile jobs run --rm ingest-political purge-retired-listings [--apply]
+```
+
+For every `duplicate_identity` migration whose orphan is in the country and still inactive
+(an active one is skipped and reported), the purge:
+
+1. copies the orphan's `market.bars` that the canonical listing lacks at the same
+   resolution, source and `bar_time` onto the canonical listing (its security and entity,
+   a new version);
+2. moves open aliases on the orphan's security and entity, such as the SEC `cik` aliases
+   the canonical entities lack, to the canonical ones under the same key. An entity that
+   maps to more than one canonical entity (GOOG and GOOGL share one Alphabet orphan) is kept
+   with its aliases and reported under `skipped`;
+3. deletes, with lightweight `DELETE`, the orphan's bars, `meta.recovery_state` rows and
+   aliases, its security and entity when nothing outside the orphans references them, and
+   finally the listing. A run that fails part way is finished by the next one.
+
+`ref.listing_migrations` is kept: resolvers still skip the retired IDs. This step is not
+reversible.
+
+Expected from the 2026-10-30 production reads: 150 orphans. 59,957 bars on three of them
+(AAPL, AMZN, TSLA) are deleted, after the 1-minute bars of 2026-08-03 to 2026-08-07 (one
+week the canonical listings lack) are rescued. 6 recovery rows go. 148 CIK aliases move.
+Alphabet's orphan entity is skipped. Afterwards no US symbol has more than one
+`ref.listings` row.

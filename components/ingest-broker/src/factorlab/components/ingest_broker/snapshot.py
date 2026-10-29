@@ -33,7 +33,7 @@ from typing import Any
 from factorlab.calendars.us import NY, next_scheduled_run
 from factorlab.core import paths
 from factorlab.core.logging import configure_logging
-from factorlab.ingest.provider import RunSummary, run_provider
+from factorlab.ingest.provider import RunSummary, run_config, run_provider
 from factorlab.runtime import (
     ExitCode,
     GracefulShutdown,
@@ -138,7 +138,13 @@ def _notify(subject: str, body: str, *, severity: str, context: dict[str, Any]) 
         log.exception("Notification failed for %s", subject)
 
 
-def run_once(storage: Any, config: SnapshotConfig, *, dry_run: bool = False) -> RunSummary:
+def run_once(
+    storage: Any,
+    config: SnapshotConfig,
+    *,
+    dry_run: bool = False,
+    slots: Sequence[time] = (),
+) -> RunSummary:
     provider = IBKRBrokerProvider(storage, config)
     summary = run_provider(
         provider,
@@ -150,6 +156,12 @@ def run_once(storage: Any, config: SnapshotConfig, *, dry_run: bool = False) -> 
             "client_id": config.client_id,
             "executions_lookback_hours": config.executions_lookback.total_seconds() / 3600,
         },
+        # Recorded for the hub's collection plan; empty slots means a one-off run.
+        config=run_config(
+            modes=list(config.modes),
+            snapshot_times=[slot.strftime("%H:%M") for slot in slots] or None,
+            timezone="America/New_York" if slots else None,
+        ),
     )
     report(storage, summary, dry_run=dry_run)
     return summary
@@ -168,7 +180,7 @@ def run_daemon(
     snapshot: Callable[[], Any] | None = None,
 ) -> int:
     """Run a snapshot at each scheduled slot until ``should_stop()``; never crash on a bad run."""
-    take = snapshot or (lambda: run_once(storage, config))
+    take = snapshot or (lambda: run_once(storage, config, slots=slots))
     pending_start = run_on_start
     while not should_stop():
         if pending_start:
@@ -280,7 +292,9 @@ def main(argv: list[str] | None = None) -> int:
                         run_on_start=args.run_on_start,
                         sleep=_interruptible_sleep(lambda: shutdown.triggered),
                         heartbeat=heartbeat.tick,
-                        snapshot=lambda: run_once(storage, config, dry_run=args.dry_run),
+                        snapshot=lambda: run_once(
+                            storage, config, dry_run=args.dry_run, slots=args.at
+                        ),
                     )
             finally:
                 close = getattr(storage, "close", None)

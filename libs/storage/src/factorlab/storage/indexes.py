@@ -64,7 +64,12 @@ class IndexStorage:
     def closes(
         self, listings: Sequence[UUID], start: date, end: date, *, source: str
     ) -> Iterator[tuple[date, dict[UUID, float]]]:
-        """Daily closes grouped by trade date, ascending, read one calendar year at a time."""
+        """Daily closes grouped by trade date, ascending, read one calendar year at a time.
+
+        ``market.bars`` is partitioned by ``bar_time`` month, so the ``bar_time`` bound
+        (a day either side of the trade dates) prunes partitions; filtering on
+        ``trade_date`` alone made FINAL scan every month and exhaust server memory.
+        """
         if not listings:
             return
         for year in range(start.year, end.year + 1):
@@ -73,8 +78,11 @@ class IndexStorage:
                 "SELECT trade_date, listing_id, toFloat64(close) FROM market.bars FINAL "
                 "WHERE country_code = 'US' AND resolution = 'daily' "
                 "AND source = {source:String} AND listing_id IN {ids:Array(UUID)} "
+                "AND bar_time >= toDateTime64({lo:Date}, 3, 'UTC') - INTERVAL 1 DAY "
+                "AND bar_time < toDateTime64({hi:Date}, 3, 'UTC') + INTERVAL 2 DAY "
                 "AND trade_date BETWEEN {lo:Date} AND {hi:Date} AND close > 0 "
-                "ORDER BY trade_date",
+                "ORDER BY trade_date "
+                "SETTINGS do_not_merge_across_partitions_select_final = 1",
                 parameters={"source": source, "ids": list(listings), "lo": lo, "hi": hi},
             ).result_rows
             day: date | None = None

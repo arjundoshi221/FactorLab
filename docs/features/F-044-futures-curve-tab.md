@@ -9,7 +9,7 @@ sprint: null
 decisions: []
 links: [F-043, F-042]
 created: 2026-10-22
-updated: 2026-10-22
+updated: 2026-10-30
 ---
 
 # F-044 Futures curves in the hub
@@ -26,18 +26,20 @@ only front and next contracts per root there is no curve to look at.
 - `GET /hub/api/v1/us/futures`: every root with its live contracts in expiry order and
   each contract's latest quote, change against the previous settlement, and a stale flag.
 - A **Futures** view in Market Data (`/market-data?view=futures`, `/futures` redirects):
-  group tabs, root chips, a curve chart (price by expiry) with a contango/backwardation
-  label, and a contract table.
+  group tabs, root chips, expiry and range selectors over a price-history chart of the
+  selected contract, a contango/backwardation label, and a contract table.
+- `GET /hub/api/v1/us/futures/{contract_id}/series?range=1d|5d|1m|3m|1y|max`: intraday
+  last trades (1- or 15-minute buckets over the latest 1 or 5 sessions) or daily closes.
 
 ## Non-goals
 
 - India stock futures (only the nearest contract is recorded, so there is no curve).
-- Overlays of past curves, intraday charts, continuous or back-adjusted series.
+- A curve chart across expiries, overlays of past curves, continuous or back-adjusted series.
 
 ## Acceptance criteria
 
 - [ ] After the `ingest-us` release every root shows its configured number of contracts.
-- [ ] The curve and table match the latest `market.futures_quotes` rows for /ES and /CL.
+- [ ] The selected contract's chart and the table match the latest `market.futures_quotes` rows for /ES and /CL.
 - [ ] Quotes older than 15 minutes while Globex is open are flagged stale; a closed
       market shows the last session's curve without stale flags.
 - [ ] Polling stays at about 2 Schwab requests a minute.
@@ -51,3 +53,5 @@ only front and next contracts per root there is no curve to look at.
 ## Log
 
 - 2026-10-22: created; roster deepened, API endpoint and Market Data Futures view built.
+- 2026-10-30: the curve chart is replaced by a time series of one selected expiry
+  (expiry and range buttons, URL-backed); new `/us/futures/{contract_id}/series` endpoint.

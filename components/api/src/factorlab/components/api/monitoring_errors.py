@@ -5,21 +5,12 @@ from typing import Any
 
 from factorlab.clickhouse import rows
 
+from .catalog_pipelines import PIPELINES
 from .catalog_query import scrub_text
 from .source_health import source_state
 
-PIPELINE_SERVICES = {
-    "ibkr_broker_snapshot": "ibkr-snapshot",
-    "ibkr_broker_simulation": "ibkr-snapshot",
-    "us_universe_sync": "universe-us",
-    "us_live": "ingest-us",
-    "us_recovery_daily": "ingest-us",
-    "us_recovery_1min": "ingest-us",
-    "india_intraday_1min": "ingest-india",
-    "india_historical_1min_recovery": "ingest-india",
-    "india_reference_premarket": "ingest-india",
-    "political_bootstrap": "ingest-political",
-}
+# Declared once, on each catalogue pipeline.
+PIPELINE_SERVICES = {pipeline.id: pipeline.service for pipeline in PIPELINES}
 
 
 def error_history(client: Any, *, hours: int, service_id: str, severity: str, limit: int):

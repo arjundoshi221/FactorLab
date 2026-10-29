@@ -310,6 +310,9 @@ class V2USStorage(V2IndiaStorage):
                 "WITH recent AS (SELECT listing_id, trade_date, close, volume "
                 "FROM market.bars FINAL WHERE country_code = 'US' "
                 "AND resolution = 'daily' AND source = 'schwab' "
+                # 20 sessions fit in 60 days; the bar_time bound prunes old monthly
+                # partitions so FINAL does not scan the full history.
+                "AND bar_time >= now() - INTERVAL 60 DAY "
                 "AND listing_id IN (SELECT listing_id FROM meta.expected_series FINAL "
                 "WHERE country_code = 'US' AND source = 'schwab' "
                 "AND resolution = 'daily' AND active) "
@@ -321,7 +324,8 @@ class V2USStorage(V2IndiaStorage):
                 "INNER JOIN ref.listings AS l FINAL ON l.listing_id = recent.listing_id "
                 "GROUP BY recent.listing_id ORDER BY "
                 "if(observations >= 15, 1, 0) DESC, dollar_volume DESC, symbol "
-                "LIMIT {limit:UInt16}",
+                "LIMIT {limit:UInt16} "
+                "SETTINGS do_not_merge_across_partitions_select_final = 1",
                 parameters={"limit": limit},
             )
         )

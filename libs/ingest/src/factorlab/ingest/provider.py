@@ -244,6 +244,19 @@ class RunContext:
         )
 
 
+ConfigValue = str | int | float | bool | list[str] | list[int]
+
+
+def run_config(**values: ConfigValue | None) -> dict[str, ConfigValue]:
+    """The settings a run actually used, stored as ``metadata_json["config"]``.
+
+    The hub's collection plan reads it to show what each service runs with in
+    production (universe, cadence, tier sizes) rather than repository defaults.
+    ``None`` values are dropped so unset options stay absent.
+    """
+    return {key: value for key, value in values.items() if value is not None}
+
+
 @contextmanager
 def ingestion_run(
     storage: ProviderStorage,
@@ -254,19 +267,24 @@ def ingestion_run(
     universe: str = "",
     requested_series: int = 0,
     metadata: Mapping[str, Any] | None = None,
+    config: Mapping[str, ConfigValue] | None = None,
 ) -> Iterator[RunContext]:
     """Open a ``meta.ingestion_runs`` row and always write its terminal state.
 
     Unit outcomes decide ``success``/``partial``/``failed``. An exception escaping
     the block marks the run ``failed`` (``cancelled`` for interrupts) and re-raises.
+    ``config`` (see :func:`run_config`) is recorded as ``metadata["config"]``.
     """
+    run_metadata = dict(metadata or {})
+    if config:
+        run_metadata["config"] = dict(config)
     handle = storage.start_ingestion_run(
         pipeline=pipeline,
         source=source,
         market_code=market_code,
         universe=universe,
         requested_series=requested_series,
-        metadata=dict(metadata or {}),
+        metadata=run_metadata,
     )
     ctx = RunContext(storage, handle, source=source, pipeline=pipeline)
     try:
@@ -312,6 +330,7 @@ def run_provider(
     universe: str = "",
     requested_series: int = 0,
     metadata: Mapping[str, Any] | None = None,
+    config: Mapping[str, ConfigValue] | None = None,
 ) -> RunSummary:
     """Run ``provider.collect`` inside one ingestion run and return its summary."""
     with ingestion_run(
@@ -322,6 +341,7 @@ def run_provider(
         universe=universe,
         requested_series=requested_series,
         metadata=metadata,
+        config=config,
     ) as ctx:
         provider.collect(ctx)
     return ctx.summary()
@@ -354,6 +374,7 @@ class NullProviderStorage:
 
 
 __all__ = [
+    "ConfigValue",
     "IngestionRuns",
     "NullProviderStorage",
     "Provenance",
@@ -367,5 +388,6 @@ __all__ = [
     "Transport",
     "UnitOutcome",
     "ingestion_run",
+    "run_config",
     "run_provider",
 ]

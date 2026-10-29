@@ -23,7 +23,10 @@ SLOT_GRACE = timedelta(hours=1)
 SLOT_TOLERANCE = timedelta(minutes=5)
 SEVERE_SOURCE_STATUSES = frozenset({"error", "failed", "auth_required", "incomplete"})
 # Normal between scheduled runs: the daemon reports when it will run next.
-IDLE_SOURCE_STATUSES = {"ibkr": frozenset({"waiting"})}
+IDLE_SOURCE_STATUSES = {
+    "ibkr": frozenset({"waiting"}),
+    "schwab_futures": frozenset({"waiting"}),  # Globex closed
+}
 SLOT_SOURCES = frozenset({"ibkr"})
 
 
@@ -77,6 +80,8 @@ def source_service(country_code: str, source: str) -> str:
     """The monitored service (``deploy/monitor-services.yaml``) that reports a source."""
     if source == "ibkr":
         return "ibkr-snapshot"
+    if source == "schwab_futures":
+        return "futures-us"
     if country_code == "US":
         return "universe-us" if source == "universe" else "ingest-us"
     if country_code == "IN":

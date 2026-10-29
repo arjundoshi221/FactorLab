@@ -14,6 +14,12 @@ Rows stored under the orphan stay where they are; datasets that resolve by symbo
 (political trades) re-resolve afterwards. Only provable duplicates are retired: exactly
 one listing of the symbol carries the canonical alias, all share an exchange and no
 two carry different ISINs. Anything else is reported, never guessed.
+
+A later purge removes the retired tombstones: bars only the orphan holds are copied to
+the canonical listing, aliases on the orphan's security and entity (SEC CIKs) move to the
+canonical ones, then the orphan's bars, recovery state, aliases, listing, and any
+security or entity nothing else references are deleted. ``ref.listing_migrations`` keeps
+the record.
 """
 
 from __future__ import annotations
@@ -240,6 +246,225 @@ def retire_duplicate_listings(
     _insert(client, "ref.identifier_aliases", moved)
     report.applied = True
     return report
+
+
+@dataclass
+class PurgeReport:
+    orphans: list[tuple[str, uuid.UUID, uuid.UUID]] = field(default_factory=list)
+    skipped: dict[str, str] = field(default_factory=dict)
+    bars_rescued: int = 0
+    bars_deleted: int = 0
+    recovery_rows_deleted: int = 0
+    aliases_moved: int = 0
+    securities_deleted: int = 0
+    entities_deleted: int = 0
+    applied: bool = False
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "applied": self.applied,
+            "orphans": len(self.orphans),
+            "bars_rescued": self.bars_rescued,
+            "bars_deleted": self.bars_deleted,
+            "recovery_rows_deleted": self.recovery_rows_deleted,
+            "aliases_moved": self.aliases_moved,
+            "securities_deleted": self.securities_deleted,
+            "entities_deleted": self.entities_deleted,
+            "skipped": self.skipped,
+            "purged": [
+                {"symbol": symbol, "orphan": str(orphan), "canonical": str(canonical)}
+                for symbol, orphan, canonical in self.orphans
+            ],
+        }
+
+
+def purge_retired_listings(
+    client: Any, *, country: str, apply: bool = False, now: datetime | None = None
+) -> PurgeReport:
+    """Plan (and with ``apply``, delete) the tombstones of retired duplicate listings.
+
+    The orphan's listing row is deleted last, so a run that fails part way is found and
+    finished by the next one; the bar copy and alias moves are idempotent.
+    """
+    rows = client.query(
+        "SELECT o.trading_symbol, m.old_listing_id, m.new_listing_id, o.active, o.security_id, "
+        "n.security_id, ns.entity_id FROM ref.listing_migrations AS m FINAL "
+        "INNER JOIN ref.listings AS o FINAL ON o.listing_id = m.old_listing_id "
+        "INNER JOIN ref.listings AS n FINAL ON n.listing_id = m.new_listing_id "
+        "INNER JOIN ref.securities AS ns FINAL ON ns.security_id = n.security_id "
+        f"WHERE m.migration_type = '{MIGRATION_TYPE}' AND o.country_code = {{country:String}} "
+        "ORDER BY o.trading_symbol, m.old_listing_id",
+        parameters={"country": country},
+    ).result_rows
+    report = PurgeReport()
+    canonical: dict[uuid.UUID, tuple[uuid.UUID, uuid.UUID, uuid.UUID]] = {}
+    # orphan security -> canonical (security, entity)
+    orphan_securities: dict[uuid.UUID, tuple[uuid.UUID, uuid.UUID]] = {}
+    for symbol, orphan, new, active, security, new_security, new_entity in rows:
+        symbol = _decoded_text(symbol)
+        if active:
+            report.skipped[f"{symbol}:{orphan}"] = "retired listing is active again"
+            continue
+        report.orphans.append((symbol, orphan, new))
+        canonical[orphan] = (new, new_security, new_entity)
+        orphan_securities[security] = (new_security, new_entity)
+    if not canonical:
+        report.applied = apply
+        return report
+    ids = sorted(canonical, key=str)
+    now = now or datetime.now(UTC)
+    version = _version(now)
+
+    # Bars: copy what only the orphan holds, then everything under the orphan goes.
+    counts = client.query(
+        "SELECT listing_id, count() FROM market.bars "
+        "WHERE country_code = {country:String} AND listing_id IN {ids:Array(UUID)} "
+        "GROUP BY listing_id",
+        parameters={"country": country, "ids": ids},
+    ).result_rows
+    rescued: list[dict[str, Any]] = []
+    for orphan, count in counts:
+        report.bars_deleted += int(count)
+        new, new_security, new_entity = canonical[orphan]
+        result = client.query(
+            "SELECT * FROM market.bars FINAL "
+            "WHERE country_code = {country:String} AND listing_id = {orphan:UUID} "
+            "AND (resolution, source, bar_time) NOT IN (SELECT resolution, source, bar_time "
+            "FROM market.bars FINAL WHERE country_code = {country:String} "
+            "AND listing_id = {canonical:UUID})",
+            parameters={"country": country, "orphan": orphan, "canonical": new},
+        )
+        rescued.extend(
+            {
+                **dict(zip(result.column_names, row, strict=True)),
+                "listing_id": new,
+                "security_id": new_security,
+                "entity_id": new_entity,
+                "version": version,
+                "ingested_at": now,
+            }
+            for row in result.result_rows
+        )
+    report.bars_rescued = len(rescued)
+    [(recovery,)] = client.query(
+        "SELECT count() FROM meta.recovery_state FINAL WHERE listing_id IN {ids:Array(UUID)}",
+        parameters={"ids": ids},
+    ).result_rows
+    report.recovery_rows_deleted = int(recovery)
+
+    # A security or entity goes only when nothing outside the orphans references it, and
+    # its aliases move only when it maps to exactly one canonical identity.
+    securities = client.query(
+        "SELECT security_id, entity_id FROM ref.securities FINAL "
+        "WHERE security_id IN {ids:Array(UUID)}",
+        parameters={"ids": sorted(orphan_securities, key=str)},
+    ).result_rows
+    shared_securities = {
+        row[0]
+        for row in client.query(
+            "SELECT DISTINCT security_id FROM ref.listings FINAL "
+            "WHERE security_id IN {sids:Array(UUID)} AND listing_id NOT IN {ids:Array(UUID)}",
+            parameters={"sids": sorted(orphan_securities, key=str), "ids": ids},
+        ).result_rows
+    }
+    entity_targets: dict[uuid.UUID, set[uuid.UUID]] = defaultdict(set)
+    for security, entity in securities:
+        if security not in shared_securities:
+            entity_targets[entity].add(orphan_securities[security][1])
+    purged_securities = {
+        security for security, _ in securities if security not in shared_securities
+    }
+    shared_entities = {
+        row[0]
+        for row in client.query(
+            "SELECT DISTINCT entity_id FROM ref.securities FINAL "
+            "WHERE entity_id IN {eids:Array(UUID)} AND security_id NOT IN {sids:Array(UUID)}",
+            parameters={
+                "eids": sorted(entity_targets, key=str),
+                "sids": sorted(purged_securities, key=str),
+            },
+        ).result_rows
+    }
+    targets: dict[uuid.UUID, uuid.UUID] = {
+        security: orphan_securities[security][0] for security in purged_securities
+    }
+    for entity, news in sorted(entity_targets.items(), key=lambda item: str(item[0])):
+        if entity in shared_entities:
+            continue
+        if len(news) != 1:
+            report.skipped[f"entity:{entity}"] = (
+                f"maps to {len(news)} canonical entities; kept with its aliases"
+            )
+            continue
+        targets[entity] = next(iter(news))
+    report.securities_deleted = len(purged_securities)
+    report.entities_deleted = sum(1 for target in targets if target not in purged_securities)
+
+    aliases = client.query(
+        f"SELECT {', '.join(ALIAS_COLUMNS[:-2])} FROM ref.identifier_aliases FINAL "
+        "WHERE target_kind IN ('security', 'entity') AND target_id IN {ids:Array(UUID)}",
+        parameters={"ids": sorted({*targets, *targets.values()}, key=str)},
+    ).result_rows
+    held = {
+        (alias["alias_kind"], alias["alias_value"], alias["target_id"])
+        for alias in (dict(zip(ALIAS_COLUMNS[:-2], row, strict=True)) for row in aliases)
+        if alias["valid_to"] is None
+    }
+    moved: list[dict[str, Any]] = []
+    for row in aliases:
+        alias = dict(zip(ALIAS_COLUMNS[:-2], row, strict=True))
+        target = targets.get(alias["target_id"])
+        if target is None or alias["valid_to"] is not None:
+            continue
+        if (alias["alias_kind"], alias["alias_value"], target) in held:
+            continue
+        # Same (kind, value, valid_from) key: a newer version retargets it in place.
+        moved.append(
+            {
+                **alias,
+                "target_id": target,
+                "source": REPAIR_SOURCE,
+                "notes": f"moved from purged duplicate {alias['target_kind']} {alias['target_id']}",
+                "version": version,
+                "ingested_at": now,
+            }
+        )
+    report.aliases_moved = len(moved)
+    if not apply:
+        return report
+
+    _insert(client, "market.bars", rescued)
+    _insert(client, "ref.identifier_aliases", moved)
+    _delete(client, "market.bars", "listing_id", ids)
+    _delete(client, "meta.recovery_state", "listing_id", ids)
+    _delete(client, "ref.identifier_aliases", "target_id", ids, "target_kind = 'listing'")
+    if targets:
+        _delete(
+            client,
+            "ref.identifier_aliases",
+            "target_id",
+            sorted(targets, key=str),
+            "target_kind IN ('security', 'entity')",
+        )
+    entities = sorted((t for t in targets if t not in purged_securities), key=str)
+    if entities:
+        _delete(client, "ref.entities", "entity_id", entities)
+    if purged_securities:
+        _delete(client, "ref.securities", "security_id", sorted(purged_securities, key=str))
+    _delete(client, "ref.listings", "listing_id", ids)
+    report.applied = True
+    return report
+
+
+def _delete(
+    client: Any, table: str, column: str, ids: list[uuid.UUID], condition: str = ""
+) -> None:
+    where = f"{condition} AND " if condition else ""
+    for start in range(0, len(ids), 1000):
+        client.command(
+            f"DELETE FROM {table} WHERE {where}{column} IN {{ids:Array(UUID)}}",
+            parameters={"ids": ids[start : start + 1000]},
+        )
 
 
 def _insert(client: Any, table: str, records: list[dict[str, Any]]) -> None:

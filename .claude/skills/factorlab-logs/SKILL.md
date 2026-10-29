@@ -28,6 +28,16 @@ operations without an explicit request). For code questions, read the code inste
 | ingest-us | `ingest-us`, `universe-us` |
 | ingest-political | `ingest-political`, `cron` (plain-text cron wrapper output) |
 | ingest-broker | `ibkr-snapshot` |
+| monitor | `monitor` |
+| clickhouse | `clickhouse` (container output, INFO and above; `<Error>` lines are ERROR) |
+| ibkr-gateway | `paper`, `live` (IBC/Gateway output) |
+| ops | `uptime-kuma`, `portainer` |
+| edge | `cloudflared` (the tunnel's journal) |
+
+The last four are third-party: `collect-container-logs.py` copies them from
+`docker logs` and journald every minute (`logger` is `docker` or `journal`, and
+`stream` says stdout or stderr), so they lag by up to a minute and lines below
+INFO are dropped.
 
 Run `list` first when unsure. It shows the files present, their sizes and the running
 containers with their versions.

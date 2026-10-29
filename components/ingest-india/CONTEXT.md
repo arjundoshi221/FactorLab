@@ -118,3 +118,5 @@ Primary Upstox bindings drive the shared engine. Full-universe mode preserves
 the existing absence of automatic historical recovery; named universes recover
 inclusively from their last stored session. Missing requested quote instruments
 fail the unit while retaining valid finalized bars.
+
+**Collection plan (F-045):** every run records `metadata_json["config"]`: `mode` (`full`/`named`), `quote_interval_s`, `futures_interval_s` (`FUTURES_SWEEP_SECONDS`), `quote_batch_size`, `recovery` and `window_utc`. Named-universe sweeps use `NAMED_SWEEP_SECONDS` (300).

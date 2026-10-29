@@ -19,7 +19,7 @@ const views: { key: View; title: string; intro: string }[] = [
   { key: "all", title: "All tickers", intro: "Every registered listing and derivative contract, including inactive instruments and instruments without collected data. Select one to see everything stored for it." },
   { key: "sectors", title: "By sector", intro: "Every listing grouped by its current GICS sector (iShares IWV holdings). Expand a sector to see its tickers; listings without a sector are grouped as unclassified." },
   { key: "indexes", title: "Indexes", intro: "Official US indexes, plus FactorLab's own GICS sector indexes over the Russell 3000 proxy, equal- and cap-weighted." },
-  { key: "futures", title: "Futures", intro: "US futures curves: each recorded root's live contracts in expiry order at the latest Schwab quote, with the contract table. No rolls or back-adjustment." },
+  { key: "futures", title: "Futures", intro: "US futures: each recorded root's live contracts at the latest Schwab quote, a price history for the selected expiry, and the contract table. No rolls or back-adjustment." },
   { key: "matrix", title: "Data matrix", intro: "Each FactorLab ticker against each dataset. Bars are judged against the exchange's latest completed session; holdings, trades and tags follow the account owner's profile. Select a ticker to see everything linked to it." },
   { key: "collection", title: "Collection coverage", intro: "Every ticker configured for collection in the US and India, with the bars stored for each in daily collection and historical recovery." },
 ];

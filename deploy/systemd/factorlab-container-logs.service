@@ -1,0 +1,10 @@
+[Unit]
+Description=Copy ClickHouse, IB Gateway, ops and tunnel logs to /var/log/factorlab
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/libexec/factorlab-collect-container-logs.py
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=5min

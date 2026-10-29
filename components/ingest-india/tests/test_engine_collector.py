@@ -1,7 +1,7 @@
 """Production inventory and recovery semantics through real sources and sinks."""
 
 import json
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 from uuid import UUID
 
@@ -78,10 +78,12 @@ def setup(monkeypatch):
             "name": "Beta",
         },
     ]
+    # refresh() selects against the real IST date, so expiries follow it.
+    today = datetime.now(collector.IST).date()
     for key, expiry in (
-        ("nearest", date(2026, 10, 29)),
-        ("distant", date(2026, 11, 26)),
-        ("expired", date(2026, 9, 24)),
+        ("nearest", today + timedelta(days=28)),
+        ("distant", today + timedelta(days=56)),
+        ("expired", today - timedelta(days=7)),
     ):
         master.append(
             {

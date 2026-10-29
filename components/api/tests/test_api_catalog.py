@@ -449,7 +449,7 @@ def test_busy_expensive_and_failed_queries_map_to_safe_errors(client_and_service
 
 def test_stats_sample_recent_rows_without_payload_columns(client_and_service):
     fake, _, http = client_and_service
-    fake.rows["FROM (SELECT"] = Result(
+    fake.rows["__rows"] = Result(
         [
             "__rows",
             "raw_id__nulls",
@@ -618,6 +618,28 @@ def test_pipeline_status_respects_market_hours():
     assert pipeline_status(us_live, {}, None, [], NOW)[0] == "not_expected"
 
 
+def test_futures_pipelines_follow_the_globex_week():
+    quotes = PIPELINES_BY_ID["us_futures_quotes"]
+    wednesday = datetime(2026, 9, 23, 15, 0, tzinfo=UTC)  # 11:00 New York, Globex open
+    status, _ = pipeline_status(
+        quotes, {"last_status": "success"}, wednesday - timedelta(minutes=30), [], wednesday
+    )
+    assert status == "attention"
+    saturday = datetime(2026, 9, 26, 15, 0, tzinfo=UTC)
+    status, reason = pipeline_status(
+        quotes, {"last_status": "success"}, saturday - timedelta(hours=22), [], saturday
+    )
+    assert status == "not_expected" and "Outside collection hours" in reason
+
+
+def test_index_computations_count_as_pipeline_runs(client_and_service):
+    fake, _, http = client_and_service
+    http.get("/hub/api/v1/catalog/pipelines")
+    summary = next(call[0] for call in fake.calls if "argMax(status, started_at)" in call[0])
+    assert "FROM derived.computations FINAL WHERE dataset = 'derived.index_levels'" in summary
+    assert "'us_index_compute' AS pipeline" in summary
+
+
 US_LAST_BAR = datetime(2026, 9, 24, 19, 59, tzinfo=UTC)
 MARKETS = Result(
     ["country", "rows", "first_data_at", "last_data_at", "last_ingested_at"],
@@ -652,7 +674,7 @@ def test_market_scoped_previews_anchor_on_that_markets_latest_rows(client_and_se
     assert "`country_code` = {p2:String}" in sql and parameters["p2"] == "US"
     assert parameters["p1"] == "2026-09-24 19:59:01.000"  # window ends just after the latest US bar
 
-    fake.rows["FROM (SELECT"] = Result(["__rows"], [(0,)])
+    fake.rows["__rows"] = Result(["__rows"], [(0,)])
     assert (
         http.get(
             "/hub/api/v1/catalog/tables/market.bars/stats", params={"country": "IN"}

@@ -18,6 +18,11 @@
 .futures-shape { margin: 0; color: var(--muted); font: 400 12px var(--mono); }
 .futures-shape strong { color: var(--ink); margin-right: 6px; }
 
+.futures-controls { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
+/* Up to 12 expiries: wrap instead of pushing the page sideways on phones. */
+.futures-controls .index-toggle { flex-wrap: wrap; }
+.futures-controls .index-toggle button { padding: 0 10px; font: 400 12px var(--mono); }
+
 .futures-chart { position: relative; margin: 0 0 24px; padding: 16px; border: 1px solid var(--line); background: var(--panel); }
 .futures-chart figcaption { color: var(--muted); font: 400 11px var(--mono); margin-bottom: 8px; }
 .futures-chart svg[role="img"] { width: 100%; height: auto; display: block; }
@@ -30,6 +35,10 @@
 .futures-table td { font: 400 12px var(--mono); font-variant-numeric: tabular-nums; }
 .futures-table td small { color: var(--muted); }
 .futures-table tr.is-stale td { color: var(--muted); }
+.futures-table tr.is-selected td { background: var(--panel-soft); }
+.futures-table tr.is-selected td:first-child { box-shadow: inset 2px 0 0 var(--lime); }
+.futures-pick { padding: 0; color: inherit; background: none; border: 0; cursor: pointer; }
+.futures-pick:hover code { text-decoration: underline; }
 .futures-stale { color: var(--amber); }
 
 @media (max-width: 860px) { .futures-chart .index-tooltip { position: static; margin-top: 8px; } }

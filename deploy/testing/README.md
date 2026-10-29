@@ -77,6 +77,37 @@ migrations are never run: apply any wave the image needs first. The image versio
 immutable, so one commit gets one trial per image unit (`futures-us`, `indexes-us` and
 `ingest-us` share the `ingest-us` image); push a new commit for another scope.
 
+## Automated platform trial
+
+`./deploy/release-ui-trial.ps1 -Trial platform -Scope <scope>` (scope `monitor`,
+`secrets-agent` or `schema-migrator`) pushes `platform-trial/<scope>/<12-char SHA>` from
+the CI-green tip of `restructure/deploy-market-data-ui` and starts
+[branch-platform-deploy.yml](../../.github/workflows/branch-platform-deploy.yml). It
+publishes the unit image through the image workflow, transfers
+[`platform_trial.py`](platform_trial.py) (with `ingest_trial.py` and `ingestion_test.py`,
+whose helpers it reuses) and the commit's `deploy/compose.production.yml`, and on the
+host under the release lock:
+
+1. creates the root-only trial directory with a backup of the live deployment directory;
+2. pulls the image by digest and checks component, revision, version and runtime user
+   (10001; the secrets agent runs as 0 with every capability dropped);
+3. plans: pins the rollback model to the running image, takes the commit's service
+   definition while keeping the live environment, validates the model and imports the
+   component offline;
+4. applies:
+   - `monitor`: recreates the container, waits for health and for
+     `/hub/api/v1/monitoring/services` to report the monitor online;
+   - `secrets-agent`: recreates the container, waits for health and for a
+     `.agent-ready` newer than before (the new container synced). Consumers keep their
+     tmpfs secrets while it restarts;
+   - `schema-migrator`: runs the new image's `bootstrap` readiness check and
+     `migrate status` (both read-only, no DDL) and then pins the image for later starts.
+     It never applies a wave.
+
+ClickHouse, the API, web and the other platform container must be unchanged
+afterwards. Any failure restores the preceding model and image. The job summary gives
+`platform_trial.py restore <test-id>` for a later manual rollback.
+
 ## Ingestion trial
 
 This is an owner-authorized exception for testing ingestion component images on

@@ -32,7 +32,9 @@ function assign(row: LedgerRow, userId: string, tags: OrderAssignment) {
   });
 }
 
-function InlineEditor({ row, userId, catalogs, done }: { row: LedgerRow; userId: string; catalogs: Record<CatalogKind, CatalogEntry[]>; done: (message: string) => void }) {
+function InlineEditor({ row, userId, catalogs, done, onCreated }: {
+  row: LedgerRow; userId: string; catalogs: Record<CatalogKind, CatalogEntry[]>; done: (message: string) => void; onCreated: (kind: CatalogKind) => void;
+}) {
   const [tags, setTags] = useState<OrderAssignment>({ theme_id: row.theme_id, strategy_id: row.strategy_id, trade_name_id: row.trade_name_id });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -43,7 +45,7 @@ function InlineEditor({ row, userId, catalogs, done }: { row: LedgerRow; userId:
     finally { setBusy(false); }
   }
   return <form className="ledger-editor" onSubmit={event => { event.preventDefault(); void save(tags, "Tags saved"); }}>
-    <TagSelectors tags={tags} onChange={setTags} catalogs={catalogs} disabled={busy} name={`order ${row.perm_id}`} />
+    <TagSelectors tags={tags} onChange={setTags} catalogs={catalogs} disabled={busy} name={`order ${row.perm_id}`} userId={userId} onCreated={onCreated} />
     <div className="portfolio-actions">
       <button className="portfolio-button portfolio-button--primary" disabled={busy || !hasTags(tags)}>{busy ? "Saving…" : "Save tags"}</button>
       {row.tag_status === "tagged" && <button type="button" className="portfolio-button portfolio-button--ghost" disabled={busy} onClick={() => void save(EMPTY, "Tags cleared")}>Clear tags</button>}
@@ -73,6 +75,7 @@ export function TradeLedger() {
   const strategies = useRemote<ItemsPage<CatalogEntry>>(userId ? `${API}/catalogs/strategies${suffix}` : null, 60_000);
   const names = useRemote<ItemsPage<CatalogEntry>>(userId ? `${API}/catalogs/trade-names${suffix}` : null, 60_000);
   const catalogs: Record<CatalogKind, CatalogEntry[]> = { themes: themes.data?.items ?? [], strategies: strategies.data?.items ?? [], "trade-names": names.data?.items ?? [] };
+  const refreshCatalog = (kind: CatalogKind) => ({ themes, strategies, "trade-names": names })[kind].refresh();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState("");
   const [expanded, setExpanded] = useState("");
@@ -136,7 +139,7 @@ export function TradeLedger() {
       {params.get("listing_id") && <p className="portfolio-footnote">Showing trades for one ticker, including security-level fills and derivatives on it. <a href={`/market-data?view=matrix&kind=listing&id=${params.get("listing_id")}`}>Open the ticker →</a></p>}
       {chosen.length > 0 && <div className="ledger-bulk" role="region" aria-label="Tag selected orders">
         <strong>{chosen.length} selected</strong>
-        <TagSelectors tags={bulk} onChange={setBulk} catalogs={catalogs} disabled={Boolean(running)} name="selected orders" />
+        <TagSelectors tags={bulk} onChange={setBulk} catalogs={catalogs} disabled={Boolean(running)} name="selected orders" userId={userId} onCreated={refreshCatalog} />
         <div className="portfolio-actions">
           <button type="button" className="portfolio-button portfolio-button--primary" disabled={Boolean(running) || !hasTags(bulk)} onClick={() => void applyBulk(bulk)}>Apply to {chosen.length} orders</button>
           <button type="button" className="portfolio-button portfolio-button--secondary" disabled={Boolean(running)} onClick={() => void applyBulk(EMPTY)}>Clear tags</button>
@@ -177,7 +180,7 @@ export function TradeLedger() {
                 <button type="button" className="portfolio-button portfolio-button--ghost" aria-expanded={expanded === row.key} aria-label={`${row.fill_count} fills for order ${row.perm_id}`} onClick={() => setExpanded(expanded === row.key ? "" : row.key)}>{row.fill_count} {row.fill_count === 1 ? "fill" : "fills"}<PortfolioIcon name="chevron" /></button>
               </td>
             </tr>
-            {editing === row.key && <tr className="ledger-detail"><td colSpan={12}><InlineEditor row={row} userId={userId} catalogs={catalogs} done={refresh} /></td></tr>}
+            {editing === row.key && <tr className="ledger-detail"><td colSpan={12}><InlineEditor row={row} userId={userId} catalogs={catalogs} done={refresh} onCreated={refreshCatalog} /></td></tr>}
             {expanded === row.key && <tr className="ledger-detail"><td colSpan={12}>
               <p className="portfolio-footnote">Order {row.perm_id} · first fill {formatTime(row.first_fill_at, "—")} · commissions {row.commissions.length ? row.commissions.map(c => `${c.amount} ${c.currency}`).join(", ") : "not reported"}{row.fills_truncated ? " · showing the first 50 fills" : ""}</p>
               <table aria-label={`Fills for order ${row.perm_id}`}><thead><tr><th scope="col">Execution</th><th scope="col">Time (IST)</th><th scope="col" className="portfolio-numeric">Qty</th><th scope="col" className="portfolio-numeric">Price</th></tr></thead>

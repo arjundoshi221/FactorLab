@@ -1,0 +1,10 @@
+[Unit]
+Description=Copy third-party container and tunnel logs every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:30
+Persistent=true
+Unit=factorlab-container-logs.service
+
+[Install]
+WantedBy=timers.target

@@ -1,108 +1,48 @@
 # Ingestion inventory
 
-**Owner:** factorlab-pm · **Last updated:** 2026-06-16
+**Owner:** factorlab-pm · **Last updated:** 2026-10-30
 
-> **Stale (2026-09-24):** Postgres references below predate the ClickHouse v2 cutover. The target ingestion model (provider adapters → engine → DB-service sinks) is [07-ingestion-provider-abstraction.md](07-ingestion-provider-abstraction.md); this inventory is refreshed in its phase P8.
+This page lists what each running ingestion service collects: its universe, resolution and cadence.
 
-Living index of every script/module that fetches, parses, or upserts data.
+- **Declared values** live on each pipeline in
+  [catalog_pipelines.py](../../components/api/src/factorlab/components/api/catalog_pipelines.py)
+  (`service`, `universe`, `resolution`, `schedule`).
+- **Live values** are in the hub: **Monitoring → Collection plan**
+  (`GET /hub/api/v1/monitoring/collection-plan`, [F-045](../features/F-045-collection-plan.md)).
+  That view shows the universe each latest run recorded, its active members, the observed gap
+  between runs, and the config each collector reports (`meta.ingestion_runs.metadata_json["config"]`).
+  It flags drift from the values below.
 
-## Provider adapters (07 model, 2026-09-24)
+The ingestion model (provider adapters → engine → DB-service sinks) is
+[07-ingestion-provider-abstraction.md](07-ingestion-provider-abstraction.md). Bindings are in
+[configs/ingestion/bindings.yaml](../../configs/ingestion/bindings.yaml).
 
-Every source below runs through `scripts/factlab_ingest.py` (engine -> DB-service sinks) and is
-bound in `configs/ingestion/bindings.yaml`. All are `shadow` until their cutover
-([07 §15.2](07-ingestion-provider-abstraction.md)); the legacy scripts further down still
-serve production until then.
+## Per service
 
-| Provider (`sources/…`) | Datasets | Legacy path it replaces |
-|---|---|---|
-| `upstox` | `ref.listings`, `ref.contracts`, `market.bars` 1min, `market.futures_contract_bars` 1min | `factlab_india_clickhouse_5min.py` / `countries/in_/equities/upstox` |
-| `eodhd` | `ref.listings`, `ref.universe_membership`, `market.bars` daily | `countries/us/equities/eodhd/*`, `factlab_us_universe.py` master |
-| `schwab` | `ref.listings` (aliases), `market.bars` daily + 1min | `factlab_us_clickhouse.py` / `sources/schwab/market.py` |
-| `github_csv` | `ref.universe_membership` | `universe/github_csv.py` + Schwab validation |
-| `ibkr` | `broker.snapshot` | `us_portfolio_ibkr_snapshot.py` (`IBKRBrokerProvider`) |
-| `congress_legislators` | `ref.legislators` | `sources/political/references.py` + `V2PoliticalClickHouseStorage` |
-| `house_clerk` | `alt.political_filings`, `alt.political_trades` | `factlab_political_bootstrap.py` |
-| `edgar` | `fundamentals.filings` (+ line items) | none (new) |
+| Component / service | Pipeline(s) | Universe (`universe_id`) | Resolution | Cadence | Set by |
+|---|---|---|---|---|---|
+| ingest-us / `universe-us` | `us_universe_sync`, `us_shares_outstanding` | `us_configured`: iShares IWV Russell 3000 proxy (`r3k_iwv`, ~2,580 names, minimum 2,400) plus 30 benchmark symbols (`$SPX`, sector SPDRs, RSP*, IWV) | membership | every `refresh_interval_minutes` (1440); retry 15 min | `/etc/factorlab/us-universe.yaml` (seed [deploy/us-universe.yaml](../../deploy/us-universe.yaml)) |
+| ingest-us / `ingest-us` | `us_live` | `us_liquid_250` (the minute tier, up to `US_MINUTE_TIER_SIZE` = 250 of the published names) | 1min | sweep every `US_LIVE_INTERVAL_SECONDS` (300 s), XNYS regular session | env, `collector.py` |
+| | `us_recovery_daily` | `us_configured` (every published member) | daily | continuous until complete, retry backoff from 15 min; weekly full refresh | published membership |
+| | `us_recovery_1min` | `us_liquid_250` | 1min, last 60 days | continuous, retry backoff from 15 min | env |
+| ingest-us / `indexes-us` | `us_index_compute` | sector and composite indexes over the universe | daily | weekdays after 23:30 UTC, trailing 14 days | [catalog_us.yaml](../../libs/indexes/src/factorlab/indexes/catalog_us.yaml) |
+| ingest-us / `futures-us` | `us_futures_roster`, `us_futures_quotes`, `us_futures_daily` | `us_futures`: 14 roots, ~72 contracts | quotes; daily bars | quotes every `--interval` (60 s) while Globex is open; roster once per session; provisional bar at 17:00 ET, settled an hour into the next session | [us_futures.yaml](../../configs/universes/us_futures.yaml) |
+| ingest-india / `ingest-india` | `india_intraday_1min`, `india_historical_1min_recovery`, `india_reference_premarket` | `UPSTOX_UNIVERSE` (default `full_nse_eq`) plus nearest stock futures | 1min | 03:45–10:02 UTC on NSE days. Full universe: quotes every minute (+5 s). Named universe: every 300 s, with recovery. Futures every 600 s. | `production.env`, [india.yaml](../../configs/universes/india.yaml) |
+| ingest-political / `ingest-political` | `political_bootstrap` | `house` (newest `POLITICAL_PTR_LIMIT` = 20 PTRs) | filings | daily 02:15 UTC (host cron) | `production.env` |
+| ingest-broker / `ibkr-snapshot` | `ibkr_broker_snapshot` | `ibkr_accounts` (`IBKR_SNAPSHOT_MODES` = paper, live) | snapshot | `IBKR_SNAPSHOT_TIMES` New York slots on XNYS days (production: every hour) | `production.env` |
 
-Legacy-only sources with no adapter yet (deprecated in place, 07 §16): FEC, LDA, Senate eFD,
-Senate Stock Watcher, Congress.gov, USAspending, Finnhub contracts. Retirement list:
-[07 §15.3](07-ingestion-provider-abstraction.md).
+## Keeping it current
 
-## Country × domain matrix
-
-| Country | Domain                                                         | Vendors / sources                                                              |
-|---------|----------------------------------------------------------------|--------------------------------------------------------------------------------|
-| US      | equities                                                       | Schwab (REST + live), EODHD (daily)                                            |
-| US      | broker mirror                                                  | IBKR (read-only positions / account / executions / open orders → `broker.*`)   |
-| US      | political (alt-data)                                           | House Clerk · Senate eFD · Senate Stock Watcher · FEC · Congress.gov · LDA · USASpending · Finnhub-contracts |
-| IN      | equities                                                       | Upstox (intraday + futures)                                                    |
-| EU/APAC | equities                                                       | (future EODHD multi-market)                                                    |
-| future  | alt-data                                                       | Reddit / Twitter / arXiv stubs (not active)                                    |
-
-## Scripts (entrypoints)
-
-| Path                                                     | Kind        | Cadence                                          |
-|----------------------------------------------------------|-------------|--------------------------------------------------|
-| `scripts/us/equities/schwab/us_equities_schwab_auth.py`                            | auth        | Manual / weekly (Schwab refresh)                 |
-| `scripts/us/equities/schwab/us_equities_schwab_historical.py`                        | backfill    | Manual (Schwab historical)                       |
-| `scripts/us/equities/schwab/us_equities_schwab_live.py`                            | live        | Hourly cron, 24/7 (1m catch-up, SP500)           |
-| `scripts/us/equities/schwab/us_equities_schwab_eod.py`                             | daily       | Daily post-close cron (R3K, last 7d)             |
-| `scripts/us/equities/blackrock/us_equities_blackrock_universe.py`                        | maintenance | Quarterly (BlackRock IWV → universe yamls)       |
-| `scripts/us/equities/eodhd/us_equities_eodhd_daily.py`                           | daily       | EOD (EODHD)                                      |
-| `scripts/us/ibkr/us_portfolio_ibkr_snapshot.py`                                    | daily       | Daemon, 06:00 + 16:30 New York (IBKR paper + live) |
-| `scripts/us/political/us_political_backfill.py`                       | backfill    | Manual (4-phase)                                 |
-| `scripts/us/political/us_political_daily.py --mode daily`            | daily       | Mon–Sat 17:30 IST                                |
-| `scripts/us/political/us_political_daily.py --mode weekly`           | daily       | Sun 17:30 IST                                    |
-| `scripts/us/political/us_political_daily.py --mode hourly`           | daily       | Hourly (self-healing retry)                      |
-| `scripts/us/political/us_political_status.py`                         | maintenance | Manual                                           |
-| `scripts/us/political/us_political_verify.py`                         | maintenance | Run as part of `--mode weekly`                   |
-| `scripts/us/political/house_clerk/us_political_house_clerk_historical.py`    | backfill    | Manual (one-shot 2013–2026)                      |
-| `scripts/us/political/_maintenance/us_political_refresh_bioguide.py`               | maintenance | Manual (post-matcher edit)                       |
-| `scripts/us/political/_maintenance/*.py`                 | maintenance | All ad-hoc (cache cleanup, paper-PTR fills, ...) |
-| `scripts/in/equities/upstox/india_equities_upstox_auth_server.py`                    | auth        | Railway always-on; Upstox OAuth callback         |
-| `scripts/in/equities/upstox/india_equities_upstox_premarket.py`                      | premarket   | Daily 06:00 IST                                  |
-| `scripts/in/equities/upstox/india_equities_upstox_live.py`                           | live        | Long-running 03:40–10:05 UTC                     |
-| `scripts/_shared/factlab_backfill.py`                    | dispatcher  | Manual (one CLI for any Backfiller)              |
-| `scripts/_shared/sync_raw_to_nas.py`                     | maintenance | Weekly (NAS backup mirror)                       |
-| `scripts/_shared/notifier_daemon.py`                     | service     | At log-on (Outlook bridge)                       |
-
-## Source modules
-
-| Module                                                                | Subpackages                                                                                          |
-|-----------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
-| `factorlab.countries.us.equities.schwab`                              | `auth`, `candles`, `client`, `intraday`, `quotes`, `symbols`                                         |
-| `factorlab.components.ingest_us.legacy.eodhd`                               | `client`, `candles`, `instruments`, `backfill`                                                       |
-| `factorlab.countries.us.political`                                    | `_client`, `_state`, `_security`, `_db`, `_resolver`, `_bioguide`, `_asset_classifier`, `_metrics`, `orchestrator` |
-| `factorlab.countries.us.political.house_clerk`                        | `client`, `index`, `parser`, `ingest`                                                                |
-| `factorlab.countries.us.political.senate_efd`                         | `scraper`, `parser`, `ingest`                                                                        |
-| `factorlab.countries.us.political.senate_stock_watcher`               | `ingest`                                                                                              |
-| `factorlab.countries.us.political.fec`                                | `client`, `ingest`                                                                                    |
-| `factorlab.countries.us.political.congress_gov`                       | `client`, `ingest`                                                                                    |
-| `factorlab.countries.us.political.lda`                                | `client`, `ingest`                                                                                    |
-| `factorlab.countries.us.political.usaspending`                        | `client`, `ingest`                                                                                    |
-| `factorlab.countries.us.political.finnhub_contracts`                  | `ingest`                                                                                              |
-| `factorlab.countries.us.political.legislators`                        | `yaml_fetcher`, `ingest`                                                                              |
-| `factorlab.components.ingest_india.legacy.upstox`                             | `auth`, `client`, `instruments`, `universes`                                                         |
-
-## Shared plumbing every source uses
-
-- `factorlab.core.paths` — RAW_ROOT / STATE_ROOT / TOKEN_ROOT / LOG_ROOT helpers
-- `factorlab.runtime` — logging / signals / dedup / market / lock / state / heartbeat / supervised
-- `factorlab.runtime.notify` — Outlook + SMTP + Telegram + webhook + JSONL (one `notify()` entry)
-- `factorlab.ingest` — HTTPClient + State + Backfiller protocol + redact helpers
+- Every pipeline id a collector passes to `ingestion_run` needs a catalogue entry that has a `service`.
+  [test_collection_plan.py](../../components/api/tests/test_collection_plan.py) fails when an
+  ingestion service in the manifests has no pipeline.
+- Record a new collector setting in its `config=run_config(...)` call (`factorlab.ingest`). The hub
+  then shows the production value, not the repository default.
+- Change the table above when a declared universe or cadence changes.
 
 ## Where data ends up
 
-- **Canonical** (rows): Postgres on Railway. Schemas: `ref`, `market_us`, `market_in`, `universe`, `alt_political_us`, `audit`.
-- **Canonical** (raw bytes): `<repo>/data/<source>/raw/`.
-- **Backup mirror**: `E:\NAS\factorlab\raw\` — populated weekly by `sync_raw_to_nas.py`.
-- **State checkpoints**: `<repo>/data/_state/` and `<repo>/data/<source>/_state/` (political legacy).
-- **Logs**: `<repo>/logs/`.
-- **Heartbeats**: `<repo>/data/_heartbeat/<service>` — mtime = liveness.
-- **Tokens**: `<repo>/data/<vendor>/.token` — repo-local; never on NAS.
-
-## Sister docs
-
-- Per-country deep dives: `docs/countries/{us-equities,india-equities,...}.md`
-- Per-vendor deep dives: `docs/data-sources/{01,04,07,...}-*.md`
-- Operations: this folder
+- Rows go to ClickHouse v2 ([06-schema-rehau.md](06-schema-rehau.md)).
+- Every provider response is archived to `raw.archive`.
+- Run records are in `meta.ingestion_runs`, and the expected inventory is in `meta.expected_series`.
+- Logs are under `/var/log/factorlab/<component>/<service>.jsonl` ([log-access.md](../operations/log-access.md)).

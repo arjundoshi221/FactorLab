@@ -1,0 +1,12 @@
+<clickhouse>
+    <!-- The tracker drifted ~1.4 GiB above real RSS (3.86 GiB tracked vs 2.45 GiB
+         resident while idle), so ordinary inserts hit the 4.5 GiB server limit.
+         Let the memory worker resync the tracker to RSS. -->
+    <memory_worker_correct_memory_tracker>1</memory_worker_correct_memory_tracker>
+
+    <!-- Image defaults (5-8 GiB each) exceed the 5 GiB container; cap them. -->
+    <mark_cache_size>268435456</mark_cache_size>
+    <primary_index_cache_size>268435456</primary_index_cache_size>
+    <index_mark_cache_size>67108864</index_mark_cache_size>
+    <uncompressed_cache_size>268435456</uncompressed_cache_size>
+</clickhouse>

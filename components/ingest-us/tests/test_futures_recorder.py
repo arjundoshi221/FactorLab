@@ -78,6 +78,11 @@ class Sink(InMemorySink):
         super().__init__()
         self.roster: dict[str, str] = {}
         self.contract_aliases[("schwab_symbol", "/ESZ26")] = ESZ26
+        self.started: list[dict[str, Any]] = []
+
+    def start_ingestion_run(self, **kwargs: Any) -> Any:
+        self.started.append(kwargs)
+        return super().start_ingestion_run(**kwargs)
 
 
 @pytest.fixture
@@ -143,11 +148,23 @@ def test_open_market_polls_quotes_and_finalizes_the_previous_session(recorder) -
     assert recorder.client.rosters == [date(2026, 10, 19)]  # same session, same roster
 
 
+def test_runs_record_the_roster_universe_and_cadence(recorder) -> None:
+    recorder.tick(ny(2026, 10, 19, 10, 0, 20))
+    pipelines = {run["pipeline"]: run for run in recorder.sink.started}
+    assert set(pipelines) == {"us_futures_roster", "us_futures_quotes", "us_futures_daily"}
+    assert {run["universe"] for run in recorder.sink.started} == {"us_futures"}
+    assert pipelines["us_futures_quotes"]["metadata"]["config"] == {
+        "roots": ["/ES"],
+        "contracts": 1,
+        "interval_s": 60,
+    }
+
+
 def test_close_writes_provisional_bars_then_settles_them_next_session(recorder) -> None:
     recorder.tick(ny(2026, 10, 19, 10, 0))
     recorder.storage.settlement = {}  # nothing for Monday until the next session reports it
     wake = recorder.tick(ny(2026, 10, 19, 17, 30))
-    assert wake == ny(2026, 10, 19, 17, 45)
+    assert wake == ny(2026, 10, 19, 17, 35)
     assert len(recorder.client.polls) == 1  # no quotes during the break
     assert bars(recorder)[-1].close == Decimal("5801.25")  # provisional: last price
     recorder.tick(ny(2026, 10, 19, 18, 30))  # Tuesday's session: new roster, too early to settle
@@ -161,7 +178,7 @@ def test_close_writes_provisional_bars_then_settles_them_next_session(recorder) 
 
 def test_weekend_writes_fridays_provisional_bars_once(recorder) -> None:
     wake = recorder.tick(ny(2026, 10, 24, 12, 0))
-    assert wake == ny(2026, 10, 24, 12, 15)
+    assert wake == ny(2026, 10, 24, 12, 5)
     recorder.tick(ny(2026, 10, 24, 12, 15))
     assert recorder.client.polls == []
     assert len(bars(recorder)) == 1

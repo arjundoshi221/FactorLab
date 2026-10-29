@@ -14,6 +14,7 @@ from factorlab.ingest.provider import (
     RawCapture,
     RunContext,
     ingestion_run,
+    run_config,
     run_provider,
 )
 
@@ -162,6 +163,26 @@ def test_run_provider_returns_summary():
     assert [u.name for u in summary.failed_units] == ["b"]
     assert storage.started[0]["pipeline"] == "demo_pipeline"
     assert storage.started[0]["metadata"] == {"k": "v"}
+
+
+def test_run_config_is_recorded_under_metadata_and_drops_unset_values():
+    storage = RecordingStorage()
+    config = run_config(universe_file="us.yaml", tier=250, slots=["06:00"], lock=None)
+    with ingestion_run(
+        storage, pipeline="p", source="s", market_code="USA", metadata={"k": "v"}, config=config
+    ) as ctx:
+        ctx.succeed_unit("a", 0)
+    assert storage.started[0]["metadata"] == {
+        "k": "v",
+        "config": {"universe_file": "us.yaml", "tier": 250, "slots": ["06:00"]},
+    }
+
+
+def test_run_without_config_leaves_metadata_unchanged():
+    storage = RecordingStorage()
+    with ingestion_run(storage, pipeline="p", source="s", market_code="USA", config={}) as ctx:
+        ctx.succeed_unit("a", 0)
+    assert storage.started[0]["metadata"] == {}
 
 
 def test_null_storage_records_without_writing():

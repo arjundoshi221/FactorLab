@@ -77,6 +77,14 @@ def test_inventory_keeps_inactive_empty_and_duplicate_symbols_and_parameterizes_
     assert "UNION ALL" in inventory_sql()
 
 
+def test_inventory_excludes_listings_retired_as_duplicate_identities():
+    sql = inventory_sql()
+    # Both branches: retired listings and contracts on a retired underlying.
+    assert sql.count("migration_type = 'duplicate_identity'") == 2
+    assert "l.listing_id NOT IN (SELECT old_listing_id FROM ref.listing_migrations" in sql
+    assert "c.underlying_listing_id NOT IN (SELECT old_listing_id" in sql
+
+
 @pytest.mark.parametrize(
     "table",
     [

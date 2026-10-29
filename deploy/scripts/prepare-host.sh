@@ -38,6 +38,11 @@ sudo install -d -m 0750 -o root -g factorlab-logs /var/log/factorlab
 for component in $FACTORLAB_COMPONENTS; do
     sudo install -d -m 2750 -o "$(component_uid "$component")" -g factorlab-logs "/var/log/factorlab/$component"
 done
+# Third-party container and tunnel logs, copied by collect-container-logs.py (root).
+FACTORLAB_HOST_LOGS="clickhouse ibkr-gateway ops edge"
+for directory in $FACTORLAB_HOST_LOGS; do
+    sudo install -d -m 2750 -o root -g factorlab-logs "/var/log/factorlab/$directory"
+done
 # The political cron log used to grow forever under /var/lib/factorlab/logs.
 legacy_log=/var/lib/factorlab/logs/political-cron.log
 if [ -f "$legacy_log" ]; then
@@ -91,10 +96,15 @@ sudo install -m 0644 "$script_dir/../systemd/factorlab-docker-images.timer" /etc
 sudo install -D -m 0755 "$script_dir/prune-images.py" /usr/local/libexec/factorlab-prune-images.py
 sudo install -m 0644 "$script_dir/../systemd/factorlab-image-prune.service" /etc/systemd/system/factorlab-image-prune.service
 sudo install -m 0644 "$script_dir/../systemd/factorlab-image-prune.timer" /etc/systemd/system/factorlab-image-prune.timer
+# Every minute, copy ClickHouse, IB Gateway, ops-tool and tunnel logs for the log reader.
+sudo install -D -m 0755 "$script_dir/collect-container-logs.py" /usr/local/libexec/factorlab-collect-container-logs.py
+sudo install -m 0644 "$script_dir/../systemd/factorlab-container-logs.service" /etc/systemd/system/factorlab-container-logs.service
+sudo install -m 0644 "$script_dir/../systemd/factorlab-container-logs.timer" /etc/systemd/system/factorlab-container-logs.timer
 sudo systemctl daemon-reload
 sudo systemctl enable --now logrotate.timer
 sudo systemctl enable --now factorlab-docker-images.timer
 sudo systemctl enable --now factorlab-image-prune.timer
+sudo systemctl enable --now factorlab-container-logs.timer
 sudo systemctl start factorlab-docker-images.service
 
 echo "FactorLab production directories are ready."

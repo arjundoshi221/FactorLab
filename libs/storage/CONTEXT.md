@@ -22,7 +22,9 @@ raw archiving, run lifecycle, inventory, recovery/coverage state and broker writ
   `V2ReferenceWriter` ([v2_reference.py](src/factorlab/storage/v2_reference.py));
   UUID namespaces ([canonical_ids.py](src/factorlab/storage/canonical_ids.py));
   duplicate-listing retirement ([identity_repair.py](src/factorlab/storage/identity_repair.py),
-  recorded in `ref.listing_migrations` as `duplicate_identity`; resolvers skip retired IDs);
+  recorded in `ref.listing_migrations` as `duplicate_identity`; resolvers skip retired IDs)
+  and the later purge of those tombstones (`purge_retired_listings`: rescues bars only the
+  orphan holds, moves security/entity aliases when unambiguous, then deletes);
   `ClickHouseSinks` ([sinks/clickhouse.py](src/factorlab/storage/sinks/clickhouse.py))
   with identity, calendar, political and fundamentals helpers in [sinks/](src/factorlab/storage/sinks/__init__.py).
 - Does not own: dataset/record/sink contracts (`factorlab-ingest`), connection and

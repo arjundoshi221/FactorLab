@@ -36,6 +36,8 @@ from factorlab.components.api.catalog_query import (
     parse_filters,
     parse_timestamp,
 )
+from factorlab.components.api.collection_plan import CACHE as COLLECTION_PLAN_CACHE
+from factorlab.components.api.collection_plan import CollectionPlan, build_collection_plan
 from factorlab.components.api.docker_images import DockerImagesResponse, read_docker_images_snapshot
 from factorlab.components.api.futures import router as futures_router
 from factorlab.components.api.hub import HubOverview, HubOverviewService, HubRepository
@@ -326,6 +328,22 @@ def get_monitoring_summary(
     """One verdict for whether everything is working; failed checks read as unknown."""
 
     return SUMMARY_CACHE.get(lambda: build_summary(client, service))
+
+
+@app.get(
+    "/hub/api/v1/monitoring/collection-plan",
+    response_model=CollectionPlan,
+    tags=["hub-monitoring"],
+)
+def get_monitoring_collection_plan(
+    client: Annotated[object, Depends(monitoring_repository)],
+    service: Annotated[CatalogService, Depends(get_catalog_service)],
+) -> CollectionPlan:
+    """Per ingestion service: universe, resolution, cadence and the config it reports."""
+
+    return _catalog_call(
+        lambda: COLLECTION_PLAN_CACHE.get(lambda: build_collection_plan(client, service))
+    )
 
 
 @app.get(
