@@ -4744,3 +4744,49 @@ ENGINE = ReplacingMergeTree(version)
 PARTITION BY toYYYYMM(observed_at)
 ORDER BY (country_code, contract_id, source, observed_at);
 ```
+
+## Broker statement rows (forward Wave 17)
+
+A broker statement (an IBKR Activity Flex Query) carries more than the typed
+`broker.*` tables model: MTM and MTD/YTD performance summaries, transaction taxes,
+unbooked trades, and whatever sections the query is later extended with. Every row
+of every section, the statement header included, is kept here whole, its attributes
+exactly as reported, so a new section is queryable without a schema change. Fills,
+orders, cash movements and open positions also go to their typed tables
+(`broker.executions`, `broker.order_events`, `broker.cash_flows`,
+`broker.positions_snapshot`); this table is their complete, untyped record.
+
+### `broker.statement_rows`
+
+One row per statement element. `row_key` is a digest of the element name and its
+attributes (`#2`, `#3`, ... for identical repeats), so re-fetching the same statement
+collapses on merge, while a later statement (another `statement_to`) is a new
+record. `vendor_id` is not resolved: join through `ref.identifier_aliases`
+(`alias_kind = 'ibkr_conid'`) when a listing is needed.
+
+```sql
+CREATE TABLE broker.statement_rows (
+    generated_at       DateTime64(3, 'UTC'),        -- when the broker generated the statement
+    broker_code        LowCardinality(String),
+    account_id         String,
+    account_mode       LowCardinality(String),
+    country_code       FixedString(2),
+    statement_from     Date,
+    statement_to       Date,
+    section            LowCardinality(String),      -- 'OpenPositions', 'MTDYTDPerformanceSummary', ...
+    element            LowCardinality(String),      -- 'OpenPosition', ...
+    row_key            String,
+    level_of_detail    LowCardinality(String),      -- 'SUMMARY', 'EXECUTION', ... or ''
+    asset_category     LowCardinality(String),      -- 'STK', 'OPT', ... or ''
+    vendor_id          String,                      -- IBKR conid, '' when none
+    trading_symbol     String,
+    currency           LowCardinality(String),
+    report_date        Nullable(Date),
+    attributes         Map(String, String),         -- every attribute as reported
+    source, source_channel, raw_id, ingest_run_id,
+    as_of_time, ingested_at, version
+)
+ENGINE = ReplacingMergeTree(version)
+PARTITION BY (broker_code, toYYYYMM(statement_to))
+ORDER BY (broker_code, account_id, statement_to, section, row_key);
+```

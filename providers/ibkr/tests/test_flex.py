@@ -19,7 +19,13 @@ from factorlab.sources.ibkr.flex_normalize import (
     normalize_flex_statement,
 )
 from factorlab.sources.ibkr.flex_source import IbkrFlexActivity, IbkrFlexSettings
-from factorlab.sources.ibkr.shapes import CashFlowRecord, ExecutionRecord, OrderEventRecord
+from factorlab.sources.ibkr.shapes import (
+    CashFlowRecord,
+    ExecutionRecord,
+    OrderEventRecord,
+    PositionSnapshot,
+    StatementRow,
+)
 
 STATEMENT = (
     Path(__file__).parent / "fixtures" / "broker.flex_activity" / "live_statement.xml"
@@ -193,4 +199,72 @@ def test_source_plans_one_statement_unit_and_fetches_through_the_client():
 
     assert unit.source_channel == "ibkr:flex_statement"
     capture = source.fetch(unit)
-    assert len(source.normalize(capture)) == 10
+    assert len(source.normalize(capture)) == len(normalize_flex_statement(STATEMENT))
+
+
+def test_open_positions_are_summary_rows_as_of_the_report_close():
+    positions = {
+        p.trading_symbol: p
+        for p in normalize_flex_statement(STATEMENT)
+        if isinstance(p, PositionSnapshot)
+    }
+
+    # The LOT row breaks AAPL's SUMMARY row down; the closed MSFT row has no position.
+    assert sorted(positions) == ["AAPL", "SAP"]
+    aapl, sap = positions["AAPL"], positions["SAP"]
+    assert aapl.snapshot_time == datetime(2026, 10, 23, 20, 0, tzinfo=UTC)  # 16:00 EDT
+    assert (aapl.account_id, aapl.account_mode, aapl.vendor_id) == ("U0000001", "live", "265598")
+    assert (aapl.position, aapl.avg_cost, aapl.market_price) == (
+        Decimal(100),
+        Decimal("175.328"),
+        Decimal("182.5"),
+    )
+    assert (aapl.market_value, aapl.unrealized_pnl) == (Decimal(18250), Decimal("717.2"))
+    assert aapl.realized_pnl_ytd == Decimal(0)  # from the MTD/YTD performance summary
+    assert aapl.market_value_usd == Decimal(18250)
+    assert aapl.fx_rate_to_base == Decimal("1.2814")
+    assert sap.position == Decimal(-10)
+    assert sap.market_value_usd is None  # EUR: the statement gives no USD value
+    assert sap.realized_pnl_ytd is None
+
+
+def test_every_statement_row_is_kept_whole():
+    rows = [r for r in normalize_flex_statement(STATEMENT) if isinstance(r, StatementRow)]
+    live = [r for r in rows if r.account_id == "U0000001"]
+
+    sections = {(r.section, r.element) for r in live}
+    assert ("FlexStatement", "FlexStatement") in sections
+    assert ("AccountInformation", "AccountInformation") in sections
+    assert ("MTDYTDPerformanceSummary", "MTDYTDPerformanceSummaryUnderlying") in sections
+    assert ("OpenPositions", "OpenPosition") in sections
+    assert ("Trades", "Order") in sections
+    assert not any(r.section == "TransactionTaxes" for r in live)  # empty section, no rows
+    assert len([r for r in live if r.element == "OpenPosition"]) == 4  # LOT and closed rows too
+    assert len({(r.account_id, r.section, r.row_key) for r in rows}) == len(rows)
+
+    header = next(r for r in live if r.element == "FlexStatement")
+    assert (header.statement_from, header.statement_to) == (
+        datetime(2025, 10, 24).date(),
+        datetime(2026, 10, 23).date(),
+    )
+    assert header.generated_at == datetime(2026, 10, 24, 17, 45, tzinfo=UTC)
+    lot = next(r for r in live if r.level_of_detail == "LOT")
+    assert lot.attributes["originatingOrderID"] == "987654321"
+    assert (lot.vendor_id, lot.report_date) == ("265598", datetime(2026, 10, 23).date())
+    assert {r.account_mode for r in rows if r.account_id == "DU0000002"} == {"paper"}
+
+
+def test_identical_statement_rows_get_distinct_keys():
+    statement = (
+        b'<FlexQueryResponse><FlexStatements><FlexStatement accountId="U1" fromDate="20261001" '
+        b'toDate="20261002" whenGenerated="20261003;090000"><Notes>'
+        b'<Note text="same" /><Note text="same" /></Notes></FlexStatement></FlexStatements>'
+        b"</FlexQueryResponse>"
+    )
+    notes = [
+        r
+        for r in normalize_flex_statement(statement)
+        if isinstance(r, StatementRow) and r.element == "Note"
+    ]
+    first, second = (r.row_key for r in notes)
+    assert second == f"{first}#2"

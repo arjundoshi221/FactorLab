@@ -208,6 +208,25 @@ PIPELINES: tuple[PipelineInfo, ...] = (
         ),
         scheduled=False,
     ),
+    PipelineInfo(
+        id="broker.flex_activity:ibkr",
+        label="IBKR Flex statements",
+        market="Broker",
+        source="IBKR Flex Web Service",
+        description="Imports an IBKR Activity Flex statement: fills, executed orders, cash movements and end-of-day positions, with every statement row kept whole.",
+        schedule="Manual; run by an operator on the VPS (the Flex token is IP-restricted).",
+        expected_interval_seconds=None,
+        session_calendar=None,
+        tables_written=(
+            "broker.executions",
+            "broker.order_events",
+            "broker.cash_flows",
+            "broker.positions_snapshot",
+            "broker.statement_rows",
+            *COMMON_TABLES,
+        ),
+        scheduled=False,
+    ),
 )
 
 PIPELINES_BY_ID = {pipeline.id: pipeline for pipeline in PIPELINES}

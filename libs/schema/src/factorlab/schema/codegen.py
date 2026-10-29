@@ -45,6 +45,7 @@ FORWARD_TABLES: dict[str, tuple[int, str]] = {
     "derived.index_levels": (14, "indexes"),
     "derived.index_weights": (14, "indexes"),
     "market.futures_quotes": (15, "futures_quotes"),
+    "broker.statement_rows": (17, "broker_statement_rows"),
 }
 
 # Alter existing registries only in a forward wave, leaving their original DDL frozen.

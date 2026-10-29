@@ -61,7 +61,7 @@ applied by a reviewed, operator-run migration; the `schema-migrator` component's
 
 ## Data
 
-Forward Waves 12/13 add application profiles/account ownership, nullable catalog profile IDs and append-only durable-order assignments. These migrations are separate operator operations; applied waves stay frozen. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md). Forward Wave 15 adds `market.futures_quotes` (US futures snapshots, no TTL; [F-043](../../docs/features/F-043-us-futures-quotes.md)). Hand-written Wave 16 adds `market.bars_v16` and `meta.session_coverage_v16`, identical to the live tables except that daily/weekly/monthly history is partitioned by year ([runbook](../../docs/operations/clickhouse-memory.md)).
+Forward Waves 12/13 add application profiles/account ownership, nullable catalog profile IDs and append-only durable-order assignments. These migrations are separate operator operations; applied waves stay frozen. [Feature](../../docs/features/F-036-portfolio-tagging-pnl.md). Forward Wave 15 adds `market.futures_quotes` (US futures snapshots, no TTL; [F-043](../../docs/features/F-043-us-futures-quotes.md)). Hand-written Wave 16 adds `market.bars_v16` and `meta.session_coverage_v16`, identical to the live tables except that daily/weekly/monthly history is partitioned by year ([runbook](../../docs/operations/clickhouse-memory.md)). Forward Wave 17 adds `broker.statement_rows` (every IBKR Flex statement row, attributes as `Map(String, String)`).
 
 - Databases: `ref`, `market`, `fundamentals`, `alt`, `book`, `risk`, `derived`,
   `broker`, `meta`, `raw`, `research`.

@@ -67,7 +67,9 @@ on XNYS trading days; `--run-on-start` also takes an immediate snapshot.
   rows, `meta.unresolved_entities`, `meta.source_status` (`source` = `ibkr`) and
   `meta.ingestion_runs`. Reads `ref.broker_metrics_map` and `ref.execution_methods`.
 - On demand, `engine run --dataset broker.flex_activity --market USA` backfills
-  `broker.executions`, `broker.order_events` and `broker.cash_flows` from an IBKR Flex statement
+  `broker.executions`, `broker.order_events`, `broker.cash_flows`, end-of-day
+  `broker.positions_snapshot` rows and `broker.statement_rows` (every statement row, Wave 17)
+  from an IBKR Flex statement
   (`raw.archive` `transport='http'`, `source_channel` = `ibkr:flex_statement`). Run it on the
   VPS, because the token is IP-restricted: `fl` exec into `ibkr-snapshot`.
 - Pipeline (frozen) `ibkr_broker_snapshot`, `source` = `ibkr`, `universe` = `ibkr_accounts`;

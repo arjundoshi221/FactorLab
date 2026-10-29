@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 import pytest
 
@@ -38,7 +39,6 @@ STORAGE_OWNED = {
         "contract_id",
         "entity_id",
         "resolution_confidence",
-        "fx_rate_to_base",
         "fx_rate_source_time",
         "initial_margin_contribution",
         "maintenance_margin_contribution",
@@ -85,7 +85,7 @@ def test_shape_plus_storage_columns_cover_ddl_exactly(dc, table):
 
 
 def _minimum_position(**overrides):
-    base = dict(  # noqa: C408 - keyword form mirrors the IBKR field names
+    base: dict[str, Any] = dict(  # noqa: C408 - keyword form mirrors the IBKR field names
         snapshot_time=NOW,
         broker_code="ibkr",
         account_id="DUE375963",

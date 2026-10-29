@@ -21,6 +21,7 @@ from factorlab.ingest.datasets.broker import (
     PositionSnapshot,
     ProductType,
     Side,
+    StatementRow,
 )
 
 BrokerCode = Literal["ibkr"]
@@ -57,5 +58,6 @@ __all__ = [
     "ProductType",
     "Side",
     "SourceChannel",
+    "StatementRow",
     "source_channel_for",
 ]

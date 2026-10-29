@@ -16,7 +16,8 @@
   "market_value": "17550.0",
   "unrealized_pnl": "2550.0",
   "realized_pnl_ytd": "0.0",
-  "market_value_usd": null
+  "market_value_usd": null,
+  "fx_rate_to_base": null
  },
  {
   "_type": "PositionSnapshot",
@@ -35,6 +36,7 @@
   "market_value": "-10380.0",
   "unrealized_pnl": "-130.0",
   "realized_pnl_ytd": "0.0",
-  "market_value_usd": null
+  "market_value_usd": null,
+  "fx_rate_to_base": null
  }
 ]

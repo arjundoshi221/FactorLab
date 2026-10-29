@@ -2,6 +2,17 @@
 <FlexStatements count="2">
 <FlexStatement accountId="U0000001" fromDate="20251024" toDate="20261023" period="Last365CalendarDays" whenGenerated="20261024;134500">
 <AccountInformation accountId="U0000001" currency="USD" />
+<MTDYTDPerformanceSummary>
+<MTDYTDPerformanceSummaryUnderlying accountId="U0000001" assetCategory="STK" symbol="AAPL" conid="265598" mtmMTD="120.5" mtmYTD="717.2" realizedPnlMTD="0" realizedPnlYTD="0" />
+<MTDYTDPerformanceSummaryUnderlying accountId="U0000001" assetCategory="STK" symbol="MSFT" conid="272093" mtmMTD="0" mtmYTD="812.25" realizedPnlMTD="0" realizedPnlYTD="812.25" />
+</MTDYTDPerformanceSummary>
+<OpenPositions>
+<OpenPosition accountId="U0000001" currency="USD" fxRateToBase="1.2814" assetCategory="STK" symbol="AAPL" conid="265598" reportDate="20261023" position="100" markPrice="182.5" positionValue="18250" openPrice="175.328" costBasisPrice="175.328" costBasisMoney="17532.8" percentOfNAV="42.1" fifoPnlUnrealized="717.2" side="Long" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="USD" fxRateToBase="1.2814" assetCategory="STK" symbol="AAPL" conid="265598" reportDate="20261023" position="60" markPrice="182.5" positionValue="10950" openPrice="175.32" costBasisPrice="175.32" costBasisMoney="10519.2" fifoPnlUnrealized="430.8" side="Long" levelOfDetail="LOT" openDateTime="20260115;100500" originatingOrderID="987654321" />
+<OpenPosition accountId="U0000001" currency="EUR" fxRateToBase="1.4013" assetCategory="STK" symbol="SAP" conid="14204" reportDate="20261023" position="-10" markPrice="200" positionValue="-2000" openPrice="210" costBasisPrice="210" costBasisMoney="-2100" fifoPnlUnrealized="100" side="Short" levelOfDetail="SUMMARY" />
+<OpenPosition accountId="U0000001" currency="USD" fxRateToBase="1.2814" assetCategory="STK" symbol="MSFT" conid="272093" reportDate="20261023" position="0" markPrice="415" positionValue="0" costBasisPrice="0" fifoPnlUnrealized="0" side="Long" levelOfDetail="SUMMARY" />
+</OpenPositions>
+<TransactionTaxes />
 <Trades>
 <Trade accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" conid="265598" listingExchange="NASDAQ" tradeID="900000001" dateTime="20260115;100500" tradeDate="20260115" transactionType="ExchTrade" exchange="NASDAQ" quantity="60" tradePrice="175.32" ibCommission="-0.63" ibCommissionCurrency="USD" fifoPnlRealized="0" buySell="BUY" ibOrderID="987654321" ibExecID="0001f8a3.66eb01c2.01.01" orderReference="" isAPIOrder="Y" levelOfDetail="EXECUTION" />
 <Trade accountId="U0000001" currency="USD" assetCategory="STK" symbol="AAPL" conid="265598" listingExchange="NASDAQ" tradeID="900000002" dateTime="20260115;100501" tradeDate="20260115" transactionType="ExchTrade" exchange="ARCA" quantity="40" tradePrice="175.34" ibCommission="-0.42" ibCommissionCurrency="USD" fifoPnlRealized="0" buySell="BUY" ibOrderID="987654321" ibExecID="0001f8a3.66eb01c2.01.02" orderReference="" isAPIOrder="Y" levelOfDetail="EXECUTION" />

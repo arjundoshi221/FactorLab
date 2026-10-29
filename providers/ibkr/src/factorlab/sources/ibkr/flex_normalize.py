@@ -9,12 +9,19 @@ several accounts (``<FlexStatement accountId=...>``); each yields:
   per executed order. Flex reports only what executed, so orders that never
   filled are absent, and the event sits at ``ORDER_SUMMARY_EVENT_SEQ`` so it
   never collides with streamed lifecycle events (0..n) for the same ``perm_id``;
-* ``<CashTransaction>`` -> :class:`CashFlowRecord` (``SUMMARY`` rows are skipped).
+* ``<CashTransaction>`` -> :class:`CashFlowRecord` (``SUMMARY`` rows are skipped);
+* ``<OpenPosition levelOfDetail="SUMMARY">`` -> :class:`PositionSnapshot` as of the
+  report date's 16:00 New York close, with ``realized_pnl_ytd`` from the same
+  statement's MTD/YTD performance summary when present;
+* every element of every section, the ``<FlexStatement>`` itself included ->
+  :class:`StatementRow` with all of its attributes, so sections no typed table
+  models (performance summaries, taxes, ...) are kept as reported.
 
 Conventions that differ from the Gateway API, mapped here:
 
 * ``dateTime`` is US/Eastern wall time (``yyyyMMdd;HHmmss`` by default; any
   separator works) and becomes UTC;
+* ``reportDate`` is a trading day; positions are stamped at its 16:00 close;
 * ``ibCommission`` is a signed cash amount (cost < 0); ``commission`` keeps the
   Gateway sign (cost > 0);
 * ``quantity`` is signed (sell < 0); records carry the absolute size and ``side``;
@@ -26,8 +33,11 @@ Conventions that differ from the Gateway API, mapped here:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import re
+from collections import Counter
 from collections.abc import Iterator
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -49,12 +59,17 @@ from factorlab.sources.ibkr.shapes import (
     ExecutionRecord,
     Mode,
     OrderEventRecord,
+    PositionSnapshot,
+    StatementRow,
 )
 
 log = logging.getLogger(__name__)
 
 FLEX_TIMEZONE = ZoneInfo("America/New_York")
 ORDER_SUMMARY_EVENT_SEQ = 2**32 - 1  # UInt32 max: after any streamed event of the order
+REPORT_CLOSE = "160000"  # positions are as of the report date's New York close
+
+FlexRecord = ExecutionRecord | OrderEventRecord | CashFlowRecord | PositionSnapshot | StatementRow
 
 _CASH_FLOW_TYPES = {
     "dividends": "dividend",
@@ -202,11 +217,99 @@ def _cash_flow(row: Any, account: str, mode: Mode, country: str) -> CashFlowReco
     )
 
 
+def _position(
+    row: Any, account: str, mode: Mode, country: str, realized_ytd: dict[str, Decimal]
+) -> PositionSnapshot | None:
+    position = to_decimal(row.get("position"))
+    if position is None or position == 0:
+        return None
+    if row.get("side", "").lower() == "short" and position > 0:
+        position = -position
+    report = re.sub(r"\D", "", row.get("reportDate", ""))[:8]
+    currency = row.get("currency", "")
+    value = to_decimal(row.get("positionValue"))
+    conid = row.get("conid", "")
+    return PositionSnapshot(
+        snapshot_time=flex_time(report + REPORT_CLOSE),
+        broker_code=BROKER_CODE,
+        account_id=account,
+        account_mode=mode,
+        country_code=country,
+        product_type=product_type(row.get("assetCategory")),
+        vendor_id=conid,
+        trading_symbol=row.get("symbol", ""),
+        currency=currency,
+        position=position,
+        avg_cost=to_decimal(row.get("costBasisPrice")),
+        market_price=to_decimal(row.get("markPrice")),
+        market_value=value,
+        unrealized_pnl=to_decimal(row.get("fifoPnlUnrealized")),
+        realized_pnl_ytd=realized_ytd.get(conid),
+        market_value_usd=value if currency == "USD" else None,
+        fx_rate_to_base=to_decimal(row.get("fxRateToBase")),
+    )
+
+
+def _realized_ytd(statement: Any) -> dict[str, Decimal]:
+    realized: dict[str, Decimal] = {}
+    for row in statement.iter("MTDYTDPerformanceSummaryUnderlying"):
+        value = to_decimal(row.get("realizedPnlYTD"))
+        if row.get("conid") and value is not None:
+            realized[row.get("conid")] = value
+    return realized
+
+
+def _statement_rows(statement: Any, account: str, mode: Mode, country: str) -> list[StatementRow]:
+    generated_at = flex_time(statement.get("whenGenerated", ""))
+    statement_to = _flex_date(statement.get("toDate")) or generated_at.date()
+    statement_from = _flex_date(statement.get("fromDate")) or statement_to
+    repeats: Counter[tuple[str, str]] = Counter()
+    rows: list[StatementRow] = []
+
+    def add(section: str, element: Any) -> None:
+        attributes = dict(element.attrib)
+        digest = hashlib.sha256(
+            json.dumps([element.tag, sorted(attributes.items())]).encode()
+        ).hexdigest()[:32]
+        repeats[section, digest] += 1  # identical rows stay distinct: digest, digest#2, ...
+        count = repeats[section, digest]
+        rows.append(
+            StatementRow(
+                generated_at=generated_at,
+                broker_code=BROKER_CODE,
+                account_id=attributes.get("accountId") or account,
+                account_mode=mode,
+                country_code=country,
+                statement_from=statement_from,
+                statement_to=statement_to,
+                section=section,
+                element=element.tag,
+                row_key=digest if count == 1 else f"{digest}#{count}",
+                level_of_detail=attributes.get("levelOfDetail", ""),
+                asset_category=attributes.get("assetCategory", ""),
+                vendor_id=attributes.get("conid", ""),
+                trading_symbol=attributes.get("symbol", ""),
+                currency=attributes.get("currency", ""),
+                report_date=_flex_date(attributes.get("reportDate")),
+                attributes=attributes,
+            )
+        )
+
+    add(statement.tag, statement)
+    for section in statement:
+        children = list(section.iter())[1:]
+        if not children and section.attrib:
+            add(section.tag, section)  # a one-row section such as <AccountInformation>
+        for child in children:
+            add(section.tag, child)
+    return rows
+
+
 def normalize_flex_statement(
     body: bytes, *, country_code: str = DEFAULT_COUNTRY_CODE
-) -> list[ExecutionRecord | OrderEventRecord | CashFlowRecord]:
-    """Every execution, executed order and cash movement in an Activity Flex statement."""
-    rows: list[ExecutionRecord | OrderEventRecord | CashFlowRecord] = []
+) -> list[FlexRecord]:
+    """Every fill, executed order, cash movement, open position and raw row of a statement."""
+    rows: list[FlexRecord] = []
     for statement in _statements(body):
         account = statement.get("accountId", "")
         mode = mode_for_account(account)
@@ -231,12 +334,24 @@ def normalize_flex_statement(
                 log.warning("Skipping IBKR Flex cash transaction without an amount")
                 continue
             rows.append(record)
+        realized_ytd = _realized_ytd(statement)
+        for row in statement.iter("OpenPosition"):
+            if row.get("levelOfDetail", "SUMMARY").upper() != "SUMMARY":
+                continue  # LOT rows break the SUMMARY row down; counting both would double it
+            position = _position(
+                row, row.get("accountId") or account, mode, country_code, realized_ytd
+            )
+            if position is not None:
+                rows.append(position)
+        rows.extend(_statement_rows(statement, account, mode, country_code))
     return rows
 
 
 __all__ = [
     "FLEX_TIMEZONE",
     "ORDER_SUMMARY_EVENT_SEQ",
+    "REPORT_CLOSE",
+    "FlexRecord",
     "flex_time",
     "mode_for_account",
     "normalize_flex_statement",

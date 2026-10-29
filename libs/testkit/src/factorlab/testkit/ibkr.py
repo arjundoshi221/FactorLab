@@ -206,7 +206,20 @@ _COLUMN_RE = re.compile(r"^\s*([a-z_][a-z0-9_]*)\s+[A-Z]")
 
 def wave7_columns(table: str) -> set[str]:
     """Column names of a ``broker.*`` table, parsed from the Wave 7 DDL."""
-    text = WAVE_07_DDL.read_text(encoding="utf-8")
+    return _ddl_columns(WAVE_07_DDL.read_text(encoding="utf-8"), table)
+
+
+def ddl_columns(table: str) -> set[str]:
+    """Column names of a table from whichever wave creates it (forward waves included)."""
+    marker = f"CREATE TABLE IF NOT EXISTS {table} ("
+    for path in sorted(v2_sql_dir().glob("wave_*_schema*.sql")):
+        text = path.read_text(encoding="utf-8")
+        if marker in text:
+            return _ddl_columns(text, table)
+    raise KeyError(table)
+
+
+def _ddl_columns(text: str, table: str) -> set[str]:
     start = text.index(f"CREATE TABLE IF NOT EXISTS {table} (")
     body = text[start : text.index("\nENGINE", start)]
     columns = set()

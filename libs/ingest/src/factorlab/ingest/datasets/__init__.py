@@ -18,6 +18,7 @@ from factorlab.ingest.datasets.broker import (
     OrderEventRecord,
     PositionSnapshot,
     SnapshotRequest,
+    StatementRow,
 )
 from factorlab.ingest.datasets.classification import (
     SectorRecord,
@@ -199,11 +200,24 @@ DATASETS: dict[str, DatasetSpec] = {
             requires_alias=False,  # rows carry broker_code + vendor_id, resolved in the DB service
         ),
         DatasetSpec(
-            # Broker statement history (IBKR Flex): fills, filled orders and cash movements.
+            # Broker statements (IBKR Flex): fills, filled orders, cash movements, end-of-day
+            # positions, and every statement row kept whole in broker.statement_rows.
             id="broker.flex_activity",
-            tables=("broker.executions", "broker.order_events", "broker.cash_flows"),
+            tables=(
+                "broker.executions",
+                "broker.order_events",
+                "broker.cash_flows",
+                "broker.positions_snapshot",
+                "broker.statement_rows",
+            ),
             request_type=SnapshotRequest,
-            record_types=(ExecutionRecord, OrderEventRecord, CashFlowRecord),
+            record_types=(
+                ExecutionRecord,
+                OrderEventRecord,
+                CashFlowRecord,
+                PositionSnapshot,
+                StatementRow,
+            ),
             sink_protocol=BrokerSink,
             sink_method="write_snapshot",
             requires_alias=False,
@@ -284,6 +298,7 @@ __all__ = [
     "SharesOutstandingRecord",
     "SharesOutstandingSink",
     "SnapshotRequest",
+    "StatementRow",
     "UniverseReader",
     "UniverseSink",
     "WriteResult",

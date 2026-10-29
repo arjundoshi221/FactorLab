@@ -244,6 +244,18 @@
       },
       "description": "Time series of positions. Cadence: pre-open snapshot, EOD snapshot, on-demand."
     },
+    "broker.statement_rows": {
+      "columns": {
+        "asset_category": "'STK', 'OPT', ... or ''",
+        "attributes": "every attribute as reported",
+        "element": "'OpenPosition', ...",
+        "generated_at": "when the broker generated the statement",
+        "level_of_detail": "'SUMMARY', 'EXECUTION', ... or ''",
+        "section": "'OpenPositions', 'MTDYTDPerformanceSummary', ...",
+        "vendor_id": "IBKR conid, '' when none"
+      },
+      "description": "One row per statement element. row_key is a digest of the element name and its attributes (#2, #3, ... for identical repeats), so re-fetching the same statement collapses on merge, while a later statement (another statement_to) is a new record. vendor_id is not resolved: join through ref.identifier_aliases (alias_kind = 'ibkr_conid') when a listing is needed."
+    },
     "derived.backtest_returns": {
       "description": "Same pattern."
     },

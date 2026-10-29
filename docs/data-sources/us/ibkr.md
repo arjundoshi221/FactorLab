@@ -327,7 +327,8 @@ Full tag list captured in `playground/data/ibkr/account_values_full.json` — re
   `GetStatement`, v3). It needs no Gateway, login or 2FA: only a Flex token and a query id.
 - Query setup (Portal -> Performance & Reports -> Flex Queries -> Activity): format **XML**;
   sections **Trades** (options *Executions* and *Orders*), **Cash Transactions**,
-  **Account Information**; period *Last 365 Calendar Days*; date format `yyyyMMdd`, time
+  **Account Information**, **Open Positions** (*Summary*), and any others wanted
+  (performance summaries, ...); period *Last 365 Calendar Days*; date format `yyyyMMdd`, time
   `HHmmss`, separator `;` (any separator parses).
 - Token: Portal -> Settings -> Flex Web Service. The current token is valid until
   2027-09-25 and is IP-restricted to the VPS. It lives in Cloudflare Secrets Store as
@@ -336,6 +337,11 @@ Full tag list captured in `playground/data/ibkr/account_values_full.json` — re
   [providers/ibkr/CONTEXT.md](../../../providers/ibkr/CONTEXT.md) (Data): Eastern-time
   `dateTime`, negated `ibCommission`, `ibOrderID` = `perm_id`. Flex only reports orders that
   executed; unfilled or cancelled orders are absent.
+- Open positions become end-of-day `broker.positions_snapshot` rows (as of the report
+  date's close), next to the Gateway's intraday snapshots; `source_channel` tells them
+  apart and the hub shows whichever is newer. Every row of every section, typed or not,
+  is also kept in `broker.statement_rows` with all of its attributes, so a section added
+  to the query is stored without a code change.
 
 ### 5.8 What we do NOT use
 

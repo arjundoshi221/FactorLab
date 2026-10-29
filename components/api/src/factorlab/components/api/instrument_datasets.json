@@ -945,6 +945,62 @@
     "engine": "ReplacingMergeTree(version)",
     "sorting_key": "(broker_code, account_id, snapshot_time, coalesce(listing_id, toUUID('00000000-0000-0000-0000-000000000000')), vendor_id)"
   },
+  "broker.statement_rows": {
+    "group": "Broker & portfolio",
+    "classification": "queryable",
+    "relationships": {
+      "listing": [
+        [
+          "IBKR conid alias",
+          "vendor_id IN (SELECT alias_value FROM ref.identifier_aliases FINAL WHERE alias_kind = 'ibkr_conid' AND target_kind = 'listing' AND target_id = {id:UUID})"
+        ]
+      ],
+      "contract": [
+        [
+          "IBKR conid alias",
+          "vendor_id IN (SELECT alias_value FROM ref.identifier_aliases FINAL WHERE alias_kind = 'ibkr_conid' AND target_kind = 'contract' AND target_id = {id:UUID})"
+        ]
+      ]
+    },
+    "time_column": "statement_to",
+    "dimensions": [
+      "source",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "section",
+      "element",
+      "source_channel"
+    ],
+    "columns": [
+      "generated_at",
+      "broker_code",
+      "account_id",
+      "account_mode",
+      "country_code",
+      "statement_from",
+      "statement_to",
+      "section",
+      "element",
+      "row_key",
+      "level_of_detail",
+      "asset_category",
+      "vendor_id",
+      "trading_symbol",
+      "currency",
+      "report_date",
+      "attributes",
+      "source",
+      "source_channel",
+      "raw_id",
+      "ingest_run_id",
+      "as_of_time",
+      "ingested_at",
+      "version"
+    ],
+    "engine": "ReplacingMergeTree(version)",
+    "sorting_key": "(broker_code, account_id, statement_to, section, row_key)"
+  },
   "derived.computations": {
     "group": "Derived",
     "classification": "queryable",

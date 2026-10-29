@@ -38,7 +38,10 @@ SESSION_GRACE = timedelta(hours=2)
 CACHE_SECONDS = 60.0
 MAX_FOCUS_IDS = 5000
 HELD_LOOKBACK = timedelta(days=14)
-SNAPSHOT_PIPELINES = "('ibkr_broker_snapshot', 'ibkr_broker_simulation')"
+# Runs whose manifests list position snapshots: Gateway, simulation and Flex statements.
+SNAPSHOT_PIPELINES = (
+    "('ibkr_broker_snapshot', 'ibkr_broker_simulation', 'broker.flex_activity:ibkr')"
+)
 
 
 class MatrixColumn(BaseModel):

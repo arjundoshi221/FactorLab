@@ -37,9 +37,11 @@ EXECUTIONS_TABLE = "broker.executions"
 OPEN_ORDERS_TABLE = "broker.open_orders_snapshot"
 ORDER_EVENTS_TABLE = "broker.order_events"
 CASH_FLOWS_TABLE = "broker.cash_flows"
+STATEMENT_ROWS_TABLE = "broker.statement_rows"
 
 # Channels whose fills are statement history (IBKR Flex): they carry no session
 # order id or API client id, so an exec_id the Gateway already wrote is kept as is.
+# Their positions are end-of-day statements, recorded as a snapshot manifest per account.
 HISTORY_CHANNELS = frozenset({"flex_statement"})
 
 # Identity columns present in each table's Wave 7 DDL (only positions carry entity_id).
@@ -66,6 +68,7 @@ _SCALES = {
     "unrealized_pnl": 6,
     "realized_pnl_ytd": 6,
     "market_value_usd": 6,
+    "fx_rate_to_base": 8,
     "value_num": 6,
     "quantity": 6,
     "price": 6,
@@ -284,19 +287,34 @@ class V2BrokerStorage(V2USStorage):
 
     def write_positions(self, rows: Sequence[Any], *, provenance: Provenance) -> int:
         identities = self._identities(rows, provenance)
-        return self._write(
+        written = self._write(
             POSITIONS_TABLE,
             rows,
             provenance,
             lambda row: {
                 **identities.get(row.vendor_id, UNRESOLVED).columns(POSITIONS_TABLE),
-                # Not reported by portfolio(); populated once FX/margin pullers exist.
-                "fx_rate_to_base": None,
-                "fx_rate_source_time": None,
+                # A statement's FX rate is as of the position's own snapshot time.
+                "fx_rate_source_time": row.snapshot_time if row.fx_rate_to_base else None,
+                # Not reported by portfolio() or Flex; populated once a margin puller exists.
                 "initial_margin_contribution": None,
                 "maintenance_margin_contribution": None,
             },
         )
+        if _is_history(provenance):
+            # The Gateway provider records its own manifests; a statement's are recorded
+            # here so readers can find the latest statement snapshot per account.
+            accounts: dict[datetime, set[str]] = {}
+            for row in rows:
+                accounts.setdefault(row.snapshot_time, set()).add(row.account_id)
+            for snapshot_time, ids in sorted(accounts.items()):
+                self.record_broker_snapshot(
+                    sorted(ids),
+                    broker_code=rows[0].broker_code,
+                    dataset="positions",
+                    snapshot_time=snapshot_time,
+                    provenance=provenance,
+                )
+        return written
 
     def write_account_state(self, rows: Sequence[Any], *, provenance: Provenance) -> int:
         canonical = self.canonical_metrics(rows[0].broker_code) if rows else {}
@@ -385,6 +403,15 @@ class V2BrokerStorage(V2USStorage):
                 "linked_corp_action_id": None,
             },
             drop=frozenset({"vendor_id"}),  # resolution input only; not a cash_flows column
+        )
+
+    def write_statement_rows(self, rows: Sequence[Any], *, provenance: Provenance) -> int:
+        """Every statement row as reported; ``vendor_id`` stays unresolved (no identity here)."""
+        return self._write(
+            STATEMENT_ROWS_TABLE,
+            rows,
+            provenance,
+            lambda row: {"attributes": dict(row.attributes)},
         )
 
     def _method(self, client_id: int | None, methods: Mapping[int, str], history: bool) -> str:

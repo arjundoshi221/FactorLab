@@ -23,7 +23,13 @@ from factorlab.sources.ibkr.normalize import (
     normalize_open_orders,
     normalize_positions,
 )
-from factorlab.sources.ibkr.shapes import CashFlowRecord, ExecutionRecord, OrderEventRecord
+from factorlab.sources.ibkr.shapes import (
+    CashFlowRecord,
+    ExecutionRecord,
+    OrderEventRecord,
+    PositionSnapshot,
+    StatementRow,
+)
 from factorlab.storage.v2_broker import (
     MANUAL_EXECUTION_METHOD,
     UNMAPPED_EXECUTION_METHOD,
@@ -31,6 +37,7 @@ from factorlab.storage.v2_broker import (
 )
 from factorlab.testkit.conformance import cases
 from factorlab.testkit.ibkr import (
+    ddl_columns,
     make_account_value,
     make_contract,
     make_fill,
@@ -257,3 +264,46 @@ def test_cash_flows_rows_match_ddl_and_resolve_only_instruments(storage, now_utc
     assert (dividend["listing_id"], dividend["security_id"]) == (LISTING, SECURITY)
     assert dividend["amount"] == Decimal("26.000000")
     assert (deposit["listing_id"], deposit["resolution_confidence"]) == (None, "exact")
+
+
+def test_flex_positions_carry_fx_and_record_a_snapshot_manifest(storage, now_utc):
+    storage._broker_snapshots = []
+    rows = _flex_rows(PositionSnapshot)
+    provenance = _provenance(storage, now_utc, "ibkr:flex_statement")
+
+    assert storage.write_positions(rows, provenance=provenance) == 2
+    aapl, sap = storage.client.rows("broker.positions_snapshot")
+    assert set(aapl) == wave7_columns("broker.positions_snapshot")
+    assert aapl["listing_id"] == LISTING
+    assert aapl["fx_rate_to_base"] == Decimal("1.28140000")
+    assert aapl["fx_rate_source_time"] == aapl["snapshot_time"]
+    assert sap["resolution_confidence"] == "unresolved"
+    [manifest] = storage._broker_snapshots
+    assert (manifest["account_id"], manifest["dataset"]) == ("U0000001", "positions")
+    assert manifest["source_channel"] == "ibkr:flex_statement"
+    assert manifest["snapshot_time"] == aapl["snapshot_time"].isoformat()
+
+
+def test_gateway_positions_record_no_manifest_in_the_writer(storage, mock_ib_paper, now_utc):
+    storage._broker_snapshots = []
+    mock_ib_paper.portfolio.return_value = [make_portfolio_item()]
+    rows = normalize_positions(
+        decode_capture(capture_portfolio(mock_ib_paper, fetched_at=now_utc).body)
+    )
+    storage.write_positions(rows, provenance=_provenance(storage, now_utc))
+    [row] = storage.client.rows("broker.positions_snapshot")
+    assert (row["fx_rate_to_base"], row["fx_rate_source_time"]) == (None, None)
+    assert storage._broker_snapshots == []  # the Gateway provider records its own
+
+
+def test_statement_rows_match_ddl_and_keep_attributes(storage, now_utc):
+    rows = _flex_rows(StatementRow)
+    provenance = _provenance(storage, now_utc, "ibkr:flex_statement")
+
+    assert storage.write_statement_rows(rows, provenance=provenance) == len(rows)
+    written = storage.client.rows("broker.statement_rows")
+    assert set(written[0]) == ddl_columns("broker.statement_rows")
+    lot = next(r for r in written if r["level_of_detail"] == "LOT")
+    assert type(lot["attributes"]) is dict
+    assert lot["attributes"]["costBasisMoney"] == "10519.2"
+    assert lot["ingest_run_id"] == storage._active_run_id

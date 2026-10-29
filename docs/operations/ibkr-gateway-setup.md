@@ -223,12 +223,13 @@ then lives in Cloudflare Secrets Store and in VPS memory while the Gateway runs.
 
 ## Appendix: Flex statement history
 
-`broker.flex_activity` backfills fills, executed orders and cash transactions, up to
-365 days, from the IBKR Flex Web Service. It is HTTPS only and does not need a running
-Gateway.
+`broker.flex_activity` backfills fills, executed orders, cash transactions and
+end-of-day open positions, up to 365 days, from the IBKR Flex Web Service, and keeps every
+row of every statement section in `broker.statement_rows`. It is HTTPS only and does not
+need a running Gateway, so it still updates positions while the Gateway is unreachable.
 
 1. In the IBKR Portal, create an Activity Flex Query (XML; Trades with Executions and
-   Orders; Cash Transactions; Account Information; Last 365 Calendar Days), and note its
+   Orders; Cash Transactions; Account Information; Open Positions; Last 365 Calendar Days), and note its
    query id. See [ibkr.md §5.7](../data-sources/us/ibkr.md).
 2. Under Settings -> Flex Web Service, generate a token restricted to the VPS IP.
 3. Store the token as `IBKR_FLEX_TOKEN` in Cloudflare Secrets Store and uncomment its
@@ -239,3 +240,7 @@ Gateway.
    --market USA --dry-run` in the `ibkr-snapshot` container, then run it without
    `--dry-run`. Errors 1012 (expired), 1013 (wrong IP) and 1015 (invalid) mean the token
    needs attention; 1018 means wait a minute.
+
+`broker.statement_rows` is created by forward Wave 17
+(`factorlab-db migrate apply --phase schema --through-wave 17 --yes`); apply it before the
+first run that writes it.

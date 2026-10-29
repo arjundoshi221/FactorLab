@@ -55,6 +55,7 @@ class PositionSnapshot:
     unrealized_pnl: Decimal | None
     realized_pnl_ytd: Decimal | None
     market_value_usd: Decimal | None
+    fx_rate_to_base: Decimal | None = None  # position currency -> account base, when reported
 
     def __post_init__(self) -> None:
         _require_utc("snapshot_time", self.snapshot_time)
@@ -201,6 +202,37 @@ class CashFlowRecord:
         _require_utc("event_time", self.event_time)
 
 
+@dataclass(frozen=True, slots=True)
+class StatementRow:
+    """One row of a broker statement, every attribute kept, for ``broker.statement_rows``.
+
+    Statements carry sections no typed table models (performance summaries,
+    taxes, ...); each of their rows is stored whole. ``row_key`` identifies the
+    row within its statement, so re-fetching a statement replaces, not adds.
+    """
+
+    generated_at: datetime  # when the broker generated the statement
+    broker_code: str  # 'ibkr', ...
+    account_id: str
+    account_mode: Mode
+    country_code: str
+    statement_from: date
+    statement_to: date
+    section: str  # 'OpenPositions', 'MTDYTDPerformanceSummary', ...
+    element: str  # 'OpenPosition', ...
+    row_key: str
+    level_of_detail: str
+    asset_category: str
+    vendor_id: str  # IBKR conid, '' when the row has no instrument
+    trading_symbol: str
+    currency: str
+    report_date: date | None
+    attributes: Mapping[str, str]  # every attribute exactly as reported
+
+    def __post_init__(self) -> None:
+        _require_utc("generated_at", self.generated_at)
+
+
 BrokerRecord = (
     PositionSnapshot
     | AccountStateRow
@@ -208,6 +240,7 @@ BrokerRecord = (
     | OpenOrderSnapshot
     | OrderEventRecord
     | CashFlowRecord
+    | StatementRow
 )
 
 
@@ -239,4 +272,5 @@ __all__ = [
     "ProductType",
     "Side",
     "SnapshotRequest",
+    "StatementRow",
 ]
