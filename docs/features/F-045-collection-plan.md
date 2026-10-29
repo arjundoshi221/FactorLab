@@ -83,4 +83,5 @@ Two examples of the drift:
 
 ## Log
 
-- 2026-10-30: created and built (review); releases pending.
+- 2026-10-30: created and built (review).
+- 2026-10-30: deployed from `71242a7` through branch trials, all green: `ui-trial` (api+web, run 40945263349), `ingest-trial` ingest-us (40946042282), futures-us (40946630814), ingest-india (40947067161), ingest-broker (40947687210), `political-trial` (40953120838). Live check of production values still pending.
