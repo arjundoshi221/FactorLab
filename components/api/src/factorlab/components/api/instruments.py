@@ -28,6 +28,7 @@ from factorlab.components.api.catalog_query import (
 )
 from factorlab.components.api.catalog_text import table_text
 from factorlab.components.api.schema_map import _planned_v2_tables, _rows
+from factorlab.storage.identity_repair import RETIRED_LISTINGS
 
 Kind = Literal["listing", "contract"]
 State = Literal["stored", "empty", "missing_table", "unavailable", "unsupported"]
@@ -117,8 +118,9 @@ class DatasetResult(BaseModel):
 
 
 def inventory_sql() -> str:
-    # Membership is configuration, never inferred from stored bar counts.
-    return """SELECT 'listing' AS kind, l.listing_id AS id, l.listing_id AS listing_id,
+    # Membership is configuration, never inferred from stored bar counts. Listings retired
+    # as duplicate identities are tombstones of a canonical listing, not instruments.
+    return f"""SELECT 'listing' AS kind, l.listing_id AS id, l.listing_id AS listing_id,
         l.security_id AS security_id, s.entity_id AS entity_id, l.trading_symbol AS symbol,
         e.legal_name AS name, l.country_code AS country, l.exchange_code AS exchange,
         s.security_type AS instrument_type, l.active AS active,
@@ -129,6 +131,7 @@ def inventory_sql() -> str:
         FROM ref.listings AS l FINAL
         LEFT JOIN ref.securities AS s FINAL ON s.security_id = l.security_id
         LEFT JOIN ref.entities AS e FINAL ON e.entity_id = s.entity_id
+        WHERE l.listing_id NOT IN ({RETIRED_LISTINGS})
         UNION ALL
         SELECT 'contract', c.contract_id, c.underlying_listing_id, l.security_id,
         s.entity_id, l.trading_symbol, e.legal_name, c.country_code, c.exchange_code,
@@ -138,7 +141,8 @@ def inventory_sql() -> str:
         FROM ref.contracts AS c FINAL
         LEFT JOIN ref.listings AS l FINAL ON l.listing_id = c.underlying_listing_id
         LEFT JOIN ref.securities AS s FINAL ON s.security_id = l.security_id
-        LEFT JOIN ref.entities AS e FINAL ON e.entity_id = s.entity_id"""
+        LEFT JOIN ref.entities AS e FINAL ON e.entity_id = s.entity_id
+        WHERE c.underlying_listing_id NOT IN ({RETIRED_LISTINGS})"""
 
 
 def current_sector_sql() -> str:

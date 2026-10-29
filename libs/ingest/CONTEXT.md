@@ -138,3 +138,5 @@ existing membership intact; shadow comparisons retain resolution counts.
 `FUTURE_PRODUCT_TYPES` adds `commodity_future`, `rate_future` and `fx_future`, which are
 valid for both listings and contracts. `InMemorySink.resolve_contract` resolves contracts
 by alias.
+
+**Run config (F-045):** `ingestion_run(..., config=)` and `run_provider(..., config=)` record the settings a run actually used as `metadata_json["config"]`; build it with `run_config(**values)` (drops `None`; values are scalars or string/int lists). The hub's collection plan reads it. Pass what the run used, never a re-read of the environment.

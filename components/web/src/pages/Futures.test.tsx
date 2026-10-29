@@ -31,8 +31,22 @@ const snapshot: FuturesResponse = {
 beforeEach(() => window.history.replaceState({}, "", "/futures"));
 afterEach(() => vi.unstubAllGlobals());
 
-function stub(body: unknown) {
-  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => body })));
+const seriesCalls: string[] = [];
+function stub(body: unknown, points = 3) {
+  seriesCalls.length = 0;
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const match = /futures\/([^/]+)\/series\?range=(\w+)/.exec(url);
+    if (!match) return { ok: true, json: async () => body };
+    seriesCalls.push(url);
+    const [, id, range] = match;
+    const daily = !["1d", "5d"].includes(range);
+    return { ok: true, json: async () => ({
+      contract_id: decodeURIComponent(id), range, resolution: daily ? "daily" : range === "1d" ? "1min" : "15min",
+      points: Array.from({ length: points }, (_, i) => ({
+        t: daily ? `2026-10-2${i}` : `2026-10-29T14:0${i}:00Z`, price: 6800 + i,
+      })),
+    }) };
+  }));
 }
 
 it("labels contango and backwardation from front to back", () => {
@@ -41,15 +55,18 @@ it("labels contango and backwardation from front to back", () => {
   expect(structure([contract("/X", "2026-12-01", 1)])).toBeNull();
 });
 
-it("draws the first group's first root curve and its contract table", async () => {
+it("charts the front contract's own history with the contract table", async () => {
   stub(snapshot);
   render(<Futures />);
   expect(await screen.findByRole("heading", { name: "E-mini S&P 500" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Equity index" })).toHaveAttribute("aria-selected", "true");
   expect(screen.getByText("Globex open")).toBeInTheDocument();
   expect(screen.getByText("Contango")).toBeInTheDocument();
-  // The unquoted June contract is drawn at its previous settlement.
-  expect(screen.getAllByTestId("curve-point")).toHaveLength(3);
+  expect(await screen.findByTestId("series-line")).toBeInTheDocument();
+  expect(screen.getByText(/\/ESZ26 · expires 2026-12-18 · last trade per 15 minutes/)).toBeInTheDocument();
+  expect(seriesCalls).toEqual(["/hub/api/v1/us/futures/%2FESZ26/series?range=5d"]);
+  expect(within(screen.getByRole("group", { name: "Expiry" })).getByRole("button", { name: "Dec 26" }))
+    .toHaveAttribute("aria-pressed", "true");
   const rows = within(screen.getByRole("table", { name: "Contracts" })).getAllByRole("row");
   expect(rows).toHaveLength(4);
   expect(within(rows[1]).getByText("6,800.25")).toBeInTheDocument();
@@ -57,8 +74,32 @@ it("draws the first group's first root curve and its contract table", async () =
   expect(within(rows[3]).getByText("No quote")).toBeInTheDocument();
 });
 
-it("switches group and root through the URL", async () => {
+it("selects an expiry and range through the URL", async () => {
   stub(snapshot);
+  render(<Futures />);
+  fireEvent.click(await screen.findByRole("button", { name: "Mar 27" }));
+  expect(new URLSearchParams(window.location.search).get("contract")).toBe("/ESH27");
+  expect(await screen.findByText(/\/ESH27 · expires 2027-03-19/)).toBeInTheDocument();
+
+  fireEvent.click(within(screen.getByRole("group", { name: "Range" })).getByRole("button", { name: "1M" }));
+  expect(await screen.findByText(/daily close/)).toBeInTheDocument();
+  expect(seriesCalls.at(-1)).toBe("/hub/api/v1/us/futures/%2FESH27/series?range=1m");
+
+  // A table row picks the same contract as the expiry buttons.
+  fireEvent.click(within(screen.getByRole("table", { name: "Contracts" })).getByRole("button", { name: "/ESZ26" }));
+  expect(new URLSearchParams(window.location.search).get("contract")).toBe("/ESZ26");
+});
+
+it("draws the previous settlement only on the 1D range", async () => {
+  window.history.replaceState({}, "", "/futures?range=1d");
+  stub(snapshot);
+  render(<Futures />);
+  expect(await screen.findByTestId("settle-line")).toBeInTheDocument();
+  expect(screen.getByText("Dashed line: previous settlement 6,780.00.")).toBeInTheDocument();
+});
+
+it("switches group and root through the URL", async () => {
+  stub(snapshot, 1);
   render(<Futures />);
   fireEvent.click(await screen.findByRole("tab", { name: "Energy" }));
   expect(window.location.search).toBe("?group=energy");
@@ -69,7 +110,7 @@ it("switches group and root through the URL", async () => {
   fireEvent.click(screen.getByRole("tab", { name: "Equity index" }));
   fireEvent.click(screen.getByRole("button", { name: /\/NQ/ }));
   expect(window.location.search).toBe("?group=index&root=%2FNQ");
-  expect(screen.getByText(/Not enough priced contracts/)).toBeInTheDocument();
+  expect(await screen.findByText(/Not enough recorded prices to chart \/NQZ26/)).toBeInTheDocument();
 });
 
 it("explains an empty recorder", async () => {

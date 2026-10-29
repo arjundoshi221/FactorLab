@@ -15,7 +15,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from factorlab.calendars import globex
 from factorlab.components.api.catalog_pipelines import (
+    INDEX_PIPELINE,
     PIPELINES,
     PIPELINES_BY_ID,
     PipelineInfo,
@@ -404,6 +406,8 @@ def _csv_safe(value: Any) -> Any:
 def _session_open(calendar_code: str | None, now: datetime) -> bool:
     if calendar_code is None:
         return True
+    if calendar_code == "GLOBEX":
+        return globex.is_open(now)
     import exchange_calendars as xcals
     import pandas as pd
 
@@ -466,6 +470,18 @@ def _run_from_row(row: dict[str, Any]) -> PipelineRun:
 RUN_COLUMNS = (
     "run_id, pipeline, source, status, started_at, completed_at, rows_written, "
     "requested_series, successful_series, failed_series, error"
+)
+
+# Every pipeline run: ingestion runs, plus index computations mapped onto the same
+# columns so the index engine is judged like any other pipeline.
+RUNS_SOURCE = (
+    f"(SELECT {RUN_COLUMNS} FROM meta.ingestion_runs FINAL "
+    "UNION ALL "
+    f"SELECT computation_id AS run_id, '{INDEX_PIPELINE}' AS pipeline, "
+    "'factorlab' AS source, status, started_at, completed_at, row_count AS rows_written, "
+    "toUInt32(0) AS requested_series, toUInt32(0) AS successful_series, "
+    "toUInt32(0) AS failed_series, error "
+    "FROM derived.computations FINAL WHERE dataset = 'derived.index_levels')"
 )
 
 
@@ -923,7 +939,7 @@ class CatalogService:
         runs: list[PipelineRun] = []
         if pipelines:
             result = self._query(
-                f"SELECT {RUN_COLUMNS} FROM meta.ingestion_runs FINAL "
+                f"SELECT {RUN_COLUMNS} FROM {RUNS_SOURCE} "
                 "WHERE has({pipelines:Array(String)}, pipeline) "
                 "AND started_at >= parseDateTime64BestEffort({since:String}, 3, 'UTC') "
                 "ORDER BY started_at DESC LIMIT 10",
@@ -971,7 +987,7 @@ class CatalogService:
                    countIf(status = 'success') AS success_7d,
                    countIf(status IN ('failed', 'partial')) AS problem_7d,
                    sumIf(rows_written, started_at >= {day_start}) AS rows_24h
-            FROM meta.ingestion_runs FINAL
+            FROM {RUNS_SOURCE}
             WHERE {window}
             GROUP BY pipeline
             """,
@@ -986,7 +1002,7 @@ class CatalogService:
                    countIf(status = 'success') AS success,
                    countIf(status IN ('failed', 'partial')) AS problem,
                    count() AS total
-            FROM meta.ingestion_runs FINAL
+            FROM {RUNS_SOURCE}
             WHERE {window}
             GROUP BY pipeline, day
             ORDER BY pipeline, day
@@ -999,7 +1015,7 @@ class CatalogService:
             self._query(
                 f"""
             SELECT {RUN_COLUMNS}
-            FROM meta.ingestion_runs FINAL
+            FROM {RUNS_SOURCE}
             WHERE {window} AND status IN ('failed', 'partial')
             ORDER BY started_at DESC
             LIMIT 5 BY pipeline
@@ -1113,7 +1129,7 @@ class CatalogService:
             parameters["status"] = status
             status_clause = "AND status = {status:String}"
         result = self._query(
-            f"SELECT {RUN_COLUMNS} FROM meta.ingestion_runs FINAL "
+            f"SELECT {RUN_COLUMNS} FROM {RUNS_SOURCE} "
             "WHERE pipeline = {pipeline:String} "
             "AND started_at >= parseDateTime64BestEffort({since:String}, 3, 'UTC') "
             f"{status_clause} ORDER BY started_at DESC LIMIT {limit + 1:d} OFFSET {offset:d}",

@@ -4,7 +4,8 @@
 another identity. ``retire-duplicate-listings`` retires provable duplicate listing
 identities into the listing that carries the canonical provider alias.
 ``reresolve-political-trades`` then re-links trades that were unresolved or pointed at a
-retired duplicate. Each prints a JSON report; run the dry run first and review it.
+retired duplicate. ``purge-retired-listings`` finally deletes the retired tombstones.
+Each prints a JSON report; run the dry run first and review it.
 """
 
 from __future__ import annotations
@@ -38,6 +39,24 @@ def retire_main(argv: list[str] | None = None) -> int:
             canonical_alias_kind=args.canonical_alias,
             apply=args.apply,
         )
+    finally:
+        sink.close()
+    _print(report.as_dict())
+    return 0
+
+
+def purge_main(argv: list[str] | None = None) -> int:
+    configure_logging(component="ingest-political", service="identity-repair")
+    parser = argparse.ArgumentParser(description="Purge retired duplicate listing identities")
+    parser.add_argument("--country", default="US")
+    parser.add_argument("--apply", action="store_true", help="delete; default is a dry run")
+    args = parser.parse_args(argv)
+    from factorlab.storage.identity_repair import purge_retired_listings
+    from factorlab.storage.sinks import ClickHouseSinks
+
+    sink = ClickHouseSinks.from_environment("USA")
+    try:
+        report = purge_retired_listings(sink.client, country=args.country, apply=args.apply)
     finally:
         sink.close()
     _print(report.as_dict())

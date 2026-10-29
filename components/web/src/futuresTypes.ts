@@ -31,3 +31,18 @@ export interface FuturesResponse {
   market_open: boolean;
   items: FuturesRoot[];
 }
+
+// Response model of /hub/api/v1/us/futures/{contract_id}/series.
+export type FuturesRange = "1d" | "5d" | "1m" | "3m" | "1y" | "max";
+
+export interface FuturesPoint {
+  t: string; // ISO datetime (intraday) or date (daily)
+  price: number;
+}
+
+export interface FuturesSeries {
+  contract_id: string;
+  range: FuturesRange;
+  resolution: "1min" | "15min" | "daily";
+  points: FuturesPoint[];
+}

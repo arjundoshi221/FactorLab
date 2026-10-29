@@ -94,6 +94,10 @@
 .portfolio-tag-summary dd { margin: 5px 0 0; color: #c9d3db; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
 .portfolio-tag-form { margin-top: 18px; padding-top: 16px; border-top: 1px solid #29343e; }
 .portfolio-tag-selectors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.portfolio-new-entry { display: flex; gap: 6px; min-width: 0; }
+.portfolio-new-entry input { flex: 1 1 auto; min-width: 0; }
+.portfolio-new-entry .portfolio-button { flex: 0 0 auto; }
+.portfolio-field-error { color: #f08a8a; font-size: 11px; font-weight: 400; }
 .portfolio-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .portfolio-tag-form .portfolio-actions { margin-top: 16px; }
 .portfolio-tag-form .portfolio-footnote { margin-top: 11px; }

@@ -31,6 +31,12 @@ def _retire(argv: list[str]) -> int:
     return retire_main(argv)
 
 
+def _purge(argv: list[str]) -> int:
+    from factorlab.components.ingest_political.maintenance import purge_main
+
+    return purge_main(argv)
+
+
 def _dedupe(argv: list[str]) -> int:
     from factorlab.components.ingest_political.maintenance import dedupe_main
 
@@ -54,6 +60,9 @@ COMMANDS = {
     ),
     "reresolve-political-trades": Command(
         "re-link unresolved political trades (dry run unless --apply)", _reresolve
+    ),
+    "purge-retired-listings": Command(
+        "delete retired duplicate listing tombstones (dry run unless --apply)", _purge
     ),
 }
 

@@ -447,6 +447,137 @@ def test_duplicate_listings_retire_and_political_trades_reresolve():
     assert sinks.reresolve_political_trades()["candidates"] == 0
 
 
+def test_purge_removes_retired_tombstones_and_keeps_what_only_they_hold():
+    from uuid import UUID
+
+    from factorlab.storage.identity_repair import (
+        purge_retired_listings,
+        retire_duplicate_listings,
+    )
+
+    db = FakeClickHouse(exchanges=US)
+    sinks = ClickHouseSinks(V2USStorage(db))
+    records = [
+        InstrumentRecord(
+            ref=InstrumentRef("eodhd_symbol", f"{symbol}.US", "XNAS", symbol, "US"),
+            name=symbol,
+            product_type="common",
+            currency="USD",
+            first_traded=date(2026, 9, 24),
+        )
+        for symbol in ("AAPL", "GOOG", "GOOGL")
+    ]
+    with ingestion_run(sinks, pipeline="seed", source="eodhd", market_code="USA") as ctx:
+        sinks.upsert_instruments(
+            records,
+            provenance=ctx.provenance(source_channel="eodhd:seed", raw_id=None, as_of_time=NOW),
+        )
+        ctx.succeed_unit("seed", len(records))
+    canonical = {r["trading_symbol"]: r for r in db.rows("ref.listings")}
+    entity_of = {r["security_id"]: r["entity_id"] for r in db.rows("ref.securities")}
+    # Cutover-era orphans: AAPL on its own entity; GOOG and GOOGL on one shared entity.
+    orphan_entities = {"AAPL": UUID(int=10), "GOOG": UUID(int=11), "GOOGL": UUID(int=11)}
+    orphans = {}
+    for n, (symbol, entity) in enumerate(orphan_entities.items()):
+        listing, security = UUID(int=20 + n), UUID(int=30 + n)
+        db.insert(
+            "ref.securities",
+            [[security, entity, "common", None]],
+            column_names=["security_id", "entity_id", "security_type", "isin"],
+        )
+        row = {**canonical[symbol], "listing_id": listing, "security_id": security}
+        db.insert("ref.listings", [list(row.values())], column_names=list(row))
+        orphans[symbol] = listing
+    [template] = [a for a in db.rows("ref.identifier_aliases") if a["alias_value"] == "AAPL.US"]
+    for entity, cik in ((UUID(int=10), "320193"), (UUID(int=11), "1652044")):
+        cik_alias = {
+            **template,
+            "alias_kind": "cik",
+            "alias_value": cik,
+            "target_kind": "entity",
+            "target_id": entity,
+            "source": "sec_edgar",
+            "valid_from": date(2026, 9, 18),
+        }
+        db.insert(
+            "ref.identifier_aliases", [list(cik_alias.values())], column_names=list(cik_alias)
+        )
+
+    def bar(listing, minute):
+        return {
+            "country_code": "US",
+            "listing_id": listing,
+            "security_id": UUID(int=0),
+            "entity_id": UUID(int=0),
+            "resolution": "1min",
+            "source": "schwab",
+            "bar_time": datetime(2026, 8, 3, 14, minute, tzinfo=UTC),
+            "close": minute,
+            "version": 1,
+            "ingested_at": NOW,
+        }
+
+    aapl, orphan = canonical["AAPL"]["listing_id"], orphans["AAPL"]
+    # The orphan alone holds minute 0; both hold minute 1.
+    bars = [bar(orphan, 0), bar(orphan, 1), bar(aapl, 1)]
+    db.insert("market.bars", [list(b.values()) for b in bars], column_names=list(bars[0]))
+    db.insert("meta.recovery_state", [[orphan, "schwab"]], column_names=["listing_id", "source"])
+    retire_duplicate_listings(
+        db, country="US", canonical_alias_kind="eodhd_symbol", apply=True, now=NOW
+    )
+
+    dry = purge_retired_listings(db, country="US", now=NOW)
+    assert (dry.applied, len(dry.orphans), dry.bars_rescued, dry.bars_deleted) == (
+        False,
+        3,
+        1,
+        2,
+    )
+    assert (dry.recovery_rows_deleted, dry.securities_deleted, dry.entities_deleted) == (1, 3, 1)
+    assert dry.aliases_moved == 1
+    # GOOG and GOOGL are two canonical entities: moving Alphabet's CIK would be a guess.
+    assert dry.skipped == {
+        f"entity:{UUID(int=11)}": "maps to 2 canonical entities; kept with its aliases"
+    }
+    assert len(db.rows("ref.listings")) == 6
+
+    done = purge_retired_listings(db, country="US", apply=True, now=NOW)
+    assert done.applied
+    assert {r["listing_id"] for r in db.rows("ref.listings")} == {
+        r["listing_id"] for r in canonical.values()
+    }
+    assert {(b["listing_id"], b["close"]) for b in db.rows("market.bars")} == {
+        (aapl, 0),
+        (aapl, 1),
+    }
+    [rescued] = [b for b in db.rows("market.bars") if b["close"] == 0]
+    assert (rescued["security_id"], rescued["entity_id"]) == (
+        canonical["AAPL"]["security_id"],
+        entity_of[canonical["AAPL"]["security_id"]],
+    )
+    assert db.rows("meta.recovery_state") == []
+    assert {r["security_id"] for r in db.rows("ref.securities")} == {
+        r["security_id"] for r in canonical.values()
+    }
+    assert UUID(int=10) not in {e["entity_id"] for e in db.rows("ref.entities")}
+    ciks = {
+        a["alias_value"]: a["target_id"]
+        for a in db.rows("ref.identifier_aliases")
+        if a["alias_kind"] == "cik"
+    }
+    assert ciks == {
+        "320193": entity_of[canonical["AAPL"]["security_id"]],
+        "1652044": UUID(int=11),
+    }
+    assert not [
+        a for a in db.rows("ref.identifier_aliases") if a["target_id"] in set(orphans.values())
+    ]
+    # The audit trail stays, and a second run has nothing to do.
+    assert len(db.rows("ref.listing_migrations")) == 3
+    again = purge_retired_listings(db, country="US", apply=True, now=NOW)
+    assert (again.orphans, again.bars_rescued, again.aliases_moved) == ([], 0, 0)
+
+
 def test_dedupe_deletes_versions_superseded_under_another_identity():
     from uuid import UUID
 

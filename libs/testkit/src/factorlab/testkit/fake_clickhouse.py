@@ -46,8 +46,9 @@ KEYS = {
 
 
 class Result:
-    def __init__(self, rows: list[tuple[Any, ...]]) -> None:
+    def __init__(self, rows: list[tuple[Any, ...]], columns: list[str] | None = None) -> None:
         self.result_rows = rows
+        self.column_names = columns or []
 
 
 class FakeClickHouse:
@@ -74,6 +75,28 @@ class FakeClickHouse:
             for key, row in list(table.items()):
                 if row["political_trade_id"] in p["ids"] and row["version"] < p["version"]:
                     del table[key]
+            return None
+        if sql.startswith("DELETE FROM ") and sql.endswith(" IN {ids:Array(UUID)}"):
+            # identity_repair.purge_retired_listings
+            table, where = sql[len("DELETE FROM ") :].split(" WHERE ", 1)
+            column = where.split()[-3]
+            kinds = (
+                {"listing"}
+                if "target_kind = 'listing'" in where
+                else {"security", "entity"}
+                if "target_kind IN ('security', 'entity')" in where
+                else None
+            )
+
+            def doomed(row: dict[str, Any]) -> bool:
+                return row[column] in p["ids"] and (kinds is None or row["target_kind"] in kinds)
+
+            if table in KEYS:
+                for key, row in list(self.tables[table].items()):
+                    if doomed(row):
+                        del self.tables[table][key]
+            else:
+                self.log[table] = [row for row in self.log[table] if not doomed(row)]
             return None
         raise AssertionError(f"unexpected command: {sql}")
 
@@ -418,6 +441,16 @@ class FakeClickHouse:
                     )
                 )
             return Result(sorted(out, key=lambda row: (row[1], str(row[0]))))
+        if sql.startswith("SELECT alias_kind, alias_value,") and "target_kind IN (" in sql:
+            # identity_repair.purge_retired_listings: security/entity aliases, any validity
+            columns = sql[len("SELECT ") : sql.index(" FROM ")].split(", ")
+            return Result(
+                [
+                    tuple(a[c] for c in columns)
+                    for a in self.rows("ref.identifier_aliases")
+                    if a["target_kind"] in {"security", "entity"} and a["target_id"] in p["ids"]
+                ]
+            )
         if sql.startswith("SELECT alias_kind, alias_value,") and "target_id IN" in sql:
             columns = sql[len("SELECT ") : sql.index(" FROM ")].split(", ")
             return Result(
@@ -490,6 +523,84 @@ class FakeClickHouse:
                         )
                     )
             return Result(out)
+        if sql.startswith("SELECT o.trading_symbol, m.old_listing_id"):
+            # identity_repair.purge_retired_listings
+            out = []
+            for m in self.rows("ref.listing_migrations"):
+                orphan, new = self._listing(m["old_listing_id"]), self._listing(m["new_listing_id"])
+                if m["migration_type"] != "duplicate_identity" or not orphan or not new:
+                    continue
+                security = self._security(new["security_id"])
+                if security is None or orphan["country_code"] != p["country"]:
+                    continue
+                out.append(
+                    (
+                        orphan["trading_symbol"],
+                        orphan["listing_id"],
+                        new["listing_id"],
+                        orphan["active"],
+                        orphan["security_id"],
+                        new["security_id"],
+                        security["entity_id"],
+                    )
+                )
+            return Result(sorted(out, key=lambda row: (row[0], str(row[1]))))
+        if sql.startswith("SELECT listing_id, count() FROM market.bars"):
+            bar_counts: dict[Any, int] = defaultdict(int)
+            for bar in self.log["market.bars"]:
+                if bar["country_code"] == p["country"] and bar["listing_id"] in p["ids"]:
+                    bar_counts[bar["listing_id"]] += 1
+            return Result(list(bar_counts.items()))
+        if sql.startswith("SELECT * FROM market.bars FINAL"):
+            bars = self.log["market.bars"]
+            held = {
+                (b["resolution"], b["source"], b["bar_time"])
+                for b in bars
+                if b["listing_id"] == p["canonical"]
+            }
+            found = [
+                b
+                for b in bars
+                if b["listing_id"] == p["orphan"]
+                and (b["resolution"], b["source"], b["bar_time"]) not in held
+            ]
+            columns = list(found[0]) if found else []
+            return Result([tuple(b.values()) for b in found], columns)
+        if sql.startswith("SELECT count() FROM meta.recovery_state FINAL"):
+            return Result(
+                [(sum(r["listing_id"] in p["ids"] for r in self.log["meta.recovery_state"]),)]
+            )
+        if sql.startswith("SELECT security_id, entity_id FROM ref.securities FINAL"):
+            return Result(
+                [
+                    (s_["security_id"], s_["entity_id"])
+                    for s_ in self.rows("ref.securities")
+                    if s_["security_id"] in p["ids"]
+                ]
+            )
+        if sql.startswith("SELECT DISTINCT security_id FROM ref.listings FINAL"):
+            return Result(
+                [
+                    (sid,)
+                    for sid in {
+                        listing["security_id"]
+                        for listing in self.rows("ref.listings")
+                        if listing["security_id"] in p["sids"]
+                        and listing["listing_id"] not in p["ids"]
+                    }
+                ]
+            )
+        if sql.startswith("SELECT DISTINCT entity_id FROM ref.securities FINAL"):
+            return Result(
+                [
+                    (eid,)
+                    for eid in {
+                        s_["entity_id"]
+                        for s_ in self.rows("ref.securities")
+                        if s_["entity_id"] in p["eids"] and s_["security_id"] not in p["sids"]
+                    }
+                ]
+            )
         if "max(bar_time)" in sql:
             table = "market.bars" if "FROM market.bars " in sql else "market.futures_contract_bars"
             key = "listing_id" if table == "market.bars" else "contract_id"
