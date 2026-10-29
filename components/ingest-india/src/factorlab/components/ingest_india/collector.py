@@ -6,7 +6,7 @@ import argparse
 import csv
 import logging
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as clock_time
@@ -31,7 +31,13 @@ from factorlab.ingest.datasets import (
 )
 from factorlab.ingest.datasets.reference import ReferenceMode
 from factorlab.ingest.engine import collect_binding
-from factorlab.ingest.provider import Provenance, RunSummary, ingestion_run
+from factorlab.ingest.provider import (
+    ConfigValue,
+    Provenance,
+    RunSummary,
+    ingestion_run,
+    run_config,
+)
 from factorlab.runtime.monitor import monitor_client, monitoring_sleep
 from factorlab.runtime.signals import GracefulShutdown
 from factorlab.sources.upstox.client import UpstoxClient
@@ -51,6 +57,8 @@ IST = ZoneInfo("Asia/Kolkata")
 FULL_EQUITY_UNIVERSE = "full_nse_eq"
 OPEN = clock_time(3, 45)
 CLOSE = clock_time(10, 2)
+NAMED_SWEEP_SECONDS = 300  # full-universe mode sweeps every minute instead
+FUTURES_SWEEP_SECONDS = 600
 SOURCE_CLASSES = {
     "ref.listings": UpstoxListings,
     "ref.contracts": UpstoxContracts,
@@ -239,6 +247,7 @@ def refresh(
     universe: str,
     exchanges: Sequence[str] = ("NSE",),
     activate: bool = True,
+    config: Mapping[str, ConfigValue] | None = None,
 ) -> list[Series]:
     sink.listings.clear()
     sink.contracts.clear()
@@ -249,6 +258,7 @@ def refresh(
         market_code="IND",
         universe=universe,
         requested_series=2 * len(exchanges),
+        config=config,
     ) as ctx:
         for dataset in ("ref.listings", "ref.contracts"):
             outcomes = collect_binding(
@@ -309,6 +319,7 @@ def collect_windows(
     quote: bool = False,
     shutdown: GracefulShutdown | None = None,
     as_of: datetime | None = None,
+    config: Mapping[str, ConfigValue] | None = None,
 ) -> RunSummary | None:
     if not windows:
         log.warning("no India windows available for collection")
@@ -347,6 +358,7 @@ def collect_windows(
             if quote
             else "intraday_candle_v3_per_series",
         },
+        config=config,
     ) as ctx:
         for binding, source, request in targets:
             collect_binding(
@@ -384,6 +396,15 @@ def main(argv: list[str] | None = None) -> int:
     sink = IndiaSink(V2IndiaStorage.from_environment())
     calendar = xcals.get_calendar("XBOM")
     full = args.universe == FULL_EQUITY_UNIVERSE
+    # Recorded on every run for the hub's collection plan.
+    config = run_config(
+        mode="full" if full else "named",
+        quote_interval_s=60 if full else NAMED_SWEEP_SECONDS,
+        futures_interval_s=FUTURES_SWEEP_SECONDS,
+        quote_batch_size=args.quote_batch_size,
+        recovery=not full and not args.skip_recovery,
+        window_utc=f"{OPEN:%H:%M}-{CLOSE:%H:%M}",
+    )
     series: list[Series] = []
     configured_for: date | None = None
     recovered_for: date | None = None
@@ -402,7 +423,7 @@ def main(argv: list[str] | None = None) -> int:
                 today = now.astimezone(IST).date()
                 if configured_for != today and time.monotonic() >= next_reference:
                     try:
-                        series = refresh(sink, sources, universe=args.universe)
+                        series = refresh(sink, sources, universe=args.universe, config=config)
                         configured_for = today
                     except Exception:
                         if not args.daemon:
@@ -434,6 +455,7 @@ def main(argv: list[str] | None = None) -> int:
                                 pipeline="india_historical_1min_recovery",
                                 shutdown=shutdown,
                                 as_of=now,
+                                config=config,
                             )
                             if windows
                             else None
@@ -481,7 +503,7 @@ def main(argv: list[str] | None = None) -> int:
                             )
                         )
                         continue
-                include_futures = time.monotonic() - last_future >= 600
+                include_futures = time.monotonic() - last_future >= FUTURES_SWEEP_SECONDS
                 selected = [s for s in series if s.contract_id is None or include_futures]
                 opened = datetime.combine(today, clock_time(9, 15), tzinfo=IST).astimezone(UTC)
                 windows = [SeriesWindow(s.ref, opened, now) for s in selected if opened < now]
@@ -495,6 +517,7 @@ def main(argv: list[str] | None = None) -> int:
                     quote=full,
                     shutdown=shutdown,
                     as_of=now,
+                    config=config,
                 )
                 if (
                     result is not None
@@ -508,7 +531,7 @@ def main(argv: list[str] | None = None) -> int:
                     last_future = time.monotonic()
                 if args.once or not args.daemon:
                     return 0 if result is not None and result.status == "success" else 2
-                wait(seconds_until_next_quote_sweep() if full else 300)
+                wait(seconds_until_next_quote_sweep() if full else NAMED_SWEEP_SECONDS)
         return 0
     finally:
         sources.close()

@@ -83,3 +83,7 @@ Every account needs its own login every 7 days. Stagger the logins.
 ## Log
 
 - 2026-10-21: created; implemented in the working tree.
+- 2026-10-29: `SCHWAB_APP_KEY_ACCT2`/`SCHWAB_APP_SECRET_ACCT2` in the Secrets Store; both
+  Workers deployed with the acct2 bindings and `SCHWAB_ACCOUNTS = "primary,acct2"`. The
+  live secrets-agent (`b54ee228`) and ingest-us (`6e25394`) trials already carry F-041, so
+  no release was needed. Waiting on the acct2 login.

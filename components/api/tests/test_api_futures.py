@@ -14,6 +14,7 @@ from factorlab.components.api.futures import (
     curves,
     group_of,
     repository,
+    series,
 )
 
 ES = UUID(int=1)
@@ -146,3 +147,58 @@ def test_no_roots_skips_the_contract_and_quote_queries():
     assert response.status_code == 200
     assert response.json()["items"] == []
     assert client.query.call_count == 1
+
+
+def test_intraday_series_buckets_the_latest_sessions_quotes():
+    client = Mock()
+    client.query.return_value = result(
+        ["t", "price"],
+        [
+            (datetime(2026, 10, 21, 13, 59), Decimal(6800)),
+            (datetime(2026, 10, 21, 14, 0), Decimal("6800.25")),
+        ],
+    )
+    snapshot = series(FuturesRepository(client), ESZ, "1d", NOW)
+
+    assert snapshot.resolution == "1min"
+    assert [p.price for p in snapshot.points] == [6800.0, 6800.25]
+    assert all(p.t.tzinfo is not None for p in snapshot.points if isinstance(p.t, datetime))
+    sql = client.query.call_args.args[0]
+    assert "market.futures_quotes" in sql and "LIMIT {sessions:UInt32}" in sql
+    params = client.query.call_args.kwargs["parameters"]
+    assert (params["sessions"], params["minutes"], params["id"]) == (1, 1, ESZ)
+    assert params["since"] == NOW - timedelta(days=7)
+
+
+def test_daily_series_reads_bar_closes_and_max_has_no_start():
+    client = Mock()
+    client.query.return_value = result(["t", "price"], [(date(2026, 10, 20), Decimal(6780))])
+    snapshot = series(FuturesRepository(client), ESZ, "1m", NOW)
+    assert snapshot.resolution == "daily"
+    assert snapshot.points[0].t == date(2026, 10, 20)
+    assert "market.futures_contract_bars" in client.query.call_args.args[0]
+    assert client.query.call_args.kwargs["parameters"]["since"] == date(2026, 9, 20)
+
+    series(FuturesRepository(client), ESZ, "max", NOW)
+    assert client.query.call_args.kwargs["parameters"]["since"] == date(1970, 1, 1)
+
+
+def test_series_route_takes_a_range_and_rejects_an_unknown_one():
+    client = Mock()
+    client.query.return_value = result(["t", "price"], [])
+    app.dependency_overrides[repository] = lambda: FuturesRepository(client)
+    try:
+        http = TestClient(app)
+        ok = http.get(f"/hub/api/v1/us/futures/{ESZ}/series?range=5d")
+        bad = http.get(f"/hub/api/v1/us/futures/{ESZ}/series?range=2w")
+    finally:
+        app.dependency_overrides.clear()
+    assert ok.status_code == 200
+    assert ok.json() == {
+        "contract_id": str(ESZ),
+        "range": "5d",
+        "resolution": "15min",
+        "points": [],
+    }
+    assert client.query.call_args.kwargs["parameters"]["minutes"] == 15
+    assert bad.status_code == 422

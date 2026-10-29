@@ -11,7 +11,7 @@ from factorlab.ingest.bindings import Binding, load_bindings, validate_bindings
 from factorlab.ingest.datasets import ReferenceRequest
 from factorlab.ingest.datasets.political import FilingsRequest, congress_number
 from factorlab.ingest.engine import collect_binding
-from factorlab.ingest.provider import RunContext, ingestion_run
+from factorlab.ingest.provider import RunContext, ingestion_run, run_config
 from factorlab.ingest.registry import REGISTRY, load_providers, source_for
 from factorlab.storage.sinks import ClickHouseSinks
 
@@ -84,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
             universe="house",
             requested_series=4 + args.ptr_limit,
             metadata={"year": args.year, "congress": args.congress, "ptr_limit": args.ptr_limit},
+            config=run_config(ptr_limit=args.ptr_limit, year=args.year, congress=args.congress),
         ) as ctx:
             collect(
                 ctx,

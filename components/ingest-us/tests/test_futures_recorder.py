@@ -78,6 +78,11 @@ class Sink(InMemorySink):
         super().__init__()
         self.roster: dict[str, str] = {}
         self.contract_aliases[("schwab_symbol", "/ESZ26")] = ESZ26
+        self.started: list[dict[str, Any]] = []
+
+    def start_ingestion_run(self, **kwargs: Any) -> Any:
+        self.started.append(kwargs)
+        return super().start_ingestion_run(**kwargs)
 
 
 @pytest.fixture
@@ -141,6 +146,18 @@ def test_open_market_polls_quotes_and_finalizes_the_previous_session(recorder) -
     recorder.tick(ny(2026, 10, 19, 10, 1, 5))
     assert len(recorder.client.polls) == 2 and len(bars(recorder)) == 1  # final once
     assert recorder.client.rosters == [date(2026, 10, 19)]  # same session, same roster
+
+
+def test_runs_record_the_roster_universe_and_cadence(recorder) -> None:
+    recorder.tick(ny(2026, 10, 19, 10, 0, 20))
+    pipelines = {run["pipeline"]: run for run in recorder.sink.started}
+    assert set(pipelines) == {"us_futures_roster", "us_futures_quotes", "us_futures_daily"}
+    assert {run["universe"] for run in recorder.sink.started} == {"us_futures"}
+    assert pipelines["us_futures_quotes"]["metadata"]["config"] == {
+        "roots": ["/ES"],
+        "contracts": 1,
+        "interval_s": 60,
+    }
 
 
 def test_close_writes_provisional_bars_then_settles_them_next_session(recorder) -> None:

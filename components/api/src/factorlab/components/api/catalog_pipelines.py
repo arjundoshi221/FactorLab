@@ -6,9 +6,12 @@ from dataclasses import dataclass
 from typing import Literal
 
 Market = Literal["India", "US", "Political", "Broker"]
-SessionCalendar = Literal["XBOM", "XNYS"]
+# GLOBEX is the CME futures week (factorlab.calendars.globex), not an exchange_calendars code.
+SessionCalendar = Literal["XBOM", "XNYS", "GLOBEX"]
 
 COMMON_TABLES = ("raw.archive", "meta.ingestion_runs")
+# The index engine records derived.computations rows instead of ingestion runs.
+INDEX_PIPELINE = "us_index_compute"
 
 
 @dataclass(frozen=True)
@@ -24,6 +27,13 @@ class PipelineInfo:
     # Runs are expected only while this exchange is open; None means around the clock.
     session_calendar: SessionCalendar | None
     tables_written: tuple[str, ...]
+    # Compose service whose runs these are (monitoring and the collection plan).
+    service: str
+    # Declared universe id the runs record in meta.ingestion_runs.universe_id; the
+    # collection plan flags runs reporting another. Empty when runs carry none.
+    universe: str = ""
+    # Bar resolution collected; None for reference, snapshot and derived pipelines.
+    resolution: str | None = None
     scheduled: bool = True
     # One run per symbol: summarize, never list every run.
     per_symbol_runs: bool = False
@@ -48,6 +58,9 @@ PIPELINES: tuple[PipelineInfo, ...] = (
             "meta.unresolved_entities",
             *COMMON_TABLES,
         ),
+        service="ingest-india",
+        universe="full_nse_eq",
+        resolution="1min",
     ),
     PipelineInfo(
         id="india_historical_1min_recovery",
@@ -59,6 +72,9 @@ PIPELINES: tuple[PipelineInfo, ...] = (
         expected_interval_seconds=None,
         session_calendar=None,
         tables_written=("market.bars", "market.futures_contract_bars", *COMMON_TABLES),
+        service="ingest-india",
+        universe="full_nse_eq",
+        resolution="1min",
     ),
     PipelineInfo(
         id="india_reference_premarket",
@@ -77,6 +93,8 @@ PIPELINES: tuple[PipelineInfo, ...] = (
             "ref.identifier_aliases",
             *COMMON_TABLES,
         ),
+        service="ingest-india",
+        universe="full_nse_eq",
         scheduled=False,
     ),
     PipelineInfo(
@@ -84,7 +102,7 @@ PIPELINES: tuple[PipelineInfo, ...] = (
         label="US live bars",
         market="US",
         source="Schwab",
-        description="Collects the current session's 1-minute bars for every configured US equity.",
+        description="Collects the current session's 1-minute bars for the liquid minute tier (up to 250 of the configured US equities, ETFs, and index values such as $SPX).",
         schedule="A sweep every 5 minutes during the US regular session (09:30–16:00 ET).",
         expected_interval_seconds=900,
         session_calendar="XNYS",
@@ -95,6 +113,9 @@ PIPELINES: tuple[PipelineInfo, ...] = (
             "meta.source_status",
             *COMMON_TABLES,
         ),
+        service="ingest-us",
+        universe="us_liquid_250",
+        resolution="1min",
         per_symbol_runs=True,
     ),
     PipelineInfo(
@@ -102,7 +123,7 @@ PIPELINES: tuple[PipelineInfo, ...] = (
         label="US daily history",
         market="US",
         source="Schwab",
-        description="Loads and repairs full daily price history for each US equity.",
+        description="Loads and repairs full daily price history for each US equity, ETF, and index value.",
         schedule="Continuously until every symbol's daily history is complete; retries after 15 minutes.",
         expected_interval_seconds=None,
         session_calendar=None,
@@ -112,6 +133,10 @@ PIPELINES: tuple[PipelineInfo, ...] = (
             "meta.recovery_state",
             *COMMON_TABLES,
         ),
+        service="ingest-us",
+        # Daily runs record the published membership's name (universe-us config ``name``).
+        universe="us_configured",
+        resolution="daily",
         per_symbol_runs=True,
     ),
     PipelineInfo(
@@ -129,14 +154,17 @@ PIPELINES: tuple[PipelineInfo, ...] = (
             "meta.recovery_state",
             *COMMON_TABLES,
         ),
+        service="ingest-us",
+        universe="us_liquid_250",
+        resolution="1min",
         per_symbol_runs=True,
     ),
     PipelineInfo(
         id="us_universe_sync",
         label="US universe",
         market="US",
-        source="GitHub CSV + Schwab",
-        description="Resolves which US equities to collect and validates each one with Schwab.",
+        source="iShares IWV holdings + Schwab",
+        description="Resolves which US equities, ETFs, and index values to collect from the Russell 3000 proxy, validates each one with Schwab, and records membership and GICS sectors.",
         schedule="Once a day; retries after 15 minutes on failure.",
         expected_interval_seconds=2 * 86_400,
         session_calendar=None,
@@ -146,10 +174,97 @@ PIPELINES: tuple[PipelineInfo, ...] = (
             "ref.listings",
             "ref.identifier_aliases",
             "ref.exchanges",
+            "ref.universes",
+            "ref.universe_membership",
+            "ref.sectors",
+            "ref.security_sector_history",
             "meta.expected_series",
             "meta.source_status",
+            "meta.unresolved_entities",
             *COMMON_TABLES,
         ),
+        service="universe-us",
+        universe="us_configured",
+    ),
+    PipelineInfo(
+        id="us_shares_outstanding",
+        label="US shares outstanding",
+        market="US",
+        source="Schwab",
+        description="Snapshots each US equity's shares outstanding, which weights FactorLab's cap-weighted indexes.",
+        schedule="After each successful US universe refresh, once a day.",
+        expected_interval_seconds=2 * 86_400,
+        session_calendar=None,
+        tables_written=(
+            "fundamentals.shares_outstanding",
+            "meta.unresolved_entities",
+            *COMMON_TABLES,
+        ),
+        service="universe-us",
+    ),
+    PipelineInfo(
+        id=INDEX_PIPELINE,
+        label="US sector indexes",
+        market="US",
+        source="FactorLab",
+        description="Computes FactorLab's equal- and cap-weighted GICS sector indexes and whole-universe composites from daily closes, sectors, and shares outstanding.",
+        schedule="Weekdays at 23:30 UTC, after the daily bar pass; rewrites the last 14 days.",
+        # Friday's run to Monday's, plus an hour of grace.
+        expected_interval_seconds=3 * 86_400 + 3_600,
+        session_calendar=None,
+        # Runs are derived.computations rows, read through the catalog's RUNS_SOURCE.
+        tables_written=("derived.index_levels", "derived.index_weights", "derived.computations"),
+        service="indexes-us",
+        resolution="daily",
+    ),
+    PipelineInfo(
+        id="us_futures_roster",
+        label="US futures roster",
+        market="US",
+        source="Schwab",
+        description="Resolves the dated contracts to record for each US futures root (equity index, energy, metals, rates, FX).",
+        schedule="Once per Globex session, at its open.",
+        expected_interval_seconds=25 * 3_600,
+        session_calendar="GLOBEX",
+        tables_written=(
+            "ref.entities",
+            "ref.securities",
+            "ref.listings",
+            "ref.contracts",
+            "ref.identifier_aliases",
+            "meta.unresolved_entities",
+            *COMMON_TABLES,
+        ),
+        service="futures-us",
+        universe="us_futures",
+    ),
+    PipelineInfo(
+        id="us_futures_quotes",
+        label="US futures quotes",
+        market="US",
+        source="Schwab",
+        description="Snapshots every roster contract's last trade, bid and ask, day range, volume, open interest, and settlement.",
+        schedule="Every minute while Globex is open (Sunday 18:00 to Friday 17:00 ET, with a daily 17:00–18:00 break).",
+        expected_interval_seconds=600,
+        session_calendar="GLOBEX",
+        tables_written=("market.futures_quotes", *COMMON_TABLES),
+        service="futures-us",
+        universe="us_futures",
+    ),
+    PipelineInfo(
+        id="us_futures_daily",
+        label="US futures daily bars",
+        market="US",
+        source="Schwab",
+        description="Builds one daily bar per futures contract from the session's quotes, then sets the close to the exchange settlement.",
+        schedule="A provisional bar at each 17:00 ET close; the settled bar an hour into the next session.",
+        # Friday's provisional bar to Sunday evening's settled one.
+        expected_interval_seconds=3 * 86_400,
+        session_calendar=None,
+        tables_written=("market.futures_contract_bars", *COMMON_TABLES),
+        service="futures-us",
+        universe="us_futures",
+        resolution="daily",
     ),
     PipelineInfo(
         id="political_bootstrap",
@@ -170,6 +285,8 @@ PIPELINES: tuple[PipelineInfo, ...] = (
             "ref.legislator_terms",
             *COMMON_TABLES,
         ),
+        service="ingest-political",
+        universe="house",
     ),
     PipelineInfo(
         id="ibkr_broker_snapshot",
@@ -188,6 +305,8 @@ PIPELINES: tuple[PipelineInfo, ...] = (
             "meta.source_status",
             *COMMON_TABLES,
         ),
+        service="ibkr-snapshot",
+        universe="ibkr_accounts",
         slot_schedule=True,
     ),
     PipelineInfo(
@@ -206,6 +325,7 @@ PIPELINES: tuple[PipelineInfo, ...] = (
             "broker.executions",
             *COMMON_TABLES,
         ),
+        service="ibkr-snapshot",
         scheduled=False,
     ),
 )

@@ -150,3 +150,25 @@ it("keeps currencies separate and expands holdings with the correct account link
   expect(screen.getByText("Price unavailable")).toBeInTheDocument();
   expect(screen.queryByText("AAPL")).not.toBeInTheDocument();
 });
+
+it("creates a catalog entry from the tag dropdown and selects it", async () => {
+  const created: unknown[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const path = new URL(url, "http://localhost");
+    let result: unknown;
+    if (init?.method === "POST") { created.push({ path: path.pathname, body: JSON.parse(String(init.body)) }); result = { id: "fresh", name: "Energy" }; }
+    else if (path.pathname.includes("/catalogs/")) { result = { items: entries[path.pathname.split("/").pop() as keyof typeof entries] }; }
+    else { result = { items: [{ key: "100", perm_id: "100", trading_symbol: "ABC", currency: "USD", side: "BUY", status: "Executed", filled_quantity: "20", taggable: true,
+      theme_id: null, strategy_id: null, trade_name_id: null, fills: [] }], has_more: false }; }
+    return { ok: true, json: async () => result };
+  }));
+  render(<OrderTagging account={account} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Assign tags" }));
+  fireEvent.change(screen.getByLabelText("Themes for order 100"), { target: { value: "__new__" } });
+  const input = screen.getByLabelText("New theme name for order 100");
+  fireEvent.change(input, { target: { value: " Energy " } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(screen.getByLabelText("Themes for order 100")).toHaveValue("fresh"));
+  expect(created).toEqual([{ path: "/hub/api/v1/portfolio/catalogs/themes", body: { name: "Energy", description: "", active: true } }]);
+  expect(within(screen.getByLabelText("Themes for order 100")).getByRole("option", { name: "Energy" })).toBeInTheDocument();
+});

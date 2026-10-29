@@ -7,14 +7,18 @@ A curve is the contracts in expiry order; nothing here rolls or back-adjusts pri
 ``change`` is measured against the settlement the latest quote carries, which is the
 previous session's; when a quote has none, the last daily bar's close before the
 quote's session stands in.
+
+``/futures/{contract_id}/series`` is one contract's price over time: the last trade per
+1- or 15-minute bucket over its latest 1 or 5 recorded sessions, or the daily bar close.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
+from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from factorlab.calendars import globex
@@ -28,6 +32,13 @@ STALE_AFTER = timedelta(minutes=15)  # the recorder quotes every minute while Gl
 ENERGY_ROOTS = frozenset({"/CL", "/NG", "/RB", "/HO", "/BZ"})
 
 Group = Literal["index", "energy", "metals", "rates", "fx", "other"]
+Range = Literal["1d", "5d", "1m", "3m", "1y", "max"]
+# Intraday ranges: (sessions, bucket minutes, lookback that bounds the partitions read).
+INTRADAY: dict[str, tuple[int, int, timedelta]] = {
+    "1d": (1, 1, timedelta(days=7)),
+    "5d": (5, 15, timedelta(days=12)),
+}
+DAILY_DAYS = {"1m": 31, "3m": 92, "1y": 366, "max": None}
 
 
 class Contract(BaseModel):
@@ -58,6 +69,18 @@ class FuturesResponse(BaseModel):
     generated_at: datetime
     market_open: bool
     items: list[Root]
+
+
+class Point(BaseModel):
+    t: datetime | date
+    price: float
+
+
+class SeriesResponse(BaseModel):
+    contract_id: str
+    range: Range
+    resolution: Literal["1min", "15min", "daily"]
+    points: list[Point]
 
 
 def group_of(root: str, product_type: str) -> Group:
@@ -166,6 +189,45 @@ class FuturesRepository:
         )
         return {row["contract_id"]: row["last_close"] for row in result}
 
+    def intraday(
+        self, contract_id: UUID, since: datetime, sessions: int, minutes: int
+    ) -> list[dict[str, Any]]:
+        return self.query(
+            # Aliases differ from the column names so argMax still reads the columns.
+            """SELECT toStartOfInterval(observed_at, toIntervalMinute({minutes:UInt32})) AS t,
+                argMax(last_price, observed_at) AS price
+            FROM market.futures_quotes FINAL
+            WHERE country_code = 'US' AND source = {source:String}
+              AND contract_id = {id:UUID} AND observed_at >= {since:DateTime64(6)}
+              AND last_price IS NOT NULL
+              AND trade_date >= (
+                SELECT min(trade_date) FROM (
+                    SELECT DISTINCT trade_date FROM market.futures_quotes
+                    WHERE country_code = 'US' AND source = {source:String}
+                      AND contract_id = {id:UUID} AND observed_at >= {since:DateTime64(6)}
+                      AND last_price IS NOT NULL
+                    ORDER BY trade_date DESC LIMIT {sessions:UInt32}))
+            GROUP BY t
+            ORDER BY t""",
+            source=SOURCE,
+            id=contract_id,
+            since=since,
+            sessions=sessions,
+            minutes=minutes,
+        )
+
+    def daily(self, contract_id: UUID, since: date | None) -> list[dict[str, Any]]:
+        return self.query(
+            """SELECT trade_date AS t, close AS price
+            FROM market.futures_contract_bars FINAL
+            WHERE country_code = 'US' AND source = {source:String} AND resolution = 'daily'
+              AND contract_id = {id:UUID} AND trade_date >= {since:Date} AND close IS NOT NULL
+            ORDER BY t""",
+            source=SOURCE,
+            id=contract_id,
+            since=since or date(1970, 1, 1),
+        )
+
 
 def _contract(
     row: dict[str, Any], quote: dict[str, Any] | None, close: Any, stale_before: datetime | None
@@ -225,6 +287,31 @@ def curves(repo: FuturesRepository, now: datetime) -> FuturesResponse:
     return FuturesResponse(generated_at=now, market_open=market_open, items=items)
 
 
+def series(
+    repo: FuturesRepository, contract_id: UUID, range_: Range, now: datetime
+) -> SeriesResponse:
+    if range_ in INTRADAY:
+        sessions, minutes, lookback = INTRADAY[range_]
+        result = repo.intraday(contract_id, now - lookback, sessions, minutes)
+        resolution: Literal["1min", "15min", "daily"] = "1min" if minutes == 1 else "15min"
+        points = []
+        for row in result:
+            t = row["t"]
+            points.append(
+                Point(t=t if t.tzinfo else t.replace(tzinfo=UTC), price=float(row["price"]))
+            )
+    else:
+        days = DAILY_DAYS[range_]
+        since = None if days is None else now.astimezone(NY).date() - timedelta(days=days)
+        resolution = "daily"
+        points = [
+            Point(t=row["t"], price=float(row["price"])) for row in repo.daily(contract_id, since)
+        ]
+    return SeriesResponse(
+        contract_id=str(contract_id), range=range_, resolution=resolution, points=points
+    )
+
+
 def repository() -> FuturesRepository:
     """Request-local client: clickhouse-connect sessions are not thread-safe."""
     return FuturesRepository(ClickHouse.from_environment().client)
@@ -237,3 +324,10 @@ router = APIRouter()
 @router.get("/futures", response_model=FuturesResponse)
 def futures(repo: Repo) -> FuturesResponse:
     return curves(repo, datetime.now(UTC))
+
+
+@router.get("/futures/{contract_id}/series", response_model=SeriesResponse)
+def futures_series(
+    repo: Repo, contract_id: UUID, range_: Annotated[Range, Query(alias="range")] = "5d"
+) -> SeriesResponse:
+    return series(repo, contract_id, range_, datetime.now(UTC))

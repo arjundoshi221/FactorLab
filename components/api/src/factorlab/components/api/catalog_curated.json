@@ -3,9 +3,9 @@
     "alt": {"title": "Alternative data", "summary": "Non-price signals such as US congressional trade disclosures, committees, and filings."},
     "book": {"title": "Investment book", "summary": "Strategies, themes, and trade ideas written by portfolio managers. Reserved; no data is collected yet."},
     "broker": {"title": "Broker mirror", "summary": "Positions, executions, and orders mirrored from broker accounts, including explicitly marked simulated paper accounts. Cash flows and order-event history are reserved."},
-    "derived": {"title": "Derived research", "summary": "Reproducible computed outputs such as factors and forward-test attribution. Reserved; no data is computed yet."},
-    "fundamentals": {"title": "Fundamentals", "summary": "Point-in-time company filings and financial statement line items. Reserved; no data is collected yet."},
-    "market": {"title": "Market data", "summary": "Price and volume bars for India and US listings, including India single-stock futures contracts."},
+    "derived": {"title": "Derived research", "summary": "Reproducible computed outputs: FactorLab's US sector and composite indexes today, with factors and forward-test attribution reserved."},
+    "fundamentals": {"title": "Fundamentals", "summary": "Point-in-time company data: daily US shares outstanding today, with filings and financial statement line items reserved."},
+    "market": {"title": "Market data", "summary": "Price and volume bars for India and US listings and index values, India single-stock futures, and US futures quotes and daily contract bars."},
     "meta": {"title": "Data operations", "summary": "How collection is running: every ingestion run, the series we expect, daily coverage, recovery progress, and source health."},
     "raw": {"title": "Raw archive", "summary": "The untouched vendor responses every curated row was built from, kept for audit and replay."},
     "ref": {"title": "Reference", "summary": "The shared dictionary: countries, exchanges, companies, securities, listings, contracts, and identifier mappings."},
@@ -30,7 +30,7 @@
     "broker.open_orders_snapshot": {"title": "Open orders", "summary": "Snapshots of working orders per broker account. Successful empty snapshots are tracked in ingestion-run metadata."},
     "broker.order_events": {"title": "Order events", "summary": "Reserved for the full life cycle of each order: placed, modified, cancelled, filled. No data is collected yet."},
     "broker.positions_snapshot": {"title": "Positions", "summary": "Holdings, market values, and broker-reported P&L per broker account and snapshot. A successful empty snapshot clears the portfolio view."},
-    "derived.computations": {"title": "Computations", "summary": "Reserved for a record of each reproducible computation run. No data is computed yet."},
+    "derived.computations": {"title": "Computations", "summary": "A record of each reproducible computation run, with its inputs, parameters, and outcome. The US index engine writes one row per run."},
     "derived.factors": {"title": "Factors", "summary": "Reserved for computed factor values per listing and date. No data is computed yet."},
     "derived.index_levels": {"title": "Index levels", "summary": "Daily levels of FactorLab's own indexes: equal- and cap-weighted GICS sector indexes over the Russell 3000 proxy, plus whole-universe composites. Only rows marked complete are final.", "notes": ["index_code names a definition in factorlab.indexes' catalog_us.yaml, e.g. us_gics_45_cw.", "Price return only: there are no dividends in the source bars."]},
     "derived.index_weights": {"title": "Index weights", "summary": "Each constituent's start-of-day weight in a FactorLab index and its contribution to that day's return. A day's contributions add up to the index return."},
@@ -62,7 +62,7 @@
     "alt.social_reddit_posts": {"title": "Reddit posts", "summary": "Reserved for social media posts that mention listed securities. No data is collected yet."},
     "market.bars": {
       "title": "Price bars",
-      "summary": "Open, high, low, close, and volume for every collected listing: India NSE equities every minute, and US equities every minute and every day.",
+      "summary": "Open, high, low, close, and volume for every collected listing: India NSE equities every minute, and US equities, ETFs, and index values ($SPX, $COMPX) every minute and every day.",
       "notes": [
         "Filter by resolution: 1-minute and daily bars are stored in the same table.",
         "bar_time is the start of the bar in UTC; trade_date is the local trading day.",
@@ -102,14 +102,14 @@
       ],
       "columns": {
         "contract_id": "The futures contract's FactorLab ID in ref.contracts.",
-        "underlying_listing_id": "The stock the future is written on, in ref.listings.",
+        "underlying_listing_id": "In ref.listings: the stock for an India single-stock future, the futures root (e.g. /ES) for a US future.",
         "oi": "Open interest: contracts outstanding at the end of the bar."
       }
     },
     "market.futures_continuous": {"title": "Continuous futures", "summary": "Reserved for rolled front- and back-month futures series. Not computed yet."},
     "market.futures_quotes": {
       "title": "US futures quotes",
-      "summary": "Snapshots of US futures contracts (equity index, energy, metals, rates, VIX, FX) taken from Schwab about once a minute through the trading week: last trade, bid and ask, the day's range and volume, open interest and settlement.",
+      "summary": "Snapshots of US futures contracts (equity index, energy, metals, rates, FX) taken from Schwab about once a minute through the trading week: last trade, bid and ask, the day's range and volume, open interest and settlement.",
       "notes": [
         "This is the only intraday record of US futures: Schwab provides no futures price history.",
         "trade_date is the exchange session date; a quote after 18:00 New York time belongs to the next day."
@@ -206,8 +206,8 @@
     "ref.sessions": {"title": "Trading sessions", "summary": "Reserved for exchange trading hours by day of week. Not populated yet."},
     "ref.source_priorities": {"title": "Vendor priorities", "summary": "Which data vendor is preferred for each dataset, country, and bar length, synced from the ingestion bindings. Reserved until the wave 10 migration is applied."},
     "ref.sources": {"title": "Data sources", "summary": "The vendors and feeds FactorLab collects from."},
-    "ref.universe_membership": {"title": "Universe membership", "summary": "Reserved for which listings belonged to an index or universe on each date."},
-    "ref.universes": {"title": "Universes", "summary": "Reserved for index and watchlist definitions such as the S&P 500 or NIFTY 50."},
+    "ref.universe_membership": {"title": "Universe membership", "summary": "Which listings belonged to a universe, such as the US Russell 3000 proxy, and from when to when."},
+    "ref.universes": {"title": "Universes", "summary": "Index and watchlist definitions such as the US Russell 3000 proxy; NIFTY 50 and others are reserved."},
     "research.bars": {"title": "Point-in-time bars", "summary": "Price bars as they were known on a chosen date. Query it with an asof_date parameter."},
     "research.owned_listings": {"title": "Owned listings", "summary": "Listings held in broker accounts on a given date, for joining against other data."},
     "research.political_trades": {"title": "Point-in-time political trades", "summary": "Congressional trades as they had been disclosed by a chosen date."},

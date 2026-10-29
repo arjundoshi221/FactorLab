@@ -112,8 +112,22 @@ def test_sector_performance_shapes_every_sector_with_benchmarks():
 
 def test_constituents_404_for_tracked_codes_and_empty_before_first_run():
     client = Mock()
-    client.query.return_value = result(["trade_date"], [(date(1970, 1, 1),)])
+    client.query.return_value = result(["latest"], [(date(1970, 1, 1),)])
     repo = IndexRepository(client)
     with pytest.raises(Exception, match="Unknown constructed index"):
         repo.constituents("XLK", None, 10)
     assert repo.constituents("us_gics_45_cw", None, 10)["items"] == []
+
+
+def test_constituents_latest_date_alias_does_not_shadow_the_column():
+    client = Mock()
+    client.query.side_effect = [
+        result(["latest"], [(date(2026, 10, 23),)]),
+        result(["listing_id", "symbol", "weight"], [("a", "NVDA", 0.19)]),
+        result(["n"], [(70,)]),
+    ]
+    body = IndexRepository(client).constituents("us_gics_45_cw", None, 25)
+    # ClickHouse rewrites `max(trade_date) AS trade_date` into WHERE (ILLEGAL_AGGREGATION).
+    assert "AS trade_date" not in client.query.call_args_list[0].args[0]
+    assert body["trade_date"] == date(2026, 10, 23) and body["total"] == 70
+    assert body["items"][0]["symbol"] == "NVDA"

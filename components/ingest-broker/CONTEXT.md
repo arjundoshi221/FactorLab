@@ -130,3 +130,5 @@ production until the rollout completes.
   `data_contract`; never roll back across a contract bump.
 
 **UDP service monitoring:** The manifest declares expected liveness. Set FACTORLAB_MONITOR_ADDR=monitor:9125 after the monitor rollout; empty disables sending. The process reports crashes and deliberate stops, and daemon waits report idle liveness through runtime helpers.
+
+**Collection plan (F-045):** each snapshot run records `metadata_json["config"]` with `modes` and, in the daemon, `snapshot_times` (the `--at` NY slots) and `timezone`; `run_once(..., slots=)` carries them.

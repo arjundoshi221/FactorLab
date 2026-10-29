@@ -19,6 +19,7 @@ from factorlab.ingest.provider import (
     RunSummary,
     UnitOutcome,
     ingestion_run,
+    run_config,
     run_provider,
 )
 from factorlab.ingest.security import (
@@ -46,6 +47,7 @@ __all__ = [
     "ingestion_run",
     "redact_error",
     "redact_url",
+    "run_config",
     "run_provider",
     "validate_id_segment",
     "validate_year_segment",

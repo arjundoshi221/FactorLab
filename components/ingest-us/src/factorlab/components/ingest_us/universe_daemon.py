@@ -23,7 +23,7 @@ from factorlab.components.ingest_us.universe.engine import (
 )
 from factorlab.core.logging import configure_logging, redact
 from factorlab.ingest.datasets import ConstituentRecord, InstrumentRef
-from factorlab.ingest.provider import RawCapture, ingestion_run
+from factorlab.ingest.provider import RawCapture, ingestion_run, run_config
 from factorlab.runtime.monitor import MonitoredEvent, monitor_client
 from factorlab.sources.schwab.normalize import provider_symbol
 from factorlab.storage.sinks import ClickHouseSinks
@@ -39,6 +39,20 @@ JOB_ERRORS = (ClickHouseError, OSError, RuntimeError, ValueError, yaml.YAMLError
 def failure_detail(exc: Exception) -> str:
     detail = str(exc) if isinstance(exc, (ValueError, RuntimeError)) else type(exc).__name__
     return redact(detail)[:240]
+
+
+def universe_run_config(config: UniverseConfig) -> dict[str, Any]:
+    """The mounted universe file's choices, recorded on each run for the hub's collection plan."""
+    return run_config(
+        provider=config.provider,
+        indexes=[index.name for index in config.indexes],
+        daily_source=config.daily_source,
+        refresh_interval_minutes=config.refresh_interval_minutes,
+        max_unvalidated=config.max_unvalidated,
+        sector_provider=config.sector_provider,
+        shares_outstanding=config.shares_outstanding,
+        extra_symbols=len(config.extra_symbols),
+    )
 
 
 def safe_status(storage, status: str, detail: str) -> None:
@@ -84,6 +98,7 @@ def sync_once(
             market_code="USA",
             universe=config.name,
             metadata={"provider": config.provider, "indexes": [i.name for i in config.indexes]},
+            config=universe_run_config(config),
         ) as ctx:
             current = resolver or create_resolver(
                 config, storage, client=client, ctx=ctx, sink=sink

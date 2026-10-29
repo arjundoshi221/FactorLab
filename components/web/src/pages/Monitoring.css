@@ -173,3 +173,10 @@
 .monitoring .monitoring-service:target, .monitoring-pipeline:target, .monitoring-coverage-card:target { outline: 2px solid var(--lime); outline-offset: 3px; }
 @media (max-width: 620px) { .monitoring-section-nav { top: 64px; } }
 @media (max-width: 600px) { .monitoring-status-verdict { padding: 18px 16px; align-items: flex-start; } .monitoring-status-time { display: none; } .monitoring-status-row { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 13px 16px; } .monitoring-status-more > summary { padding: 12px 16px; } }
+.monitoring-collection { margin-top: 40px; scroll-margin-top: 140px; }
+.monitoring-collection-component { margin-top: 20px; }
+.monitoring-collection-component h3 { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+.monitoring-collection-table td { vertical-align: top; }
+.monitoring-collection-table small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.monitoring-collection-table .monitoring-event-state, .monitoring-collection-table .monitoring-event-error { display: inline-block; margin: 4px 6px 0 0; }
+.monitoring-collection-member { display: block; font: 11px var(--mono); }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import "./Monitoring.css";
 import { DailyStrip, MonitoringOperations, useMonitoringOperations } from "./MonitoringOperations";
 import { sourceProblems } from "./MonitoringSources";
+import { MonitoringCollection } from "./MonitoringCollection";
 import { MonitoringErrors } from "./MonitoringErrors";
 import { MonitoringStatus } from "./MonitoringStatus";
 
@@ -121,7 +122,7 @@ export function Monitoring() {
     </header>
     {offline && <div className="monitoring-notice" role="alert"><strong>Monitor offline.</strong> Heartbeat tracking is interrupted. Service statuses may be stale.</div>}
     {error && <div className="monitoring-notice monitoring-notice--error" role="alert"><strong>{error}</strong> {updated ? "Showing the last successful snapshot." : "Try refreshing to reconnect."}</div>}
-    <nav className="monitoring-section-nav" aria-label="Monitoring sections"><a href="#monitoring-status">Status</a><a href="#monitoring-services-title">Services</a><a href="#monitoring-errors-title">Error inbox</a><a href="#monitoring-data-title">Data completeness</a><a href="#monitoring-pipelines-title">Ingestion</a><a href="#monitoring-events-title">Events</a></nav>
+    <nav className="monitoring-section-nav" aria-label="Monitoring sections"><a href="#monitoring-status">Status</a><a href="#monitoring-services-title">Services</a><a href="#monitoring-errors-title">Error inbox</a><a href="#monitoring-data-title">Data completeness</a><a href="#monitoring-pipelines-title">Ingestion</a><a href="#monitoring-collection-title">Collection plan</a><a href="#monitoring-events-title">Events</a></nav>
     <MonitoringStatus refreshKey={refreshKey} />
     <div className="monitoring-daily-overview">
       <div><span>Errors today · UTC</span><strong>{operations.daily.data?.days ? operations.daily.data.days.filter(d => d.day === operations.daily.data!.generated_at.slice(0, 10)).reduce((sum, d) => sum + d.errors, 0).toLocaleString() : "—"}</strong><small>{operations.daily.error ? "Daily telemetry unavailable or stale" : "Full stored event counts"}</small></div>
@@ -151,6 +152,7 @@ export function Monitoring() {
     </section>
     <MonitoringErrors refreshKey={refreshKey} services={services.map(s => s.service_id)} />
     <MonitoringOperations coverage={operations.coverage} pipelines={operations.pipelines} showSourceAlerts={false} />
+    <MonitoringCollection refreshKey={refreshKey} />
     <section className="monitoring-history" aria-labelledby="monitoring-events-title">
       <div className="monitoring-section-heading"><div><h2 id="monitoring-events-title">Event activity</h2><p>Latest 100 matching events &middot; times in your local timezone.</p></div><span className="monitoring-event-count" role="status">{loading ? "Updating..." : `${visibleEvents.length} events`}</span></div>
       <div className="monitoring-filters">

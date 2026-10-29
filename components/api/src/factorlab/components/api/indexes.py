@@ -176,13 +176,15 @@ class IndexRepository:
     def constituents(self, code: str, day: date | None, limit: int) -> dict[str, Any]:
         if code not in {d.code for d in catalog().definitions()}:
             raise HTTPException(404, f"Unknown constructed index: {code}")
+        # The alias must differ from the column, or ClickHouse substitutes the
+        # aggregate into WHERE (ILLEGAL_AGGREGATION).
         latest = self.query(
-            """SELECT max(trade_date) AS trade_date FROM derived.index_weights FINAL
+            """SELECT max(trade_date) AS latest FROM derived.index_weights FINAL
             WHERE index_code = {code:String} AND trade_date <= {day:Date}""",
             code=code,
             day=day or datetime.now(NY).date(),
         )
-        trade_date = latest[0]["trade_date"] if latest else None
+        trade_date = latest[0]["latest"] if latest else None
         if not trade_date or trade_date == date(1970, 1, 1):
             return {"code": code, "trade_date": None, "items": [], "total": 0}
         items = self.query(

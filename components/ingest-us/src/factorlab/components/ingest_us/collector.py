@@ -20,7 +20,7 @@ from factorlab.core.logging import configure_logging
 from factorlab.ingest.datasets import BarRequest, SeriesWindow
 from factorlab.ingest.engine import collect_binding
 from factorlab.ingest.errors import AuthRequired
-from factorlab.ingest.provider import ingestion_run
+from factorlab.ingest.provider import ingestion_run, run_config
 from factorlab.runtime.monitor import MonitoredEvent
 from factorlab.sources.schwab.normalize import provider_symbol as schwab_symbol
 from factorlab.storage.v2_us import V2USStorage as USStorage
@@ -35,6 +35,17 @@ LIVE_INTERVAL = timedelta(seconds=CollectionSettings().live_interval_seconds)
 RETRY_BASE = timedelta(minutes=15)
 RETRY_CAP = timedelta(hours=24)
 COLLECTION_ERRORS = (ClickHouseError, OSError, RuntimeError, ValueError)
+SCHWAB_MIN_REQUEST_INTERVAL = CollectionSettings().schwab_min_request_interval_seconds
+
+
+def collection_config():
+    """What this collector runs with, recorded on every run for the hub's collection plan."""
+    return run_config(
+        minute_universe=MINUTE_UNIVERSE,
+        minute_tier_size=MINUTE_TIER_SIZE,
+        live_interval_s=int(LIVE_INTERVAL.total_seconds()),
+        schwab_min_request_interval_s=SCHWAB_MIN_REQUEST_INTERVAL,
+    )
 
 
 def retry_delay(attempts):
@@ -123,6 +134,7 @@ def collect(
                 "full": full and not live,
                 "expected_series": 1,
             },
+            config=collection_config(),
         ) as ctx:
             mapped = sink.aliases_for([instrument_id], alias_kind="schwab_symbol")
             if instrument_id not in mapped:
@@ -425,7 +437,15 @@ def run_full(args, storage, schwab: EngineClient):
                 if stop.is_set():
                     break
                 try:
-                    collect(storage, schwab, item, "1min", now=datetime.now(UTC), live=True)
+                    collect(
+                        storage,
+                        schwab,
+                        item,
+                        "1min",
+                        now=datetime.now(UTC),
+                        live=True,
+                        universe_name=MINUTE_UNIVERSE,
+                    )
                     ok += 1
                 except AuthRequired:
                     # Token rolled over mid-sweep; retry the whole tier shortly instead of
@@ -449,7 +469,9 @@ def run_full(args, storage, schwab: EngineClient):
             retry_key = item[2]
             if now >= minute_retry_at.get(retry_key, datetime.min.replace(tzinfo=UTC)):
                 try:
-                    complete = collect(storage, schwab, item, "1min", now=now)
+                    complete = collect(
+                        storage, schwab, item, "1min", now=now, universe_name=MINUTE_UNIVERSE
+                    )
                     if complete:
                         minute_retry_attempts.pop(retry_key, None)
                     else:
@@ -546,7 +568,15 @@ def run(args, storage, client):
                 if stop.is_set():
                     break
                 try:
-                    collect(storage, client, item, "1min", now=datetime.now(UTC), live=True)
+                    collect(
+                        storage,
+                        client,
+                        item,
+                        "1min",
+                        now=datetime.now(UTC),
+                        live=True,
+                        universe_name=args.universe,
+                    )
                 except COLLECTION_ERRORS as exc:
                     log.error("Live %s failed: %s", item[0], type(exc).__name__)
             next_live = datetime.now(UTC) + timedelta(seconds=300)
@@ -569,7 +599,9 @@ def run(args, storage, client):
             if stop.is_set():
                 break
             try:
-                complete = collect(storage, client, item, resolution, now=now)
+                complete = collect(
+                    storage, client, item, resolution, now=now, universe_name=args.universe
+                )
                 if not complete:
                     retry_at[(item[0], resolution)] = now + timedelta(minutes=15)
                     had_failure = True
