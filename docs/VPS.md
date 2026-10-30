@@ -14,6 +14,15 @@ values.
 
 ## Server
 
+IBKR Flex sync from the hub (F-047), 2026-10-30: `ingest-trial/ingest-broker/a711b2d2151b`
+([workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/41098028600), success)
+replaced `ibkr-snapshot` and added `ibkr-flex-runner` (profile `ibkr`, backend network only,
+`expose: 8091`, no published port; reuses `ibkr_client_runtime` and `IBKR_FLEX_QUERY_ID`).
+`ui-trial/f7886891a680` ([workflow](https://github.com/arjundoshi221/FactorLab/actions/runs/41099540451),
+success) replaced `api-candidate` and `web` with the `/hub/api/v1/portfolio/flex/runs` proxy and
+the Portfolio "Sync IBKR history" button. `GET .../flex/runs/latest` on api-candidate returns
+`{"state":"idle"}`; no sync has been started through it yet.
+
 IBKR Flex positions and statement rows, 2026-10-29: trials `platform-trial/schema-migrator`,
 `ingest-trial/ingest-broker` and `ui-trial` at `71d1e8e83df2` (all success) replaced the
 schema-migrator pin, `ibkr-snapshot` (image `0.0.0-trial.71d1e8e83df2`), `api-candidate` and

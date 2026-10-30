@@ -56,3 +56,6 @@ Release `ingest-broker` first (adds `ibkr-flex-runner` under the `ibkr` profile)
 ## Log
 
 - 2026-10-30: created; implemented, in review, pending the three component releases.
+- 2026-10-30: deployed by branch trials: `ingest-trial/ingest-broker/a711b2d2151b` (adds
+  `ibkr-flex-runner`) and `ui-trial/f7886891a680` (api-candidate, web). Proxy answers `idle`;
+  first production sync pending.
