@@ -339,6 +339,7 @@ def test_prices_use_one_daily_source_and_fill_missing_open():
     result = repo.prices(ID, "1m")
     assert (result.source, result.resolution, result.derived) == ("schwab", "daily", False)
     assert [(b.open, b.close) for b in result.bars] == [(10, 10)]
+    assert isinstance(repo.query, Mock)
     sql, params = repo.query.call_args.args
     assert "resolution = 'daily'" in sql and "FINAL" in sql
     assert params["source"] == "schwab"
@@ -350,6 +351,7 @@ def test_prices_roll_minute_bars_into_sessions_when_no_daily_feed():
     repo = repo_with(feeds, [])
     result = repo.prices(ID, "ytd")
     assert (result.resolution, result.derived) == ("daily", True)
+    assert isinstance(repo.query, Mock)
     sql, params = repo.query.call_args.args
     assert "argMin(open, bar_time)" in sql and "GROUP BY trade_date" in sql
     assert params["start"] == date(2026, 1, 1)
@@ -369,6 +371,7 @@ def test_intraday_prices_start_at_the_earliest_of_the_last_sessions():
     repo = repo_with(feeds, sessions, [minute])
     result = repo.prices(ID, "5d")
     assert result.resolution == "1min" and len(result.bars) == 1
+    assert isinstance(repo.query, Mock)
     assert repo.query.call_args.args[1]["start"] == date(2026, 10, 29)
 
 
