@@ -5,6 +5,8 @@ import type {
   FuturesContract, FuturesGroup, FuturesRange, FuturesResponse, FuturesRoot, FuturesSeries,
 } from "../futuresTypes";
 import { errorMessage, useRemote } from "../shared/api";
+import { AreaChart } from "../shared/charts";
+import { useWidth } from "../shared/charts/useWidth";
 import { formatCompact, formatRelative } from "../shared/format";
 import { useUrlParams } from "../shared/urlState";
 import "./Indexes.css"; // shared chart primitives: index-grid, index-axis, index-crosshair, index-tooltip, index-toggle
@@ -26,10 +28,10 @@ const RESOLUTION: Record<FuturesSeries["resolution"], string> = {
   "1min": "last trade per minute", "15min": "last trade per 15 minutes", daily: "daily close",
 };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-// Dark categorical slot 1 (validated against the hub panel #12161b, as on the Indexes chart);
-// the line turns red when the range ends below where it started.
-const UP_COLOR = "#3987e5";
-const DOWN_COLOR = "#e66767";
+// Terminal direction tokens: the line is green when the range ends at or above where it
+// started and red when below; the caption's signed change is the non-colour cue.
+const UP_COLOR = "var(--up)";
+const DOWN_COLOR = "var(--down)";
 const NY_TIME = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
 });
@@ -128,7 +130,10 @@ function RootDetail({ root }: { root: FuturesRoot }) {
             className={r.id === range ? "active" : ""} onClick={() => pick("range", r.id)}>{r.label}</button>)}
         </div>
       </div>
-      <SeriesChart contract={contract} range={range} />
+      <div className="futures-charts">
+        <SeriesChart contract={contract} range={range} />
+        <TermCurve root={root} />
+      </div>
     </>}
     <ContractTable contracts={root.contracts} selected={contract?.contract_id} onSelect={(c) => pick("contract", c.symbol)} />
   </section>;
@@ -140,7 +145,8 @@ function SeriesChart({ contract, range }: { contract: FuturesContract; range: Fu
     `/hub/api/v1/us/futures/${encodeURIComponent(contract.contract_id)}/series?range=${range}`, intraday ? 60_000 : 0);
   const ref = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
-  const width = 880, height = 280, pad = { top: 20, right: 32, bottom: 32, left: 72 };
+  const [box, measured] = useWidth<HTMLElement>(880);
+  const width = Math.max(measured - 24, 320), height = 280, pad = { top: 20, right: 32, bottom: 32, left: 72 };
   // Ignore a previous contract's or range's response while the next one loads.
   const current = data && data.contract_id === contract.contract_id && data.range === range ? data : null;
   const points = useMemo(() => current?.points ?? [], [current]);
@@ -165,7 +171,7 @@ function SeriesChart({ contract, range }: { contract: FuturesContract; range: Fu
     setHover(Math.max(0, Math.min(points.length - 1, Math.round(ratio * (points.length - 1)))));
   };
   const hovered = hover === null ? null : points[hover];
-  return <figure className="futures-chart">
+  return <figure className="futures-chart" ref={box}>
     <figcaption>{contract.symbol} · expires {contract.expiry} · {RESOLUTION[current.resolution]} · {pct(last / first - 1)} over the range</figcaption>
     <svg ref={ref} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${contract.symbol} price history`}
       onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
@@ -174,17 +180,25 @@ function SeriesChart({ contract, range }: { contract: FuturesContract; range: Fu
       {settle !== null && <line data-testid="settle-line" x1={pad.left} x2={width - pad.right} y1={y(settle)} y2={y(settle)} className="index-base" />}
       <text x={pad.left} y={height - 8} className="index-axis">{pointLabel(points[0].t, daily)}</text>
       <text x={width - pad.right} y={height - 8} textAnchor="end" className="index-axis">{pointLabel(points[points.length - 1].t, daily)}</text>
-      <polyline data-testid="series-line" fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round"
+      <polyline data-testid="series-line" fill="none" style={{ stroke: color }} strokeWidth="2" strokeLinejoin="round"
         points={points.map((p, i) => `${x(i).toFixed(1)},${y(p.price).toFixed(1)}`).join(" ")} />
       {hovered && <g>
         <line x1={x(hover!)} x2={x(hover!)} y1={pad.top} y2={height - pad.bottom} className="index-crosshair" />
-        <circle cx={x(hover!)} cy={y(hovered.price)} r="4" fill={color} stroke="#12161b" strokeWidth="2" />
+        <circle cx={x(hover!)} cy={y(hovered.price)} r="4" style={{ fill: color, stroke: "var(--panel)" }} strokeWidth="2" />
       </g>}
     </svg>
     {hovered && <div className="index-tooltip" role="status"><strong>{pointLabel(hovered.t, daily)}</strong>
       <span><i style={{ background: color }} />{contract.symbol}<b>{price(hovered.price)}</b></span>
       <span><i />From range start<b>{signed(hovered.price - first)} ({pct(hovered.price / first - 1)})</b></span></div>}
     {settle !== null && <p className="futures-legend">Dashed line: previous settlement {price(settle)}.</p>}
+  </figure>;
+}
+
+function TermCurve({ root }: { root: FuturesRoot }) {
+  const points = root.contracts.filter((c) => c.last !== null).map((c) => ({ t: c.expiry, value: c.last as number }));
+  return <figure className="futures-term">
+    <figcaption>Term structure · last by expiry</figcaption>
+    <AreaChart points={points} label={`${root.root} term structure`} height={240} format={(value) => price(Number(value.toPrecision(8)))} formatTime={monthLabel} />
   </figure>;
 }
 

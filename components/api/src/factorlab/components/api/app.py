@@ -1443,6 +1443,11 @@ def hub_roadmap() -> FileResponse:
     return _hub_index()
 
 
+@app.get("/ops", include_in_schema=False)
+def hub_ops() -> FileResponse:
+    return _hub_index()
+
+
 @app.get("/docker-images", include_in_schema=False)
 def hub_docker_images() -> FileResponse:
     return _hub_index()

@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
+import { PageHeader } from "../components/ui";
 import type { Profile } from "../portfolioTypes";
 
 /** Refresh mounted panels without throwing away their last result or unsaved forms. */
@@ -71,6 +72,8 @@ export function setPortfolioQuery(userId: string, account?: string) {
   window.history.replaceState(null, "", url);
 }
 
+const CODES: Record<string, string> = { Portfolio: "PORT", Trades: "TRD", Themes: "THM", Strategies: "STRT", "Trade names": "TNM" };
+
 export function PortfolioHeader({ title, description, children }: { title: string; description: string; children: ReactNode }) {
-  return <header className="portfolio-header"><div><span className="portfolio-eyebrow">Portfolio workspace</span><h1>{title}</h1><p>{description}</p></div>{children}</header>;
+  return <PageHeader code={CODES[title] ?? "PORT"} title={title} eyebrow="Portfolio workspace" info={description}>{children}</PageHeader>;
 }

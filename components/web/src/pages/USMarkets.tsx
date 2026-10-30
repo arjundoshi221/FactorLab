@@ -5,6 +5,8 @@ import { USInstrumentTable } from "../components/us/USInstrumentTable";
 import { USStatusPill } from "../components/us/USStatusPill";
 import { USSummaryCards } from "../components/us/USSummaryCards";
 import { USUniverseTabs } from "../components/us/USUniverseTabs";
+import { PageHeader } from "../components/ui";
+import { Candles, type CandleBar } from "../shared/charts";
 import type {
   USCandle, USDashboard, USDay, USInstrument, USPage, USResolution, USScope,
 } from "../usTypes";
@@ -37,6 +39,15 @@ export function USSummaryCard() {
       <USStatusPill status={data.source.status} /><small>Configured daily universe · liquid minute tier</small></>
       : <p>{error ? "Collection status unavailable" : "Loading US coverage…"}</p>}
   </article>;
+}
+
+
+/** Chart bars, oldest first, from a newest-first candle page; rows with unparseable prices are skipped. */
+export function candleBars(candles: USCandle[]): CandleBar[] {
+  return candles.map(candle => ({
+    t: candle.trade_date || candle.bar_time || "", open: Number(candle.open), high: Number(candle.high),
+    low: Number(candle.low), close: Number(candle.close), volume: candle.volume ?? null,
+  })).filter(bar => [bar.open, bar.high, bar.low, bar.close].every(Number.isFinite)).reverse();
 }
 
 export function USMarkets() {
@@ -97,9 +108,10 @@ export function USMarkets() {
   }, [selected, resolution, cursor, dashboard]);
   const total = page.total ?? page.items.length;
   return <main className="us-markets">
-    <section className="hero"><div><span className="eyebrow">US equities · configured universe + Schwab</span>
-      <h1>US markets</h1><p>Configured US stocks daily; up to 250 liquid names with one-minute coverage.</p></div>
-      <button onClick={() => setTick(value => value + 1)} disabled={loading}>Refresh data</button></section>
+    <PageHeader code="US" title="US markets" eyebrow="Configured universe · Schwab"
+      info="Configured US stocks daily; up to 250 liquid names with one-minute coverage.">
+      <button onClick={() => setTick(value => value + 1)} disabled={loading}>Refresh data</button>
+    </PageHeader>
     {error && <div className="notice notice--error" role="alert">{error}</div>}
     {loading && <p role="status">Loading US markets…</p>}
     {dashboard && <><USSummaryCards dashboard={dashboard} />
@@ -122,6 +134,10 @@ export function USMarkets() {
       {detailError && <p role="alert" className="notice notice--error">{detailError}</p>}
       {detailLoading ? <p role="status">Loading instrument history…</p> : <>
         <p className="us-note">Daily and minute data are supplied by Schwab. Times are UTC.</p>
+        {candles.length > 1 && <Candles bars={candleBars(candles)} height={300}
+          label={`${selected.symbol} ${resolution === "daily" ? "daily" : "one-minute"} candlestick chart`}
+          format={value => value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          formatTime={t => (/^\d{4}-\d{2}-\d{2}$/.test(t) ? t : utcTime(t))} />}
         <div className="table-scroll"><table><thead><tr><th>Session / time (UTC)</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th></tr></thead>
           <tbody>{candles.map((candle, index) => <tr key={index}><td>{candle.trade_date || utcTime(candle.bar_time!)}</td>
             {[candle.open, candle.high, candle.low, candle.close].map((value, position) => <td key={position}>{dollars.format(Number(value))}</td>)}

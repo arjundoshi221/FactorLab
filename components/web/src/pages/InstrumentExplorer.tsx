@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { PageHeader } from "../components/ui";
 import { errorMessage, fetchJson } from "../shared/api";
+import { Treemap } from "../shared/charts";
 import type { Dataset, DatasetResult, Identity, Instrument, InstrumentPage, SectorSummary } from "../instrumentTypes";
 import { AtAGlance, DataMatrix } from "./DataMatrix";
 import { Futures } from "./Futures";
@@ -15,13 +17,13 @@ const states = { stored: "Stored data", empty: "No matching records", missing_ta
 const PAGE = 50;
 
 type View = "all" | "sectors" | "indexes" | "futures" | "matrix" | "collection";
-const views: { key: View; title: string; intro: string }[] = [
-  { key: "all", title: "All tickers", intro: "Every registered listing and derivative contract, including inactive instruments and instruments without collected data. Select one to see everything stored for it." },
-  { key: "sectors", title: "By sector", intro: "Every listing grouped by its current GICS sector (iShares IWV holdings). Expand a sector to see its tickers; listings without a sector are grouped as unclassified." },
-  { key: "indexes", title: "Indexes", intro: "Official US indexes, plus FactorLab's own GICS sector indexes over the Russell 3000 proxy, equal- and cap-weighted." },
-  { key: "futures", title: "Futures", intro: "US futures: each recorded root's live contracts at the latest Schwab quote, a price history for the selected expiry, and the contract table. No rolls or back-adjustment." },
-  { key: "matrix", title: "Data matrix", intro: "Each FactorLab ticker against each dataset. Bars are judged against the exchange's latest completed session; holdings, trades and tags follow the account owner's profile. Select a ticker to see everything linked to it." },
-  { key: "collection", title: "Collection coverage", intro: "Every ticker configured for collection in the US and India, with the bars stored for each in daily collection and historical recovery." },
+const views: { key: View; title: string; code: string; intro: string }[] = [
+  { key: "all", code: "MKT", title: "All tickers", intro: "Every registered listing and derivative contract, including inactive instruments and instruments without collected data. Select one to see everything stored for it." },
+  { key: "sectors", code: "SECT", title: "By sector", intro: "Every listing grouped by its current GICS sector (iShares IWV holdings). Expand a sector to see its tickers; listings without a sector are grouped as unclassified." },
+  { key: "indexes", code: "INDX", title: "Indexes", intro: "Official US indexes, plus FactorLab's own GICS sector indexes over the Russell 3000 proxy, equal- and cap-weighted." },
+  { key: "futures", code: "FUT", title: "Futures", intro: "US futures: each recorded root's live contracts at the latest Schwab quote, a price history for the selected expiry, and the contract table. No rolls or back-adjustment." },
+  { key: "matrix", code: "MTX", title: "Data matrix", intro: "Each FactorLab ticker against each dataset. Bars are judged against the exchange's latest completed session; holdings, trades and tags follow the account owner's profile. Select a ticker to see everything linked to it." },
+  { key: "collection", code: "COV", title: "Collection coverage", intro: "Every ticker configured for collection in the US and India, with the bars stored for each in daily collection and historical recovery." },
 ];
 
 // Abort and clear on every URL change; a slow old instrument must never replace a new one.
@@ -235,8 +237,13 @@ function BySector({ params, update, select }: { params: URLSearchParams; update:
     {!data && !error && <p role="status" className="md-loading">Loading sectors…</p>}
     {data && <>
       <p className="md-count"><strong>{data.total.toLocaleString()}</strong> listings in <strong>{data.items.length}</strong> sectors</p>
+      <Treemap label="Listings by GICS sector" height={180} items={groups.map(group => ({
+        key: group.sector_id, label: group.sector, size: group.count, sublabel: group.count.toLocaleString(),
+        title: `${group.sector}: ${group.count.toLocaleString()} listings`, selected: open === group.sector_id,
+        onSelect: () => update({ sector: open === group.sector_id ? "" : group.sector_id, offset: "" }),
+      }))} />
       {!groups.length && <p className="md-empty">No listings match these filters.</p>}
-      <div className="md-sectors">{groups.map(group => <details key={group.sector_id} className="md-sector" open={open === group.sector_id}>
+      <div className="md-sectors" role="group" aria-label="Sectors">{groups.map(group => <details key={group.sector_id} className="md-sector" open={open === group.sector_id}>
         <summary onClick={event => { event.preventDefault(); update({ sector: open === group.sector_id ? "" : group.sector_id, offset: "" }); }}>
           <span className="md-sector__name">{group.sector}</span>
           {group.sector_id !== "none" && <code className="md-sector__code">GICS {group.sector_id}</code>}
@@ -268,15 +275,12 @@ export function MarketData() {
   const current = views.find(v => v.key === view)!;
   const kind = params.get("kind"), id = params.get("id");
   return <main className="md-page">
-    <section className="hero md-hero">
-      <div><span className="eyebrow">Instruments · coverage · collection</span>
-        <h1>Market data</h1>
-        <p>{current.intro}</p></div>
-    </section>
-    <nav className="md-tabs" aria-label="Market Data views">{views.map(v =>
-      <button key={v.key} type="button" aria-pressed={view === v.key} className={view === v.key ? "is-active" : ""}
-        onClick={() => update({ view: v.key === "all" ? "" : v.key, offset: "", sector: "", group: "", root: "" })}>{v.title}</button>)}
-    </nav>
+    <PageHeader code={current.code} title="Market data" eyebrow={current.title} info={current.intro}>
+      <nav className="md-tabs" aria-label="Market Data views">{views.map(v =>
+        <button key={v.key} type="button" aria-pressed={view === v.key} className={view === v.key ? "is-active" : ""}
+          onClick={() => update({ view: v.key === "all" ? "" : v.key, offset: "", sector: "", group: "", root: "" })}>{v.title}</button>)}
+      </nav>
+    </PageHeader>
     {view === "collection" ? <CollectionCoverage /> : view === "indexes" ? <Indexes embedded /> : view === "futures" ? <Futures embedded /> : <>
       {view === "matrix" ? <DataMatrix params={params} update={update} select={select} />
         : view === "sectors" ? <BySector params={params} update={update} select={select} />

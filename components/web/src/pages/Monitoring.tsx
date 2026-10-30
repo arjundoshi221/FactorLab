@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PageHeader } from "../components/ui";
 import "./Monitoring.css";
 import { DailyStrip, MonitoringOperations, useMonitoringOperations } from "./MonitoringOperations";
 import { sourceProblems } from "./MonitoringSources";
@@ -112,14 +113,11 @@ export function Monitoring() {
   const filtered = Boolean(service || type || windowHours);
   const visibleEvents = historyFilter === filterKey ? events : [];
   return <main className="monitoring">
-    <header className="monitoring-hero">
-      <div><span className="eyebrow">Operations / Control room</span><h1>Service monitoring</h1><p>Live health, daily ingestion and data gaps. One operational view.</p></div>
-      <div className="monitoring-refresh">
-        <span className={`monitoring-chip monitoring-chip--${!updated ? "unknown" : error || offline ? "late" : "up"}`}><i />{error ? "Connection lost" : !updated ? "Connecting" : offline ? "Monitor offline" : "Monitor connected"}</span>
-        <span>{updated ? `Checked ${clock(updated)}` : "Waiting for monitoring data"} &middot; every 15s</span>
-        <button type="button" disabled={loading} onClick={() => setRefreshKey(k => k + 1)}>{loading ? "Refreshing..." : "Refresh now"}</button>
-      </div>
-    </header>
+    <PageHeader code="MON" title="Service monitoring" eyebrow="Control room" info="Live health, daily ingestion and data gaps. One operational view.">
+      <span className={`monitoring-chip monitoring-chip--${!updated ? "unknown" : error || offline ? "late" : "up"}`}><i />{error ? "Connection lost" : !updated ? "Connecting" : offline ? "Monitor offline" : "Monitor connected"}</span>
+      <span className="t-stamp">{updated ? `Checked ${clock(updated)}` : "Waiting for monitoring data"} &middot; every 15s</span>
+      <button type="button" disabled={loading} onClick={() => setRefreshKey(k => k + 1)}>{loading ? "Refreshing..." : "Refresh now"}</button>
+    </PageHeader>
     {offline && <div className="monitoring-notice" role="alert"><strong>Monitor offline.</strong> Heartbeat tracking is interrupted. Service statuses may be stale.</div>}
     {error && <div className="monitoring-notice monitoring-notice--error" role="alert"><strong>{error}</strong> {updated ? "Showing the last successful snapshot." : "Try refreshing to reconnect."}</div>}
     <nav className="monitoring-section-nav" aria-label="Monitoring sections"><a href="#monitoring-status">Status</a><a href="#monitoring-services-title">Services</a><a href="#monitoring-errors-title">Error inbox</a><a href="#monitoring-data-title">Data completeness</a><a href="#monitoring-pipelines-title">Ingestion</a><a href="#monitoring-collection-title">Collection plan</a><a href="#monitoring-events-title">Events</a></nav>

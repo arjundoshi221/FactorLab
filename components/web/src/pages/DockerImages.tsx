@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { PageHeader } from "../components/ui";
+
 interface Container {
   name: string; status: string; started_at: string | null;
   service?: string | null; image_ref?: string | null;
@@ -234,14 +236,11 @@ export function DockerImages() {
   const currentRelease = snapshot?.release?.id ?? snapshot?.release_id;
 
   return <main className="docker-page">
-    <section className="hero">
-      <div><span className="eyebrow">Production host</span><h1>Docker images</h1>
-        <p>Understand deployed components, trace services to their images, and inspect every image stored on the VPS. All timestamps are in IST (Asia/Kolkata).</p></div>
-      <div className="refresh-block">
-        <span>{snapshot ? `Snapshot ${date(snapshot.snapshot_at)} · refreshes every minute` : "Reading the host inventory…"}</span>
-        <button onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh images"}</button>
-      </div>
-    </section>
+    <PageHeader code="IMG" title="Docker images" eyebrow="Production host"
+      info="Understand deployed components, trace services to their images, and inspect every image stored on the VPS. All timestamps are in IST (Asia/Kolkata).">
+      <span className="t-stamp">{snapshot ? `Snapshot ${date(snapshot.snapshot_at)} · refreshes every minute` : "Reading the host inventory…"}</span>
+      <button onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh images"}</button>
+    </PageHeader>
 
     {snapshot?.stale && <div className="notice" role="status">Snapshot is stale. The host collector has not updated it for over three minutes; check <code>factorlab-docker-images.timer</code>.</div>}
     {error && <div className="notice notice--error" role="alert">Docker image inventory is unavailable. Try refreshing.</div>}

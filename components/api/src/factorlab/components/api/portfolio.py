@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -38,6 +39,25 @@ class SnapshotPage(ItemsPage):
 class AccountSummary(BaseModel):
     account: dict[str, Any]
     balances: SnapshotPage
+
+
+class EquityPoint(BaseModel):
+    t: datetime
+    value: str
+
+
+EquityRange = Literal["1m", "3m", "1y", "max"]
+
+
+class EquityHistory(BaseModel):
+    currency: str | None
+    range: EquityRange
+    resolution: Literal["hour", "day"]
+    points: list[EquityPoint]
+    basis: str
+
+
+EQUITY_DAYS: dict[str, int | None] = {"1m": 31, "3m": 92, "1y": 366, "max": None}
 
 
 class PortfolioRepository:
@@ -177,6 +197,61 @@ class PortfolioRepository:
             freshness="stale" if broker_snapshot_stale(stamp, now) else "fresh",
         )
 
+    def equity(self, account: dict[str, Any], window: EquityRange) -> EquityHistory:
+        """Net liquidation over time: the last account-wide base-currency value per bucket.
+
+        Uses the same row the account page shows (no segment, base currency only), so values
+        are never summed across currencies or segments.
+        """
+        currency = account.get("base_currency") or None
+        resolution: Literal["hour", "day"] = "hour" if window == "1m" else "day"
+        basis = "Last broker-reported net liquidation per bucket, account-wide in the base currency"
+        if not currency:
+            return EquityHistory(
+                currency=None,
+                range=window,
+                resolution=resolution,
+                points=[],
+                basis="No base currency is registered for this account",
+            )
+        days = EQUITY_DAYS[window]
+        bucket = (
+            "toStartOfHour(snapshot_time)"
+            if resolution == "hour"
+            else "toStartOfDay(snapshot_time)"
+        )
+        since = "" if days is None else "AND snapshot_time >= {since:DateTime64(3, 'UTC')} "
+        params: dict[str, Any] = {
+            "broker": account["broker_code"],
+            "account": account["account_id"],
+            "currency": currency,
+        }
+        if days is not None:
+            params["since"] = datetime.now(UTC) - timedelta(days=days)
+        found = self.query(
+            f"SELECT {bucket} AS t, argMax(value_num, snapshot_time) AS value "
+            "FROM broker.account_state_snapshot FINAL "
+            "WHERE broker_code = {broker:String} AND account_id = {account:String} "
+            "AND (metric_canonical = 'net_liquidation' OR metric = 'NetLiquidation') "
+            "AND segment = '' AND currency = {currency:String} AND value_num IS NOT NULL "
+            f"{since}GROUP BY t ORDER BY t",
+            params,
+        )
+        points = []
+        for row in found:
+            stamp = row["t"]
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=UTC)
+            value = row["value"]
+            points.append(
+                EquityPoint(
+                    t=stamp, value=format(value, "f") if isinstance(value, Decimal) else str(value)
+                )
+            )
+        return EquityHistory(
+            currency=currency, range=window, resolution=resolution, points=points, basis=basis
+        )
+
     def executions(self, account: dict[str, Any], *, limit: int, offset: int) -> ExecutionPage:
         items = self.query(
             "SELECT * FROM broker.executions FINAL WHERE broker_code = {broker:String} "
@@ -240,6 +315,19 @@ def summary(
 ) -> AccountSummary:
     account = repo.account(broker_code, account_id, validate_profile_filter(user_id))
     return AccountSummary(account=account, balances=repo.snapshot(account, "account_state"))
+
+
+@router.get("/accounts/{broker_code}/{account_id}/equity", response_model=EquityHistory)
+def equity(
+    repo: Repo,
+    broker_code: str,
+    account_id: str,
+    user_id: ProfileFilter = "",
+    range: EquityRange = "3m",
+) -> EquityHistory:
+    return repo.equity(
+        repo.account(broker_code, account_id, validate_profile_filter(user_id)), range
+    )
 
 
 @router.get("/accounts/{broker_code}/{account_id}/positions", response_model=SnapshotPage)

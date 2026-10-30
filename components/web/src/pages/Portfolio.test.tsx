@@ -80,3 +80,26 @@ it("keeps the account in navigation links and clears it when switching profiles"
   expect(link.searchParams.has("account")).toBe(false);
   expect(new URL(window.location.href).searchParams.has("account")).toBe(false);
 });
+
+it("charts net liquidation by range and aggregates base-currency positions only", async () => {
+  const fetcher = vi.fn(async (url: string) => {
+    const path = new URL(url, "http://localhost");
+    if (path.pathname.endsWith("/equity")) return { ok: true, json: async () => ({ currency: "USD", basis: "Last broker-reported net liquidation per bucket", points: [
+      { t: "2026-10-01T00:00:00Z", value: "100000.00" }, { t: "2026-10-02T00:00:00Z", value: "103000.00" }] }) };
+    if (path.pathname.endsWith("/positions")) return { ok: true, json: async () => snapshot([
+      { trading_symbol: "AAPL", position: 10, market_value: "2000.00", unrealized_pnl: "150.00", currency: "USD" },
+      { trading_symbol: "TCS", position: 5, market_value: "-90000.00", unrealized_pnl: "-5000.00", currency: "INR" }]) };
+    return { ok: true, json: async () => response(url) };
+  });
+  vi.stubGlobal("fetch", fetcher);
+  render(<Portfolio />);
+  expect(await screen.findByRole("img", { name: /Net liquidation history: 2 points/ })).toBeInTheDocument();
+  expect(screen.getByText("▲ +3.00%")).toBeInTheDocument();
+  expect(fetcher.mock.calls.some(([url]) => String(url).includes("/equity?user_id=") && String(url).endsWith("range=3m"))).toBe(true);
+  fireEvent.click(within(screen.getByRole("group", { name: "Equity range" })).getByRole("button", { name: "1Y" }));
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => String(url).endsWith("range=1y"))).toBe(true));
+  const overview = within(screen.getByLabelText("Account overview"));
+  expect(overview.getByText("2K")).toBeInTheDocument();
+  expect(overview.getByText("150.00")).toHaveClass("portfolio-amount--positive");
+  expect(screen.getByRole("group", { name: "Holdings by market value" })).toBeInTheDocument();
+});

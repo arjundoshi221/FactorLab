@@ -1,36 +1,36 @@
-.matrix-legend { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0 0 16px; padding: 0; }
+.matrix-legend { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0 0 12px; padding: 0; }
 .matrix-summary { font: 11px var(--mono); color: var(--muted); }
-.matrix-scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-soft); }
+.matrix-scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--line); border-radius: 2px; background: var(--panel-soft); }
 .matrix-table { border-collapse: separate; border-spacing: 0; min-width: 100%; font-size: 12px; }
-.matrix-table th, .matrix-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: middle; }
+.matrix-table th, .matrix-table td { padding: 8px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: middle; }
 .matrix-table thead th { position: sticky; top: 0; z-index: 2; background: var(--panel); font: 500 10px var(--mono); color: var(--muted); }
 .matrix-table thead tr:nth-child(2) th { top: 31px; }
 .matrix-table thead th small { color: var(--amber); margin-left: 4px; }
 .matrix-group { border-left: 1px solid var(--line); color: var(--ink) !important; }
 .matrix-sticky { position: sticky; left: 0; z-index: 1; background: var(--panel); box-shadow: 1px 0 0 var(--line); min-width: 170px; }
 .matrix-table thead .matrix-sticky { z-index: 3; }
-.matrix-table tbody th button { display: block; padding: 0; background: none; border: 0; color: var(--lime); font: 600 13px var(--mono); cursor: pointer; text-align: left; }
+.matrix-table tbody th button { display: block; padding: 0; background: none; border: 0; color: var(--lime); font: 600 12px var(--mono); cursor: pointer; text-align: left; box-shadow: none; min-height: 0; }
 .matrix-table tbody th small { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 10px; margin-top: 3px; }
-.matrix-table tbody tr:hover td, .matrix-table tbody tr:hover th { background: #171d23; }
+.matrix-table tbody tr:hover td, .matrix-table tbody tr:hover th { background: var(--hover); }
 .matrix-table a { text-decoration: none; }
-.matrix-cell-button { padding: 0; background: none; border: 0; cursor: pointer; }
-.matrix-cell { display: inline-block; min-width: 44px; padding: 3px 7px; border-radius: 4px; border: 1px solid #48535e; background: #323b4422; color: var(--muted); font: 10px var(--mono); text-align: center; }
-.matrix-cell--ok { color: var(--green); border-color: #5dd69b66; background: #5dd69b14; }
-.matrix-cell--stale, .matrix-cell--needs_tags { color: var(--amber); border-color: #f2c66d66; background: #f2c66d14; }
-.matrix-cell--missing { color: var(--red); border-color: #ff817966; background: #ff817914; }
-.matrix-cell--stored { color: var(--blue); border-color: #74a8ff55; }
+.matrix-cell-button { padding: 0; background: none; border: 0; cursor: pointer; box-shadow: none; min-height: 0; }
+.matrix-cell { display: inline-block; min-width: 44px; padding: 3px 7px; border-radius: 2px; border: 1px solid var(--faint); background: color-mix(in srgb, var(--line-3) 13%, transparent); color: var(--muted); font: 10px var(--mono); text-align: center; }
+.matrix-cell--ok { color: var(--green); border-color: color-mix(in srgb, var(--good) 40%, transparent); background: color-mix(in srgb, var(--good) 8%, transparent); }
+.matrix-cell--stale, .matrix-cell--needs_tags { color: var(--amber); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.matrix-cell--missing { color: var(--red); border-color: color-mix(in srgb, var(--bad) 40%, transparent); background: color-mix(in srgb, var(--bad) 8%, transparent); }
+.matrix-cell--stored { color: var(--blue); border-color: color-mix(in srgb, var(--info) 33%, transparent); }
 .matrix-cell--unavailable { color: var(--blue); border-style: dashed; }
-.matrix-cell--none, .matrix-cell--not_configured { border-color: transparent; background: none; }
-.matrix-pager { display: flex; align-items: center; gap: 10px; margin-top: 14px; font: 11px var(--mono); color: var(--muted); }
+.matrix-cell--none, .matrix-cell--not_configured { border-color: transparent; background: none; box-shadow: none; min-height: 0; }
+.matrix-pager { display: flex; align-items: center; gap: 8px; margin-top: 10px; font: 11px var(--mono); color: var(--muted); }
 .matrix-pager span { margin-right: auto; }
-.matrix-glance { margin: 20px 0; padding: 18px 20px; border: 1px solid var(--line); border-left: 4px solid var(--lime); border-radius: 8px; background: var(--panel-soft); }
-.matrix-glance h3 { margin: 0 0 12px; font-size: 15px; }
-.matrix-glance ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 10px 18px; list-style: none; margin: 0 0 14px; padding: 0; }
+.matrix-glance { margin: 11px 0; padding: 10px 11px; border: 1px solid var(--line); border-left: 4px solid var(--lime); border-radius: 2px; background: var(--panel-soft); }
+.matrix-glance h3 { margin: 0 0 9px; font-size: 13px; }
+.matrix-glance ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 8px 10px; list-style: none; margin: 0 0 10px; padding: 0; }
 .matrix-glance li { display: grid; gap: 4px; }
 .matrix-glance li > span { font-size: 11px; color: var(--muted); }
 .matrix-glance li small { font-size: 10px; color: var(--muted); }
 .matrix-glance li a { justify-self: start; text-decoration: none; }
-[id^=dataset-] { scroll-margin-top: 90px; }
+[id^=dataset-] { scroll-margin-top: calc(var(--sticky) + 12px); }
 @media (max-width: 620px) {
   .matrix-sticky { min-width: 120px; }
   /* Keep the matrix a real table; the global phone card layout would hide its column headers. */
@@ -38,6 +38,6 @@
   .matrix-table thead { display: table-header-group; }
   .matrix-table tbody { display: table-row-group; }
   .matrix-table tr { display: table-row; padding: 0; border: 0; margin: 0; }
-  .matrix-table td { display: table-cell; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .matrix-table td { display: table-cell; padding: 8px 8px; border-bottom: 1px solid var(--line); }
   .matrix-table td::before { content: none; }
 }

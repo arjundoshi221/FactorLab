@@ -2,7 +2,9 @@ import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 
 import type { BrokerAccount, CatalogEntry, CatalogKind, ItemsPage, OrderAssignment, OrdersPage, PnlGroup, Profile, TaggedOrder } from "../portfolioTypes";
 import { errorMessage, fetchJson, useRemote } from "../shared/api";
+import { SignedBars } from "../shared/charts";
 import { formatTime } from "../shared/format";
+import { compactMoney, toNumber } from "../shared/market";
 import { Amount, EmptyState, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery, usePortfolioRefresh } from "./PortfolioUI";
 import "./Portfolio.css";
 
@@ -244,12 +246,24 @@ function PnlReport({ kind, userId, selected, onSelect }: { kind: CatalogKind; us
   </section>;
 }
 
+/** Total PnL per group as diverging bars, one chart per currency so values are never compared across currencies. */
+function PnlBars({ groups, kind }: { groups: PnlGroup[]; kind: CatalogKind }) {
+  const currencies = Array.from(new Set(groups.map(group => group.currency)));
+  return <div className="portfolio-pnl-bars">{currencies.map(currency => {
+    const bars = groups.filter(group => group.currency === currency).map(group => ({
+      key: JSON.stringify([group.id, group.account_mode, group.simulated]), label: group.name, value: toNumber(group.total),
+      display: `${compactMoney(toNumber(group.total))}`, title: `${group.name} · ${group.account_mode}${group.simulated ? " · simulated" : ""}: total ${group.total ?? "unavailable"} ${currency}`,
+    })).sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+    return <figure key={currency}><figcaption>Total PnL by {singular[kind]} · {currency}</figcaption><SignedBars bars={bars} label={`Total PnL by ${singular[kind]}, ${currency}`} /></figure>;
+  })}</div>;
+}
+
 function PnlValues({ kind, userId, filter }: { kind: CatalogKind; userId: string; filter: string }) {
   const remote = useRemote<ItemsPage<PnlGroup>>(`${API}/pnl/${kind}?user_id=${userId}${filter}`, 60_000);
   const [expanded, setExpanded] = useState<string | null>(null);
   return <><div className="portfolio-report-tools"><p>Realized + unrealized − fees <span>·</span> Values shown in each row’s currency</p><button className="portfolio-button portfolio-button--ghost" onClick={remote.refresh} disabled={remote.refreshing}><PortfolioIcon name="refresh" />{remote.refreshing ? "Refreshing…" : "Refresh PnL"}</button></div>
     {Boolean(remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(remote.error, "PnL refresh failed.")} Any visible report is from the last successful refresh.</p>}
-    {remote.loading && !remote.data ? <p className="portfolio-empty-inline" role="status">Calculating PnL…</p> : remote.data?.items.length === 0 ? <EmptyState title="No performance to show yet">PnL appears here when this profile has recorded fills or holdings.</EmptyState> : remote.data && <div className="portfolio-table-scroll" role="region" aria-label="Performance table" tabIndex={0}><table className="portfolio-pnl-table" aria-label={`PnL by ${singular[kind]}`}><thead><tr><th scope="col">{singular[kind]}</th><th scope="col">Currency</th><th scope="col" className="portfolio-numeric">Realized</th><th scope="col" className="portfolio-numeric">Unrealized</th><th scope="col" className="portfolio-numeric">Fees</th><th scope="col" className="portfolio-numeric portfolio-total">Total PnL</th><th scope="col"><span className="sr-only">Details</span></th></tr></thead><tbody>{remote.data.items.map(group => {
+    {remote.loading && !remote.data ? <p className="portfolio-empty-inline" role="status">Calculating PnL…</p> : remote.data?.items.length === 0 ? <EmptyState title="No performance to show yet">PnL appears here when this profile has recorded fills or holdings.</EmptyState> : remote.data && <><PnlBars groups={remote.data.items} kind={kind} /><div className="portfolio-table-scroll" role="region" aria-label="Performance table" tabIndex={0}><table className="portfolio-pnl-table" aria-label={`PnL by ${singular[kind]}`}><thead><tr><th scope="col">{singular[kind]}</th><th scope="col">Currency</th><th scope="col" className="portfolio-numeric">Realized</th><th scope="col" className="portfolio-numeric">Unrealized</th><th scope="col" className="portfolio-numeric">Fees</th><th scope="col" className="portfolio-numeric portfolio-total">Total PnL</th><th scope="col"><span className="sr-only">Details</span></th></tr></thead><tbody>{remote.data.items.map(group => {
       const key = JSON.stringify([group.id, group.account_mode, group.simulated, group.currency]);
       const open = expanded === key;
       return <Fragment key={key}><tr className={open ? "is-expanded" : ""}><th scope="row"><strong>{group.name}</strong><div className="portfolio-group-meta"><span>{group.account_mode}</span>{group.simulated && <span>Simulated</span>}
@@ -263,7 +277,7 @@ function PnlValues({ kind, userId, filter }: { kind: CatalogKind; userId: string
               <td><span className="portfolio-cell-note">{detail.price_time ? formatTime(detail.price_time) : "No open-position valuation"}</span><small className="portfolio-cell-note">Recorded since {formatTime(detail.history_start)}</small><a className="portfolio-text-link" href={`/portfolio?user_id=${userId}&account=${encodeURIComponent(JSON.stringify([detail.broker_code, detail.account_id]))}`}>{detail.orders.length ? `${detail.orders.length} contributing ${detail.orders.length === 1 ? "order" : "orders"}` : "View account"}<PortfolioIcon name="arrow" /></a></td></tr>)}</tbody></table>}
         </div></td></tr>}
       </Fragment>;
-    })}</tbody></table></div>}
+    })}</tbody></table></div></>}
   </>;
 }
 
