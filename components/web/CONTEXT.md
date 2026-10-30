@@ -4,8 +4,7 @@
 
 ## Purpose
 
-`web` is the FactorLab Data Hub single-page app: data catalog, schema explorer, pipelines,
-India / US / political dashboards and the Docker images page. It is a `static` component:
+`web` is the FactorLab hub single-page app, a trading terminal: a cross-asset cockpit, then Data (markets, catalog, schema), Portfolio (accounts, trades, tagged PnL) and Ops (monitoring, pipelines, images). It is a `static` component:
 the image `ghcr.io/arjundoshi221/factorlab-web` holds only the built bundle and nginx; all
 data comes from the `api` component's `/hub/api/v1/*` routes on the same hostname.
 
@@ -20,7 +19,7 @@ data comes from the `api` component's `/hub/api/v1/*` routes on the same hostnam
 - nginx: `GET /healthz` returns `{"status":"ok"}`; `/assets/` is cached immutable; every other path falls back to `index.html` (`no-cache`); `^/(hub/api|api)/` and
   `/health`, `/docs`, `/redoc`, `/openapi.json` return 404 so a misrouted API call never
   gets the SPA. `/version.json` carries `{"component":"web","version","commit"}`.
-- Client routes (in [App.tsx](src/App.tsx)): `/`, `/data`, `/data/tables/<db>.<table>`,
+- Client routes (in [App.tsx](src/App.tsx); headers and sub-tabs from [shell/nav.ts](src/shell/nav.ts)): `/` (cockpit), `/ops` (table inventory overview), `/data`, `/data/tables/<db>.<table>`,
   `/data/pipelines`, `/schema`, `/schema/v2`, `/india`, `/india/instruments/<uuid>`, `/us`, `/market-data`,
   `/political`, `/docker-images`, `/roadmap`, `/monitoring`, `/portfolio[/trades|/themes|/strategies|/trade-names]`; `/market-data?view=matrix` is the data matrix, `?view=sectors` the by-sector view and `?view=indexes` the indexes dashboard (`/indexes` redirects there) and `?view=futures` the futures view (`/futures` redirects there).
 - npm scripts ([package.json](package.json)): `dev` (Vite on 127.0.0.1, proxies `/hub/api`
@@ -147,3 +146,5 @@ missing data has been repaired; a heartbeat alone supplies no recovery evidence.
 **Futures (F-044):** `/market-data?view=futures` ([Futures.tsx](src/pages/Futures.tsx), `futuresTypes.ts`, `Futures.css`; chart primitives shared from `Indexes.css`) polls `/hub/api/v1/us/futures` every 60s. URL-backed group tabs (`group=index|energy|metals|rates|fx`) and root chips (`root=/ES`); the selected root shows expiry buttons (`contract=/ESZ26`, default the front traded contract) and range buttons (`range=1d|5d|1m|3m|1y|max`, default `5d`) over a hand-rolled SVG time series of that one contract from `/us/futures/{contract_id}/series` (points at their index so closed sessions leave no gaps; blue when the range ends up, red when down; 1D draws the previous settlement as a dashed reference; intraday ranges poll every 60s), a Contango/Backwardation/Flat label from front to back, and the contract table (symbols also select the charted contract; last, bid/ask, change vs previous settlement, volume, OI, quote age; stale rows muted). Failed refreshes keep the last snapshot. [F-044](../../docs/features/F-044-futures-curve-tab.md).
 
 **Collection plan (F-045):** [MonitoringCollection.tsx](src/pages/MonitoringCollection.tsx) is the Monitoring page's "Collection plan" section (nav anchor `#monitoring-collection-title`, row anchors `#collection-<pipeline>`). It shows one table per component from `/hub/api/v1/monitoring/collection-plan`, refreshes every 60 s, and names unavailable observations instead of showing empty columns as clean.
+
+**Terminal shell (F-046):** [shell/](src/shell/) renders Home · Data · Portfolio · Ops tabs and sub-tabs from `nav.ts`, exchange clocks, a status light (`/monitoring/summary`, 30s), a quote tape (`/us/indexes`, `/us/futures`, 60s; wrong-shaped payloads ignored), a status line and a Ctrl+K / `/` command bar (pages and `/market-data/instruments` ticker search; `g` then `h`/`d`/`p`/`o`/`m`/`t`); `location.ts` keeps sub-tabs in sync with pages' `pushState`. `/` is the cockpit ([Cockpit.tsx](src/pages/Cockpit.tsx): independent index, sector-heat, futures, book, movers, Congress and systems panels) and the former dashboard is `/ops`. Colours, sizes and spacing are tokens in [theme/tokens.css](src/theme/tokens.css) (page CSS uses roles, never raw hex; `--lime` etc. are aliases); [theme/terminal.css](src/theme/terminal.css) holds the shell and `t-*` primitives, `components/ui` adds `PageHeader` (code, title, ⓘ info, tools), `Panel` and `Segmented`, and [shared/charts/](src/shared/charts/) holds Sparkline, AreaChart, Candles, Treemap, Gauge, SignedBars and `heatFill` (charts measure their width so SVG text is 1:1; up/down are green/red plus ▲/▼ and signs, up candles hollow). Book reads `/portfolio/accounts/{broker}/{account}/equity?range=` (base-currency net liquidation); its exposure/unrealized KPIs sum base-currency positions only. [F-046](../../docs/features/F-046-terminal-ui.md).

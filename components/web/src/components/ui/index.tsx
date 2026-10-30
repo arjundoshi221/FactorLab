@@ -141,3 +141,72 @@ export function BarChart({ bars, caption, unit = "rows" }: { bars: Bar[]; captio
     </figure>
   );
 }
+
+export interface HeaderStat { label: string; value: ReactNode; tone?: "up" | "down" | "warn" | "good" | "bad" | "accent" }
+
+/** Compact page header strip: mnemonic, title, key stats and tools. Long explanations live behind the ⓘ toggle. */
+export function PageHeader({ code, title, info, stats, children, eyebrow }: {
+  code: string; title: ReactNode; info?: ReactNode; stats?: HeaderStat[]; children?: ReactNode; eyebrow?: ReactNode;
+}) {
+  return (
+    <header className="t-head">
+      <div className="t-head__id">
+        <code className="t-code">{code}</code>
+        <h1>{title}</h1>
+        {eyebrow && <span className="t-head__eyebrow">{eyebrow}</span>}
+        {info && (
+          <details className="t-info">
+            <summary aria-label="About this page" title="About this page">i</summary>
+            <div className="t-info__body">{info}</div>
+          </details>
+        )}
+      </div>
+      {stats && stats.length > 0 && (
+        <dl className="t-head__stats">
+          {stats.map((stat) => (
+            <div key={stat.label} className={stat.tone ? `is-${stat.tone}` : undefined}>
+              <dt>{stat.label}</dt>
+              <dd>{stat.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {children && <div className="t-head__tools">{children}</div>}
+    </header>
+  );
+}
+
+/** A terminal panel: a thin header bar with a mnemonic, title and tools over dense content. */
+export function Panel({ code, title, tools, href, children, className = "", label, footer }: {
+  code: string; title: ReactNode; tools?: ReactNode; href?: string; children: ReactNode; className?: string; label?: string; footer?: ReactNode;
+}) {
+  return (
+    <section className={`t-panel ${className}`.trim()} aria-label={label ?? (typeof title === "string" ? title : undefined)}>
+      <header className="t-panel__head">
+        <code>{code}</code>
+        <h2>{title}</h2>
+        <div className="t-panel__tools">
+          {tools}
+          {href && <a className="t-panel__open" href={href} aria-label={`Open ${typeof title === "string" ? title : code}`} title="Open full view">↗</a>}
+        </div>
+      </header>
+      <div className="t-panel__body">{children}</div>
+      {footer && <footer className="t-panel__foot">{footer}</footer>}
+    </section>
+  );
+}
+
+/** Segmented control for a small set of mutually exclusive options (aria-pressed buttons). */
+export function Segmented<T extends string>({ options, value, onChange, label }: {
+  options: { id: T; label: string }[]; value: T; onChange: (value: T) => void; label: string;
+}) {
+  return (
+    <div className="t-seg" role="group" aria-label={label}>
+      {options.map((option) => (
+        <button key={option.id} type="button" aria-pressed={option.id === value} className={option.id === value ? "is-active" : ""} onClick={() => onChange(option.id)}>
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}

@@ -9,6 +9,7 @@ import type {
   IndiaInstrumentDay,
   IndiaInstrumentRow,
 } from "../indiaTypes";
+import { Candles } from "../shared/charts";
 
 const numberFormatter = new Intl.NumberFormat("en-IN");
 const priceFormatter = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -57,55 +58,23 @@ function StatCard({ label, value, detail }: { label: string; value: string; deta
 }
 
 function CandleChart({ candles, symbol }: { candles: IndiaCandle[]; symbol: string }) {
-  const points = useMemo(() => {
+  const bars = useMemo(() => {
     const unique = new Map<string, IndiaCandle>();
     for (const candle of candles) if (!unique.has(candle.bar_time)) unique.set(candle.bar_time, candle);
-    return [...unique.values()].reverse().filter((candle) => numeric(candle.high) !== null && numeric(candle.low) !== null);
+    return [...unique.values()].reverse().flatMap((candle) => {
+      const high = numeric(candle.high), low = numeric(candle.low);
+      if (high === null || low === null) return [];
+      const open = numeric(candle.open) ?? numeric(candle.close) ?? low;
+      const close = numeric(candle.close) ?? open;
+      return [{ t: candle.bar_time, open, high, low, close, volume: candle.volume }];
+    });
   }, [candles]);
-  if (!points.length) return <div className="candle-chart candle-chart--empty">No price candles are stored for this session.</div>;
-
-  const width = 960;
-  const height = 320;
-  const left = 58;
-  const right = 16;
-  const top = 20;
-  const bottom = 34;
-  const highs = points.map((item) => numeric(item.high) as number);
-  const lows = points.map((item) => numeric(item.low) as number);
-  const maximum = Math.max(...highs);
-  const minimum = Math.min(...lows);
-  const spread = Math.max(maximum - minimum, Math.abs(maximum) * 0.001, 1);
-  const plotHeight = height - top - bottom;
-  const plotWidth = width - left - right;
-  const y = (value: number) => top + ((maximum - value) / spread) * plotHeight;
-  const step = plotWidth / points.length;
-  const bodyWidth = Math.max(1, Math.min(8, step * 0.65));
-  const gridValues = [maximum, maximum - spread / 2, minimum];
+  if (!bars.length) return <div className="candle-chart candle-chart--empty">No price candles are stored for this session.</div>;
 
   return <figure className="candle-chart" aria-labelledby="price-chart-title">
-    <figcaption><div><span className="eyebrow">Actual stored candles</span><h2 id="price-chart-title">{symbol} intraday price</h2></div><span>{points.length} unique minutes · Asia/Kolkata</span></figcaption>
-    <div className="candle-chart__viewport">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${symbol} one-minute candlestick chart`}>
-        {gridValues.map((value) => <g key={value}><line className="chart-gridline" x1={left} x2={width - right} y1={y(value)} y2={y(value)} /><text className="chart-axis-label" x={left - 8} y={y(value) + 3} textAnchor="end">{priceFormatter.format(value)}</text></g>)}
-        {points.map((candle, index) => {
-          const open = numeric(candle.open) ?? numeric(candle.close) ?? minimum;
-          const close = numeric(candle.close) ?? open;
-          const high = numeric(candle.high) ?? Math.max(open, close);
-          const low = numeric(candle.low) ?? Math.min(open, close);
-          const rising = close >= open;
-          const x = left + (index + 0.5) * step;
-          const bodyTop = Math.min(y(open), y(close));
-          const bodyHeight = Math.max(1, Math.abs(y(close) - y(open)));
-          return <g className={rising ? "candle candle--up" : "candle candle--down"} key={`${candle.bar_time}-${candle.contract_id}`}>
-            <title>{`${formatTime(candle.bar_time)} · O ${priceFormatter.format(open)} H ${priceFormatter.format(high)} L ${priceFormatter.format(low)} C ${priceFormatter.format(close)}`}</title>
-            <line x1={x} x2={x} y1={y(high)} y2={y(low)} />
-            <rect x={x - bodyWidth / 2} y={bodyTop} width={bodyWidth} height={bodyHeight} />
-          </g>;
-        })}
-        <text className="chart-axis-label" x={left} y={height - 8}>{formatTime(points[0].bar_time)}</text>
-        <text className="chart-axis-label" x={width - right} y={height - 8} textAnchor="end">{formatTime(points.at(-1)?.bar_time ?? null)}</text>
-      </svg>
-    </div>
+    <figcaption><div><span className="eyebrow">Actual stored candles</span><h2 id="price-chart-title">{symbol} intraday price</h2></div><span>{bars.length} unique minutes · Asia/Kolkata</span></figcaption>
+    <Candles bars={bars} label={`${symbol} one-minute candlestick chart`} height={320}
+      format={(value) => priceFormatter.format(value)} formatTime={(t) => formatTime(t)} />
   </figure>;
 }
 

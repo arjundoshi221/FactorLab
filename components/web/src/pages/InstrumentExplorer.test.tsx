@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MarketData } from "./InstrumentExplorer";
 
@@ -93,13 +93,16 @@ it("groups listings by GICS sector and lists a sector's tickers on demand", asyn
   fireEvent.click(screen.getByRole("button", { name: "By sector" }));
   const before = fetcher.mock.calls.length;
   expect(window.location.search).toContain("view=sectors");
-  expect(await screen.findByText("Energy")).toBeInTheDocument();
-  expect(screen.getByText("Unclassified")).toBeInTheDocument();
+  const list = within(await screen.findByRole("group", { name: "Sectors" }));
+  expect(list.getByText("Energy")).toBeInTheDocument();
+  expect(list.getByText("Unclassified")).toBeInTheDocument();
+  expect(within(screen.getByRole("group", { name: "Listings by GICS sector" })).getAllByRole("button")).toHaveLength(list.getAllByText(/./, { selector: ".md-sector__name" }).length);
   expect(fetcher).toHaveBeenCalledWith(expect.stringContaining("/market-data/sectors?country=US"), expect.anything());
   // Members load only when a sector is opened.
   expect(fetcher.mock.calls.slice(before).some(([url]) => String(url).includes("/instruments?"))).toBe(false);
-  fireEvent.click(screen.getByText("Information Technology"));
+  fireEvent.click(list.getByText("Information Technology"));
   expect(window.location.search).toContain("sector=45");
+  expect(screen.getByRole("button", { name: /^Information Technology: / })).toHaveAttribute("aria-pressed", "true");
   await waitFor(() => expect(fetcher).toHaveBeenCalledWith(expect.stringMatching(/instruments\?.*kind=listing&sector=45/), expect.anything()));
   fireEvent.click(await screen.findByRole("button", { name: "SAME · NYSE" }));
   expect(window.location.search).toContain(`id=${item.id}`);

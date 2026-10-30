@@ -43,7 +43,7 @@ describe("India instrument detail", () => {
   it("renders actual candles, prices, and session quality on a dedicated route", async () => {
     render(<App />);
     expect(await screen.findByRole("heading", { name: "TCS" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "India markets" })).toHaveClass("active");
+    expect(screen.getByRole("link", { name: "India" })).toHaveClass("active");
     expect(screen.getByRole("img", { name: /TCS one-minute candlestick chart/ })).toBeInTheDocument();
     expect(screen.getByText("One-minute candles")).toBeInTheDocument();
     expect(screen.getAllByText("₹3,505.00").length).toBeGreaterThan(0);

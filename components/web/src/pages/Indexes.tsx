@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { heatFill } from "../shared/charts";
+import { useWidth } from "../shared/charts/useWidth";
 import type {
   ConstituentsResponse, IndexOverview, PerformanceResponse, Period, Returns, Series, SectorPerformance, Weighting,
 } from "../indexTypes";
@@ -8,12 +10,12 @@ import "./Indexes.css";
 const PERIOD_LABELS: Record<Period, string> = { "1d": "1D", "1w": "1W", "1m": "1M", "3m": "3M", ytd: "YTD", "1y": "1Y" };
 const RANGES = { "1Y": 365, "3Y": 365 * 3, "5Y": 365 * 5, Max: 365 * 11 } as const;
 type Range = keyof typeof RANGES;
-// Dark categorical slots 1-4 (validated against the hub panel #12161b); ETFs are dashed.
+// Categorical slots 1-4 from the theme tokens (validated against the terminal panel); ETFs are dashed.
 const LINES = [
-  { key: "ew", label: "FactorLab equal weight", color: "#3987e5", dashed: false },
-  { key: "cw", label: "FactorLab cap weight", color: "#d95926", dashed: false },
-  { key: "cw_etf", label: "Sector SPDR (cap)", color: "#199e70", dashed: true },
-  { key: "ew_etf", label: "Invesco sector EW", color: "#c98500", dashed: true },
+  { key: "ew", label: "FactorLab equal weight", color: "var(--series-1)", dashed: false },
+  { key: "cw", label: "FactorLab cap weight", color: "var(--series-2)", dashed: false },
+  { key: "cw_etf", label: "Sector SPDR (cap)", color: "var(--series-3)", dashed: true },
+  { key: "ew_etf", label: "Invesco sector EW", color: "var(--series-4)", dashed: true },
 ] as const;
 
 async function read<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -27,13 +29,8 @@ const pct = (value: number | null | undefined, digits = 1) =>
 const level = (value: number | null) =>
   value === null ? "—" : value.toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 
-// Diverging blue (gain) <-> red (loss) around a neutral panel; text keeps ink tokens.
-function heat(value: number | null, scale: number): string {
-  if (value === null) return "transparent";
-  const t = Math.min(Math.abs(value) / scale, 1);
-  const pole = value >= 0 ? "57, 135, 229" : "230, 103, 103";
-  return `rgba(${pole}, ${(0.08 + 0.5 * t).toFixed(3)})`;
-}
+// Diverging up/down around a neutral panel (the shared terminal heat scale); text keeps ink tokens.
+const heat = (value: number | null, scale: number) => heatFill(value, scale);
 const SCALE: Record<Period, number> = { "1d": 0.02, "1w": 0.04, "1m": 0.08, "3m": 0.15, ytd: 0.3, "1y": 0.35 };
 
 export function Indexes({ embedded = false }: { embedded?: boolean }) {
@@ -156,7 +153,8 @@ function BenchmarkRow({ label, returns, periods }: { label: string; returns: Ret
 function ComparisonChart({ series, sector }: { series: Series[]; sector: SectorPerformance }) {
   const ref = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
-  const width = 880, height = 300, pad = { top: 16, right: 150, bottom: 28, left: 48 };
+  const [box, measured] = useWidth<HTMLElement>(880);
+  const width = Math.max(measured - 32, 320), height = 300, pad = { top: 16, right: 150, bottom: 28, left: 48 };
   const lines = useMemo(() => {
     const codes = { ew: `us_gics_${sector.sector_id}_ew`, cw: `us_gics_${sector.sector_id}_cw`, cw_etf: sector.cw_etf, ew_etf: sector.ew_etf };
     return LINES.map(spec => {
@@ -181,10 +179,10 @@ function ComparisonChart({ series, sector }: { series: Series[]; sector: SectorP
     const ratio = ((event.clientX - box.left) / box.width * width - pad.left) / (width - pad.left - pad.right);
     setHover(Math.max(0, Math.min(dates.length - 1, Math.round(ratio * (dates.length - 1)))));
   };
-  return <figure className="index-chart">
+  return <figure className="index-chart" ref={box}>
     <figcaption>Rebased to 100 at {dates[0]} · {sector.name}</figcaption>
     <ul className="index-legend">{lines.map(l => <li key={l.key}>
-      <svg width="22" height="8" aria-hidden="true"><line x1="0" y1="4" x2="22" y2="4" stroke={l.color} strokeWidth="2" strokeDasharray={l.dashed ? "5 3" : undefined} /></svg>
+      <svg width="22" height="8" aria-hidden="true"><line x1="0" y1="4" x2="22" y2="4" style={{ stroke: l.color }} strokeWidth="2" strokeDasharray={l.dashed ? "5 3" : undefined} /></svg>
       {l.label} <code>{l.code}</code></li>)}</ul>
     <svg ref={ref} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${sector.name} index comparison`}
       onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
@@ -196,7 +194,7 @@ function ComparisonChart({ series, sector }: { series: Series[]; sector: SectorP
       {lines.map(l => {
         const last = l.points[l.points.length - 1];
         return <g key={l.key}>
-          <polyline fill="none" stroke={l.color} strokeWidth="2" strokeLinejoin="round" strokeDasharray={l.dashed ? "6 4" : undefined}
+          <polyline fill="none" style={{ stroke: l.color }} strokeWidth="2" strokeLinejoin="round" strokeDasharray={l.dashed ? "6 4" : undefined}
             points={l.points.map(p => `${x(p.date).toFixed(1)},${y(p.value).toFixed(1)}`).join(" ")} />
           <text x={x(last.date) + 8} y={y(last.value) + 4} className="index-end-label">{l.code.startsWith("us_gics") ? l.key.toUpperCase() : l.code} {last.value.toFixed(1)}</text>
         </g>;
@@ -204,7 +202,7 @@ function ComparisonChart({ series, sector }: { series: Series[]; sector: SectorP
       {hoverDate && <g>
         <line x1={x(hoverDate)} x2={x(hoverDate)} y1={pad.top} y2={height - pad.bottom} className="index-crosshair" />
         {lines.map(l => { const p = l.points.find(point => point.date === hoverDate);
-          return p ? <circle key={l.key} cx={x(p.date)} cy={y(p.value)} r="4" fill={l.color} stroke="#12161b" strokeWidth="2" /> : null; })}
+          return p ? <circle key={l.key} cx={x(p.date)} cy={y(p.value)} r="4" style={{ fill: l.color, stroke: "var(--panel)" }} strokeWidth="2" /> : null; })}
       </g>}
     </svg>
     {hoverDate && <div className="index-tooltip" role="status"><strong>{hoverDate}</strong>

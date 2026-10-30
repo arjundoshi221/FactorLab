@@ -34,9 +34,9 @@ import { CARD_WIDTH, MINI_HEIGHT, cardHeight, nodeTypes, type TableCardData } fr
 const FIT = { padding: 0.14, minZoom: 0.2, maxZoom: 1.1, duration: 300 } as const;
 const CATEGORIES: RelationshipCategory[] = ["identity", "lookup", "lineage"];
 const EDGE_STYLE: Record<RelationshipCategory, { stroke: string; dash?: string }> = {
-  identity: { stroke: "#9fb0bd" },
-  lookup: { stroke: "#6d7a86", dash: "2 4" },
-  lineage: { stroke: "#a386d6", dash: "6 4" },
+  identity: { stroke: "var(--ink-3)" },
+  lookup: { stroke: "var(--faint)", dash: "2 4" },
+  lineage: { stroke: "var(--series-7)", dash: "6 4" },
 };
 
 function readView(params: URLSearchParams): SchemaView {
@@ -156,8 +156,8 @@ function ExplorerCanvas({ schema, catalog }: { schema: SchemaMapResponse; catalo
           ...(view.kind === "all" ? {} : { sourceHandle: `s:${item.source.column}`, targetHandle: `t:${item.target.column}`, label: item.source.column }),
           type: "smoothstep", data: { category: item.category },
           markerEnd: { type: MarkerType.ArrowClosed, width: 13, height: 13 },
-          labelStyle: { fill: "#aeb7be", fontSize: 9, fontFamily: "var(--mono)" },
-          labelBgStyle: { fill: "#0f1418", fillOpacity: 0.95 },
+          labelStyle: { fill: "var(--ink-3)", fontSize: 9, fontFamily: "var(--mono)" },
+          labelBgStyle: { fill: "var(--panel-soft)", fillOpacity: 0.95 },
         }));
         if (view.kind === "all") {
           const namespaces = schema.areas.filter((area) => cards.some((card) => (card.data as TableCardData).table.namespace === area.id));
@@ -237,7 +237,7 @@ function ExplorerCanvas({ schema, catalog }: { schema: SchemaMapResponse; catalo
     const category = ((edge.data as { category?: RelationshipCategory } | undefined)?.category ?? "identity");
     const lit = active !== null && (edge.source === active || edge.target === active);
     const style = view.kind === "areas" ? edge.style : {
-      stroke: lit ? "#b8f35a" : EDGE_STYLE[category].stroke,
+      stroke: lit ? "var(--accent)" : EDGE_STYLE[category].stroke,
       strokeDasharray: EDGE_STYLE[category].dash,
       strokeWidth: lit ? 2 : 1.3,
     };
@@ -452,7 +452,7 @@ function ExplorerCanvas({ schema, catalog }: { schema: SchemaMapResponse; catalo
                 colorMode="dark"
                 proOptions={{ hideAttribution: true }}
               >
-                <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#252c33" />
+                <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#262d36" />
                 <Controls showInteractive={false} />
                 <MiniMap pannable zoomable nodeColor={(node) => areaColor(
                   node.type === "tableCard" ? (node.data as TableCardData).table.namespace

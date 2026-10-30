@@ -2,7 +2,9 @@ import { Fragment, useState } from "react";
 
 import type { CatalogEntry, CatalogKind, ItemsPage, LedgerPage, LedgerRow, LedgerTagStatus, OrderAssignment, Profile } from "../portfolioTypes";
 import { errorMessage, fetchJson, useRemote } from "../shared/api";
+import { SignedBars } from "../shared/charts";
 import { formatTime } from "../shared/format";
+import { compactMoney, toNumber } from "../shared/market";
 import { useUrlParams } from "../shared/urlState";
 import { PortfolioTabs, TagSelectors, hasTags, kinds, singular } from "./PortfolioBook";
 import { Amount, EmptyState, PortfolioHeader, PortfolioIcon, ProfileSelect } from "./PortfolioUI";
@@ -52,6 +54,34 @@ function InlineEditor({ row, userId, catalogs, done, onCreated }: {
     </div>
     {error && <p className="portfolio-notice portfolio-notice--error" role="alert">{error}</p>}
   </form>;
+}
+
+/** Tag coverage across full history (API counts) and broker-realized PnL by fill day for the loaded page. */
+function LedgerPulse({ counts, rows }: { counts: LedgerPage["counts"]; rows: LedgerRow[] }) {
+  const total = counts.tagged + counts.untagged + counts.not_taggable;
+  const realized = new Map<string, number>();
+  const currency = rows.find(row => toNumber(row.broker_realized_pnl) !== null)?.currency;
+  for (const row of rows) {
+    const value = toNumber(row.broker_realized_pnl);
+    if (value === null || row.currency !== currency) continue;
+    const day = row.last_fill_at.slice(0, 10);
+    realized.set(day, (realized.get(day) ?? 0) + value);
+  }
+  const days = [...realized.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(-10);
+  return <div className="ledger-pulse">
+    <figure>
+      <figcaption>Tag coverage · all matching history</figcaption>
+      <div className="ledger-meter" role="img" aria-label={`${counts.tagged} tagged, ${counts.untagged} need tags, ${counts.not_taggable} not taggable`}>
+        {total > 0 && (["tagged", "untagged", "not_taggable"] as const).map(status => counts[status] > 0 &&
+          <i key={status} className={`ledger-meter__${status}`} style={{ flexGrow: counts[status] }} title={`${statusLabel[status]}: ${counts[status]}`} />)}
+      </div>
+      <p>{total ? `${Math.round((counts.tagged / total) * 100)}% tagged` : "No orders"} · {counts.untagged.toLocaleString()} need tags</p>
+    </figure>
+    {days.length > 0 && <figure>
+      <figcaption>Broker-realized PnL by fill day · this page · {currency}</figcaption>
+      <SignedBars label={`Broker-realized PnL by fill day, ${currency}`} bars={days.map(([day, value]) => ({ key: day, label: day.slice(5), value, display: compactMoney(value) }))} />
+    </figure>}
+  </div>;
 }
 
 export function TradeLedger() {
@@ -124,6 +154,7 @@ export function TradeLedger() {
         {(["", "untagged", "tagged", "not_taggable"] as const).map(status => <button key={status || "all"} type="button" aria-pressed={(params.get("tag") ?? "") === status}
           onClick={() => set({ tag: status })}>{status ? statusLabel[status] : "All"}{counts && <span>{status ? counts[status] : counts.tagged + counts.untagged + counts.not_taggable}</span>}</button>)}
       </div>
+      {counts && <LedgerPulse counts={counts} rows={rows} />}
       <div className="ledger-filters">
         <label className="portfolio-selector"><span>Account</span><select value={account ?? ""} onChange={e => set({ account: e.target.value })}>
           <option value="">All accounts</option>

@@ -1,0 +1,101 @@
+/* FactorLab Terminal design tokens. Every colour, type size and spacing step lives here;
+ * page styles reference roles, never raw values. The chart slots were validated with the
+ * dataviz palette checker against --panel (all checks pass; up/down sits in the CVD warn
+ * band, so every signed value also carries ▲/▼ and a sign, and up candles are hollow). */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, darkest to lightest */
+  --bg: #06080b;
+  --panel-soft: #090c0f;
+  --panel: #0c0f13;
+  --raised: #11151a;
+  --hover: #151a21;
+  --press: #1b2129;
+
+  /* Hairlines */
+  --line: #1a2027;
+  --line-2: #262d36;
+  --line-3: #38414b;
+
+  /* Text */
+  --ink: #e6e9ec;
+  --ink-2: #c4cad0;
+  --ink-3: #9ba4ac;
+  --muted: #77818b;
+  --faint: #545d67;
+
+  /* Brand accent (amber) */
+  --accent: #ffa028;
+  --accent-ink: #160d00;
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent) 38%, transparent);
+
+  /* Market direction */
+  --up: #22b573;
+  --down: #e5484d;
+  --up-soft: color-mix(in srgb, var(--up) 14%, transparent);
+  --down-soft: color-mix(in srgb, var(--down) 14%, transparent);
+  --flat: #6c7680;
+
+  /* Status (reserved; always paired with a label) */
+  --good: #22b573;
+  --warn: #f2b33d;
+  --bad: #e5484d;
+  --info: #4c9bf0;
+  --good-soft: color-mix(in srgb, var(--good) 12%, transparent);
+  --warn-soft: color-mix(in srgb, var(--warn) 12%, transparent);
+  --bad-soft: color-mix(in srgb, var(--bad) 12%, transparent);
+  --info-soft: color-mix(in srgb, var(--info) 12%, transparent);
+  --good-line: color-mix(in srgb, var(--good) 38%, transparent);
+  --warn-line: color-mix(in srgb, var(--warn) 38%, transparent);
+  --bad-line: color-mix(in srgb, var(--bad) 38%, transparent);
+  --info-line: color-mix(in srgb, var(--info) 38%, transparent);
+
+  /* Categorical chart slots, fixed order (dark steps of the validated reference palette) */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --grid: #1c232b;
+  --axis: #67717b;
+
+  /* Legacy aliases kept so older rules resolve to the new roles */
+  --lime: var(--accent);
+  --green: var(--good);
+  --amber: var(--warn);
+  --red: var(--bad);
+  --blue: var(--info);
+
+  /* Type */
+  --sans: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --fs-2xs: 9px;
+  --fs-xs: 10px;
+  --fs-s: 11px;
+  --fs-m: 12px;
+  --fs-l: 14px;
+  --fs-xl: 18px;
+  --fs-2xl: 24px;
+
+  /* Space and size */
+  --gutter: 16px;
+  --gap: 8px;
+  --row: 26px;
+  --control: 28px;
+  --bar: 36px;
+  --subbar: 30px;
+  --tape: 26px;
+  --status: 22px;
+  --chrome: calc(var(--bar) + var(--subbar) + var(--tape));
+  /* Height of the sticky chrome (bar + sub-tabs): sticky page toolbars sit below it. */
+  --sticky: calc(var(--bar) + var(--subbar));
+  --shadow: 0 16px 40px rgba(0, 0, 0, .55);
+  --z-sticky: 10;
+  --z-menu: 30;
+  --z-overlay: 60;
+}

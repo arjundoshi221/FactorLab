@@ -1,8 +1,11 @@
 import { useState } from "react";
 
 import type { AccountSummary, BrokerAccount, BrokerRow, ExecutionPage, ItemsPage, Profile, SnapshotPage } from "../portfolioTypes";
+import { Segmented } from "../components/ui";
 import { errorMessage, useRemote } from "../shared/api";
-import { formatTime } from "../shared/format";
+import { AreaChart, Treemap } from "../shared/charts";
+import { formatDate, formatTime } from "../shared/format";
+import { compactMoney, signedPct, toNumber } from "../shared/market";
 import { OrderTagging, PortfolioTabs } from "./PortfolioBook";
 import { Amount, EmptyState, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery, usePortfolioRefresh } from "./PortfolioUI";
 import "./Portfolio.css";
@@ -36,12 +39,55 @@ function AccountMetrics({ account, summary, positions, orders }: {
     // Only show an account-wide value in its stated base currency; never add currencies or segments.
     return currency ? summary?.balances.items.find(row => row.metric === name && !row.segment && row.currency === currency)?.value_num : null;
   }
+  // Position aggregates use base-currency rows only, so currencies are never added together.
+  const base = positions?.snapshot_time && currency ? positions.items.filter(row => row.currency === currency) : null;
+  const sum = (key: string) => base?.reduce((total, row) => total + (toNumber(row[key]) ?? 0), 0) ?? null;
+  const gross = base?.reduce((total, row) => total + Math.abs(toNumber(row.market_value) ?? 0), 0) ?? null;
+  const unrealized = sum("unrealized_pnl");
   return <dl className="portfolio-overview" aria-label="Account overview">
     <div><dt>Net liquidation <span>{currency}</span></dt><dd><Amount value={metric("NetLiquidation")} /></dd><small>Broker account value</small></div>
     <div><dt>Cash balance <span>{currency}</span></dt><dd><Amount value={metric("TotalCashValue")} /></dd><small>Total broker-reported cash</small></div>
+    <div><dt>Gross exposure <span>{currency}</span></dt><dd>{gross === null ? "—" : compactMoney(gross)}</dd><small>Sum of |market value|, {currency || "base"} positions</small></div>
+    <div><dt>Unrealized <span>{currency}</span></dt><dd><Amount value={unrealized === null ? null : unrealized.toFixed(2)} signed /></dd><small>Broker-reported, {currency || "base"} positions</small></div>
     <div><dt>Open positions</dt><dd>{positions?.snapshot_time ? positions.items.length : "—"}</dd><small>In the latest snapshot</small></div>
     <div><dt>Working orders</dt><dd>{orders?.snapshot_time ? orders.items.length : "—"}</dd><small>In the latest snapshot</small></div>
   </dl>;
+}
+
+type EquityRange = "1m" | "3m" | "1y" | "max";
+interface EquityHistory { currency: string | null; points: { t: string; value: string }[]; basis: string }
+
+function Performance({ base, filter, positions }: { base: string; filter: string; positions: SnapshotPage | null }) {
+  const [range, setRange] = useState<EquityRange>("3m");
+  const equity = useRemote<EquityHistory>(`${base}/equity?${filter}&range=${range}`, 300_000);
+  const points = (equity.data?.points ?? []).map(point => ({ t: point.t, value: Number(point.value) })).filter(point => Number.isFinite(point.value));
+  const first = points[0]?.value, last = points[points.length - 1]?.value;
+  const change = first && last !== undefined ? last / first - 1 : null;
+  const tiles = (positions?.items ?? []).map((row, index) => {
+    const value = toNumber(row.market_value) ?? 0;
+    const pnl = toNumber(row.unrealized_pnl);
+    const cost = value - (pnl ?? 0);
+    const ret = pnl !== null && cost ? pnl / Math.abs(cost) : null;
+    const symbol = String(row.trading_symbol ?? "—");
+    return { key: `${symbol}-${index}`, label: symbol, size: Math.abs(value), change: ret, scale: 0.15, sublabel: signedPct(ret, 1),
+      title: `${symbol}: ${compactMoney(value)} ${row.currency ?? ""} · unrealized ${compactMoney(pnl)} (${signedPct(ret, 1)})` };
+  });
+  return <section className="portfolio-performance-band" aria-label="Performance">
+    <div className="portfolio-section portfolio-equity">
+      <div className="portfolio-section-heading"><h3>Net liquidation{equity.data?.currency ? ` · ${equity.data.currency}` : ""}
+        {change !== null && <span className={`portfolio-change portfolio-amount--${change >= 0 ? "positive" : "negative"}`}>{change >= 0 ? "▲" : "▼"} {signedPct(change)}</span>}</h3>
+        <Segmented label="Equity range" value={range} onChange={setRange} options={[{ id: "1m", label: "1M" }, { id: "3m", label: "3M" }, { id: "1y", label: "1Y" }, { id: "max", label: "MAX" }]} />
+      </div>
+      {equity.error && !equity.data ? <p className="portfolio-empty-inline" role="alert">{errorMessage(equity.error, "Equity history is unavailable.")}</p>
+        : equity.loading && !equity.data ? <p className="portfolio-empty-inline" role="status">Loading equity history…</p>
+        : <AreaChart points={points} label="Net liquidation history" height={200} format={value => compactMoney(value)} formatTime={t => formatDate(t)} />}
+      {equity.data && <p className="portfolio-footnote">{equity.data.basis}</p>}
+    </div>
+    <div className="portfolio-section portfolio-allocation">
+      <div className="portfolio-section-heading"><h3>Allocation</h3><span className="portfolio-footnote">Size = |market value| · colour = unrealized return</span></div>
+      <Treemap items={tiles} label="Holdings by market value" height={200} empty={positions?.snapshot_time ? "No open positions" : "Positions not reported yet"} />
+    </div>
+  </section>;
 }
 
 function AccountDetails({ account, userId }: { account: BrokerAccount; userId: string }) {
@@ -60,6 +106,7 @@ function AccountDetails({ account, userId }: { account: BrokerAccount; userId: s
     </header>
     {[summary, positions, orders].some(remote => remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">Account refresh failed. Showing any last successful snapshots for this account.</p>}
     <AccountMetrics account={account} summary={summary.data} positions={positions.data} orders={orders.data} />
+    <Performance base={base} filter={filter} positions={positions.data} />
     <div className="portfolio-workspace">
       <OrderTagging account={account} revision={tradeRevision} />
       <section className="portfolio-section portfolio-positions"><div className="portfolio-section-heading"><div><span className="portfolio-eyebrow">Holdings</span><h3>Open positions</h3></div><span className="portfolio-count">{positions.data?.items.length ?? "—"}</span></div>

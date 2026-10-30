@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import { PageHeader } from "../components/ui";
 import type {
   PoliticalCoverage,
   PoliticalDashboardData,
@@ -232,8 +233,11 @@ export function PoliticalData() {
   if (!dashboard) return <main className="empty-state"><span className="eyebrow">Political data unavailable</span><h1>The disclosure explorer could not load.</h1><p>{error}</p><button onClick={() => setRefreshKey((value) => value + 1)}>Try again</button></main>;
 
   return <main className="political-data">
-    <section className="hero"><div><span className="eyebrow">US Congress · STOCK Act disclosures</span><h1>Political trading activity, made legible.</h1><p>Explore reported transactions, filing coverage, entity resolution, and disclosure quality from the alt_political dataset.</p></div>
-      <div className="refresh-block"><span>Latest ingest {formatTime(dashboard.last_ingested_at)}</span><button onClick={() => setRefreshKey((value) => value + 1)} disabled={loading}>{loading ? "Refreshing…" : "Refresh data"}</button></div></section>
+    <PageHeader code="POL" title="Political trading activity, made legible." eyebrow="US Congress · STOCK Act"
+      info="Explore reported transactions, filing coverage, entity resolution, and disclosure quality from the alt_political dataset.">
+      <span className="t-stamp">Latest ingest {formatTime(dashboard.last_ingested_at)}</span>
+      <button onClick={() => setRefreshKey((value) => value + 1)} disabled={loading}>{loading ? "Refreshing…" : "Refresh data"}</button>
+    </PageHeader>
     {error && <div className="notice notice--error" role="alert">{error}</div>}
     <section className="metric-grid" aria-label="Political data totals">
       <MetricCard label="Disclosed trades" value={integerFormatter.format(dashboard.trades)} detail={`${integerFormatter.format(dashboard.filings)} indexed filings`} />

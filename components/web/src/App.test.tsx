@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
@@ -21,9 +21,13 @@ const overview = {
   warnings: [],
 };
 
+const SHELL_FEEDS = ["/hub/api/v1/monitoring/summary", "/hub/api/v1/us/indexes", "/hub/api/v1/us/futures"];
+const pageCalls = () => vi.mocked(fetch).mock.calls.map(([url]) => String(url)).filter((url) => !SHELL_FEEDS.includes(url));
+const overviewCalls = () => vi.mocked(fetch).mock.calls.filter(([url]) => String(url) === "/hub/api/v1/overview");
+
 describe("FactorLab Hub", () => {
   beforeEach(() => {
-    window.history.replaceState({}, "", "/");
+    window.history.replaceState({}, "", "/ops");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => overview }));
   });
 
@@ -34,7 +38,7 @@ describe("FactorLab Hub", () => {
 
   it("renders live health and all tables", async () => {
     render(<App />);
-    expect(await screen.findByText("Your data, at a glance.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Ops overview" })).toBeInTheDocument();
     expect(screen.getByText("18.6K")).toBeInTheDocument();
     expect(screen.getByText("market_candles_1min")).toBeInTheDocument();
     expect(screen.getByText("market_candles_daily")).toBeInTheDocument();
@@ -84,14 +88,14 @@ describe("FactorLab Hub", () => {
 
   it("keeps the last snapshot when refresh fails", async () => {
     const fetchMock = vi.mocked(fetch)
-      .mockResolvedValueOnce({ ok: true, json: async () => overview } as Response)
-      .mockRejectedValueOnce(new Error("offline"));
+      .mockImplementation(async () => ({ ok: true, json: async () => overview }) as Response);
     render(<App />);
     await screen.findByText("market_candles_1min");
+    fetchMock.mockImplementation(async () => { throw new Error("offline"); });
     fireEvent.click(screen.getByRole("button", { name: "Refresh data" }));
     await waitFor(() => expect(screen.getByText(/Live data is temporarily unavailable/)).toBeInTheDocument());
     expect(screen.getByText("market_candles_1min")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === "/hub/api/v1/overview")).toHaveLength(2);
   });
 
   it("polls once per minute while visible", async () => {
@@ -99,32 +103,47 @@ describe("FactorLab Hub", () => {
     render(<App />);
     await act(async () => Promise.resolve());
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(overviewCalls()).toHaveLength(2);
   });
 
   it("renders the roadmap route without fetching data", () => {
     window.history.replaceState({}, "", "/roadmap");
     render(<App />);
-    expect(screen.getByText("From data confidence to research execution.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "From data confidence to research execution." })).toBeInTheDocument();
     expect(screen.getByText("Backtesting")).toBeInTheDocument();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(pageCalls()).toEqual([]);
   });
 
   it("routes Docker images without loading the dashboard", () => {
     window.history.replaceState({}, "", "/docker-images");
     render(<App />);
     expect(screen.getByText("Docker image inventory")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Docker images" })).toHaveClass("active");
-    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: "Images" })).toHaveClass("active");
+    expect(pageCalls()).toEqual([]);
   });
 
-  it("groups navigation into data pages and an operations menu", () => {
+  it("groups navigation into Data, Portfolio and Ops", () => {
     window.history.replaceState({}, "", "/docker-images");
     render(<App />);
-    expect(screen.getByRole("link", { name: "Data catalog" })).toHaveAttribute("href", "/data");
-    expect(screen.getByRole("link", { name: "Pipelines" })).toHaveAttribute("href", "/data/pipelines");
-    expect(screen.getByText("Operations").closest("details")).toHaveClass("is-active");
-    expect(screen.getByRole("link", { name: "FactorLab Data Hub home" })).toHaveAttribute("href", "/data");
+    const primary = within(screen.getByRole("navigation", { name: "Primary navigation" }));
+    expect(primary.getAllByRole("link").map((link) => link.textContent)).toEqual(["Home", "Data", "Portfolio", "Ops"]);
+    expect(primary.getByRole("link", { name: "Ops" })).toHaveClass("active");
+    expect(primary.getByRole("link", { name: "Data" })).toHaveAttribute("href", "/market-data");
+    expect(primary.getByRole("link", { name: "Portfolio" })).toHaveAttribute("href", "/portfolio");
+    const section = within(screen.getByRole("navigation", { name: "Section navigation" }));
+    expect(section.getByRole("link", { name: "Pipelines" })).toHaveAttribute("href", "/data/pipelines");
+    expect(section.getByRole("link", { name: "Monitoring" })).toHaveAttribute("href", "/monitoring");
+    expect(section.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/ops");
+    expect(screen.getByRole("link", { name: "FactorLab home" })).toHaveAttribute("href", "/");
+  });
+
+  it("lists the catalog and schema under Data", () => {
+    window.history.replaceState({}, "", "/schema");
+    render(<App />);
+    const section = within(screen.getByRole("navigation", { name: "Section navigation" }));
+    expect(section.getByRole("link", { name: "Catalog" })).toHaveAttribute("href", "/data");
+    expect(section.getByRole("link", { name: "Schema" })).toHaveClass("active");
+    expect(within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole("link", { name: "Data" })).toHaveClass("active");
   });
 
   it("redirects the old indexes page into Market Data", () => {
@@ -132,9 +151,9 @@ describe("FactorLab Hub", () => {
     window.history.replaceState({}, "", "/indexes");
     render(<App />);
     expect(window.location.pathname + window.location.search).toBe("/market-data?view=indexes");
-    expect(screen.getByRole("link", { name: "Market data" })).toHaveClass("active");
+    expect(screen.getByRole("link", { name: "Indexes" })).toHaveClass("active");
+    expect(screen.getByRole("link", { name: "Markets" })).not.toHaveClass("active");
     expect(screen.getByRole("button", { name: "Indexes" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByRole("link", { name: "Indexes" })).not.toBeInTheDocument();
   });
 
   it("opens /futures as the Market Data futures view", async () => {
@@ -152,20 +171,20 @@ describe("FactorLab Hub", () => {
     window.history.replaceState({}, "", "/data/tables/market.bars");
     render(<App />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Catalog down");
-    expect(vi.mocked(fetch).mock.calls.every(([url]) => String(url).startsWith("/hub/api/v1/catalog"))).toBe(true);
+    expect(pageCalls().every((url) => url.startsWith("/hub/api/v1/catalog"))).toBe(true);
   });
 
   it("renders the schema map route without loading the dashboard", async () => {
     window.history.replaceState({}, "", "/schema");
     render(<App />);
     expect(await screen.findByText("Schema map canvas")).toBeInTheDocument();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(pageCalls()).toEqual([]);
   });
 
   it("renders the v2 schema map route without loading the dashboard", async () => {
     window.history.replaceState({}, "", "/schema/v2");
     render(<App />);
     expect(await screen.findByText("Schema map canvas")).toBeInTheDocument();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(pageCalls()).toEqual([]);
   });
 });

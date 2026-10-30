@@ -135,7 +135,7 @@ describe("India Markets", () => {
     render(<App />);
 
     expect(await screen.findByText("Inspect every instrument. Verify every session.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "India markets" })).toHaveClass("active");
+    expect(screen.getByRole("link", { name: "India" })).toHaveClass("active");
     const selectedDate = (screen.getByLabelText("Trading date") as HTMLInputElement).value;
     expect(screen.getByRole("link", { name: /TCS/ })).toHaveAttribute(
       "href",
