@@ -38,6 +38,7 @@ SERVICE_COMPONENTS = {
     "ingest-india": "ingest-india",
     "ingest-political": "ingest-political",
     "ibkr-snapshot": "ingest-broker",
+    "ibkr-flex-runner": "ingest-broker",
 }
 
 Flag = Literal["universe_mismatch", "several_universes", "config_unreported"]

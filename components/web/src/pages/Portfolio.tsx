@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { AccountSummary, BrokerAccount, BrokerRow, ExecutionPage, ItemsPage, Profile, SnapshotPage } from "../portfolioTypes";
 import { Segmented } from "../components/ui";
-import { errorMessage, useRemote } from "../shared/api";
+import { ApiError, errorMessage, fetchJson, useRemote } from "../shared/api";
 import { AreaChart, Treemap } from "../shared/charts";
 import { formatDate, formatTime } from "../shared/format";
 import { compactMoney, signedPct, toNumber } from "../shared/market";
@@ -90,6 +90,46 @@ function Performance({ base, filter, positions }: { base: string; filter: string
   </section>;
 }
 
+type FlexState = "idle" | "running" | "success" | "partial" | "failed";
+interface FlexJob { state: FlexState; run_id?: string | null; rows_written?: number | null; error?: string | null; finished_at?: string | null }
+const FLEX_POLL_MS = 5_000;
+
+/** Start the VPS-side IBKR Flex history sync (api -> ibkr-flex-runner) and poll it to completion. */
+function FlexSync({ onSynced }: { onSynced: () => void }) {
+  const [job, setJob] = useState<FlexJob | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const synced = useRef(onSynced);
+  synced.current = onSynced;
+  const running = job?.state === "running";
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setTimeout(() => {
+      fetchJson<FlexJob>(`${API}/flex/runs/latest`).then(next => {
+        setJob(next);
+        if (next.state === "success" || next.state === "partial") synced.current();
+      }, (reason: unknown) => { setJob(null); setError(errorMessage(reason, "Flex sync status is unavailable.")); });
+    }, FLEX_POLL_MS);
+    return () => window.clearTimeout(timer);
+  }, [job, running]);
+  async function start() {
+    setError(null);
+    try {
+      setJob(await fetchJson<FlexJob>(`${API}/flex/runs`, { method: "POST" }));
+    } catch (reason) {
+      // 409: a sync is already running, so follow it instead of failing.
+      if (reason instanceof ApiError && reason.status === 409) setJob({ state: "running" });
+      else setError(errorMessage(reason, "Could not start the IBKR history sync."));
+    }
+  }
+  const status = error ?? (job?.state === "running" ? "Syncing IBKR history…"
+    : job?.state === "success" ? `History synced · ${job.rows_written ?? 0} rows${job.finished_at ? ` · ${formatTime(job.finished_at)}` : ""}`
+    : job?.state === "partial" || job?.state === "failed" ? `History sync ${job.state}${job.error ? `: ${job.error}` : ""}` : null);
+  return <>
+    <button className="portfolio-button portfolio-button--secondary" type="button" onClick={() => void start()} disabled={running} title="Pull executions, orders and cash from the IBKR Flex statement"><PortfolioIcon name="refresh" />{running ? "Syncing history…" : "Sync IBKR history"}</button>
+    {status && <span className={`portfolio-footnote${error || job?.state === "failed" || job?.state === "partial" ? " portfolio-stale" : ""}`} role="status">{status}</span>}
+  </>;
+}
+
 function AccountDetails({ account, userId }: { account: BrokerAccount; userId: string }) {
   const [offset, setOffset] = useState(0);
   const [tradeRevision, setTradeRevision] = useState(0);
@@ -98,11 +138,12 @@ function AccountDetails({ account, userId }: { account: BrokerAccount; userId: s
   const summary = useRemote<AccountSummary>(`${base}/summary?${filter}`, 60_000);
   const positions = useRemote<SnapshotPage>(`${base}/positions?${filter}`, 60_000);
   const orders = useRemote<SnapshotPage>(`${base}/open-orders?${filter}`, 60_000);
+  const refreshAccount = () => { summary.refresh(); positions.refresh(); orders.refresh(); setOffset(0); setTradeRevision(value => value + 1); };
   return <section aria-label="Selected account" className="portfolio-details">
     <header className="portfolio-account-heading"><div className="portfolio-account-identity"><span className="portfolio-broker-mark" aria-hidden="true">{account.broker_code.slice(0, 2).toUpperCase()}</span><div>
       <h2>{account.account_id}</h2><p>{account.broker_code.toUpperCase()}<span>·</span>{account.account_mode === "paper" ? "Paper account" : account.account_mode}{account.base_currency && <><span>·</span>{account.base_currency}</>}</p>
     </div><strong className={`portfolio-badge${account.simulated ? " portfolio-badge--amber" : ""}`}>{account.simulated ? "Simulated" : account.account_mode}</strong></div>
-      <div className="portfolio-account-update">{summary.data && <SnapshotTime data={summary.data.balances} />}<button className="portfolio-button portfolio-button--secondary" type="button" onClick={() => { summary.refresh(); positions.refresh(); orders.refresh(); setOffset(0); setTradeRevision(value => value + 1); }} disabled={summary.refreshing || positions.refreshing || orders.refreshing}><PortfolioIcon name="refresh" />Refresh account</button><a className="portfolio-button portfolio-button--ghost" href={`/portfolio/trades?${new URLSearchParams({ user_id: userId, account: JSON.stringify([account.broker_code, account.account_id]) })}`}>View all trades</a></div>
+      <div className="portfolio-account-update">{summary.data && <SnapshotTime data={summary.data.balances} />}<button className="portfolio-button portfolio-button--secondary" type="button" onClick={refreshAccount} disabled={summary.refreshing || positions.refreshing || orders.refreshing}><PortfolioIcon name="refresh" />Refresh account</button>{account.broker_code === "ibkr" && !account.simulated && <FlexSync onSynced={refreshAccount} />}<a className="portfolio-button portfolio-button--ghost" href={`/portfolio/trades?${new URLSearchParams({ user_id: userId, account: JSON.stringify([account.broker_code, account.account_id]) })}`}>View all trades</a></div>
     </header>
     {[summary, positions, orders].some(remote => remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">Account refresh failed. Showing any last successful snapshots for this account.</p>}
     <AccountMetrics account={account} summary={summary.data} positions={positions.data} orders={orders.data} />

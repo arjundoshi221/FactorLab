@@ -27,6 +27,7 @@ when anything here is stale or invalid. The `feature` skill
 | [F-045](F-045-collection-plan.md) | Show each ingestion service's universe, resolution and cadence in the hub | review | P1 | — | api, web, ingest-us, ingest-india, ingest-political, ingest-broker, ingest |
 | [F-046](F-046-terminal-ui.md) | Redesign the hub as a trading terminal with Data, Portfolio and Ops sections | review | P1 | — | web, api |
 | [F-044](F-044-futures-curve-tab.md) | Show US futures curves and contracts on a Market Data Futures tab | review | P2 | — | api, web, ingest-us |
+| [F-047](F-047-flex-sync-from-hub.md) | Run the IBKR Flex history sync on demand from the hub | review | P2 | — | ingest-broker, api, web |
 | [F-006](F-006-restore-edge-access-invariants.md) | Restore the Cloudflare Access invariants on the hub hostname | planned | P0 | 2026-S20 | platform, api |
 | [F-007](F-007-per-component-rollout.md) | Roll out per-component releases (R0–R5) | planned | P0 | 2026-S20 | platform, api, web, secrets-agent, schema-migrator, ingest-india, ingest-us, ingest-political, ingest-broker |
 | [F-002](F-002-data-explorer.md) | Data explorer | planned | P2 | — | api, web |

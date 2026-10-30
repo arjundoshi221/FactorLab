@@ -238,7 +238,10 @@ need a running Gateway, so it still updates positions while the Gateway is unrea
 4. Set `IBKR_FLEX_QUERY_ID=<id>` in `production.env` and release `ingest-broker`.
 5. On the VPS, run `factorlab-ingest-broker engine run --dataset broker.flex_activity
    --market USA --dry-run` in the `ibkr-snapshot` container, then run it without
-   `--dry-run`. Errors 1012 (expired), 1013 (wrong IP) and 1015 (invalid) mean the token
+   `--dry-run`. After setup, the normal way to run it is the hub: Portfolio -> a live IBKR
+   account -> **Sync IBKR history**, which calls the api, which calls the backend-only
+   `ibkr-flex-runner` service (one run at a time, at most one start per 5 minutes). The
+   button shows the run id, rows written or the failure (for example `AuthRequired`). Errors 1012 (expired), 1013 (wrong IP) and 1015 (invalid) mean the token
    needs attention; 1018 means wait a minute.
 
 `broker.statement_rows` is created by forward Wave 17

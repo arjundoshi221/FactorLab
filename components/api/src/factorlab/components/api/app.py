@@ -39,6 +39,7 @@ from factorlab.components.api.catalog_query import (
 from factorlab.components.api.collection_plan import CACHE as COLLECTION_PLAN_CACHE
 from factorlab.components.api.collection_plan import CollectionPlan, build_collection_plan
 from factorlab.components.api.docker_images import DockerImagesResponse, read_docker_images_snapshot
+from factorlab.components.api.flex_sync import router as flex_sync_router
 from factorlab.components.api.futures import router as futures_router
 from factorlab.components.api.hub import HubOverview, HubOverviewService, HubRepository
 from factorlab.components.api.indexes import router as indexes_router
@@ -182,6 +183,7 @@ app.include_router(monitoring_router, prefix="/hub/api/v1/monitoring", tags=["hu
 app.include_router(portfolio_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
 app.include_router(portfolio_tagging_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
 app.include_router(portfolio_ledger_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
+app.include_router(flex_sync_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
 
 
 @app.get("/hub/api/v1/docker-images", response_model=DockerImagesResponse, tags=["hub"])

@@ -29,11 +29,22 @@ component (image `ghcr.io/arjundoshi221/factorlab-ingest-broker`, manifest
     [--client-id N] [--executions-lookback-hours 24] [--dry-run] [--log-level INFO]`.
     `--once` is the default; `--dry-run` connects and normalizes but writes nothing.
   - `engine`: the provider-agnostic engine (validate, run, daemon, replay).
+  - `flex-runner [--listen 0.0.0.0:8091] [--cooldown-seconds 300] [--timeout-seconds 600]
+    [--dry-run]`: the backend HTTP runner for on-demand Flex syncs
+    ([flex_runner.py](src/factorlab/components/ingest_broker/flex_runner.py)).
 - Compose service `ibkr-snapshot` ([deploy/compose.yaml](deploy/compose.yaml)), profile
   `ibkr`: `snapshot --daemon --run-on-start --modes ${IBKR_SNAPSHOT_MODES:-paper,live}`,
   `mem_limit: 384m`, `stop_grace_period: 60s`, network `backend`, no ports.
 - The process runs under `factorlab.runtime.supervised` crash supervision (name
   `ibkr_broker_snapshot`).
+- Compose service `ibkr-flex-runner`, profile `ibkr`: `flex-runner`, backend network only
+  (`expose: 8091`, no published port), `mem_limit: 256m`, healthcheck
+  `factorlab-healthcheck http http://127.0.0.1:8091/healthz` (overrides the image's
+  snapshot heartbeat check). `POST /runs` starts `engine run --dataset broker.flex_activity
+  --market USA` as a subprocess (202; 409 while one runs; 429 within 300 s of the last
+  start, for the Flex rate limit); `GET /runs/latest` returns `idle|running|success|partial|failed`
+  with `run_id`, `rows_written`, `failed_units` and `error`. Job state is in memory only.
+  The api proxies it for the hub's "Sync IBKR history" button (`IBKR_FLEX_RUNNER_URL`).
 
 ## Configuration and secrets
 
@@ -71,7 +82,9 @@ on XNYS trading days; `--run-on-start` also takes an immediate snapshot.
   `broker.positions_snapshot` rows and `broker.statement_rows` (every statement row, Wave 17)
   from an IBKR Flex statement
   (`raw.archive` `transport='http'`, `source_channel` = `ibkr:flex_statement`). Run it on the
-  VPS, because the token is IP-restricted: `fl` exec into `ibkr-snapshot`.
+  VPS, because the token is IP-restricted. Normally the hub's portfolio page starts it
+  (live IBKR accounts: "Sync IBKR history" -> api -> `ibkr-flex-runner`); the manual
+  fallback is `fl` exec into `ibkr-snapshot` or `ibkr-flex-runner`.
 - Pipeline (frozen) `ibkr_broker_snapshot`, `source` = `ibkr`, `universe` = `ibkr_accounts`;
   `source_channel` = `paper_gateway` / `live_gateway`.
 - The hub catalogues both `ibkr_broker_snapshot` and `ibkr_broker_simulation` (market "Broker")

@@ -23,6 +23,7 @@ SERVICES = {
     "ingest-us": "ingest-us",
     "universe-us": "ingest-us",
     "ibkr-snapshot": "ingest-broker",
+    "ibkr-flex-runner": "ingest-broker",
     "ingest-political": "ingest-political",
 }
 ALL_SERVICES = dict(SERVICES)
@@ -198,7 +199,7 @@ def plan(root: Path, test_id: str, *, image_test_id: str | None = None) -> None:
     for unit, subcommands in {
         "ingest-india": ["daemon", "premarket", "engine"],
         "ingest-us": ["daemon", "universe", "futures", "indexes", "engine"],
-        "ingest-broker": ["snapshot", "engine"],
+        "ingest-broker": ["snapshot", "flex-runner", "engine"],
         "ingest-political": ["bootstrap", "engine"],
     }.items():
         if unit not in SERVICES.values():

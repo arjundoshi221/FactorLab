@@ -103,3 +103,36 @@ it("charts net liquidation by range and aggregates base-currency positions only"
   expect(overview.getByText("150.00")).toHaveClass("portfolio-amount--positive");
   expect(screen.getByRole("group", { name: "Holdings by market value" })).toBeInTheDocument();
 });
+
+it("syncs IBKR Flex history for a live account and refreshes it", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  const live = { ...accounts[0], account_id: "U123", account_mode: "live", simulated: false };
+  let latest = { state: "running" };
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const path = new URL(url, "http://localhost").pathname;
+    if (path.endsWith("/flex/runs") && init?.method === "POST") return { ok: true, json: async () => ({ state: "running", job_id: "j1" }) };
+    if (path.endsWith("/flex/runs/latest")) return { ok: true, json: async () => latest };
+    if (path.endsWith("/accounts")) return { ok: true, json: async () => ({ items: [live] }) };
+    return { ok: true, json: async () => response(url) };
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  try {
+    render(<Portfolio />);
+    fireEvent.click(await screen.findByRole("button", { name: "Sync IBKR history" }));
+    expect(await screen.findByRole("button", { name: "Syncing history…" })).toBeDisabled();
+    latest = { state: "success", rows_written: 7 } as typeof latest;
+    const calls = fetchMock.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(await screen.findByText(/History synced · 7 rows/)).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock.mock.calls.slice(calls).some(([url]) => String(url).includes("/positions"))).toBe(true));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("hides the Flex sync for simulated accounts", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, json: async () => response(url) })));
+  render(<Portfolio />);
+  await screen.findByRole("table", { name: "Positions" });
+  expect(screen.queryByRole("button", { name: "Sync IBKR history" })).not.toBeInTheDocument();
+});

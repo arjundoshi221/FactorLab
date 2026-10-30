@@ -17,6 +17,12 @@ def _snapshot(argv: list[str]) -> int | None:
     return cli(argv)
 
 
+def _flex_runner(argv: list[str]) -> int:
+    from factorlab.components.ingest_broker.flex_runner import cli
+
+    return cli(argv)
+
+
 def _engine(argv: list[str]) -> int:
     from factorlab.components.ingest_broker.providers import PROVIDERS
     from factorlab.orchestration import cli as engine_cli
@@ -47,6 +53,7 @@ COMMANDS = {
     "profiles": Command("register shared test profiles and account ownership", _profiles),
     "simulate": Command("ingest synthetic paper broker responses (no Gateway)", _simulate),
     "snapshot": Command("account snapshot (one run or the scheduled daemon)", _snapshot),
+    "flex-runner": Command("backend HTTP runner for on-demand Flex history syncs", _flex_runner),
     "engine": Command("provider-agnostic engine: validate, run, daemon, replay", _engine),
 }
 

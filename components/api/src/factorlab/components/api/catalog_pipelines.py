@@ -334,7 +334,7 @@ PIPELINES: tuple[PipelineInfo, ...] = (
         market="Broker",
         source="IBKR Flex Web Service",
         description="Imports an IBKR Activity Flex statement: fills, executed orders, cash movements and end-of-day positions, with every statement row kept whole.",
-        schedule="Manual; run by an operator on the VPS (the Flex token is IP-restricted).",
+        schedule="On demand; the portfolio page's Sync IBKR history button (ibkr-flex-runner on the VPS; the Flex token is IP-restricted).",
         expected_interval_seconds=None,
         session_calendar=None,
         tables_written=(
@@ -345,8 +345,7 @@ PIPELINES: tuple[PipelineInfo, ...] = (
             "broker.statement_rows",
             *COMMON_TABLES,
         ),
-        # Run with `engine run` inside the ibkr-snapshot container.
-        service="ibkr-snapshot",
+        service="ibkr-flex-runner",
         scheduled=False,
     ),
 )
