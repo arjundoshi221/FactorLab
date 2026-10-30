@@ -1499,6 +1499,11 @@ def hub_market_data() -> FileResponse:
     return _hub_index()
 
 
+@app.get("/market-data/tickers/{listing_id}", include_in_schema=False)
+def hub_ticker(listing_id: UUID) -> FileResponse:
+    return _hub_index()
+
+
 @app.get("/political", include_in_schema=False)
 def hub_political_data() -> FileResponse:
     return _hub_index()

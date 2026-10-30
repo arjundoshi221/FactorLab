@@ -211,12 +211,13 @@ class MatrixRepository:
 
     def bar_feeds(self) -> list[tuple[str, str, str]]:
         def build() -> list[tuple[str, str, str]]:
+            # FixedString(2) comes back as bytes; str(b"US") would key sessions as "b'US'".
             rows = self.query(
-                "SELECT DISTINCT country_code, source, resolution FROM meta.expected_series FINAL "
-                "WHERE active AND contract_id IS NULL ORDER BY country_code, source, resolution",
+                "SELECT DISTINCT toString(country_code) AS country, source, resolution FROM meta.expected_series FINAL "
+                "WHERE active AND contract_id IS NULL ORDER BY country, source, resolution",
                 {},
             )
-            return [(str(r["country_code"]), str(r["source"]), str(r["resolution"])) for r in rows]
+            return [(str(r["country"]), str(r["source"]), str(r["resolution"])) for r in rows]
 
         return CACHE.get("bar_feeds", build)
 
@@ -409,24 +410,24 @@ class MatrixRepository:
     ) -> dict[str, dict[str, MatrixCell]]:
         listing_ids = ids(i.id for i in instruments)
         intent = {
-            (str(r["listing_id"]), str(r["country_code"]), str(r["source"]), str(r["resolution"]))
+            (str(r["listing_id"]), str(r["country"]), str(r["source"]), str(r["resolution"]))
             for r in self.query(
-                "SELECT DISTINCT listing_id, country_code, source, resolution FROM meta.expected_series FINAL "
+                "SELECT DISTINCT listing_id, toString(country_code) AS country, source, resolution FROM meta.expected_series FINAL "
                 "WHERE active AND contract_id IS NULL AND listing_id IN {ids:Array(UUID)}",
                 {"ids": listing_ids},
             )
         }
         latest: dict[tuple[str, str, str, str], date] = {}
         for row in self.query(
-            "SELECT listing_id, country_code, source, resolution, max(trade_date) AS latest "
+            "SELECT listing_id, toString(country_code) AS country, source, resolution, max(trade_date) AS latest "
             "FROM market.bars WHERE country_code IN {countries:Array(String)} "
             "AND listing_id IN {ids:Array(UUID)} "
-            "GROUP BY listing_id, country_code, source, resolution",
+            "GROUP BY listing_id, country, source, resolution",
             {"ids": listing_ids, "countries": sorted({i.country for i in instruments})},
         ):
             key = (
                 str(row["listing_id"]),
-                str(row["country_code"]),
+                str(row["country"]),
                 str(row["source"]),
                 str(row["resolution"]),
             )

@@ -1,0 +1,26 @@
+/* One ticker: price chart and key stats on top, position and details below. */
+.tk-top { display: grid; grid-template-columns: minmax(0, 3fr) minmax(260px, 1fr); gap: var(--gap); margin: var(--gap) 0; }
+.tk-chart .t-panel__tools { display: flex; align-items: center; gap: 10px; }
+.tk-chart__plot { margin-top: 10px; }
+
+.tk-stats, .tk-returns { display: grid; margin: 0; }
+.tk-stats div, .tk-returns div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.tk-stats dt, .tk-returns dt { color: var(--muted); font-size: 12px; }
+.tk-stats dd, .tk-returns dd { margin: 0; color: var(--ink); font: 500 12px var(--mono); }
+.tk-returns { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin-top: 12px; background: var(--line); border: 1px solid var(--line); }
+.tk-returns div { flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border: 0; background: var(--panel); }
+.tk-returns dt { font: 500 9px var(--mono); letter-spacing: .07em; }
+
+.tk-lines { margin: 0; padding: 0; list-style: none; }
+.tk-lines li { display: grid; grid-template-columns: 130px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+.tk-lines li:last-child { border-bottom: 0; }
+.tk-lines li > span:first-child { color: var(--muted); text-transform: capitalize; }
+.tk-pad { margin: 4px 0 8px; font-size: 12px; }
+.tk-related { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+.tk-related a { text-decoration: none; }
+.tk-related a:hover { color: var(--accent); border-color: var(--accent-line); }
+
+@media (max-width: 900px) {
+  .tk-top { grid-template-columns: 1fr; }
+  .tk-lines li { grid-template-columns: 100px minmax(0, 1fr) auto; }
+}

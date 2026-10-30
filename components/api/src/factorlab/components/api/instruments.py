@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from factorlab.clickhouse import ClickHouse
 from factorlab.components.api.catalog_pipelines import PIPELINES
@@ -115,6 +115,45 @@ class DatasetResult(BaseModel):
     start: datetime | None = None
     end: datetime | None = None
     evidence: dict[str, Any] = Field(default_factory=dict)
+
+
+PriceRange = Literal["1d", "5d", "1m", "3m", "6m", "ytd", "1y", "5y", "max"]
+INTRADAY_RANGES = {"1d": 1, "5d": 5}  # trading sessions of minute bars
+DAILY_RANGES = {"1m": 31, "3m": 92, "6m": 183, "1y": 366, "5y": 1827}  # calendar days
+
+
+class PriceBar(BaseModel):
+    t: datetime | date
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def fill_gaps(cls, data: Any) -> Any:
+        # Some vendors omit open (or close) on thin bars; fall back to the other side.
+        if isinstance(data, dict):
+            data = {
+                **data,
+                "open": data.get("open") if data.get("open") is not None else data.get("close"),
+            }
+            data["close"] = data["close"] if data.get("close") is not None else data["open"]
+        return data
+
+
+class PriceHistory(BaseModel):
+    listing_id: UUID
+    range: PriceRange
+    resolution: Literal["1min", "daily"]
+    source: str | None = None
+    derived: bool = False  # daily bars rolled up from minute bars
+    bars: list[PriceBar] = Field(default_factory=list)
+
+
+def as_day(value: Any) -> date:
+    return value.date() if isinstance(value, datetime) else value
 
 
 def inventory_sql() -> str:
@@ -275,7 +314,7 @@ class InstrumentRepository:
 
     def instrument(self, kind: Kind, id: UUID) -> Instrument:
         rows = self.query(
-            f"SELECT * FROM ({inventory_sql()}) WHERE kind = {{kind:String}} AND id = {{id:UUID}} LIMIT 1",
+            f"SELECT * FROM ({sectored_inventory_sql()}) WHERE kind = {{kind:String}} AND id = {{id:UUID}} LIMIT 1",
             {"kind": kind, "id": id},
         )
         if not rows:
@@ -487,6 +526,88 @@ class InstrumentRepository:
             result.message = str(exc)
         return result
 
+    def prices(self, listing_id: UUID, range_: PriceRange) -> PriceHistory:
+        item = self.instrument("listing", listing_id)
+        where = {"country": item.country, "id": listing_id}
+        feeds = self.query(
+            """SELECT source, resolution, count() AS bars, max(trade_date) AS latest
+            FROM market.bars WHERE country_code = {country:String} AND listing_id = {id:UUID}
+            AND resolution IN ('1min', 'daily') GROUP BY source, resolution""",
+            where,
+        )
+        # One source per chart: mixing vendors day to day would splice unrelated adjustments.
+        best = {
+            resolution: max(
+                (f for f in feeds if f["resolution"] == resolution),
+                key=lambda f: f["bars"],
+                default=None,
+            )
+            for resolution in ("1min", "daily")
+        }
+        intraday = range_ in INTRADAY_RANGES
+        feed = best["1min"] if intraday else best["daily"] or best["1min"]
+        if feed is None:
+            return PriceHistory(
+                listing_id=listing_id, range=range_, resolution="daily" if not intraday else "1min"
+            )
+        latest = as_day(feed["latest"])
+        params = {**where, "source": feed["source"]}
+        if intraday:
+            sessions = self.query(
+                """SELECT DISTINCT trade_date FROM market.bars WHERE country_code = {country:String}
+                AND listing_id = {id:UUID} AND resolution = '1min' AND source = {source:String}
+                AND trade_date >= {since:Date} ORDER BY trade_date DESC LIMIT {n:UInt8}""",
+                {**params, "since": latest - timedelta(days=14), "n": INTRADAY_RANGES[range_]},
+            )
+            start = min((as_day(s["trade_date"]) for s in sessions), default=latest)
+            bars = self.query(
+                """SELECT bar_time AS t, open, high, low, close, volume FROM market.bars FINAL
+                WHERE country_code = {country:String} AND listing_id = {id:UUID}
+                AND resolution = '1min' AND source = {source:String} AND trade_date >= {start:Date}
+                ORDER BY bar_time LIMIT 1 BY bar_time""",
+                {**params, "start": start},
+                max_rows=20_000,
+            )
+            resolution = "1min"
+        else:
+            start = (
+                date(latest.year, 1, 1)
+                if range_ == "ytd"
+                else latest - timedelta(days=DAILY_RANGES[range_])
+                if range_ in DAILY_RANGES
+                else date(1970, 1, 1)
+            )
+            # Listings collected only by the minute (India) are rolled up into session bars.
+            daily = feed["resolution"] == "daily"
+            bars = self.query(
+                """SELECT trade_date AS t, open, high, low, close, volume FROM market.bars FINAL
+                WHERE country_code = {country:String} AND listing_id = {id:UUID}
+                AND resolution = 'daily' AND source = {source:String} AND trade_date >= {start:Date}
+                ORDER BY trade_date LIMIT 1 BY trade_date"""
+                if daily
+                else """SELECT trade_date AS t, argMin(open, bar_time) AS open, max(high) AS high,
+                min(low) AS low, argMax(close, bar_time) AS close, sum(volume) AS volume
+                FROM market.bars FINAL WHERE country_code = {country:String} AND listing_id = {id:UUID}
+                AND resolution = '1min' AND source = {source:String} AND trade_date >= {start:Date}
+                GROUP BY trade_date ORDER BY trade_date""",
+                {**params, "start": start},
+                max_rows=20_000,
+            )
+            resolution = "daily"
+        return PriceHistory(
+            listing_id=listing_id,
+            range=range_,
+            resolution=resolution,
+            source=str(feed["source"]),
+            derived=not intraday and feed["resolution"] != "daily",
+            bars=[
+                PriceBar(**bar)
+                for bar in bars
+                if None not in (bar["high"], bar["low"])
+                and (bar["open"], bar["close"]) != (None, None)
+            ],
+        )
+
     def provenance(self, records: list[dict[str, Any]]) -> dict[str, Any]:
         evidence: dict[str, Any] = {}
         accounts = list(
@@ -628,6 +749,14 @@ def sectors(
 def identity(repo: Repo, kind: Kind, id: UUID) -> Identity:
     try:
         return repo.identity(kind, id)
+    except CatalogError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+
+
+@router.get("/listings/{id}/prices", response_model=PriceHistory)
+def prices(repo: Repo, id: UUID, range: PriceRange = "1y") -> PriceHistory:
+    try:
+        return repo.prices(id, range)
     except CatalogError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
 

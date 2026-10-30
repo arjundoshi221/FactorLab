@@ -5,7 +5,7 @@ import { errorMessage, fetchJson, useRemote } from "../shared/api";
 import { SignedBars } from "../shared/charts";
 import { formatTime } from "../shared/format";
 import { compactMoney, toNumber } from "../shared/market";
-import { useUrlParams } from "../shared/urlState";
+import { tickerHref, useUrlParams } from "../shared/urlState";
 import { PortfolioTabs, TagSelectors, hasTags, kinds, singular } from "./PortfolioBook";
 import { Amount, EmptyState, PortfolioHeader, PortfolioIcon, ProfileSelect } from "./PortfolioUI";
 import "./Portfolio.css";
@@ -167,7 +167,7 @@ export function TradeLedger() {
         <label className="portfolio-selector"><span>Through</span><input type="date" value={params.get("end") ?? ""} onChange={e => set({ end: e.target.value })} /></label>
         {filtering && <button type="button" className="portfolio-button portfolio-button--ghost" onClick={() => set(Object.fromEntries(filterKeys.map(k => [k, ""])))}>Clear filters</button>}
       </div>
-      {params.get("listing_id") && <p className="portfolio-footnote">Showing trades for one ticker, including security-level fills and derivatives on it. <a href={`/market-data?view=matrix&kind=listing&id=${params.get("listing_id")}`}>Open the ticker →</a></p>}
+      {params.get("listing_id") && <p className="portfolio-footnote">Showing trades for one ticker, including security-level fills and derivatives on it. <a href={tickerHref(params.get("listing_id")!)}>Open the ticker →</a></p>}
       {chosen.length > 0 && <div className="ledger-bulk" role="region" aria-label="Tag selected orders">
         <strong>{chosen.length} selected</strong>
         <TagSelectors tags={bulk} onChange={setBulk} catalogs={catalogs} disabled={Boolean(running)} name="selected orders" userId={userId} onCreated={refreshCatalog} />
@@ -196,7 +196,7 @@ export function TradeLedger() {
               <td><input type="checkbox" aria-label={`Select ${row.trading_symbol} order ${row.perm_id}`} disabled={!row.taggable || (!selected.has(row.key) && selected.size >= MAX_SELECTION)} checked={selected.has(row.key)}
                 onChange={e => { const next = new Set(selected); if (e.target.checked) next.add(row.key); else next.delete(row.key); setSelected(next); }} /></td>
               <td>{formatTime(row.last_fill_at, "—")}</td>
-              <td>{row.listing_id ? <a href={`/market-data?view=matrix&kind=${row.contract_id ? "contract" : "listing"}&id=${row.contract_id ?? row.listing_id}`}>{row.trading_symbol}</a> : row.trading_symbol}
+              <td>{row.listing_id ? <a href={tickerHref(row.listing_id)}>{row.trading_symbol}</a> : row.trading_symbol}
                 {row.contract_id && <small> {row.product_type}</small>}</td>
               <td><span className={`portfolio-side${row.side === "BUY" ? " portfolio-side--buy" : ""}`}>{row.side}</span></td>
               <td className="portfolio-numeric"><Amount value={row.quantity} quantity /></td>

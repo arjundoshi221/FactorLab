@@ -25,3 +25,9 @@ export interface DatasetResult {
   evidence: Record<string, { state: string; message?: string; table?: string;
     columns?: string[]; rows?: unknown[][]; unavailable_ids?: string[] }>;
 }
+export type PriceRange = "1d" | "5d" | "1m" | "3m" | "6m" | "ytd" | "1y" | "5y" | "max";
+export interface PriceBar { t: string; open: number; high: number; low: number; close: number; volume: number | null }
+export interface PriceHistory {
+  listing_id: string; range: PriceRange; resolution: "1min" | "daily"; source: string | null;
+  derived: boolean; bars: PriceBar[];
+}

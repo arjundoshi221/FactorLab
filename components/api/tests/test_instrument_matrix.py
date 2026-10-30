@@ -57,29 +57,35 @@ class Fake:
             return [{"total": len(self.listings)}]
         if "SELECT * FROM (SELECT 'listing'" in sql:
             return self.listings
-        if "SELECT DISTINCT country_code, source, resolution FROM meta.expected_series" in sql:
+        if (
+            "SELECT DISTINCT toString(country_code) AS country, source, resolution FROM meta.expected_series"
+            in sql
+        ):
             return [
-                {"country_code": "US", "source": "schwab", "resolution": "1min"},
-                {"country_code": "US", "source": "schwab", "resolution": "daily"},
+                {"country": "US", "source": "schwab", "resolution": "1min"},
+                {"country": "US", "source": "schwab", "resolution": "daily"},
             ]
-        if "SELECT DISTINCT listing_id, country_code, source, resolution" in sql:
+        if (
+            "SELECT DISTINCT listing_id, toString(country_code) AS country, source, resolution"
+            in sql
+        ):
             return [
-                {"listing_id": A, "country_code": "US", "source": "schwab", "resolution": "1min"},
-                {"listing_id": A, "country_code": "US", "source": "schwab", "resolution": "daily"},
-                {"listing_id": B, "country_code": "US", "source": "schwab", "resolution": "1min"},
+                {"listing_id": A, "country": "US", "source": "schwab", "resolution": "1min"},
+                {"listing_id": A, "country": "US", "source": "schwab", "resolution": "daily"},
+                {"listing_id": B, "country": "US", "source": "schwab", "resolution": "1min"},
             ]
         if "FROM market.bars WHERE country_code IN" in sql:
             return [
                 {
                     "listing_id": A,
-                    "country_code": "US",
+                    "country": "US",
                     "source": "schwab",
                     "resolution": "1min",
                     "latest": date(2026, 9, 24),
                 },
                 {
                     "listing_id": A,
-                    "country_code": "US",
+                    "country": "US",
                     "source": "schwab",
                     "resolution": "daily",
                     "latest": date(2026, 9, 21),
@@ -87,7 +93,7 @@ class Fake:
                 # B has daily bars it is not configured to collect, and no minute bars.
                 {
                     "listing_id": B,
-                    "country_code": "US",
+                    "country": "US",
                     "source": "schwab",
                     "resolution": "daily",
                     "latest": date(2026, 9, 1),

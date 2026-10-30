@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from unittest.mock import Mock
 from uuid import UUID
 
@@ -316,3 +316,69 @@ def test_sector_routes_validate_and_pass_filters():
     repo.sectors.return_value = {"items": [], "unclassified": 0, "total": 0}
     assert client.get("/sectors?search=%20ai%20").status_code == 200
     repo.sectors.assert_called_with("ai", "US", "all", "all")
+
+
+def test_prices_use_one_daily_source_and_fill_missing_open():
+    feeds = [
+        {"source": "schwab", "resolution": "daily", "bars": 900, "latest": date(2026, 10, 29)},
+        {"source": "alpaca", "resolution": "daily", "bars": 20, "latest": date(2026, 10, 29)},
+        {"source": "schwab", "resolution": "1min", "bars": 9000, "latest": date(2026, 10, 30)},
+    ]
+    bars = [
+        {"t": date(2026, 10, 28), "open": None, "high": 11, "low": 9, "close": 10, "volume": 5},
+        {
+            "t": date(2026, 10, 29),
+            "open": None,
+            "high": None,
+            "low": None,
+            "close": 10,
+            "volume": 0,
+        },
+    ]
+    repo = repo_with(feeds, bars)
+    result = repo.prices(ID, "1m")
+    assert (result.source, result.resolution, result.derived) == ("schwab", "daily", False)
+    assert [(b.open, b.close) for b in result.bars] == [(10, 10)]
+    sql, params = repo.query.call_args.args
+    assert "resolution = 'daily'" in sql and "FINAL" in sql
+    assert params["source"] == "schwab"
+    assert params["start"] == date(2026, 9, 28)
+
+
+def test_prices_roll_minute_bars_into_sessions_when_no_daily_feed():
+    feeds = [{"source": "kite", "resolution": "1min", "bars": 500, "latest": date(2026, 10, 30)}]
+    repo = repo_with(feeds, [])
+    result = repo.prices(ID, "ytd")
+    assert (result.resolution, result.derived) == ("daily", True)
+    sql, params = repo.query.call_args.args
+    assert "argMin(open, bar_time)" in sql and "GROUP BY trade_date" in sql
+    assert params["start"] == date(2026, 1, 1)
+
+
+def test_intraday_prices_start_at_the_earliest_of_the_last_sessions():
+    feeds = [{"source": "schwab", "resolution": "1min", "bars": 500, "latest": date(2026, 10, 30)}]
+    sessions = [{"trade_date": date(2026, 10, 30)}, {"trade_date": date(2026, 10, 29)}]
+    minute = {
+        "t": datetime(2026, 10, 30, 13, 30, tzinfo=UTC),
+        "open": 1,
+        "high": 2,
+        "low": 1,
+        "close": 2,
+        "volume": 3,
+    }
+    repo = repo_with(feeds, sessions, [minute])
+    result = repo.prices(ID, "5d")
+    assert result.resolution == "1min" and len(result.bars) == 1
+    assert repo.query.call_args.args[1]["start"] == date(2026, 10, 29)
+
+
+def test_prices_without_bars_return_an_empty_history():
+    repo = repo_with([])
+    assert repo.prices(ID, "1y").bars == []
+
+
+def test_price_route_rejects_unknown_ranges():
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[repository] = repo_with
+    assert TestClient(app).get(f"/listings/{ID}/prices?range=10y").status_code == 422

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 
 import type { InstrumentPage } from "../instrumentTypes";
 import { fetchJson } from "../shared/api";
+import { tickerHref } from "../shared/urlState";
 import { allItems, sections } from "./nav";
 
 interface Entry { key: string; code: string; label: string; detail: string; href: string }
@@ -73,7 +74,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         .then((page) => setTickers(page.items.slice(0, 8).map((item) => ({
           key: `inst:${item.kind}/${item.id}`, code: item.symbol, label: item.name || item.symbol,
           detail: [item.country, item.exchange, item.instrument_type].filter(Boolean).join(" · "),
-          href: `/market-data?kind=${item.kind}&id=${item.id}`,
+          href: tickerHref(item.id),
         }))))
         .catch(() => setTickers([]));
     }, 180);

@@ -22,3 +22,6 @@ export function useUrlParams(): [URLSearchParams, (update: (params: URLSearchPar
 
   return [new URLSearchParams(search), update];
 }
+
+/** A listing's own page: chart, stats, position and links. */
+export const tickerHref = (listingId: string) => `/market-data/tickers/${listingId}`;

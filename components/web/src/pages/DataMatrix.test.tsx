@@ -49,13 +49,14 @@ it("turns filters into server-side query parameters and resets paging", async ()
   expect(window.location.search).not.toContain("offset=50");
 });
 
-it("opens the ticker with an at-a-glance strip and a link to its trades", async () => {
+it("links each ticker to its page and keeps the at-a-glance strip on the raw view", async () => {
   const identity = { instrument, aliases: [], identifiers: {}, related: [], warnings: [], datasets: [] };
   vi.stubGlobal("fetch", vi.fn(async (url: string) => response(
     url.includes("/matrix?listing_id=") ? page : url.includes("/matrix") ? page : url.includes(`/instruments/listing/${instrument.id}`) ? identity : { items: [], total: 0 },
   )));
+  window.history.replaceState(null, "", `/market-data?view=matrix&kind=listing&id=${instrument.id}`);
   render(<MarketData />);
-  fireEvent.click(await screen.findByRole("button", { name: "Open AAA" }));
+  expect(await screen.findByRole("link", { name: "Open AAA" })).toHaveAttribute("href", `/market-data/tickers/${instrument.id}`);
   const glance = await screen.findByRole("region", { name: "At a glance" });
   expect(within(glance).getByText("Fundamentals")).toBeInTheDocument();
   expect(within(glance).getByRole("link", { name: "All trades for this ticker →" })).toHaveAttribute("href", `/portfolio/trades?listing_id=${instrument.id}`);
