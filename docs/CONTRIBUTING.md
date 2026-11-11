@@ -47,7 +47,8 @@ one required check.
 ## Commits and releases
 
 Conventional commits (`feat(api): …`, `fix(ingest-us): …`): the release tool builds each
-unit's changelog from them. Releases are per unit (`deploy/release.ps1 -Component <unit>`,
+unit's changelog from them. A push to `main` that changes the API or web image deploys
+the hub automatically once CI is green ([deploy/testing/README.md](../deploy/testing/README.md)). Releases are per unit (`deploy/release.ps1 -Component <unit>`,
 see [operations/releases.md](operations/releases.md)) and change production.
 
 ## What pre-commit blocks
