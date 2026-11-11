@@ -1,4 +1,5 @@
 import { errorMessage, useRemote } from "../shared/api";
+import { tickerHref } from "../shared/urlState";
 import type { Instrument } from "../instrumentTypes";
 import type { CellState, MatrixCell, MatrixColumn, MatrixPage } from "../matrixTypes";
 import "./DataMatrix.css";
@@ -79,7 +80,7 @@ export function DataMatrix({ params, update, select }: {
           <tr>{data.columns.map(c => <th key={c.key} scope="col" title={`${c.dataset}${c.level === "issuer" ? " · issuer-level" : ""}`}>{c.label}{c.level === "issuer" && <small> issuer</small>}</th>)}</tr>
         </thead>
         <tbody>{data.items.map(row => <tr key={row.instrument.id}>
-          <th scope="row" className="matrix-sticky"><button type="button" onClick={() => select(row.instrument)} aria-label={`Open ${row.instrument.symbol}`}>{row.instrument.symbol}</button><small>{row.instrument.exchange} · {row.instrument.name}</small></th>
+          <th scope="row" className="matrix-sticky"><a href={tickerHref(row.instrument.id)} aria-label={`Open ${row.instrument.symbol}`}>{row.instrument.symbol}</a><small>{row.instrument.exchange} · {row.instrument.name}</small></th>
           {data.columns.map(c => {
             const cell = row.cells[c.key];
             const pill = <CellPill cell={cell} column={c} />;

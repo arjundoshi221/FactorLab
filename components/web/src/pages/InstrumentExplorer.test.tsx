@@ -12,14 +12,20 @@ const response = (body: unknown) => ({ ok: true, json: async () => body });
 beforeEach(() => window.history.replaceState(null, "", "/market-data"));
 afterEach(() => vi.unstubAllGlobals());
 
-it("defaults to all instruments, retains inactive duplicates and bookmarks selection", async () => {
-  const fetcher = vi.fn(async (url: string) => response(url.includes("/coverage") ? coverage : url.includes(item.id) ? detail() : { items: [item, second], total: 2 }));
+it("defaults to all instruments, retains inactive duplicates and links each to its ticker page", async () => {
+  const fetcher = vi.fn(async () => response({ items: [item, second], total: 2 }));
   vi.stubGlobal("fetch", fetcher);
   render(<MarketData />);
   expect(screen.getByRole("button", { name: "All tickers" })).toHaveAttribute("aria-pressed", "true");
-  fireEvent.click(await screen.findByRole("button", { name: "SAME · NYSE" }));
+  expect(await screen.findByRole("link", { name: "SAME · NYSE" })).toHaveAttribute("href", `/market-data/tickers/${item.id}`);
+  expect(screen.getByRole("link", { name: "SAME · NASDAQ" })).toHaveAttribute("href", `/market-data/tickers/${second.id}`);
+});
+
+it("still opens the raw record view from a bookmarked link", async () => {
+  window.history.replaceState(null, "", `/market-data?kind=listing&id=${item.id}`);
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => response(url.includes("/coverage") ? coverage : url.includes(item.id) ? detail() : { items: [], total: 0 })));
+  render(<MarketData />);
   expect(await screen.findByRole("heading", { name: "SAME · NYSE" })).toBeInTheDocument();
-  expect(window.location.search).toContain(`id=${item.id}`);
   expect(await screen.findByText("No matching records")).toBeInTheDocument();
   expect(screen.getByText(/Collection membership: Not configured/)).toBeInTheDocument();
 });
@@ -65,10 +71,10 @@ it("does not display a late identity response after rapid ticker switching", asy
     return response({ items: [item, second], total: 2 });
   });
   vi.stubGlobal("fetch", fetcher);
+  window.history.replaceState(null, "", `/market-data?kind=listing&id=${item.id}`);
   render(<MarketData />);
-  fireEvent.click(await screen.findByRole("button", { name: "SAME · NYSE" }));
   await waitFor(() => expect(finish).toBeDefined());
-  fireEvent.click(screen.getByRole("button", { name: "SAME · NASDAQ" }));
+  act(() => { window.history.pushState(null, "", `/market-data?kind=listing&id=${second.id}`); window.dispatchEvent(new PopStateEvent("popstate")); });
   expect(await screen.findByRole("heading", { name: "SAME · NASDAQ" })).toBeInTheDocument();
   await act(async () => { finish!(response(detail())); });
   expect(screen.queryByRole("heading", { name: "SAME · NYSE" })).not.toBeInTheDocument();
@@ -104,9 +110,7 @@ it("groups listings by GICS sector and lists a sector's tickers on demand", asyn
   expect(window.location.search).toContain("sector=45");
   expect(screen.getByRole("button", { name: /^Information Technology: / })).toHaveAttribute("aria-pressed", "true");
   await waitFor(() => expect(fetcher).toHaveBeenCalledWith(expect.stringMatching(/instruments\?.*kind=listing&sector=45/), expect.anything()));
-  fireEvent.click(await screen.findByRole("button", { name: "SAME · NYSE" }));
-  expect(window.location.search).toContain(`id=${item.id}`);
-  expect(await screen.findByRole("heading", { name: "SAME · NYSE" })).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: "SAME · NYSE" })).toHaveAttribute("href", `/market-data/tickers/${item.id}`);
 });
 
 it("asks for unclassified listings with sector=none", async () => {

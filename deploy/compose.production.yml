@@ -144,6 +144,7 @@ services:
       FACTORLAB_CATALOG_CSV_MAX_ROWS: ${FACTORLAB_CATALOG_CSV_MAX_ROWS:-10000}
       FACTORLAB_CATALOG_PREVIEW_DENY: ${FACTORLAB_CATALOG_PREVIEW_DENY:-}
       IBKR_SNAPSHOT_TIMES: ${IBKR_SNAPSHOT_TIMES:-06:00,16:30}
+      IBKR_FLEX_RUNNER_URL: ${IBKR_FLEX_RUNNER_URL:-http://ibkr-flex-runner:8091}
     depends_on:
       bootstrap:
         condition: service_completed_successfully
@@ -172,7 +173,7 @@ services:
     - backend
     security_opt:
     - no-new-privileges:true
-    logging:
+    logging: &id005
       driver: json-file
       options:
         max-size: 20m
@@ -204,6 +205,52 @@ services:
     - /var/log/factorlab/ingest-broker:/var/log/factorlab/ingest-broker
     mem_limit: 384m
     stop_grace_period: 60s
+    profiles:
+    - ibkr
+  ibkr-flex-runner:
+    image: ${FACTORLAB_INGEST_BROKER_IMAGE:-${FACTORLAB_IMAGE:-factorlab:latest}}
+    entrypoint:
+    - factorlab-ingest-broker
+    command:
+    - flex-runner
+    restart: unless-stopped
+    networks:
+    - backend
+    expose:
+    - '8091'
+    security_opt:
+    - no-new-privileges:true
+    logging: *id005
+    healthcheck:
+      test:
+      - CMD
+      - factorlab-healthcheck
+      - http
+      - http://127.0.0.1:8091/healthz
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: '8123'
+      CLICKHOUSE_DATABASE: default
+      CLICKHOUSE_USERNAME: factorlab
+      FACTORLAB_PERSIST_SECRETS: 'false'
+      FACTORLAB_SECRETS_DIR: /run/secrets/app
+      FACTORLAB_MONITOR_ADDR: ${FACTORLAB_MONITOR_ADDR:-}
+      FACTORLAB_COMPONENT: ingest-broker
+      FACTORLAB_SERVICE: ibkr-flex-runner
+      FACTORLAB_LOG_DIR: /var/log/factorlab/ingest-broker
+      IBKR_FLEX_QUERY_ID: ${IBKR_FLEX_QUERY_ID:-}
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    volumes:
+    - ibkr_client_runtime:/run/secrets/app:ro
+    - /var/log/factorlab/ingest-broker:/var/log/factorlab/ingest-broker
+    mem_limit: 256m
+    stop_grace_period: 30s
     profiles:
     - ibkr
   ingest-india:
@@ -297,7 +344,7 @@ services:
     - backend
     security_opt:
     - no-new-privileges:true
-    logging: &id005
+    logging: &id006
       driver: json-file
       options:
         max-size: 20m
@@ -337,7 +384,7 @@ services:
     - backend
     security_opt:
     - no-new-privileges:true
-    logging: *id005
+    logging: *id006
     mem_limit: 1g
     stop_grace_period: 120s
     environment:
@@ -372,7 +419,7 @@ services:
     - backend
     security_opt:
     - no-new-privileges:true
-    logging: *id005
+    logging: *id006
     mem_limit: 1g
     environment:
       CLICKHOUSE_HOST: clickhouse
@@ -402,7 +449,7 @@ services:
     - backend
     security_opt:
     - no-new-privileges:true
-    logging: *id005
+    logging: *id006
     mem_limit: 256m
     environment:
       CLICKHOUSE_HOST: clickhouse
@@ -594,28 +641,28 @@ networks:
 volumes:
   clickhouse_runtime:
     driver: local
-    driver_opts: &id006
+    driver_opts: &id007
       type: tmpfs
       device: tmpfs
       o: size=2m,mode=0755
   monitor_runtime:
     driver: local
-    driver_opts: *id006
+    driver_opts: *id007
   india_runtime:
     driver: local
-    driver_opts: *id006
+    driver_opts: *id007
   us_runtime:
     driver: local
-    driver_opts: *id006
+    driver_opts: *id007
   political_runtime:
     driver: local
-    driver_opts: *id006
+    driver_opts: *id007
   ibkr_paper_runtime:
     driver: local
-    driver_opts: *id006
+    driver_opts: *id007
   ibkr_live_runtime:
     driver: local
-    driver_opts: *id006
+    driver_opts: *id007
   ibkr_client_runtime:
     driver: local
-    driver_opts: *id006
+    driver_opts: *id007

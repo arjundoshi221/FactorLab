@@ -7,6 +7,7 @@ import { AtAGlance, DataMatrix } from "./DataMatrix";
 import { Futures } from "./Futures";
 import { Indexes } from "./Indexes";
 import { CollectionCoverage } from "./MarketData";
+import { tickerHref } from "../shared/urlState";
 import "./InstrumentExplorer.css";
 
 const base = "/hub/api/v1/market-data/instruments";
@@ -201,7 +202,9 @@ function InstrumentTable({ data, offset, selectedId, select, page }: {
   return <>
     <div className="md-table"><table><thead><tr><th>Instrument</th><th>Company</th><th>Country / type</th><th>Sector</th><th>Status</th><th>Collection</th></tr></thead>
       <tbody>{data.items.map(i => <tr key={`${i.kind}/${i.id}`} className={selectedId === i.id ? "is-selected" : ""}>
-        <td data-label="Instrument"><button type="button" className="md-symbol" onClick={() => select(i)}>{label(i)}</button>{i.kind === "contract" && <small>Contract</small>}</td>
+        <td data-label="Instrument">{i.kind === "listing"
+          ? <a className="md-symbol" href={tickerHref(i.id)}>{label(i)}</a>
+          : <><button type="button" className="md-symbol" onClick={() => select(i)}>{label(i)}</button><small>Contract</small></>}</td>
         <td data-label="Company">{i.name || "—"}</td>
         <td data-label="Country / type">{i.country} / {i.instrument_type}</td>
         <td data-label="Sector">{i.sector || <span className="md-muted">Unclassified</span>}</td>
@@ -270,7 +273,8 @@ export function MarketData() {
   }
   const requested = params.get("view");
   const view: View = views.find(v => v.key === requested)?.key ?? "all";
-  const select = (i: Instrument) => update({ kind: i.kind, id: i.id });
+  // Listings open their own page; contracts and explicit raw links keep the inline record view.
+  const select = (i: Instrument) => i.kind === "listing" ? window.location.assign(tickerHref(i.id)) : update({ kind: i.kind, id: i.id });
   const close = () => update({ kind: "", id: "" });
   const current = views.find(v => v.key === view)!;
   const kind = params.get("kind"), id = params.get("id");

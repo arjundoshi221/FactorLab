@@ -2,6 +2,9 @@ api:
   interval_s: 30.0
 futures-us:
   interval_s: 60.0
+ibkr-flex-runner:
+  interval_s: 30.0
+  profile: ibkr
 ibkr-snapshot:
   interval_s: 30.0
   profile: ibkr

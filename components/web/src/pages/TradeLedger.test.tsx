@@ -46,7 +46,7 @@ it("lists every order with its tags and filters on the server", async () => {
   expect(within(table).getByText("NVDA swing")).toBeInTheDocument();
   expect(within(table).getAllByText("Needs tags")).toHaveLength(2);
   expect(within(table).getByText("Not taggable")).toBeInTheDocument();
-  expect(within(table).getByRole("link", { name: "NVDA" })).toHaveAttribute("href", `/market-data?view=matrix&kind=listing&id=${LISTING}`);
+  expect(within(table).getByRole("link", { name: "NVDA" })).toHaveAttribute("href", `/market-data/tickers/${LISTING}`);
   expect(screen.getByRole("button", { name: "Needs tags 2" })).toHaveAttribute("aria-pressed", "false");
   fireEvent.click(screen.getByRole("button", { name: "Needs tags 2" }));
   await waitFor(() => expect(fetcher).toHaveBeenLastCalledWith(expect.stringMatching(/\/ledger\?.*tag=untagged/), expect.anything()));

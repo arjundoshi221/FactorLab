@@ -328,6 +328,24 @@ PIPELINES: tuple[PipelineInfo, ...] = (
         service="ibkr-snapshot",
         scheduled=False,
     ),
+    PipelineInfo(
+        id="broker.flex_activity:ibkr",
+        label="IBKR Flex history",
+        market="Broker",
+        source="IBKR Flex Web Service",
+        description="Backfills executions, executed orders and cash flows from the saved IBKR Activity Flex statement.",
+        schedule="On demand; the portfolio page's Sync IBKR history button (ibkr-flex-runner).",
+        expected_interval_seconds=None,
+        session_calendar=None,
+        tables_written=(
+            "broker.executions",
+            "broker.order_events",
+            "broker.cash_flows",
+            *COMMON_TABLES,
+        ),
+        service="ibkr-flex-runner",
+        scheduled=False,
+    ),
 )
 
 PIPELINES_BY_ID = {pipeline.id: pipeline for pipeline in PIPELINES}

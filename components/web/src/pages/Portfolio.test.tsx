@@ -103,3 +103,69 @@ it("charts net liquidation by range and aggregates base-currency positions only"
   expect(overview.getByText("150.00")).toHaveClass("portfolio-amount--positive");
   expect(screen.getByRole("group", { name: "Holdings by market value" })).toBeInTheDocument();
 });
+
+it("prefers broker-reported base-currency unrealized and gross values over position sums", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const path = new URL(url, "http://localhost");
+    if (path.pathname.endsWith("/summary")) return { ok: true, json: async () => ({ account: accounts[0], balances: snapshot([
+      { metric: "NetLiquidation", value_num: "100000.000000", currency: "USD" },
+      { metric: "UnrealizedPnL", value_num: "-321.500000", currency: "USD" },
+      { metric: "GrossPositionValue", value_num: "71000.000000", currency: "USD" }]) }) };
+    if (path.pathname.endsWith("/positions")) return { ok: true, json: async () => snapshot([
+      { trading_symbol: "TCS", position: 5, market_value: "-90000.00", unrealized_pnl: "-5000.00", currency: "INR" }]) };
+    return { ok: true, json: async () => response(url) };
+  }));
+  render(<Portfolio />);
+  const overview = within(await screen.findByLabelText("Account overview"));
+  expect(await overview.findByText("−321.50")).toHaveClass("portfolio-amount--negative");
+  expect(overview.getByText("71K")).toBeInTheDocument();
+  expect(overview.getAllByText("Broker-reported, all positions")).toHaveLength(2);
+});
+
+it("shows unknown, not zero, when no position is in the base currency", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const path = new URL(url, "http://localhost");
+    if (path.pathname.endsWith("/positions")) return { ok: true, json: async () => snapshot([
+      { trading_symbol: "TCS", position: 5, market_value: "-90000.00", unrealized_pnl: "-5000.00", currency: "INR" }]) };
+    return { ok: true, json: async () => response(url) };
+  }));
+  render(<Portfolio />);
+  const overview = within(await screen.findByLabelText("Account overview"));
+  await waitFor(() => expect(overview.getByText("Open positions").nextElementSibling).toHaveTextContent("1"));
+  expect(overview.getByText("Unrealized").nextElementSibling).toHaveTextContent("—");
+  expect(overview.getByText("Gross exposure").nextElementSibling).toHaveTextContent("—");
+  expect(overview.queryByText("0.00")).not.toBeInTheDocument();
+});
+
+it("syncs IBKR Flex history for a live account and refreshes it", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  const live = { ...accounts[0], account_id: "U123", account_mode: "live", simulated: false };
+  let latest = { state: "running" };
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const path = new URL(url, "http://localhost").pathname;
+    if (path.endsWith("/flex/runs") && init?.method === "POST") return { ok: true, json: async () => ({ state: "running", job_id: "j1" }) };
+    if (path.endsWith("/flex/runs/latest")) return { ok: true, json: async () => latest };
+    if (path.endsWith("/accounts")) return { ok: true, json: async () => ({ items: [live] }) };
+    return { ok: true, json: async () => response(url) };
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  try {
+    render(<Portfolio />);
+    fireEvent.click(await screen.findByRole("button", { name: "Sync IBKR history" }));
+    expect(await screen.findByRole("button", { name: "Syncing history…" })).toBeDisabled();
+    latest = { state: "success", rows_written: 7 } as typeof latest;
+    const calls = fetchMock.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(await screen.findByText(/History synced · 7 rows/)).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock.mock.calls.slice(calls).some(([url]) => String(url).includes("/positions"))).toBe(true));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("hides the Flex sync for simulated accounts", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, json: async () => response(url) })));
+  render(<Portfolio />);
+  await screen.findByRole("table", { name: "Positions" });
+  expect(screen.queryByRole("button", { name: "Sync IBKR history" })).not.toBeInTheDocument();
+});

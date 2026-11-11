@@ -11,6 +11,7 @@ import { PoliticalData } from "./pages/PoliticalData";
 import { Portfolio } from "./pages/Portfolio";
 import { PortfolioGroups } from "./pages/PortfolioBook";
 import { Roadmap } from "./pages/Roadmap";
+import { Ticker } from "./pages/Ticker";
 import { TradeLedger } from "./pages/TradeLedger";
 import { USMarkets } from "./pages/USMarkets";
 import { DataHome } from "./pages/catalog/DataHome";
@@ -30,6 +31,7 @@ const TableDetail = lazy(async () => {
 function Page({ path }: { path: string }) {
   const indiaInstrumentMatch = path.match(/^\/india\/instruments\/([0-9a-f-]+)$/i);
   const tableMatch = path.match(/^\/data\/tables\/([a-z_]+\.[a-z0-9_]+)$/);
+  const tickerMatch = path.match(/^\/market-data\/tickers\/([0-9a-f-]+)$/i);
   if (path === "/") return <Cockpit />;
   if (path === "/ops") return <OpsOverview />;
   if (path === "/portfolio") return <Portfolio />;
@@ -54,6 +56,7 @@ function Page({ path }: { path: string }) {
     );
   }
   if (path === "/market-data") return <MarketData />;
+  if (tickerMatch) return <Ticker key={tickerMatch[1]} listingId={tickerMatch[1]} />;
   if (path === "/monitoring") return <Monitoring />;
   if (path === "/roadmap") return <Roadmap />;
   if (path === "/docker-images") return <DockerImages />;
