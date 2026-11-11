@@ -192,8 +192,10 @@ function PortfolioPanel() {
   const netLiq = metric("NetLiquidation");
   const cash = metric("TotalCashValue");
   const rows = positions.data?.items ?? [];
-  const unrealized = rows.reduce((sum, row) => sum + (toNumber(row.unrealized_pnl) ?? 0), 0);
-  const gross = rows.reduce((sum, row) => sum + Math.abs(toNumber(row.market_value) ?? 0), 0);
+  // Broker's base-currency figure first; else base-currency positions only (never mix currencies); else unknown.
+  const baseRows = currency ? rows.filter((row) => row.currency === currency) : [];
+  const unrealized = metric("UnrealizedPnL") ?? (baseRows.length ? baseRows.reduce((sum, row) => sum + (toNumber(row.unrealized_pnl) ?? 0), 0) : null);
+  const gross = metric("GrossPositionValue") ?? (baseRows.length ? baseRows.reduce((sum, row) => sum + Math.abs(toNumber(row.market_value) ?? 0), 0) : null);
   const points = (equity.data?.points ?? []).map((point) => ({ t: point.t, value: Number(point.value) })).filter((point) => Number.isFinite(point.value));
   const href = profile && account ? `/portfolio?${new URLSearchParams({ user_id: profile.user_id, account: JSON.stringify([account.broker_code, account.account_id]) })}` : "/portfolio";
   const tiles = rows.map((row) => {
@@ -215,8 +217,8 @@ function PortfolioPanel() {
         <dl className="ck-kpis">
           <div><dt>Net liq {currency}</dt><dd>{compactMoney(netLiq)}</dd></div>
           <div><dt>Cash</dt><dd>{compactMoney(cash)}</dd></div>
-          <div><dt>Gross exp</dt><dd>{rows.length ? compactMoney(gross) : "—"}</dd></div>
-          <div><dt>Unrealized</dt><dd className={`t-num--${direction(unrealized)}`}>{rows.length ? `${arrow(unrealized)} ${compactMoney(unrealized)}` : "—"}</dd></div>
+          <div><dt>Gross exp</dt><dd>{gross === null ? "—" : compactMoney(gross)}</dd></div>
+          <div><dt>Unrealized</dt><dd className={unrealized === null ? undefined : `t-num--${direction(unrealized)}`}>{unrealized === null ? "—" : `${arrow(unrealized)} ${compactMoney(unrealized)}`}</dd></div>
           <div><dt>Positions</dt><dd>{positions.data?.snapshot_time ? rows.length : "—"}</dd></div>
         </dl>
         <div className="ck-portfolio__charts">

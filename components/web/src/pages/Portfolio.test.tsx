@@ -104,6 +104,39 @@ it("charts net liquidation by range and aggregates base-currency positions only"
   expect(screen.getByRole("group", { name: "Holdings by market value" })).toBeInTheDocument();
 });
 
+it("prefers broker-reported base-currency unrealized and gross values over position sums", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const path = new URL(url, "http://localhost");
+    if (path.pathname.endsWith("/summary")) return { ok: true, json: async () => ({ account: accounts[0], balances: snapshot([
+      { metric: "NetLiquidation", value_num: "100000.000000", currency: "USD" },
+      { metric: "UnrealizedPnL", value_num: "-321.500000", currency: "USD" },
+      { metric: "GrossPositionValue", value_num: "71000.000000", currency: "USD" }]) }) };
+    if (path.pathname.endsWith("/positions")) return { ok: true, json: async () => snapshot([
+      { trading_symbol: "TCS", position: 5, market_value: "-90000.00", unrealized_pnl: "-5000.00", currency: "INR" }]) };
+    return { ok: true, json: async () => response(url) };
+  }));
+  render(<Portfolio />);
+  const overview = within(await screen.findByLabelText("Account overview"));
+  expect(await overview.findByText("−321.50")).toHaveClass("portfolio-amount--negative");
+  expect(overview.getByText("71K")).toBeInTheDocument();
+  expect(overview.getAllByText("Broker-reported, all positions")).toHaveLength(2);
+});
+
+it("shows unknown, not zero, when no position is in the base currency", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const path = new URL(url, "http://localhost");
+    if (path.pathname.endsWith("/positions")) return { ok: true, json: async () => snapshot([
+      { trading_symbol: "TCS", position: 5, market_value: "-90000.00", unrealized_pnl: "-5000.00", currency: "INR" }]) };
+    return { ok: true, json: async () => response(url) };
+  }));
+  render(<Portfolio />);
+  const overview = within(await screen.findByLabelText("Account overview"));
+  await waitFor(() => expect(overview.getByText("Open positions").nextElementSibling).toHaveTextContent("1"));
+  expect(overview.getByText("Unrealized").nextElementSibling).toHaveTextContent("—");
+  expect(overview.getByText("Gross exposure").nextElementSibling).toHaveTextContent("—");
+  expect(overview.queryByText("0.00")).not.toBeInTheDocument();
+});
+
 it("syncs IBKR Flex history for a live account and refreshes it", async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   const live = { ...accounts[0], account_id: "U123", account_mode: "live", simulated: false };

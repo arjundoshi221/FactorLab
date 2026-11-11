@@ -39,16 +39,20 @@ function AccountMetrics({ account, summary, positions, orders }: {
     // Only show an account-wide value in its stated base currency; never add currencies or segments.
     return currency ? summary?.balances.items.find(row => row.metric === name && !row.segment && row.currency === currency)?.value_num : null;
   }
-  // Position aggregates use base-currency rows only, so currencies are never added together.
+  // Prefer the broker's account-wide figure, already converted to the base currency. Otherwise sum
+  // base-currency positions only, so currencies are never added together; with no such positions
+  // the value is unknown (an em dash), not zero.
   const base = positions?.snapshot_time && currency ? positions.items.filter(row => row.currency === currency) : null;
-  const sum = (key: string) => base?.reduce((total, row) => total + (toNumber(row[key]) ?? 0), 0) ?? null;
-  const gross = base?.reduce((total, row) => total + Math.abs(toNumber(row.market_value) ?? 0), 0) ?? null;
-  const unrealized = sum("unrealized_pnl");
+  const baseRows = base?.length ? base : null;
+  const brokerNumber = (name: string) => toNumber(metric(name) ?? null);
+  const unrealized = brokerNumber("UnrealizedPnL") ?? baseRows?.reduce((total, row) => total + (toNumber(row.unrealized_pnl) ?? 0), 0) ?? null;
+  const gross = brokerNumber("GrossPositionValue") ?? baseRows?.reduce((total, row) => total + Math.abs(toNumber(row.market_value) ?? 0), 0) ?? null;
+  const fromBroker = (name: string) => brokerNumber(name) !== null;
   return <dl className="portfolio-overview" aria-label="Account overview">
     <div><dt>Net liquidation <span>{currency}</span></dt><dd><Amount value={metric("NetLiquidation")} /></dd><small>Broker account value</small></div>
     <div><dt>Cash balance <span>{currency}</span></dt><dd><Amount value={metric("TotalCashValue")} /></dd><small>Total broker-reported cash</small></div>
-    <div><dt>Gross exposure <span>{currency}</span></dt><dd>{gross === null ? "—" : compactMoney(gross)}</dd><small>Sum of |market value|, {currency || "base"} positions</small></div>
-    <div><dt>Unrealized <span>{currency}</span></dt><dd><Amount value={unrealized === null ? null : unrealized.toFixed(2)} signed /></dd><small>Broker-reported, {currency || "base"} positions</small></div>
+    <div><dt>Gross exposure <span>{currency}</span></dt><dd>{gross === null ? "—" : compactMoney(gross)}</dd><small>{fromBroker("GrossPositionValue") ? "Broker-reported, all positions" : `Sum of |market value|, ${currency || "base"} positions`}</small></div>
+    <div><dt>Unrealized <span>{currency}</span></dt><dd><Amount value={unrealized === null ? null : unrealized.toFixed(2)} signed /></dd><small>{fromBroker("UnrealizedPnL") ? "Broker-reported, all positions" : `Broker-reported, ${currency || "base"} positions`}</small></div>
     <div><dt>Open positions</dt><dd>{positions?.snapshot_time ? positions.items.length : "—"}</dd><small>In the latest snapshot</small></div>
     <div><dt>Working orders</dt><dd>{orders?.snapshot_time ? orders.items.length : "—"}</dd><small>In the latest snapshot</small></div>
   </dl>;
