@@ -1,18 +1,27 @@
 # Production branch trials
 
-## Dedicated UI trial branch
+Until the component-pin rollout ([docs/operations/rollout.md](../../docs/operations/rollout.md))
+installs `/opt/factorlab/state/images.env`, production units are deployed by these
+CI-gated, self-verifying trials. Every trial deploys a commit on `main`.
 
-The current public UI is served by the `web` and `api-candidate` services from the
-pre-rollout branch trial. UI updates, including Monitoring, can be deployed without merging the
-platform restructure to `main` by using `restructure/deploy-market-data-ui` and the
-reviewed [UI trial workflow](../../.github/workflows/branch-ui-deploy.yml). This path
-replaces only those two services. It leaves the primary API, ClickHouse, ingestion,
-monitor, secrets agent, Caddy, and Cloudflare Access configuration untouched.
+## UI trial (automatic on `main`)
 
-From a clean, synchronized deployment branch after CI passes, run
-`./deploy/release-ui-trial.ps1`. It pushes an immutable `ui-trial/<12-char SHA>` tag.
-The workflow checks branch tip and CI again, builds and verifies immutable API/web
-images through the existing image workflow, then runs
+The public UI is served by the `web` and `api-candidate` services. The
+[UI trial workflow](../../.github/workflows/branch-ui-deploy.yml) replaces only those two
+services. It leaves the primary API, ClickHouse, ingestion, monitor, secrets agent, Caddy,
+and Cloudflare Access configuration untouched.
+
+- **Automatic:** a push to `main` that changes `components/web/`, `components/api/`,
+  `libs/`, `configs/`, `pyproject.toml` or `uv.lock` starts the workflow. It waits for CI
+  on that commit (up to 50 minutes) and deploys when CI is green. A commit whose CI fails
+  is not deployed; one whose CI was cancelled by a newer push is skipped, and the newer
+  push deploys instead.
+- **Manual:** from a clean `main` that matches `origin/main` after CI passes, run
+  `./deploy/release-ui-trial.ps1`. It pushes an immutable `ui-trial/<12-char SHA>` tag
+  (for example to deploy a commit the path filter skipped). Each commit deploys at most once.
+
+The workflow checks that the commit is on `main` and CI is green, builds and verifies
+immutable API/web images through the image workflow, then runs
 [`ui_test.py`](ui_test.py) on the host under the global release lock. The runner
 captures the live resolved Compose model and protected container identities in a
 root-only `/opt/factorlab/deployment-tests/ui-<SHA>/` directory, pulls both image
@@ -20,13 +29,6 @@ digests, replaces the candidate API first and web second, and checks health,
 version, four US/India daily/historical universe reads, and the Market Data route. Monitoring responses and the served error-inbox bundle are also verified.
 An activation or verification failure restores the exact preceding images and
 model. The workflow summary reports verification and recovery.
-
-Branch state, 2026-10-19: `testing/prod-ingestion-20260930` holds all committed
-local work. It merges both deployment branches (`restructure/deploy-market-data-ui`
-and `restructure/deploy-monitoring-ingest`), and the UI trial branch was
-fast-forwarded to it. Develop on the working branch, then fast-forward
-`restructure/deploy-market-data-ui` to the commit to deploy. The workflow requires the
-tag to name that branch's tip.
 
 The tag is not a normal component release and does not bootstrap component pins.
 Once the platform rollout installs `/opt/factorlab/state/images.env`, the runner
@@ -38,7 +40,7 @@ September 30 ingestion-only restore command for this UI trial.
 
 ## Political trial
 
-Same branch, gate and image build as the UI trial, for `ingest-political`:
+Same gate (CI-green commit on `main`) and image build as the UI trial, for `ingest-political`:
 `./deploy/release-ui-trial.ps1 -Trial political` pushes `political-trial/<12-char SHA>`
 and starts [branch-political-deploy.yml](../../.github/workflows/branch-political-deploy.yml).
 On the host, [`political_test.py`](political_test.py) takes the release lock and the
@@ -58,7 +60,7 @@ political-<SHA>` reinstalls the preceding model (image only, not data).
 
 `./deploy/release-ui-trial.ps1 -Trial ingest -Scope <scope>` (scope `futures-us`,
 `indexes-us`, `ingest-us`, `ingest-india` or `ingest-broker`) pushes `ingest-trial/<scope>/<12-char SHA>`
-from the CI-green tip of `restructure/deploy-market-data-ui` and starts
+for a CI-green commit on `main` and starts
 [branch-ingest-deploy.yml](../../.github/workflows/branch-ingest-deploy.yml). It builds and
 publishes the unit image (`0.0.0-trial.<SHA>`) through the image workflow, transfers
 [`ingest_trial.py`](ingest_trial.py), `ingestion_test.py` and the commit's
@@ -81,7 +83,7 @@ immutable, so one commit gets one trial per image unit (`futures-us`, `indexes-u
 
 `./deploy/release-ui-trial.ps1 -Trial platform -Scope <scope>` (scope `monitor`,
 `secrets-agent` or `schema-migrator`) pushes `platform-trial/<scope>/<12-char SHA>` from
-the CI-green tip of `restructure/deploy-market-data-ui` and starts
+a CI-green commit on `main` and starts
 [branch-platform-deploy.yml](../../.github/workflows/branch-platform-deploy.yml). It
 publishes the unit image through the image workflow, transfers
 [`platform_trial.py`](platform_trial.py) (with `ingest_trial.py` and `ingestion_test.py`,

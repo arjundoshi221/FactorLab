@@ -1,8 +1,8 @@
 name: Branch political trial release
 
-# A tagged, CI-green commit on the dedicated branch installs a new ingest-political
+# A tagged, CI-green commit on main installs a new ingest-political
 # image (the daily cron runs it) and applies the identity repair
-# (docs/operations/identity-repair.md). Main and normal release tags are untouched.
+# (docs/operations/identity-repair.md). Normal release tags are untouched.
 on:
   push:
     tags: ["political-trial/*"]
@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Check immutable tag, branch tip, and CI
+      - name: Check immutable tag, main ancestry, and CI
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
@@ -38,9 +38,9 @@ jobs:
           short=${BASH_REMATCH[1]}
           commit=$(git rev-parse HEAD)
           [[ ${commit:0:12} == "$short" ]] || { echo "Tag does not name its commit" >&2; exit 1; }
-          git fetch --no-tags origin restructure/deploy-market-data-ui
-          [[ $(git rev-parse FETCH_HEAD) == "$commit" ]] || {
-            echo "Tag must point to the dedicated branch tip" >&2; exit 1; }
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$commit" FETCH_HEAD || {
+            echo "Tag must point to a commit on main" >&2; exit 1; }
           runs=$(gh api "repos/$REPOSITORY/actions/runs?head_sha=$commit&per_page=30")
           jq -e --arg sha "$commit" '
             any(.workflow_runs[]; .name == "CI" and .head_sha == $sha

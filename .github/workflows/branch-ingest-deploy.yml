@@ -1,11 +1,11 @@
 name: Branch ingestion trial release
 
-# A tagged, CI-green commit on the dedicated branch replaces (or adds) the ingestion
+# A tagged, CI-green commit on main replaces (or adds) the ingestion
 # services of one scope through deploy/testing/ingest_trial.py: plan, apply, verify,
 # with the preceding model restored on a failed startup. Tag ingest-trial/<scope>/<sha12>,
 # scope one of futures-us or indexes-us (each adds only that service), ingest-us,
 # ingest-india, ingest-broker.
-# Main and normal release tags are untouched; schema migrations are never run here.
+# Normal release tags are untouched; schema migrations are never run here.
 on:
   push:
     tags: ["ingest-trial/*/*"]
@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Check immutable tag, scope, branch tip, and CI
+      - name: Check immutable tag, scope, main ancestry, and CI
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
@@ -46,9 +46,9 @@ jobs:
           case $scope in futures-us|indexes-us) unit=ingest-us ;; *) unit=$scope ;; esac
           commit=$(git rev-parse HEAD)
           [[ ${commit:0:12} == "$short" ]] || { echo "Tag does not name its commit" >&2; exit 1; }
-          git fetch --no-tags origin restructure/deploy-market-data-ui
-          [[ $(git rev-parse FETCH_HEAD) == "$commit" ]] || {
-            echo "Tag must point to the dedicated branch tip" >&2; exit 1; }
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$commit" FETCH_HEAD || {
+            echo "Tag must point to a commit on main" >&2; exit 1; }
           runs=$(gh api "repos/$REPOSITORY/actions/runs?head_sha=$commit&per_page=30")
           jq -e --arg sha "$commit" '
             any(.workflow_runs[]; .name == "CI" and .head_sha == $sha

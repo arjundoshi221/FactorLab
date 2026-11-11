@@ -1,10 +1,10 @@
 name: Branch platform trial release
 
-# A tagged, CI-green commit on the dedicated branch replaces one platform service through
+# A tagged, CI-green commit on main replaces one platform service through
 # deploy/testing/platform_trial.py: plan, apply, verify, with the preceding model restored
 # on a failed check. Tag platform-trial/<scope>/<sha12>, scope one of monitor,
 # secrets-agent or schema-migrator (the migrator only runs its read-only checks and is
-# pinned for later starts). Main and normal release tags are untouched; schema
+# pinned for later starts). Normal release tags are untouched; schema
 # migrations are never run here.
 on:
   push:
@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Check immutable tag, scope, branch tip, and CI
+      - name: Check immutable tag, scope, main ancestry, and CI
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
@@ -46,9 +46,9 @@ jobs:
           unit=$scope
           commit=$(git rev-parse HEAD)
           [[ ${commit:0:12} == "$short" ]] || { echo "Tag does not name its commit" >&2; exit 1; }
-          git fetch --no-tags origin restructure/deploy-market-data-ui
-          [[ $(git rev-parse FETCH_HEAD) == "$commit" ]] || {
-            echo "Tag must point to the dedicated branch tip" >&2; exit 1; }
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$commit" FETCH_HEAD || {
+            echo "Tag must point to a commit on main" >&2; exit 1; }
           runs=$(gh api "repos/$REPOSITORY/actions/runs?head_sha=$commit&per_page=30")
           jq -e --arg sha "$commit" '
             any(.workflow_runs[]; .name == "CI" and .head_sha == $sha

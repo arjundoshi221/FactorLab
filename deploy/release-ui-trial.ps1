@@ -1,11 +1,14 @@
 <#
 .SYNOPSIS
-Tag a CI-green commit on the dedicated UI deployment branch.
+Tag the CI-green tip of main for a branch trial deployment.
 
 .DESCRIPTION
+Run from a clean main that matches origin/main exactly.
+
 The immutable ui-trial/<short SHA> tag starts branch-ui-deploy.yml. That workflow
 builds verified API and web images, then updates only the current branch-trial
-api-candidate and web containers. It does not change main or ingestion services.
+api-candidate and web containers. It does not change ingestion services. Pushes to
+main that touch the API or web deploy the UI automatically; use this to redeploy.
 
 With -Trial political, the political-trial/<short SHA> tag starts
 branch-political-deploy.yml instead: it installs the ingest-political image and
@@ -51,16 +54,16 @@ if ($LASTEXITCODE -ne 0 -or -not $repoRoot) { throw "Run from a Git worktree." }
 Push-Location $repoRoot
 try {
     $branch = (& git branch --show-current).Trim()
-    if ($branch -ne "restructure/deploy-market-data-ui") {
-        throw "The UI trial must start from restructure/deploy-market-data-ui."
+    if ($branch -ne "main") {
+        throw "Trials start from main (current branch: $branch)."
     }
     $dirty = & git status --porcelain=v1 --untracked-files=all
     if ($LASTEXITCODE -ne 0 -or $dirty) { throw "The UI trial worktree must be clean." }
-    & git fetch --no-tags origin restructure/deploy-market-data-ui
-    if ($LASTEXITCODE -ne 0) { throw "Could not fetch the deployment branch." }
+    & git fetch --no-tags origin main
+    if ($LASTEXITCODE -ne 0) { throw "Could not fetch main." }
     $commit = (& git rev-parse HEAD).Trim()
     $remoteHead = (& git rev-parse FETCH_HEAD).Trim()
-    if ($commit -ne $remoteHead) { throw "The branch must match origin exactly." }
+    if ($commit -ne $remoteHead) { throw "main must match origin/main exactly (pull or push first)." }
     $headers = @{ "User-Agent" = "FactorLab-UI-Trial" }
     $url = "https://api.github.com/repos/arjundoshi221/FactorLab/actions/runs?head_sha=$commit&per_page=30"
     $runs = Invoke-RestMethod -Uri $url -Headers $headers -TimeoutSec 20
