@@ -1,0 +1,149 @@
+/* Portfolio app theme. The portfolio is its own app with its own look: it redefines the
+ * shared role tokens (theme/tokens.css) under [data-pf-theme], so the terminal pages keep
+ * the Bloomberg look and every portfolio rule and chart re-themes through roles alone.
+ * Chart slots: dark keeps the terminal's validated dark steps; light uses the reference
+ * palette's light steps (dataviz palette.md), validated against a near-white surface. */
+[data-pf-theme] {
+  --sans: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* Figures use the sans face with tabular digits instead of a terminal monospace. */
+  --mono: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --fs-2xs: 10px;
+  --fs-xs: 11px;
+  --fs-s: 12px;
+  --fs-m: 13px;
+  --fs-l: 15px;
+  --fs-xl: 20px;
+  --fs-2xl: 28px;
+  --radius: 10px;
+  --radius-s: 6px;
+  --row: 34px;
+  --control: 34px;
+  --sticky: 60px;
+  --pf-bar: 60px;
+  --pf-width: 1480px;
+}
+
+[data-pf-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0a0f1a;
+  --panel-soft: #0e1522;
+  --panel: #111a2a;
+  --raised: #162135;
+  --hover: #1a2740;
+  --press: #1f2d48;
+  --line: #1f2b40;
+  --line-2: #2a3953;
+  --line-3: #3a4b68;
+  --ink: #edf1f7;
+  --ink-2: #ccd4e0;
+  --ink-3: #a3aec0;
+  --muted: #8592a8;
+  --faint: #5f6c83;
+  --accent: #8ea8ff;
+  --accent-ink: #0a1020;
+  --up: #2fbf7f;
+  --down: #f0626a;
+  --flat: #7d889b;
+  --good: #2fbf7f;
+  --warn: #f2b33d;
+  --bad: #f0626a;
+  --info: #5aa2f5;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --grid: #1f2b40;
+  --axis: #73809a;
+  --shadow: 0 1px 0 rgba(255, 255, 255, .03) inset, 0 12px 32px rgba(0, 0, 0, .35);
+  --card-glow: linear-gradient(180deg, rgba(255, 255, 255, .025), transparent 60%);
+}
+
+[data-pf-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f5f9;
+  --panel-soft: #f8f9fc;
+  --panel: #ffffff;
+  --raised: #f4f6fa;
+  --hover: #eef1f7;
+  --press: #e6eaf2;
+  --line: #e3e7ef;
+  --line-2: #d6dce7;
+  --line-3: #c2cad8;
+  --ink: #111827;
+  --ink-2: #283244;
+  --ink-3: #4b5568;
+  --muted: #5f6b80;
+  --faint: #8a94a6;
+  --accent: #3b5bdb;
+  --accent-ink: #ffffff;
+  --up: #12804f;
+  --down: #c9333a;
+  --flat: #6b7280;
+  --good: #12804f;
+  --warn: #a86400;
+  --bad: #c9333a;
+  --info: #1d6fd1;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  --grid: #e6e9ef;
+  --axis: #6b7486;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 6px 20px rgba(16, 24, 40, .05);
+  --card-glow: none;
+}
+
+html[data-pf-theme], html[data-pf-theme] body { background: var(--bg); color: var(--ink); }
+
+/* App chrome */
+.pf-app { min-height: 100vh; background: var(--bg); color: var(--ink); font: 400 13px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
+.pf-app h1, .pf-app h2, .pf-app h3 { color: var(--ink); }
+.pf-bar { position: sticky; top: 0; z-index: var(--z-sticky); display: flex; align-items: center; gap: 24px; height: var(--pf-bar); padding: 0 max(20px, calc((100vw - var(--pf-width)) / 2)); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(12px); }
+.pf-brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; flex: 0 0 auto; }
+.pf-brand__mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 45%, var(--series-3))); color: var(--accent-ink); font: 700 12px var(--sans); letter-spacing: -.02em; }
+.pf-brand strong { font: 600 17px var(--serif); letter-spacing: -.01em; }
+.pf-brand small { color: var(--muted); font-size: 12px; font-weight: 500; }
+.pf-nav { display: flex; align-items: stretch; gap: 4px; flex: 1 1 auto; min-width: 0; height: 100%; overflow-x: auto; scrollbar-width: none; }
+.pf-nav a { display: flex; align-items: center; padding: 0 12px; color: var(--muted); border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500; text-decoration: none; white-space: nowrap; }
+.pf-nav a:hover { color: var(--ink); }
+.pf-nav a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); }
+.pf-bar__tools { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: 0 0 auto; }
+.pf-app .pf-chip-button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--panel); color: var(--ink-2); box-shadow: none; font: 500 12px var(--sans); text-decoration: none; cursor: pointer; }
+.pf-app .pf-chip-button:hover:not(:disabled) { background: var(--hover); color: var(--ink); box-shadow: none; }
+.pf-app .pf-chip-button svg { width: 15px; height: 15px; }
+.pf-body { width: 100%; min-width: 0; max-width: var(--pf-width); margin: 0 auto; padding: 0 20px 48px; overflow-wrap: anywhere; }
+.pf-body > main { max-width: none; padding: 0; }
+.pf-foot { display: flex; flex-wrap: wrap; gap: 16px; max-width: var(--pf-width); margin: 0 auto; padding: 16px 20px 28px; color: var(--faint); border-top: 1px solid var(--line); font-size: 11px; }
+
+/* Page header */
+.pf-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 28px 0 8px; flex-wrap: wrap; }
+.pf-head__eyebrow { display: block; margin-bottom: 6px; color: var(--accent); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.pf-app .pf-head h1 { margin: 0; font: 600 30px/1.15 var(--serif); letter-spacing: -.015em; }
+.pf-app .pf-head p { margin: 6px 0 0; max-width: 70ch; color: var(--muted); font-size: 13px; }
+.pf-head__tools { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+
+/* Shared terminal primitives used inside portfolio pages, softened for this theme. */
+.pf-app input, .pf-app select, .pf-app textarea { color-scheme: inherit; }
+.pf-app :is(button, a, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pf-app .t-seg { gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); }
+.pf-app .t-seg button { min-height: 26px; padding: 0 12px; border-radius: 999px; background: transparent; box-shadow: none; color: var(--muted); font: 600 11px var(--sans); }
+.pf-app .t-seg button.is-active { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .15); }
+.pf-app .t-treemap { border-radius: var(--radius-s); overflow: hidden; }
+.pf-app .t-treemap__tile strong { font-family: var(--sans); }
+
+@media (max-width: 760px) {
+  .pf-bar { flex-wrap: wrap; row-gap: 0; gap: 12px; height: auto; padding: 10px 16px 0; }
+  .pf-nav { order: 3; flex-basis: 100%; height: 44px; margin: 0 -12px; }
+  .pf-brand small, .pf-chip-button .pf-hide-s { display: none; }
+  .pf-body { padding: 0 16px 40px; }
+  .pf-app .pf-head h1 { font-size: 24px; }
+}

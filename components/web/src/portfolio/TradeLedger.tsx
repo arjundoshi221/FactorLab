@@ -1,12 +1,12 @@
 import { Fragment, useState } from "react";
 
-import type { CatalogEntry, CatalogKind, ItemsPage, LedgerPage, LedgerRow, LedgerTagStatus, OrderAssignment, Profile } from "../portfolioTypes";
+import type { CatalogEntry, CatalogKind, ItemsPage, LedgerPage, LedgerRow, LedgerTagStatus, OrderAssignment, Profile } from "./types";
 import { errorMessage, fetchJson, useRemote } from "../shared/api";
 import { SignedBars } from "../shared/charts";
 import { formatTime } from "../shared/format";
 import { compactMoney, toNumber } from "../shared/market";
 import { tickerHref, useUrlParams } from "../shared/urlState";
-import { PortfolioTabs, TagSelectors, hasTags, kinds, singular } from "./PortfolioBook";
+import { TagSelectors, hasTags, kinds, singular } from "./PortfolioBook";
 import { Amount, EmptyState, PortfolioHeader, PortfolioIcon, ProfileSelect } from "./PortfolioUI";
 import "./Portfolio.css";
 import "./TradeLedger.css";
@@ -147,7 +147,6 @@ export function TradeLedger() {
     <PortfolioHeader title="Trades" description="Every executed order across your accounts, with the theme, strategy and trade name it belongs to.">
       <ProfileSelect profiles={profiles.data?.items ?? []} value={userId} disabled={profiles.loading && !profiles.data} onChange={value => { setSelected(new Set()); update(p => { p.set("user_id", value); p.delete("account"); p.delete("offset"); }, true); }} />
     </PortfolioHeader>
-    <PortfolioTabs active="trades" userId={userId} account={account ?? ""} />
     {Boolean(profiles.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(profiles.error)}</p>}
     {!userId ? (profiles.loading ? <p className="portfolio-empty-inline" role="status">Loading profiles…</p> : <EmptyState title="No profile available">Register a profile to see and tag its trades.</EmptyState>) : <section className="portfolio-section">
       <div className="ledger-chips" role="group" aria-label="Tag status">

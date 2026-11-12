@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
-import type { BrokerAccount } from "../portfolioTypes";
+import type { BrokerAccount } from "./types";
 import { OrderTagging, PortfolioGroups } from "./PortfolioBook";
 
 const A = "d677331a-a04f-454a-8a1e-02425be2c101";

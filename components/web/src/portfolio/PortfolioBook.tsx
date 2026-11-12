@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 
-import type { BrokerAccount, CatalogEntry, CatalogKind, ItemsPage, OrderAssignment, OrdersPage, PnlGroup, Profile, TaggedOrder } from "../portfolioTypes";
+import type { BrokerAccount, CatalogEntry, CatalogKind, ItemsPage, OrderAssignment, OrdersPage, PnlGroup, Profile, TaggedOrder } from "./types";
 import { errorMessage, fetchJson, useRemote } from "../shared/api";
 import { SignedBars } from "../shared/charts";
 import { formatTime } from "../shared/format";
@@ -14,16 +14,6 @@ export const labels = { themes: "Themes", strategies: "Strategies", "trade-names
 export const singular = { themes: "theme", strategies: "strategy", "trade-names": "trade name" };
 export const fields = { themes: "theme_id", strategies: "strategy_id", "trade-names": "trade_name_id" } as const;
 export const hasTags = (order: OrderAssignment) => kinds.every(kind => Boolean(order[fields[kind]]));
-
-export function PortfolioTabs({ active, userId = "", account = "" }: { active: "accounts" | "trades" | CatalogKind; userId?: string; account?: string }) {
-  const query = new URLSearchParams({ user_id: userId });
-  if (account) query.set("account", account);
-  return <nav className="portfolio-tabs" aria-label="Portfolio screens">
-    <a href={`/portfolio?${query}`} aria-current={active === "accounts" ? "page" : undefined}>Accounts & orders</a>
-    <a href={`/portfolio/trades?${query}`} aria-current={active === "trades" ? "page" : undefined}>Trades</a>
-    {kinds.map(kind => <a key={kind} href={`/portfolio/${kind}?${query}`} aria-current={active === kind ? "page" : undefined}>{labels[kind]}</a>)}
-  </nav>;
-}
 
 const NEW_ENTRY = "__new__";
 
@@ -290,7 +280,6 @@ export function PortfolioGroups({ kind }: { kind: CatalogKind }) {
   return <main className="portfolio-page"><PortfolioHeader title={labels[kind]} description={descriptions[kind]}>
       <ProfileSelect profiles={profiles.data?.items ?? []} value={selected} disabled={profiles.loading && !profiles.data} onChange={value => { setUserId(value); setAccount(""); setPortfolioQuery(value); }} />
     </PortfolioHeader>
-    <PortfolioTabs active={kind} userId={selected} account={account} />
     {Boolean(profiles.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(profiles.error)}</p>}
     {selected ? <div key={`${kind}/${selected}`} className="portfolio-details"><PnlReport kind={kind} userId={selected} selected={account} onSelect={value => { setAccount(value); setPortfolioQuery(selected, value); }} /><CatalogManager kind={kind} userId={selected} /></div> : profiles.loading ? <p className="portfolio-empty-inline" role="status">Loading profiles…</p> : <EmptyState title="No profile available">Register a profile to create tags and track performance.</EmptyState>}
     <p className="portfolio-workspace-note">Shared workspace · Catalogs belong to the selected profile. Archived entries remain in historical assignments.</p>

@@ -8,11 +8,8 @@ import { MarketData } from "./pages/InstrumentExplorer";
 import { Monitoring } from "./pages/Monitoring";
 import { OpsOverview } from "./pages/OpsOverview";
 import { PoliticalData } from "./pages/PoliticalData";
-import { Portfolio } from "./pages/Portfolio";
-import { PortfolioGroups } from "./pages/PortfolioBook";
 import { Roadmap } from "./pages/Roadmap";
 import { Ticker } from "./pages/Ticker";
-import { TradeLedger } from "./pages/TradeLedger";
 import { USMarkets } from "./pages/USMarkets";
 import { DataHome } from "./pages/catalog/DataHome";
 import { Pipelines } from "./pages/catalog/Pipelines";
@@ -22,6 +19,14 @@ const SchemaExplorer = lazy(async () => {
   const module = await import("./pages/schema/SchemaExplorer");
   return { default: module.SchemaExplorer };
 });
+
+// The portfolio is a separate app (own shell, theme and chunk); the terminal never loads it.
+const PortfolioApp = lazy(async () => {
+  const module = await import("./portfolio/PortfolioApp");
+  return { default: module.PortfolioApp };
+});
+
+const isPortfolioPath = (path: string) => path === "/portfolio" || path.startsWith("/portfolio/");
 
 const TableDetail = lazy(async () => {
   const module = await import("./pages/catalog/TableDetail");
@@ -34,11 +39,6 @@ function Page({ path }: { path: string }) {
   const tickerMatch = path.match(/^\/market-data\/tickers\/([0-9a-f-]+)$/i);
   if (path === "/") return <Cockpit />;
   if (path === "/ops") return <OpsOverview />;
-  if (path === "/portfolio") return <Portfolio />;
-  if (path === "/portfolio/trades") return <TradeLedger />;
-  if (path === "/portfolio/themes") return <PortfolioGroups kind="themes" />;
-  if (path === "/portfolio/strategies") return <PortfolioGroups kind="strategies" />;
-  if (path === "/portfolio/trade-names") return <PortfolioGroups kind="trade-names" />;
   if (path === "/data") return <DataHome />;
   if (path === "/data/pipelines") return <Pipelines />;
   if (tableMatch) {
@@ -71,9 +71,17 @@ export function App() {
   // Indexes and Futures live in Market Data; keep direct links working.
   if (window.location.pathname === "/indexes") window.history.replaceState(null, "", "/market-data?view=indexes");
   if (window.location.pathname === "/futures") window.history.replaceState(null, "", "/market-data?view=futures");
+  const path = window.location.pathname;
+  if (isPortfolioPath(path)) {
+    return (
+      <Suspense fallback={<main className="loading-state">Loading portfolio…</main>}>
+        <PortfolioApp path={path} />
+      </Suspense>
+    );
+  }
   return (
     <TerminalShell>
-      <Page path={window.location.pathname} />
+      <Page path={path} />
     </TerminalShell>
   );
 }

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
-import type { AccountSummary, BrokerAccount, BrokerRow, ExecutionPage, ItemsPage, Profile, SnapshotPage } from "../portfolioTypes";
+import type { AccountSummary, BrokerAccount, BrokerRow, ExecutionPage, ItemsPage, Profile, SnapshotPage } from "./types";
 import { Segmented } from "../components/ui";
 import { ApiError, errorMessage, fetchJson, useRemote } from "../shared/api";
 import { AreaChart, Treemap } from "../shared/charts";
 import { formatDate, formatTime } from "../shared/format";
 import { compactMoney, signedPct, toNumber } from "../shared/market";
-import { OrderTagging, PortfolioTabs } from "./PortfolioBook";
+import { OrderTagging } from "./PortfolioBook";
 import { Amount, EmptyState, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery, usePortfolioRefresh } from "./PortfolioUI";
 import "./Portfolio.css";
 
@@ -216,10 +216,9 @@ export function Portfolio() {
   const profiles = remote.data?.items ?? [];
   const selected = userId ?? profiles.find(profile => profile.active)?.user_id ?? profiles[0]?.user_id ?? "";
   return <main className="portfolio-page">
-    <PortfolioHeader title="Portfolio" description="Your accounts, orders and investment ideas. All in one place.">
+    <PortfolioHeader title="Overview" eyebrow="Portfolio" description="Net worth, holdings and working orders for each broker account.">
       <ProfileSelect profiles={profiles} value={selected} disabled={remote.loading && !remote.data} all onChange={value => { setUserId(value); setAccount(""); setPortfolioQuery(value); }} />
     </PortfolioHeader>
-    <PortfolioTabs active="accounts" userId={selected} account={account} />
     {Boolean(remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(remote.error, "Profiles are unavailable.")} <button className="portfolio-button portfolio-button--ghost" onClick={remote.refresh}>Retry</button></p>}
     {remote.loading && !remote.data ? <p className="portfolio-empty-inline" role="status">Loading your portfolio…</p> : <Accounts key={selected} userId={selected} selected={account} onSelect={value => { setAccount(value); setPortfolioQuery(selected, value); }} />}
     <p className="portfolio-workspace-note">Shared workspace · Profiles organize accounts and tags; everyone with workspace access can view and edit them.</p>

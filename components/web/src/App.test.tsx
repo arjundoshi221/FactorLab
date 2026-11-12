@@ -137,6 +137,19 @@ describe("FactorLab Hub", () => {
     expect(screen.getByRole("link", { name: "FactorLab home" })).toHaveAttribute("href", "/");
   });
 
+  it("opens the portfolio as its own app without the terminal chrome", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ items: [] }) } as Response);
+    window.history.replaceState({}, "", "/portfolio/trades?user_id=u1");
+    render(<App />);
+    const nav = within(await screen.findByRole("navigation", { name: "Portfolio navigation" }));
+    expect(nav.getAllByRole("link").map((link) => link.textContent)).toEqual(["Overview", "Risk", "Trades", "Themes", "Strategies", "Trade names"]);
+    expect(nav.getByRole("link", { name: "Trades" })).toHaveAttribute("aria-current", "page");
+    expect(nav.getByRole("link", { name: "Risk" })).toHaveAttribute("href", "/portfolio/risk?user_id=u1");
+    expect(screen.queryByRole("navigation", { name: "Primary navigation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open command bar" })).not.toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => SHELL_FEEDS.includes(String(url)))).toBe(false);
+  });
+
   it("lists the catalog and schema under Data", () => {
     window.history.replaceState({}, "", "/schema");
     render(<App />);

@@ -1,4 +1,4 @@
-/** The single route table: drives the header tabs, sub-tabs and the command bar. */
+/** The single route table: drives the terminal header tabs, sub-tabs and command bar, and the portfolio app's tabs. */
 
 export type SectionId = "data" | "portfolio" | "ops";
 
@@ -42,7 +42,8 @@ export const sections: NavSection[] = [
     id: "portfolio",
     label: "Portfolio",
     items: [
-      { href: "/portfolio", label: "Book", code: "PORT", keywords: "accounts positions balances orders", active: (path) => path === "/portfolio" },
+      { href: "/portfolio", label: "Overview", code: "PORT", keywords: "book accounts positions balances orders", active: (path) => path === "/portfolio" },
+      { href: "/portfolio/risk", label: "Risk", code: "RISK", keywords: "leverage margin limits stress concentration liquidity", active: (path) => path === "/portfolio/risk" },
       { href: "/portfolio/trades", label: "Trades", code: "TRD", keywords: "ledger executions tagging", active: (path) => path === "/portfolio/trades" },
       { href: "/portfolio/themes", label: "Themes", code: "THM", keywords: "pnl", active: (path) => path === "/portfolio/themes" },
       { href: "/portfolio/strategies", label: "Strategies", code: "STRT", keywords: "pnl", active: (path) => path === "/portfolio/strategies" },

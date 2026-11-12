@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, expect, it, vi } from "vitest";
 
 import { Portfolio } from "./Portfolio";
+import { PortfolioShell } from "./PortfolioShell";
 
 const A = "d677331a-a04f-454a-8a1e-02425be2c101";
 const B = "d677331a-a04f-454a-8a1e-02425be2c102";
@@ -64,17 +65,18 @@ it("retains same-account data on refresh failure and clears a successful empty s
   expect(within(screen.getByRole("table", { name: "Balances" })).getByText("USD")).toBeInTheDocument();
 });
 
-it("keeps the account in navigation links and clears it when switching profiles", async () => {
+it("keeps the account in the shell's navigation links and clears it when switching profiles", async () => {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, json: async () => response(url) })));
-  render(<Portfolio />);
+  render(<PortfolioShell><Portfolio /></PortfolioShell>);
   const selector = await screen.findByLabelText("Broker account");
   const selected = JSON.stringify(["ibkr", "SIM_A"]);
   fireEvent.change(selector, { target: { value: selected } });
-  const nav = within(screen.getByRole("navigation", { name: "Portfolio screens" }));
+  const nav = within(screen.getByRole("navigation", { name: "Portfolio navigation" }));
   let link = new URL(nav.getByRole("link", { name: "Themes" }).getAttribute("href")!, "http://localhost");
   expect(link.searchParams.get("user_id")).toBe(A);
   expect(link.searchParams.get("account")).toBe(selected);
   fireEvent.change(screen.getByLabelText("Profile"), { target: { value: B } });
+  await waitFor(() => expect(new URL(nav.getByRole("link", { name: "Themes" }).getAttribute("href")!, "http://localhost").searchParams.get("user_id")).toBe(B));
   link = new URL(nav.getByRole("link", { name: "Themes" }).getAttribute("href")!, "http://localhost");
   expect(link.searchParams.get("user_id")).toBe(B);
   expect(link.searchParams.has("account")).toBe(false);

@@ -4,7 +4,7 @@ import { Panel } from "../components/ui";
 import type { FuturesResponse, FuturesRoot } from "../futuresTypes";
 import type { IndexOverview, Mover, Period, PerformanceResponse, Series } from "../indexTypes";
 import type { PoliticalMetricsSeries, PoliticalTradesPage } from "../politicalTypes";
-import type { AccountSummary, BrokerAccount, ItemsPage, Profile, SnapshotPage } from "../portfolioTypes";
+import type { AccountSummary, BrokerAccount, ItemsPage, Profile, SnapshotPage } from "../portfolio/types";
 import { useRemote, type Remote } from "../shared/api";
 import { AreaChart, Gauge, heatFill, SignedBars, Sparkline, Treemap } from "../shared/charts";
 import { formatCompact, formatDate, formatTime } from "../shared/format";

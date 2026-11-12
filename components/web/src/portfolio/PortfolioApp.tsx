@@ -1,0 +1,19 @@
+import { Portfolio } from "./Portfolio";
+import { PortfolioGroups } from "./PortfolioBook";
+import { PortfolioShell } from "./PortfolioShell";
+import { Risk } from "./Risk";
+import { TradeLedger } from "./TradeLedger";
+
+function PortfolioPage({ path }: { path: string }) {
+  if (path === "/portfolio/risk") return <Risk />;
+  if (path === "/portfolio/trades") return <TradeLedger />;
+  if (path === "/portfolio/themes") return <PortfolioGroups kind="themes" />;
+  if (path === "/portfolio/strategies") return <PortfolioGroups kind="strategies" />;
+  if (path === "/portfolio/trade-names") return <PortfolioGroups kind="trade-names" />;
+  return <Portfolio />;
+}
+
+/** The portfolio app: its own shell and theme, loaded as a separate chunk from the terminal. */
+export function PortfolioApp({ path }: { path: string }) {
+  return <PortfolioShell><PortfolioPage path={path} /></PortfolioShell>;
+}
