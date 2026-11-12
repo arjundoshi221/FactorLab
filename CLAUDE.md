@@ -3,6 +3,8 @@
 # Claude Code specifics
 
 Everything in AGENTS.md applies; this adds onboarding and what is specific to Claude Code.
+The human-facing guide (architecture, editing, deploying, creating units) is
+[README.md](README.md); keep it current when topology or the deploy path changes.
 
 ## Start here (new contributors)
 
@@ -45,8 +47,8 @@ npm run dev        # http://127.0.0.1:5173, proxies /hub/api to 127.0.0.1:8000
 npm test           # vitest; page tests stub fetch, so no API is needed
 ```
 
-For real data, tunnel the VPS's `api-candidate` (the API that serves the hub, on host port
-18000) to local 8000: `ssh -L 8000:127.0.0.1:18000 ubuntu@<VPS host>` (host and access in
+For real data, tunnel the VPS's `api-candidate` (the API the UI deploy updates, on host
+port 18000) to local 8000: `ssh -L 8000:127.0.0.1:18000 ubuntu@<VPS host>` (host and access in
 [docs/VPS.md](docs/VPS.md); needs an SSH key on the server). A new API route goes in
 `components/api` with a test, and its response type in `components/web/src/`.
 
