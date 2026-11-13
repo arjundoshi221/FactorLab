@@ -239,14 +239,16 @@ function PnlReport({ kind, userId, selected, onSelect }: { kind: CatalogKind; us
     </select></label></div>
     {Boolean(accounts.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(accounts.error)}</p>}
     {selected && !account ? <p className="portfolio-empty-inline" role={unavailable ? "alert" : "status"}>{accounts.loading ? "Loading account…" : "The selected account is unavailable. Choose an account to view its PnL."}</p> : <PnlValues key={`${filter}/${period}`} kind={kind} userId={userId} filter={filter} period={period} />}
-    <details className="portfolio-calculation"><summary>How PnL is calculated</summary><p>All time: cumulative PnL from recorded stock and ETF fills. Total = realized + unrealized − commissions. YTD: realized PnL from closing fills and commissions on fills since 1 January (New York trading day); lots opened earlier keep their original cost. Unrealized is the current mark of open lots, so the YTD figure is net realized = realized − fees. Matching uses FIFO within the same account, instrument, currency and three tags; use the same tags on closing orders. Retagging recalculates the recorded history.</p>
-      <p>Currencies, paper/live accounts and simulations stay separate. Missing data is unavailable, never zero. Dividends, financing and FX conversion are excluded. Account fees (data subscriptions, broker fees, commission adjustments) come from Flex statements, are not tied to a fill, and are listed per account below the table, outside the totals. Snapshot quantity reconciliation cannot prove complete inception history.</p></details>
+    <details className="portfolio-calculation"><summary>How PnL is calculated</summary><p>All time: cumulative PnL from recorded stock and ETF fills. Total = realized + unrealized − commissions. YTD: realized PnL from closing fills and commissions on fills since 1 January (New York trading day); lots opened earlier keep their original cost. Unrealized is the current mark of open lots, so the YTD figure is net realized = realized − fees. An instrument that cannot be valued (for example, shares bought before the recorded history) is left out of its group's PnL and named under the group, but its fees still count. Matching uses FIFO within the same account, instrument, currency and three tags; use the same tags on closing orders. Retagging recalculates the recorded history.</p>
+      <p>Currencies, paper/live accounts and simulations stay separate. Missing data is unavailable, never zero. Dividends, financing and FX conversion are excluded. Currency conversions are not positions: they are left out of the table, and their commissions are listed with the account fees (data subscriptions, broker fees, commission adjustments from Flex statements) below it, outside the totals. Snapshot quantity reconciliation cannot prove complete inception history.</p></details>
   </section>;
 }
 
 /** Total PnL per group as diverging bars, one chart per currency so values are never compared across currencies. */
 function PnlBars({ groups, kind, metric }: { groups: PnlGroup[]; kind: CatalogKind; metric: string }) {
-  const currencies = Array.from(new Set(groups.map(group => group.currency)));
+  // A chart whose every value is unavailable shows nothing but dashes, so leave it out.
+  const currencies = Array.from(new Set(groups.filter(group => group.total !== null).map(group => group.currency)));
+  if (currencies.length === 0) return null;
   return <div className="portfolio-pnl-bars">{currencies.map(currency => {
     const bars = groups.filter(group => group.currency === currency).map(group => ({
       key: JSON.stringify([group.id, group.account_mode, group.simulated]), label: group.name, value: toNumber(group.total),
@@ -268,7 +270,8 @@ function PnlValues({ kind, userId, filter, period }: { kind: CatalogKind; userId
       const key = JSON.stringify([group.id, group.account_mode, group.simulated, group.currency]);
       const open = expanded === key;
       return <Fragment key={key}><tr className={open ? "is-expanded" : ""}><th scope="row"><strong>{group.name}</strong><div className="portfolio-group-meta"><span>{group.account_mode}</span>{group.simulated && <span>Simulated</span>}
-        {group.issues.length > 0 && <span className="portfolio-stale" title={group.issues.map(issue => issueLabels[issue] ?? issue).join(" · ")}>{group.issues.includes("stale_price") ? "Stale price" : group.issues.every(issue => issue === "unassigned") ? "Needs tags" : "Review data"}</span>}</div></th>
+        {group.issues.length > 0 && <span className="portfolio-stale" title={group.issues.map(issue => issueLabels[issue] ?? issue).join(" · ")}>{badgeFor(group.issues)}</span>}</div>
+        {(group.excluded?.length ?? 0) > 0 && <small className="portfolio-cell-note" title={group.excluded!.map(row => `${row.trading_symbol}: ${row.issues.filter(issue => issue !== "unassigned").map(issue => issueLabels[issue] ?? issue).join(", ")}`).join("\n")}>Excludes {group.excluded!.map(row => row.trading_symbol).join(", ")}{group.total !== null ? " (fees included)" : ""}</small>}</th>
         <td><span className="portfolio-currency">{group.currency}</span></td><td className="portfolio-numeric"><Amount value={group.realized} signed /></td><td className="portfolio-numeric"><Amount value={group.unrealized} signed /></td><td className="portfolio-numeric"><Amount value={group.commissions} /></td><td className="portfolio-numeric portfolio-total"><Amount value={group.total} signed /></td>
         <td><button className="portfolio-expand" aria-label={`${open ? "Hide" : "View"} holdings for ${group.name}, ${group.currency}, ${group.account_mode}${group.simulated ? ", simulated" : ""}`} aria-expanded={open} onClick={() => setExpanded(open ? null : key)}><PortfolioIcon name="chevron" /></button></td></tr>
         {open && <tr className="portfolio-expanded-row"><td colSpan={7}><div className="portfolio-holdings"><div className="portfolio-section-heading"><h3>{group.name} · Holdings & orders</h3><span className="portfolio-footnote">— means unavailable</span></div>
@@ -285,6 +288,18 @@ function PnlValues({ kind, userId, filter, period }: { kind: CatalogKind; userId
 
 type Period = "all" | "ytd";
 
+/** Name the issue that actually blocks or weakens the numbers, worst first. */
+const badgePriority: [string, string][] = [
+  ["incomplete_history", "History incomplete"], ["unsupported_instrument", "Unsupported instrument"],
+  ["missing_commission", "Fees not yet reported"], ["missing_commission_currency", "Fee currency unknown"],
+  ["invalid_fill", "Invalid fill"], ["missing_instrument", "Unknown instrument"], ["missing_currency", "Currency unknown"],
+  ["missing_price", "Price unavailable"], ["stale_price", "Stale price"], ["history_unverified", "Unverified history"],
+  ["unassigned", "Needs tags"],
+];
+function badgeFor(issues: string[]): string {
+  return badgePriority.find(([issue]) => issues.includes(issue))?.[1] ?? "Review data";
+}
+
 /** First New York trading date of the current year, as the API's `since`. */
 function ytdStart(): string {
   const year = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric" }).format(new Date());
@@ -294,10 +309,10 @@ function ytdStart(): string {
 /** Account-level Flex costs, kept apart because they cannot be attributed to a tag. */
 function AccountFees({ rows, ytd }: { rows: AccountFee[]; ytd: boolean }) {
   const label = `Account fees${ytd ? " YTD" : ""}`;
-  return <div className="portfolio-account-fees"><div className="portfolio-section-heading"><h3>{label}</h3><span className="portfolio-footnote">From IBKR Flex statements · not included in the totals above</span></div>
-    {rows.length === 0 ? <p className="portfolio-footnote">No account-level fees or commission adjustments reported {ytd ? "this year" : "in recorded statements"}. Run a Flex sync if the latest statement is missing.</p> :
-      <div className="portfolio-table-scroll" role="region" aria-label={label} tabIndex={0}><table aria-label={label}><thead><tr><th scope="col">Account</th><th scope="col">Currency</th><th scope="col" className="portfolio-numeric">Fees</th><th scope="col" className="portfolio-numeric">Commission adjustments</th><th scope="col" className="portfolio-numeric portfolio-total">Total</th></tr></thead>
-        <tbody>{rows.map(row => <tr key={JSON.stringify([row.broker_code, row.account_id, row.currency])}><th scope="row"><strong>{row.broker_code.toUpperCase()} · {row.account_id}</strong><div className="portfolio-group-meta"><span>{row.account_mode}</span>{row.simulated && <span>Simulated</span>}</div></th><td><span className="portfolio-currency">{row.currency}</span></td><td className="portfolio-numeric"><Amount value={row.fees} /></td><td className="portfolio-numeric"><Amount value={row.commission_adjustments} signed /></td><td className="portfolio-numeric portfolio-total"><Amount value={row.total} /></td></tr>)}</tbody></table></div>}
+  return <div className="portfolio-account-fees"><div className="portfolio-section-heading"><h3>{label}</h3><span className="portfolio-footnote">From IBKR · not included in the totals above</span></div>
+    {rows.length === 0 ? <p className="portfolio-footnote">No account-level fees, commission adjustments or FX conversion commissions reported {ytd ? "this year" : "in recorded statements"}. Run a Flex sync if the latest statement is missing.</p> :
+      <div className="portfolio-table-scroll" role="region" aria-label={label} tabIndex={0}><table aria-label={label}><thead><tr><th scope="col">Account</th><th scope="col">Currency</th><th scope="col" className="portfolio-numeric">Fees</th><th scope="col" className="portfolio-numeric">Commission adjustments</th><th scope="col" className="portfolio-numeric">FX conversions</th><th scope="col" className="portfolio-numeric portfolio-total">Total</th></tr></thead>
+        <tbody>{rows.map(row => <tr key={JSON.stringify([row.broker_code, row.account_id, row.currency])}><th scope="row"><strong>{row.broker_code.toUpperCase()} · {row.account_id}</strong><div className="portfolio-group-meta"><span>{row.account_mode}</span>{row.simulated && <span>Simulated</span>}</div></th><td><span className="portfolio-currency">{row.currency}</span></td><td className="portfolio-numeric"><Amount value={row.fees} /></td><td className="portfolio-numeric"><Amount value={row.commission_adjustments} signed /></td><td className="portfolio-numeric"><Amount value={row.fx_conversions ?? "0"} /></td><td className="portfolio-numeric portfolio-total"><Amount value={row.total} /></td></tr>)}</tbody></table></div>}
   </div>;
 }
 

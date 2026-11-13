@@ -247,3 +247,41 @@ def test_period_drops_positions_closed_before_the_window():
     ]
     assert ledger(fills, [], {("test", "A"): NOW}, now=NOW, since=NOW - timedelta(days=1)) == []
     assert len(ledger(fills, [], {("test", "A"): NOW}, now=NOW)) == 1
+
+
+def test_fx_conversions_never_enter_tagged_pnl():
+    rows = calculate(
+        [fill("1", "BUY", 10, 100), fill("fx", "BUY", 1000, "1.35", product_type="forex")], 10
+    )
+    assert len(rows) == 1 and "unsupported_instrument" not in rows[0]["issues"]
+    assert Decimal(rows[0]["commissions"]) == 1
+
+
+def test_zero_commission_without_currency_is_unreported_not_free():
+    rows = calculate([fill("1", "BUY", 10, 100, commission=0, commission_ccy="")], 10)
+    assert [row["currency"] for row in rows] == ["USD"]
+    assert rows[0]["commissions"] is None and "missing_commission" in rows[0]["issues"]
+
+
+def test_group_total_values_what_it_can_and_names_what_it_excludes():
+    good = calculate([fill("1", "BUY", 10, 100), fill("2", "SELL", 5, 130)], 5)
+    unreconciled = ledger(
+        [fill("3", "SELL", 4, 50, vendor_id="200", trading_symbol="OLD")],
+        [],
+        {("test", "A"): NOW},
+        now=NOW,
+    )
+    [group] = summarize(good + unreconciled, "theme_id")
+    assert Decimal(group["realized"]) == 150 and Decimal(group["unrealized"]) == 100
+    assert Decimal(group["commissions"]) == 3  # the excluded instrument's fee still counts
+    assert Decimal(group["total"]) == 247
+    assert [row["trading_symbol"] for row in group["excluded"]] == ["OLD"]
+    [period] = summarize(good + unreconciled, "theme_id", period=True)
+    assert Decimal(period["total"]) == 147
+
+
+def test_unknown_costs_make_the_group_total_unavailable():
+    rows = calculate([fill("1", "BUY", 10, 100), fill("2", "SELL", 5, 130, commission=None)], 5)
+    [group] = summarize(rows, "theme_id")
+    assert group["commissions"] is None and group["total"] is None
+    assert Decimal(group["realized"]) == 150

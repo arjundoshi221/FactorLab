@@ -32,11 +32,13 @@ export interface PnlGroup {
   id: string | null; name: string; account_mode: string; simulated: boolean; currency: string;
   realized: string | null; unrealized: string | null; commissions: string | null; total: string | null;
   issues: string[]; details: PnlDetail[];
+  /** Instruments left out of realized/unrealized because they cannot be valued; their fees still count. */
+  excluded?: { trading_symbol: string; account_id: string; issues: string[] }[];
 }
 /** Flex-reported account-level costs (not attributable to a fill), as positive amounts. */
 export interface AccountFee {
   broker_code: string; account_id: string; account_mode: string; simulated: boolean; currency: string;
-  fees: string; commission_adjustments: string; total: string;
+  fees: string; commission_adjustments: string; fx_conversions?: string; total: string;
 }
 export interface PnlReport extends ItemsPage<PnlGroup> {
   period?: { since: string; start: string; timezone: string } | null;

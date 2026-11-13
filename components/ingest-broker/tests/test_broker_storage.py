@@ -51,8 +51,9 @@ LISTING, SECURITY, ENTITY, CONTRACT = (uuid.uuid4() for _ in range(4))
 
 
 class Result:
-    def __init__(self, rows):
+    def __init__(self, rows, column_names=()):
         self.result_rows = rows
+        self.column_names = list(column_names)
 
 
 class Client:
@@ -61,6 +62,7 @@ class Client:
     def __init__(self):
         self.inserts = []
         self.known_exec_ids: set[str] = set()
+        self.uncosted: dict[str, dict] = {}
 
     def query(self, sql, parameters=None):
         if "FROM ref.identifier_aliases" in sql:
@@ -75,6 +77,10 @@ class Client:
             return Result([("NetLiquidation", "net_liquidation")])
         if "FROM ref.execution_methods" in sql:
             return Result([(10, "api_trade_engine_v1")])
+        if "FROM broker.executions FINAL" in sql:
+            rows = [self.uncosted[i] for i in parameters["ids"] if i in self.uncosted]
+            columns = list(rows[0]) if rows else []
+            return Result([[row[c] for c in columns] for row in rows], columns)
         if "FROM broker.executions" in sql:
             ids = (parameters or {})["ids"]
             return Result([(i,) for i in ids if i in self.known_exec_ids])
@@ -234,6 +240,42 @@ def test_flex_executions_keep_gateway_rows_and_mark_unknown_clients(storage, now
     assert api["execution_method_id"] == UNMAPPED_EXECUTION_METHOD  # Flex has no client id
     assert api["listing_id"] == LISTING
     assert manual["execution_method_id"] == MANUAL_EXECUTION_METHOD  # isAPIOrder="N"
+
+
+def test_flex_fills_in_missing_gateway_commission_without_rewriting_the_order(storage, now_utc):
+    rows = _flex_rows(ExecutionRecord)
+    known = next(row for row in rows if row.commission is not None and row.commission_ccy)
+    stored = {
+        "exec_id": known.exec_id,
+        "perm_id": 1394804831,  # the Gateway's perm_id carries the order's tags
+        "commission": Decimal(0),
+        "commission_ccy": "",
+        "realized_pnl": None,
+        "source_channel": "live_gateway",
+        "version": 1,
+    }
+    storage.client.known_exec_ids = {known.exec_id}
+    storage.client.uncosted = {known.exec_id: stored}
+
+    written = storage.write_executions(
+        rows, provenance=_provenance(storage, now_utc, "ibkr:flex_statement")
+    )
+
+    assert written == len(rows) - 1
+    patched = next(
+        row for row in storage.client.rows("broker.executions") if row["exec_id"] == known.exec_id
+    )
+    assert patched["perm_id"] == 1394804831 and patched["source_channel"] == "live_gateway"
+    assert patched["commission"] == known.commission
+    assert patched["commission_ccy"] == known.commission_ccy
+    assert patched["version"] > 1
+
+
+def test_flex_leaves_costed_gateway_fills_alone(storage, now_utc):
+    rows = _flex_rows(ExecutionRecord)
+    storage.client.known_exec_ids = {rows[0].exec_id}
+    storage.write_executions(rows, provenance=_provenance(storage, now_utc, "ibkr:flex_statement"))
+    assert rows[0].exec_id not in {r["exec_id"] for r in storage.client.rows("broker.executions")}
 
 
 def test_gateway_executions_are_not_filtered_by_exec_id(storage, now_utc):

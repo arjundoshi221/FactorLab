@@ -82,6 +82,9 @@ def test_account_fees_are_positive_costs_per_currency(monkeypatch):
 
     def query(sql, params=None):
         seen.update(params or {})
+        if "broker.executions" in sql:
+            assert params["fx"] == ["CASH", "forex"]
+            return [{"currency": "SGD", "amount": "2.5684"}]
         return [
             {"currency": "USD", "cash_flow_type": "fee", "amount": "-10.5", "events": 2},
             {"currency": "USD", "cash_flow_type": "commission", "amount": "1.25", "events": 1},
@@ -100,11 +103,23 @@ def test_account_fees_are_positive_costs_per_currency(monkeypatch):
             "account_id": "U1",
             "account_mode": "live",
             "simulated": False,
+            "currency": "SGD",
+            "fees": "0",
+            "commission_adjustments": "0",
+            "fx_conversions": "2.5684",
+            "total": "2.5684",
+        },
+        {
+            "broker_code": "ibkr",
+            "account_id": "U1",
+            "account_mode": "live",
+            "simulated": False,
             "currency": "USD",
             "fees": "10.5",
             "commission_adjustments": "-1.25",
+            "fx_conversions": "0",
             "total": "9.25",
-        }
+        },
     ]
     # YTD starts at New York midnight, not UTC midnight.
     assert seen["since"] == datetime(2026, 1, 1, 5, tzinfo=UTC)

@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from factorlab.components.api.portfolio import ItemsPage, PortfolioRepository, Repo
 from factorlab.components.api.portfolio_pnl import (
+    FX_CONVERSIONS,
     TAG_FIELDS,
     latest_fills,
     ledger,
@@ -28,6 +29,7 @@ router = APIRouter()
 PERIOD_TIMEZONE = ZoneInfo("America/New_York")
 # Flex cash transactions that are costs of the account rather than of one fill.
 ACCOUNT_FEE_TYPES = {"fee": "fees", "commission": "commission_adjustments"}
+ACCOUNT_FEE_FIELDS = ("fees", "commission_adjustments", "fx_conversions")
 
 
 def period_start(since: date | None) -> datetime | None:
@@ -198,24 +200,39 @@ class Book:
     def account_fees(
         self, accounts: list[dict[str, Any]], since: datetime | None
     ) -> list[dict[str, Any]]:
-        """Flex-reported account fees and commission adjustments, as positive costs."""
+        """Account fees, commission adjustments and FX conversion commissions, as positive costs."""
         result = []
+        start = since or datetime(1970, 1, 1, tzinfo=UTC)
         for account in accounts:
+            params = {
+                "broker": account["broker_code"],
+                "account": account["account_id"],
+                "since": start,
+            }
+            conversions = self.repo.query(
+                "SELECT commission_ccy AS currency, sum(commission) AS amount "
+                "FROM broker.executions FINAL WHERE broker_code = {broker:String} "
+                "AND account_id = {account:String} AND product_type IN {fx:Array(String)} "
+                "AND exec_time >= {since:DateTime64(3, 'UTC')} AND commission IS NOT NULL "
+                "GROUP BY commission_ccy ORDER BY commission_ccy",
+                {**params, "fx": sorted(FX_CONVERSIONS)},
+            )
             records = self.repo.query(
                 "SELECT currency, cash_flow_type, sum(amount) AS amount, count() AS events "
                 "FROM broker.cash_flows FINAL WHERE broker_code = {broker:String} "
                 "AND account_id = {account:String} AND cash_flow_type IN ('fee', 'commission') "
                 "AND event_time >= {since:DateTime64(3, 'UTC')} "
                 "GROUP BY currency, cash_flow_type ORDER BY currency, cash_flow_type",
-                {
-                    "broker": account["broker_code"],
-                    "account": account["account_id"],
-                    "since": since or datetime(1970, 1, 1, tzinfo=UTC),
-                },
+                params,
             )
             by_currency: dict[str, dict[str, Decimal]] = defaultdict(
-                lambda: dict.fromkeys(ACCOUNT_FEE_TYPES.values(), Decimal(0))
+                lambda: dict.fromkeys(ACCOUNT_FEE_FIELDS, Decimal(0))
             )
+            for row in conversions:
+                # Fill commissions are already positive costs.
+                by_currency[str(row["currency"]).strip() or "UNKNOWN"]["fx_conversions"] += Decimal(
+                    str(row["amount"])
+                )
             for row in records:
                 field = ACCOUNT_FEE_TYPES[str(row["cash_flow_type"])]
                 # Cash flows are signed credits; a debit (negative) is a positive cost.
@@ -268,7 +285,7 @@ class Book:
                     row["id"], "Unassigned" if row["id"] is None else "Archived entry"
                 ),
             }
-            for row in summarize(details, field)
+            for row in summarize(details, field, period=since is not None)
         ]
 
 

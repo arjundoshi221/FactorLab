@@ -49,6 +49,19 @@ strategy or named trade is performing across a profile's broker accounts.
   adjustments) per account and currency, as positive costs, for the same window.
   They are not tied to a fill, so they are shown beside the tagged table and are
   not part of any theme/strategy/trade-name total. Gateway-only accounts have none.
+  `account_fees` also carries `fx_conversions`: commissions on currency conversions.
+- Currency conversions (`product_type` `forex`) are cash movements, not positions:
+  they never enter tagged PnL (their commissions are reported with account fees).
+- Partial group totals (2026-11-13): an instrument that cannot be valued (e.g. shares
+  bought before the recorded history) is left out of its group's realized/unrealized
+  and listed in the group's `excluded`; its fees still count, so the group `total` is
+  the valued instruments' PnL minus all fees. A fill with an unknown cost (including a
+  Gateway fill recorded with commission 0 and no currency before IBKR's commission
+  report) still makes the group's fees and total unavailable. Instrument rows keep
+  their own unavailable values.
+- Gateway fills recorded before their commission report get the commission (and, if
+  missing, realized PnL) from the next Flex statement, as a new version of the same
+  row; perm_id, order id and client id, which carry the order's tags, are kept.
 
 ## Non-goals
 

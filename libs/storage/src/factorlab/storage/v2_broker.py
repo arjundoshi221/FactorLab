@@ -338,10 +338,61 @@ class V2BrokerStorage(V2USStorage):
         )
         return {str(row[0]) for row in result.result_rows}
 
+    def uncosted_executions(
+        self, broker_code: str, exec_ids: Iterable[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Stored fills (latest version) that still lack a commission or its currency."""
+        values = sorted({value for value in exec_ids if value})
+        if not values:
+            return {}
+        result = self.client.query(
+            f"SELECT * FROM {EXECUTIONS_TABLE} FINAL "
+            "WHERE broker_code = {broker:String} AND exec_id IN {ids:Array(String)} "
+            "AND (commission IS NULL OR commission_ccy = '')",
+            parameters={"broker": broker_code, "ids": values},
+        )
+        records = [dict(zip(result.column_names, row, strict=True)) for row in result.result_rows]
+        return {str(record["exec_id"]): record for record in records}
+
+    def _backfill_costs(self, rows: Sequence[Any], known: set[str]) -> int:
+        """Give Gateway fills the commission a later Flex statement reports for them.
+
+        The Gateway can record a fill before IBKR sends its commission report. The stored
+        row is kept (its perm_id, order id and client id carry the order's tags), and only
+        the cost fields are filled in, as a new version of the same row.
+        """
+        reported = {
+            row.exec_id: row
+            for row in rows
+            if row.exec_id in known and row.commission is not None and row.commission_ccy
+        }
+        if not reported:
+            return 0
+        stored = self.uncosted_executions(next(iter(reported.values())).broker_code, reported)
+        now = datetime.now(UTC)
+        patched: list[dict[str, Any]] = []
+        for exec_id, record in stored.items():
+            source = reported[exec_id]
+            patched.append(
+                {
+                    **record,
+                    "commission": source.commission,
+                    "commission_ccy": source.commission_ccy,
+                    "realized_pnl": source.realized_pnl
+                    if record.get("realized_pnl") is None
+                    else record["realized_pnl"],
+                    "version": _version(now),
+                }
+            )
+        self._insert_dicts(EXECUTIONS_TABLE, patched)
+        return len(patched)
+
     def write_executions(self, rows: Sequence[Any], *, provenance: Provenance) -> int:
         history = _is_history(provenance)
         if history and rows:
+            self._check_lineage(provenance)
             known = self.existing_exec_ids(rows[0].broker_code, (row.exec_id for row in rows))
+            self._backfill_costs(rows, known)
             rows = [row for row in rows if row.exec_id not in known]
         identities = self._identities(rows, provenance)
         methods = self.execution_methods() if rows else {}

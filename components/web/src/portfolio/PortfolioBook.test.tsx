@@ -147,7 +147,8 @@ it("keeps currencies separate and expands holdings with the correct account link
   expect(link.searchParams.get("user_id")).toBe(A);
   expect(link.searchParams.get("account")).toBe(JSON.stringify(["ibkr", "SIM_A"]));
   fireEvent.click(screen.getByRole("button", { name: "View holdings for AI, EUR, paper, simulated" }));
-  expect(screen.getByText("Price unavailable")).toBeInTheDocument();
+  // Once as the row's badge, once in the expanded issue list.
+  expect(screen.getAllByText("Price unavailable")).toHaveLength(2);
   expect(screen.queryByText("AAPL")).not.toBeInTheDocument();
 });
 
@@ -193,4 +194,18 @@ it("switches PnL to YTD with a New York year start and lists account fees apart"
   const pnl = new URL(requests.filter(url => url.includes("/pnl/")).at(-1)!, "http://localhost");
   expect(pnl.searchParams.get("since")).toMatch(/^\d{4}-01-01$/);
   expect(new URLSearchParams(window.location.search).get("period")).toBe("ytd");
+});
+
+it("names the real blocker, lists excluded instruments and hides charts with no values", async () => {
+  const partial = { ...group, issues: ["incomplete_history", "stale_price", "unassigned"], total: "100", excluded: [{ trading_symbol: "CRWD", account_id: "U1", issues: ["incomplete_history"] }] };
+  const blank = { ...group, id: "other", currency: "SGD", total: null, realized: null, issues: ["unsupported_instrument"] };
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, json: async () => url.endsWith("/profiles") ? { items: [{ user_id: A, display_name: "Alice" }] }
+    : url.includes("/accounts") ? { items: [account] } : url.includes("/pnl/") ? { items: [partial, blank], account_fees: [] } : { items: [] } })));
+  render(<PortfolioGroups kind="strategies" />);
+  const table = await screen.findByRole("table", { name: "PnL by strategy" });
+  expect(within(table).getByText("History incomplete")).toBeInTheDocument();
+  expect(within(table).getByText("Unsupported instrument")).toBeInTheDocument();
+  expect(within(table).getByText("Excludes CRWD (fees included)")).toBeInTheDocument();
+  expect(screen.getByText(/Total PnL by strategy · USD/)).toBeInTheDocument();
+  expect(screen.queryByText(/Total PnL by strategy · SGD/)).not.toBeInTheDocument();
 });

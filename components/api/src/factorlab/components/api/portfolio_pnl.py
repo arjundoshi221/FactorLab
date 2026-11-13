@@ -12,6 +12,9 @@ from .source_health import broker_snapshot_stale
 ZERO = Decimal(0)
 TAG_FIELDS = ("theme_id", "strategy_id", "trade_name_id")
 SUPPORTED = {"STK", "ETF", "stock", "equity", "etf", "common", "preferred", "adr", "reit"}
+# Currency conversions are cash movements, not positions: they never enter tagged PnL, and
+# their commissions are reported with the account's fees.
+FX_CONVERSIONS = {"forex", "CASH"}
 
 
 def number(value: Any) -> Decimal | None:
@@ -80,8 +83,12 @@ def _ledger(
     since: datetime | None = None,
 ) -> list[dict[str, Any]]:
     now = now or datetime.now(UTC)
-    executions = latest_fills(executions)
-    marks = {identity(row): row for row in snapshots}
+    executions = [
+        row for row in latest_fills(executions) if row.get("product_type") not in FX_CONVERSIONS
+    ]
+    marks = {
+        identity(row): row for row in snapshots if row.get("product_type") not in FX_CONVERSIONS
+    }
     expected: dict[tuple[str, str, str], Decimal] = defaultdict(Decimal)
     invalid: set[tuple[str, str, str]] = set()
     for row in executions:
@@ -168,6 +175,10 @@ def _ledger(
             if signed:
                 queue.append([signed, price])
         commission = number(row.get("commission"))
+        if commission == 0 and not row.get("commission_ccy"):
+            # The Gateway records a fill before IBKR's commission report arrives; a later
+            # Flex sync fills it in. Until then the cost is unknown, not zero.
+            commission = None
         if not in_period:
             pass  # Costs outside the window are neither expensed nor reported missing.
         elif commission is None:
@@ -268,14 +279,26 @@ def _ledger(
     return result
 
 
-def summarize(details: list[dict[str, Any]], group_by: str) -> list[dict[str, Any]]:
-    """Each dimension uses the same ledger; modes, simulation and currencies stay separate."""
+def summarize(
+    details: list[dict[str, Any]], group_by: str, *, period: bool = False
+) -> list[dict[str, Any]]:
+    """Each dimension uses the same ledger; modes, simulation and currencies stay separate.
+
+    An instrument whose PnL cannot be valued (e.g. history before recorded fills) is
+    left out of its group's realized/unrealized and listed in ``excluded``; the group's
+    fees still include it, so ``total`` is the valued instruments' PnL minus all fees.
+    A fill with an unknown cost makes the group's fees and total unavailable. For a
+    ``period`` report the total is net realized (realized - fees).
+    """
     with localcontext() as context:
         context.prec = 64
-        return _summarize(details, group_by)
+        return _summarize(details, group_by, period)
 
 
-def _summarize(details: list[dict[str, Any]], group_by: str) -> list[dict[str, Any]]:
+COST_UNKNOWN = {"missing_commission", "missing_commission_currency"}
+
+
+def _summarize(details: list[dict[str, Any]], group_by: str, period: bool) -> list[dict[str, Any]]:
     grouped: dict[tuple[Any, ...], dict[str, Any]] = {}
     for row in details:
         key = row[group_by], row["account_mode"], row["simulated"], row["currency"]
@@ -289,27 +312,56 @@ def _summarize(details: list[dict[str, Any]], group_by: str) -> list[dict[str, A
                 "realized": ZERO,
                 "unrealized": ZERO,
                 "commissions": ZERO,
-                "total": ZERO,
+                "valued": 0,
+                "costs_unknown": False,
+                "excluded": [],
                 "issues": set(),
                 "details": [],
             },
         )
-        for field in ("realized", "unrealized", "commissions", "total"):
-            item[field] = (
-                None
-                if item[field] is None or row[field] is None
-                else item[field] + Decimal(row[field])
+        realized, unrealized = number(row["realized"]), number(row["unrealized"])
+        if realized is not None and (period or unrealized is not None):
+            item["realized"] += realized
+            item["unrealized"] += unrealized or ZERO
+            item["valued"] += 1
+        elif row["orders"] or number(row["quantity"]):
+            item["excluded"].append(
+                {
+                    "trading_symbol": row["trading_symbol"],
+                    "account_id": row["account_id"],
+                    "issues": row["issues"],
+                }
             )
+        commissions = number(row["commissions"])
+        if commissions is not None:
+            item["commissions"] += commissions
+        if COST_UNKNOWN & set(row["issues"]):
+            item["costs_unknown"] = True
         item["issues"].update(row["issues"])
         item["details"].append(row)
-    return [
-        {
-            **item,
-            **{
-                field: None if item[field] is None else str(item[field])
-                for field in ("realized", "unrealized", "commissions", "total")
-            },
-            "issues": sorted(item["issues"]),
-        }
-        for item in grouped.values()
-    ]
+    result = []
+    for item in grouped.values():
+        valued = item.pop("valued") > 0
+        costs_unknown = item.pop("costs_unknown")
+        realized = item["realized"] if valued else None
+        unrealized = item["unrealized"] if valued else None
+        commissions = None if costs_unknown else item["commissions"]
+        total = (
+            None
+            if realized is None or unrealized is None or commissions is None
+            else realized + (ZERO if period else unrealized) - commissions
+        )
+        result.append(
+            {
+                **item,
+                "realized": None if realized is None else str(realized),
+                "unrealized": None if unrealized is None else str(unrealized),
+                "commissions": None if commissions is None else str(commissions),
+                "total": None if total is None else str(total),
+                "excluded": sorted(
+                    item["excluded"], key=lambda row: (row["trading_symbol"], row["account_id"])
+                ),
+                "issues": sorted(item["issues"]),
+            }
+        )
+    return result
