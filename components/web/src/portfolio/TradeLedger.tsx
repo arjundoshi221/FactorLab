@@ -188,7 +188,7 @@ export function TradeLedger() {
             <th scope="col"><input type="checkbox" aria-label="Select all taggable orders on this page" checked={allOnPage} disabled={!taggableOnPage.length}
               onChange={e => setSelected(e.target.checked ? new Set([...selected, ...taggableOnPage.map(r => r.key)].slice(0, MAX_SELECTION)) : new Set([...selected].filter(k => !taggableOnPage.some(r => r.key === k))))} /></th>
             <th scope="col">Last fill (IST)</th><th scope="col">Ticker</th><th scope="col">Side</th><th scope="col" className="portfolio-numeric">Qty</th><th scope="col" className="portfolio-numeric">Avg price</th>
-            <th scope="col">Account</th><th scope="col">Theme</th><th scope="col">Strategy</th><th scope="col">Trade name</th><th scope="col" className="portfolio-numeric">Broker realized</th><th scope="col"><span className="sr-only">Actions</span></th>
+            <th scope="col">Theme</th><th scope="col">Strategy</th><th scope="col">Trade name</th><th scope="col" className="portfolio-numeric">Broker realized</th><th scope="col"><span className="sr-only">Actions</span></th>
           </tr></thead>
           <tbody>{rows.map(row => <Fragment key={row.key}>
             <tr className={`ledger-row ledger-row--${row.tag_status}`}>
@@ -196,11 +196,10 @@ export function TradeLedger() {
                 onChange={e => { const next = new Set(selected); if (e.target.checked) next.add(row.key); else next.delete(row.key); setSelected(next); }} /></td>
               <td>{formatTime(row.last_fill_at, "—")}</td>
               <td>{row.listing_id ? <a href={tickerHref(row.listing_id)}>{row.trading_symbol}</a> : row.trading_symbol}
-                {row.contract_id && <small> {row.product_type}</small>}</td>
+                {row.contract_id && <small> {row.product_type}</small>}{row.simulated && <span className="portfolio-badge portfolio-badge--amber">Simulated</span>}</td>
               <td><span className={`portfolio-side${row.side === "BUY" ? " portfolio-side--buy" : ""}`}>{row.side}</span></td>
               <td className="portfolio-numeric"><Amount value={row.quantity} quantity /></td>
               <td className="portfolio-numeric"><Amount value={row.avg_price} /> <small>{row.currency}</small></td>
-              <td>{row.broker_code.toUpperCase()} {row.account_id}<span className={`portfolio-badge${row.simulated ? " portfolio-badge--amber" : ""}`}>{row.simulated ? "Simulated" : row.account_mode}</span></td>
               {row.tag_status === "tagged"
                 ? <><td>{row.theme_name ?? "Archived entry"}</td><td>{row.strategy_name ?? "Archived entry"}</td><td>{row.trade_name_name ?? "Archived entry"}</td></>
                 : <td colSpan={3}><span className={`portfolio-badge${row.taggable ? " portfolio-badge--amber" : ""}`}>{statusLabel[row.tag_status]}</span></td>}
@@ -210,8 +209,8 @@ export function TradeLedger() {
                 <button type="button" className="portfolio-button portfolio-button--ghost" aria-expanded={expanded === row.key} aria-label={`${row.fill_count} fills for order ${row.perm_id}`} onClick={() => setExpanded(expanded === row.key ? "" : row.key)}>{row.fill_count} {row.fill_count === 1 ? "fill" : "fills"}<PortfolioIcon name="chevron" /></button>
               </td>
             </tr>
-            {editing === row.key && <tr className="ledger-detail"><td colSpan={12}><InlineEditor row={row} userId={userId} catalogs={catalogs} done={refresh} onCreated={refreshCatalog} /></td></tr>}
-            {expanded === row.key && <tr className="ledger-detail"><td colSpan={12}>
+            {editing === row.key && <tr className="ledger-detail"><td colSpan={11}><InlineEditor row={row} userId={userId} catalogs={catalogs} done={refresh} onCreated={refreshCatalog} /></td></tr>}
+            {expanded === row.key && <tr className="ledger-detail"><td colSpan={11}>
               <p className="portfolio-footnote">Order {row.perm_id} · first fill {formatTime(row.first_fill_at, "—")} · commissions {row.commissions.length ? row.commissions.map(c => `${c.amount} ${c.currency}`).join(", ") : "not reported"}{row.fills_truncated ? " · showing the first 50 fills" : ""}</p>
               <table aria-label={`Fills for order ${row.perm_id}`}><thead><tr><th scope="col">Execution</th><th scope="col">Time (IST)</th><th scope="col" className="portfolio-numeric">Qty</th><th scope="col" className="portfolio-numeric">Price</th></tr></thead>
                 <tbody>{row.fills.map(fill => <tr key={String(fill.exec_id)}><td className="portfolio-order-id">{fill.exec_id}</td><td>{formatTime(String(fill.exec_time ?? ""), "—")}</td><td className="portfolio-numeric"><Amount value={fill.quantity} quantity /></td><td className="portfolio-numeric"><Amount value={fill.price} /></td></tr>)}</tbody></table>
