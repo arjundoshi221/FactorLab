@@ -9,7 +9,7 @@ sprint: null
 decisions: []
 links: []
 created: 2026-10-15
-updated: 2026-10-15
+updated: 2026-11-13
 ---
 
 # F-036 Profile-owned order tags and portfolio PnL
@@ -37,6 +37,18 @@ strategy or named trade is performing across a profile's broker accounts.
   detects missing history. Missing basis/prices/costs are unavailable, never zero.
   Stale valuations retain timestamps. A quantity match does not prove inception
   history is complete; reported broker realized PnL is not the tagged FIFO basis.
+- Period view (added 2026-11-13): `GET /pnl/{kind}?since=YYYY-MM-DD` (the UI's
+  "YTD" toggle sends 1 January). The date is a New York trading day, matching IBKR
+  statements. FIFO still runs over full history, so lots opened earlier keep their
+  cost; realized PnL counts only closing fills in the window and commissions only
+  fills in the window. Unrealized remains the current open-lot mark, so the period
+  `total` is net realized (realized - commissions). Groups with no fills in the
+  window and no open lots are omitted.
+- Account fees: the response's `account_fees` lists Flex cash transactions of type
+  `fee` (other/broker fees, e.g. market data) and `commission` (commission
+  adjustments) per account and currency, as positive costs, for the same window.
+  They are not tied to a fill, so they are shown beside the tagged table and are
+  not part of any theme/strategy/trade-name total. Gateway-only accounts have none.
 
 ## Non-goals
 

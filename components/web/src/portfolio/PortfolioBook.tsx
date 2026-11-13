@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 
-import type { BrokerAccount, CatalogEntry, CatalogKind, ItemsPage, OrderAssignment, OrdersPage, PnlGroup, Profile, TaggedOrder } from "./types";
+import type { AccountFee, BrokerAccount, CatalogEntry, CatalogKind, ItemsPage, OrderAssignment, OrdersPage, PnlGroup, PnlReport as PnlReportPayload, Profile, TaggedOrder } from "./types";
 import { errorMessage, fetchJson, useRemote } from "../shared/api";
 import { SignedBars } from "../shared/charts";
 import { formatTime } from "../shared/format";
@@ -224,36 +224,47 @@ function PnlReport({ kind, userId, selected, onSelect }: { kind: CatalogKind; us
   const account = accounts.data?.items.find(item => JSON.stringify([item.broker_code, item.account_id]) === selected);
   const filter = account ? `&broker_code=${encodeURIComponent(account.broker_code)}&account_id=${encodeURIComponent(account.account_id)}` : "";
   const unavailable = Boolean(selected && accounts.data && !account);
+  const [period, setPeriod] = useState<Period>(() => new URLSearchParams(window.location.search).get("period") === "ytd" ? "ytd" : "all");
+  const choosePeriod = (value: Period) => {
+    setPeriod(value);
+    const url = new URL(window.location.href);
+    if (value === "ytd") url.searchParams.set("period", "ytd"); else url.searchParams.delete("period");
+    window.history.replaceState(null, "", url);
+  };
   return <section className="portfolio-section portfolio-performance"><div className="portfolio-section-heading"><div><span className="portfolio-eyebrow">Recorded performance</span><h2>PnL by {singular[kind]}</h2></div>
+    <div className="portfolio-period" role="group" aria-label="PnL period">{(["all", "ytd"] as const).map(value => <button key={value} type="button" aria-pressed={period === value} onClick={() => choosePeriod(value)}>{value === "ytd" ? `YTD ${ytdStart().slice(0, 4)}` : "All time"}</button>)}</div>
     <label className="portfolio-selector"><span className="sr-only">PnL account</span><select value={selected} onChange={event => onSelect(event.target.value)} disabled={accounts.loading && !accounts.data}><option value="">All profile accounts</option>
       {selected && !account && <option value={selected} disabled>{accounts.loading ? "Loading account…" : "Account unavailable"}</option>}
       {(accounts.data?.items ?? []).map(item => <option key={JSON.stringify([item.broker_code, item.account_id])} value={JSON.stringify([item.broker_code, item.account_id])}>{item.broker_code.toUpperCase()} · {item.account_id}</option>)}
     </select></label></div>
     {Boolean(accounts.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(accounts.error)}</p>}
-    {selected && !account ? <p className="portfolio-empty-inline" role={unavailable ? "alert" : "status"}>{accounts.loading ? "Loading account…" : "The selected account is unavailable. Choose an account to view its PnL."}</p> : <PnlValues key={filter} kind={kind} userId={userId} filter={filter} />}
-    <details className="portfolio-calculation"><summary>How PnL is calculated</summary><p>Current cumulative PnL from recorded stock and ETF fills. Total = realized + unrealized − commissions. Matching uses FIFO within the same account, instrument, currency and three tags; use the same tags on closing orders. Retagging recalculates the recorded history.</p>
-      <p>Currencies, paper/live accounts and simulations stay separate. Missing data is unavailable, never zero. Dividends, financing and FX conversion are excluded. Snapshot quantity reconciliation cannot prove complete inception history.</p></details>
+    {selected && !account ? <p className="portfolio-empty-inline" role={unavailable ? "alert" : "status"}>{accounts.loading ? "Loading account…" : "The selected account is unavailable. Choose an account to view its PnL."}</p> : <PnlValues key={`${filter}/${period}`} kind={kind} userId={userId} filter={filter} period={period} />}
+    <details className="portfolio-calculation"><summary>How PnL is calculated</summary><p>All time: cumulative PnL from recorded stock and ETF fills. Total = realized + unrealized − commissions. YTD: realized PnL from closing fills and commissions on fills since 1 January (New York trading day); lots opened earlier keep their original cost. Unrealized is the current mark of open lots, so the YTD figure is net realized = realized − fees. Matching uses FIFO within the same account, instrument, currency and three tags; use the same tags on closing orders. Retagging recalculates the recorded history.</p>
+      <p>Currencies, paper/live accounts and simulations stay separate. Missing data is unavailable, never zero. Dividends, financing and FX conversion are excluded. Account fees (data subscriptions, broker fees, commission adjustments) come from Flex statements, are not tied to a fill, and are listed per account below the table, outside the totals. Snapshot quantity reconciliation cannot prove complete inception history.</p></details>
   </section>;
 }
 
 /** Total PnL per group as diverging bars, one chart per currency so values are never compared across currencies. */
-function PnlBars({ groups, kind }: { groups: PnlGroup[]; kind: CatalogKind }) {
+function PnlBars({ groups, kind, metric }: { groups: PnlGroup[]; kind: CatalogKind; metric: string }) {
   const currencies = Array.from(new Set(groups.map(group => group.currency)));
   return <div className="portfolio-pnl-bars">{currencies.map(currency => {
     const bars = groups.filter(group => group.currency === currency).map(group => ({
       key: JSON.stringify([group.id, group.account_mode, group.simulated]), label: group.name, value: toNumber(group.total),
-      display: `${compactMoney(toNumber(group.total))}`, title: `${group.name} · ${group.account_mode}${group.simulated ? " · simulated" : ""}: total ${group.total ?? "unavailable"} ${currency}`,
+      display: `${compactMoney(toNumber(group.total))}`, title: `${group.name} · ${group.account_mode}${group.simulated ? " · simulated" : ""}: ${metric.toLowerCase()} ${group.total ?? "unavailable"} ${currency}`,
     })).sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
-    return <figure key={currency}><figcaption>Total PnL by {singular[kind]} · {currency}</figcaption><SignedBars bars={bars} label={`Total PnL by ${singular[kind]}, ${currency}`} /></figure>;
+    return <figure key={currency}><figcaption>{metric} by {singular[kind]} · {currency}</figcaption><SignedBars bars={bars} label={`${metric} by ${singular[kind]}, ${currency}`} /></figure>;
   })}</div>;
 }
 
-function PnlValues({ kind, userId, filter }: { kind: CatalogKind; userId: string; filter: string }) {
-  const remote = useRemote<ItemsPage<PnlGroup>>(`${API}/pnl/${kind}?user_id=${userId}${filter}`, 60_000);
+function PnlValues({ kind, userId, filter, period }: { kind: CatalogKind; userId: string; filter: string; period: Period }) {
+  const ytd = period === "ytd";
+  const remote = useRemote<PnlReportPayload>(`${API}/pnl/${kind}?user_id=${userId}${filter}${ytd ? `&since=${ytdStart()}` : ""}`, 60_000);
   const [expanded, setExpanded] = useState<string | null>(null);
-  return <><div className="portfolio-report-tools"><p>Realized + unrealized − fees <span>·</span> Values shown in each row’s currency</p><button className="portfolio-button portfolio-button--ghost" onClick={remote.refresh} disabled={remote.refreshing}><PortfolioIcon name="refresh" />{remote.refreshing ? "Refreshing…" : "Refresh PnL"}</button></div>
+  const metric = ytd ? "Net realized YTD" : "Total PnL";
+  const suffix = ytd ? " YTD" : "";
+  return <><div className="portfolio-report-tools"><p>{ytd ? <>Realized − fees since {ytdStart()} <span>·</span> Unrealized is the current open mark</> : "Realized + unrealized − fees"} <span>·</span> Values shown in each row’s currency</p><button className="portfolio-button portfolio-button--ghost" onClick={remote.refresh} disabled={remote.refreshing}><PortfolioIcon name="refresh" />{remote.refreshing ? "Refreshing…" : "Refresh PnL"}</button></div>
     {Boolean(remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(remote.error, "PnL refresh failed.")} Any visible report is from the last successful refresh.</p>}
-    {remote.loading && !remote.data ? <p className="portfolio-empty-inline" role="status">Calculating PnL…</p> : remote.data?.items.length === 0 ? <EmptyState title="No performance to show yet">PnL appears here when this profile has recorded fills or holdings.</EmptyState> : remote.data && <><PnlBars groups={remote.data.items} kind={kind} /><div className="portfolio-table-scroll" role="region" aria-label="Performance table" tabIndex={0}><table className="portfolio-pnl-table" aria-label={`PnL by ${singular[kind]}`}><thead><tr><th scope="col">{singular[kind]}</th><th scope="col">Currency</th><th scope="col" className="portfolio-numeric">Realized</th><th scope="col" className="portfolio-numeric">Unrealized</th><th scope="col" className="portfolio-numeric">Fees</th><th scope="col" className="portfolio-numeric portfolio-total">Total PnL</th><th scope="col"><span className="sr-only">Details</span></th></tr></thead><tbody>{remote.data.items.map(group => {
+    {remote.loading && !remote.data ? <p className="portfolio-empty-inline" role="status">Calculating PnL…</p> : remote.data?.items.length === 0 ? <EmptyState title="No performance to show yet">PnL appears here when this profile has recorded fills or holdings.</EmptyState> : remote.data && <><PnlBars groups={remote.data.items} kind={kind} metric={metric} /><div className="portfolio-table-scroll" role="region" aria-label="Performance table" tabIndex={0}><table className="portfolio-pnl-table" aria-label={`PnL by ${singular[kind]}`}><thead><tr><th scope="col">{singular[kind]}</th><th scope="col">Currency</th><th scope="col" className="portfolio-numeric">Realized{suffix}</th><th scope="col" className="portfolio-numeric">{ytd ? "Unrealized (open)" : "Unrealized"}</th><th scope="col" className="portfolio-numeric">Fees{suffix}</th><th scope="col" className="portfolio-numeric portfolio-total">{metric}</th><th scope="col"><span className="sr-only">Details</span></th></tr></thead><tbody>{remote.data.items.map(group => {
       const key = JSON.stringify([group.id, group.account_mode, group.simulated, group.currency]);
       const open = expanded === key;
       return <Fragment key={key}><tr className={open ? "is-expanded" : ""}><th scope="row"><strong>{group.name}</strong><div className="portfolio-group-meta"><span>{group.account_mode}</span>{group.simulated && <span>Simulated</span>}
@@ -262,13 +273,32 @@ function PnlValues({ kind, userId, filter }: { kind: CatalogKind; userId: string
         <td><button className="portfolio-expand" aria-label={`${open ? "Hide" : "View"} holdings for ${group.name}, ${group.currency}, ${group.account_mode}${group.simulated ? ", simulated" : ""}`} aria-expanded={open} onClick={() => setExpanded(open ? null : key)}><PortfolioIcon name="chevron" /></button></td></tr>
         {open && <tr className="portfolio-expanded-row"><td colSpan={7}><div className="portfolio-holdings"><div className="portfolio-section-heading"><h3>{group.name} · Holdings & orders</h3><span className="portfolio-footnote">— means unavailable</span></div>
           {group.issues.length > 0 && <ul className="portfolio-issue-list">{group.issues.map(issue => <li key={issue}>{issueLabels[issue] ?? issue}</li>)}</ul>}
-          {group.details.length === 0 ? <p className="portfolio-footnote">No contributing holdings reported.</p> : <table aria-label={`${group.name} holdings`}><thead><tr><th scope="col">Instrument / Account</th><th scope="col" className="portfolio-numeric">Quantity</th><th scope="col" className="portfolio-numeric">Realized</th><th scope="col" className="portfolio-numeric">Unrealized</th><th scope="col" className="portfolio-numeric">Fees</th><th scope="col" className="portfolio-numeric">Total</th><th scope="col">Valuation & orders</th></tr></thead>
+          {group.details.length === 0 ? <p className="portfolio-footnote">No contributing holdings reported.</p> : <table aria-label={`${group.name} holdings`}><thead><tr><th scope="col">Instrument / Account</th><th scope="col" className="portfolio-numeric">Quantity</th><th scope="col" className="portfolio-numeric">Realized{suffix}</th><th scope="col" className="portfolio-numeric">{ytd ? "Unrealized (open)" : "Unrealized"}</th><th scope="col" className="portfolio-numeric">Fees{suffix}</th><th scope="col" className="portfolio-numeric">{ytd ? "Net realized" : "Total"}</th><th scope="col">Valuation & orders</th></tr></thead>
             <tbody>{group.details.map((detail, index) => <tr key={index}><td><strong>{detail.trading_symbol}</strong><small className="portfolio-cell-note">{detail.broker_code.toUpperCase()} · {detail.account_id}</small></td><td className="portfolio-numeric"><Amount value={detail.quantity} quantity /></td><td className="portfolio-numeric"><Amount value={detail.realized} signed /></td><td className="portfolio-numeric"><Amount value={detail.unrealized} signed /></td><td className="portfolio-numeric"><Amount value={detail.commissions} /></td><td className="portfolio-numeric"><Amount value={detail.total} signed /></td>
               <td><span className="portfolio-cell-note">{detail.price_time ? formatTime(detail.price_time) : "No open-position valuation"}</span><small className="portfolio-cell-note">Recorded since {formatTime(detail.history_start)}</small><a className="portfolio-text-link" href={`/portfolio?user_id=${userId}&account=${encodeURIComponent(JSON.stringify([detail.broker_code, detail.account_id]))}`}>{detail.orders.length ? `${detail.orders.length} contributing ${detail.orders.length === 1 ? "order" : "orders"}` : "View account"}<PortfolioIcon name="arrow" /></a></td></tr>)}</tbody></table>}
         </div></td></tr>}
       </Fragment>;
     })}</tbody></table></div></>}
+    {remote.data && <AccountFees rows={remote.data.account_fees ?? []} ytd={ytd} />}
   </>;
+}
+
+type Period = "all" | "ytd";
+
+/** First New York trading date of the current year, as the API's `since`. */
+function ytdStart(): string {
+  const year = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric" }).format(new Date());
+  return `${year}-01-01`;
+}
+
+/** Account-level Flex costs, kept apart because they cannot be attributed to a tag. */
+function AccountFees({ rows, ytd }: { rows: AccountFee[]; ytd: boolean }) {
+  const label = `Account fees${ytd ? " YTD" : ""}`;
+  return <div className="portfolio-account-fees"><div className="portfolio-section-heading"><h3>{label}</h3><span className="portfolio-footnote">From IBKR Flex statements · not included in the totals above</span></div>
+    {rows.length === 0 ? <p className="portfolio-footnote">No account-level fees or commission adjustments reported {ytd ? "this year" : "in recorded statements"}. Run a Flex sync if the latest statement is missing.</p> :
+      <div className="portfolio-table-scroll" role="region" aria-label={label} tabIndex={0}><table aria-label={label}><thead><tr><th scope="col">Account</th><th scope="col">Currency</th><th scope="col" className="portfolio-numeric">Fees</th><th scope="col" className="portfolio-numeric">Commission adjustments</th><th scope="col" className="portfolio-numeric portfolio-total">Total</th></tr></thead>
+        <tbody>{rows.map(row => <tr key={JSON.stringify([row.broker_code, row.account_id, row.currency])}><th scope="row"><strong>{row.broker_code.toUpperCase()} · {row.account_id}</strong><div className="portfolio-group-meta"><span>{row.account_mode}</span>{row.simulated && <span>Simulated</span>}</div></th><td><span className="portfolio-currency">{row.currency}</span></td><td className="portfolio-numeric"><Amount value={row.fees} /></td><td className="portfolio-numeric"><Amount value={row.commission_adjustments} signed /></td><td className="portfolio-numeric portfolio-total"><Amount value={row.total} /></td></tr>)}</tbody></table></div>}
+  </div>;
 }
 
 export function PortfolioGroups({ kind }: { kind: CatalogKind }) {

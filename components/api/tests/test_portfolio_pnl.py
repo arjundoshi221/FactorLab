@@ -202,3 +202,48 @@ def test_large_decimal_products_and_aggregate_sums_keep_fractional_digits():
 def test_unsupported_instruments_keep_the_recorded_quantity_visible():
     row = calculate([fill("1", "BUY", 10, 100, product_type="future")], 10)[0]
     assert row["quantity"] == "10" and row["total"] is None
+
+
+def test_period_counts_only_closes_and_fees_in_the_window_but_keeps_old_cost():
+    old = NOW - timedelta(days=30)
+    since = NOW - timedelta(days=1)
+    fills = [
+        fill("1", "BUY", 10, 100, exec_time=old, commission=None),
+        fill("2", "SELL", 4, 130, exec_time=old + timedelta(days=1)),
+        fill("3", "SELL", 4, 140),
+    ]
+    row = ledger(
+        fills,
+        [
+            {
+                "broker_code": "test",
+                "account_id": "A",
+                "account_mode": "paper",
+                "vendor_id": "100",
+                "position": 2,
+                "currency": "USD",
+                "market_price": 120,
+                "snapshot_time": NOW,
+            }
+        ],
+        {("test", "A"): NOW},
+        now=NOW,
+        since=since,
+    )[0]
+    # The in-window sell matches the pre-window lot at its real 100 cost.
+    assert Decimal(row["realized"]) == 160
+    assert Decimal(row["commissions"]) == 1
+    assert Decimal(row["unrealized"]) == 40
+    # A missing commission before the window does not blank the period figures.
+    assert "missing_commission" not in row["issues"]
+    assert Decimal(row["total"]) == 159  # net realized: unrealized is not period PnL
+
+
+def test_period_drops_positions_closed_before_the_window():
+    old = NOW - timedelta(days=30)
+    fills = [
+        fill("1", "BUY", 10, 100, exec_time=old),
+        fill("2", "SELL", 10, 130, exec_time=old + timedelta(days=1)),
+    ]
+    assert ledger(fills, [], {("test", "A"): NOW}, now=NOW, since=NOW - timedelta(days=1)) == []
+    assert len(ledger(fills, [], {("test", "A"): NOW}, now=NOW)) == 1

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+from datetime import UTC, date, datetime, time
+from decimal import Decimal
 from typing import Annotated, Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -19,6 +23,17 @@ from factorlab.components.api.portfolio_pnl import (
 from factorlab.storage.portfolio_book import CATALOGS, CatalogKind, PortfolioBookStorage
 
 router = APIRouter()
+
+# IBKR statements, and so their year-to-date figures, use the New York trading day.
+PERIOD_TIMEZONE = ZoneInfo("America/New_York")
+# Flex cash transactions that are costs of the account rather than of one fill.
+ACCOUNT_FEE_TYPES = {"fee": "fees", "commission": "commission_adjustments"}
+
+
+def period_start(since: date | None) -> datetime | None:
+    if since is None:
+        return None
+    return datetime.combine(since, time(), PERIOD_TIMEZONE).astimezone(UTC)
 
 
 class CatalogEntry(BaseModel):
@@ -172,15 +187,62 @@ class Book:
             for row in reversed(list(orders.values()))
         ]
 
-    def pnl(
-        self, user_id: UUID, kind: CatalogKind, broker: str, account_id: str
-    ) -> list[dict[str, Any]]:
+    def report_accounts(self, user_id: UUID, broker: str, account_id: str) -> list[dict[str, Any]]:
         profile = self.profile(user_id)
-        accounts = self.repo.accounts(profile)
         if broker or account_id:
             if not broker or not account_id:
                 raise HTTPException(422, "broker_code and account_id must be supplied together")
-            accounts = [self.repo.account(broker, account_id, profile)]
+            return [self.repo.account(broker, account_id, profile)]
+        return self.repo.accounts(profile)
+
+    def account_fees(
+        self, accounts: list[dict[str, Any]], since: datetime | None
+    ) -> list[dict[str, Any]]:
+        """Flex-reported account fees and commission adjustments, as positive costs."""
+        result = []
+        for account in accounts:
+            records = self.repo.query(
+                "SELECT currency, cash_flow_type, sum(amount) AS amount, count() AS events "
+                "FROM broker.cash_flows FINAL WHERE broker_code = {broker:String} "
+                "AND account_id = {account:String} AND cash_flow_type IN ('fee', 'commission') "
+                "AND event_time >= {since:DateTime64(3, 'UTC')} "
+                "GROUP BY currency, cash_flow_type ORDER BY currency, cash_flow_type",
+                {
+                    "broker": account["broker_code"],
+                    "account": account["account_id"],
+                    "since": since or datetime(1970, 1, 1, tzinfo=UTC),
+                },
+            )
+            by_currency: dict[str, dict[str, Decimal]] = defaultdict(
+                lambda: dict.fromkeys(ACCOUNT_FEE_TYPES.values(), Decimal(0))
+            )
+            for row in records:
+                field = ACCOUNT_FEE_TYPES[str(row["cash_flow_type"])]
+                # Cash flows are signed credits; a debit (negative) is a positive cost.
+                by_currency[str(row["currency"]).strip() or "UNKNOWN"][field] -= Decimal(
+                    str(row["amount"])
+                )
+            for currency, costs in sorted(by_currency.items()):
+                result.append(
+                    {
+                        "broker_code": account["broker_code"],
+                        "account_id": account["account_id"],
+                        "account_mode": account.get("account_mode", ""),
+                        "simulated": account["simulated"],
+                        "currency": currency,
+                        **{field: str(value) for field, value in costs.items()},
+                        "total": str(sum(costs.values(), Decimal(0))),
+                    }
+                )
+        return result
+
+    def pnl(
+        self,
+        user_id: UUID,
+        kind: CatalogKind,
+        accounts: list[dict[str, Any]],
+        since: datetime | None = None,
+    ) -> list[dict[str, Any]]:
         fills: list[dict[str, Any]] = []
         snapshots: list[dict[str, Any]] = []
         times = {}
@@ -196,7 +258,7 @@ class Book:
             snapshot = self.repo.snapshot(account, "positions")
             snapshots.extend([{**row, "simulated": account["simulated"]} for row in snapshot.items])
             times[account["broker_code"], account["account_id"]] = snapshot.snapshot_time
-        details = ledger(fills, snapshots, times)
+        details = ledger(fills, snapshots, times, since=since)
         field = CATALOGS[kind][1]
         names = {row["id"]: row["name"] for row in self.catalog(kind, user_id)}
         return [
@@ -299,12 +361,25 @@ def orders(
 
 @router.get("/pnl/{kind}")
 def pnl(
-    kind: CatalogKind, user_id: UUID, repo: Repo, broker_code: str = "", account_id: str = ""
+    kind: CatalogKind,
+    user_id: UUID,
+    repo: Repo,
+    broker_code: str = "",
+    account_id: str = "",
+    since: date | None = None,
 ) -> dict[str, Any]:
+    """``since`` (a New York trading date, e.g. 1 January for YTD) windows realized PnL and fees."""
+    book = Book(repo)
+    accounts = book.report_accounts(user_id, broker_code, account_id)
+    start = period_start(since)
     return {
-        "items": Book(repo).pnl(user_id, kind, broker_code, account_id),
+        "items": book.pnl(user_id, kind, accounts, start),
         "basis": "available_recorded_history",
         "supported": ["stocks", "ETFs"],
+        "period": None
+        if since is None
+        else {"since": since.isoformat(), "start": start, "timezone": "America/New_York"},
+        "account_fees": book.account_fees(accounts, start),
     }
 
 

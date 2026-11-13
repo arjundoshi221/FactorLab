@@ -172,3 +172,25 @@ it("creates a catalog entry from the tag dropdown and selects it", async () => {
   expect(created).toEqual([{ path: "/hub/api/v1/portfolio/catalogs/themes", body: { name: "Energy", description: "", active: true } }]);
   expect(within(screen.getByLabelText("Themes for order 100")).getByRole("option", { name: "Energy" })).toBeInTheDocument();
 });
+
+it("switches PnL to YTD with a New York year start and lists account fees apart", async () => {
+  const requests: string[] = [];
+  const fee = { broker_code: "ibkr", account_id: "SIM_A", account_mode: "paper", simulated: true, currency: "USD", fees: "10.5", commission_adjustments: "-1.25", total: "9.25" };
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    requests.push(url);
+    const ytd = url.includes("since=");
+    return { ok: true, json: async () => url.endsWith("/profiles") ? { items: [{ user_id: A, display_name: "Alice" }] }
+      : url.includes("/accounts") ? { items: [account] }
+      : url.includes("/pnl/") ? { items: [{ ...group, total: ytd ? "397" : "447" }], account_fees: ytd ? [fee] : [] } : { items: [] } };
+  }));
+  render(<PortfolioGroups kind="strategies" />);
+  expect(await screen.findByText(/No account-level fees/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /^YTD / }));
+  const table = await screen.findByRole("table", { name: "Account fees YTD" });
+  expect(within(table).getByText("9.25")).toBeInTheDocument();
+  expect(screen.getByRole("columnheader", { name: "Net realized YTD" })).toBeInTheDocument();
+  expect(screen.getByRole("columnheader", { name: "Fees YTD" })).toBeInTheDocument();
+  const pnl = new URL(requests.filter(url => url.includes("/pnl/")).at(-1)!, "http://localhost");
+  expect(pnl.searchParams.get("since")).toMatch(/^\d{4}-01-01$/);
+  expect(new URLSearchParams(window.location.search).get("period")).toBe("ytd");
+});

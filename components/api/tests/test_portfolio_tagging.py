@@ -1,3 +1,4 @@
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -5,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from factorlab.components.api.app import app
 from factorlab.components.api.portfolio import PortfolioRepository, repository
-from factorlab.components.api.portfolio_tagging import Book
+from factorlab.components.api.portfolio_tagging import Book, period_start
 
 USER = "d677331a-a04f-454a-8a1e-02425be2c101"
 
@@ -74,3 +75,41 @@ def test_zero_order_ids_never_group_unrelated_executions(monkeypatch):
         {"broker_code": "test", "account_id": "A", "user_id": USER, "simulated": True}
     )
     assert len(orders) == 2 and not any(row["taggable"] for row in orders)
+
+
+def test_account_fees_are_positive_costs_per_currency(monkeypatch):
+    seen = {}
+
+    def query(sql, params=None):
+        seen.update(params or {})
+        return [
+            {"currency": "USD", "cash_flow_type": "fee", "amount": "-10.5", "events": 2},
+            {"currency": "USD", "cash_flow_type": "commission", "amount": "1.25", "events": 1},
+        ]
+
+    reader = PortfolioRepository(None)
+    monkeypatch.setattr(reader, "query", query)
+    since = period_start(date(2026, 1, 1))
+    rows = Book(reader).account_fees(
+        [{"broker_code": "ibkr", "account_id": "U1", "account_mode": "live", "simulated": False}],
+        since,
+    )
+    assert rows == [
+        {
+            "broker_code": "ibkr",
+            "account_id": "U1",
+            "account_mode": "live",
+            "simulated": False,
+            "currency": "USD",
+            "fees": "10.5",
+            "commission_adjustments": "-1.25",
+            "total": "9.25",
+        }
+    ]
+    # YTD starts at New York midnight, not UTC midnight.
+    assert seen["since"] == datetime(2026, 1, 1, 5, tzinfo=UTC)
+
+
+def test_pnl_route_reports_period_and_rejects_bad_dates(api):
+    url = f"/hub/api/v1/portfolio/pnl/themes?user_id={USER}"
+    assert api.get(f"{url}&since=2026-13-01").status_code == 422

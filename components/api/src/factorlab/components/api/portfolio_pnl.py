@@ -57,11 +57,18 @@ def ledger(
     snapshot_times: dict[tuple[str, str], datetime | None],
     *,
     now: datetime | None = None,
+    since: datetime | None = None,
 ) -> list[dict[str, Any]]:
-    """One row per account/instrument/tag triple/currency; never silently truncate fills."""
+    """One row per account/instrument/tag triple/currency; never silently truncate fills.
+
+    With ``since``, FIFO still runs over the full recorded history (so lots opened before
+    the window keep their real cost), but realized PnL counts only closing fills at or
+    after ``since`` and commissions only fills in the window. Unrealized stays the current
+    open-lot mark, so a windowed ``total`` is net realized (realized - commissions).
+    """
     with localcontext() as context:
         context.prec = 64  # Decimal(20,6) products and sums must retain their fractional digits.
-        return _ledger(executions, snapshots, snapshot_times, now=now)
+        return _ledger(executions, snapshots, snapshot_times, now=now, since=since)
 
 
 def _ledger(
@@ -70,6 +77,7 @@ def _ledger(
     snapshot_times: dict[tuple[str, str], datetime | None],
     *,
     now: datetime | None = None,
+    since: datetime | None = None,
 ) -> list[dict[str, Any]]:
     now = now or datetime.now(UTC)
     executions = latest_fills(executions)
@@ -112,11 +120,14 @@ def _ledger(
                 "issues": set(),
                 "price_time": None,
                 "history_start": row["exec_time"],
+                "in_period": False,
             }
         return key, buckets[key]
 
     for row in executions:
+        in_period = since is None or timestamp(row["exec_time"]) >= since
         key, item = bucket(row, str(row.get("currency") or "UNKNOWN"))
+        item["in_period"] |= in_period
         item["orders"].add(str(row.get("perm_id", 0)))
         if not all(row.get(field) for field in TAG_FIELDS):
             item["issues"].add("unassigned")
@@ -148,7 +159,8 @@ def _ledger(
                 old_quantity, old_price = queue[0]
                 matched = min(abs(signed), abs(old_quantity))
                 direction = Decimal(1) if old_quantity > 0 else Decimal(-1)
-                item["realized"] += matched * (price - old_price) * direction
+                if in_period:
+                    item["realized"] += matched * (price - old_price) * direction
                 queue[0][0] -= matched * direction
                 signed += matched * direction
                 if not queue[0][0]:
@@ -156,13 +168,16 @@ def _ledger(
             if signed:
                 queue.append([signed, price])
         commission = number(row.get("commission"))
-        if commission is None:
+        if not in_period:
+            pass  # Costs outside the window are neither expensed nor reported missing.
+        elif commission is None:
             item["issues"].add("missing_commission")
         else:
             commission_currency = str(row.get("commission_ccy") or "UNKNOWN")
             _, costs = bucket(row, commission_currency)
             costs["commissions"] += commission
             costs["orders"].add(str(row.get("perm_id", 0)))
+            costs["in_period"] = True
             if commission_currency == "UNKNOWN":
                 item["issues"].add("missing_commission_currency")
                 costs["issues"].add("missing_commission_currency")
@@ -177,6 +192,8 @@ def _ledger(
     }
     for key, item in buckets.items():
         queue = lots[key]
+        if not item["in_period"] and not queue:
+            continue  # Closed out before the window: nothing to report for this period.
         if queue:
             mark = marks.get(key[:3], {})
             price = number(mark.get("market_price"))
@@ -202,6 +219,15 @@ def _ledger(
             or "missing_commission_currency" in item["issues"]
             else realized + unrealized - costs
         )
+        if since is not None:
+            total = (
+                None
+                if realized is None
+                or costs is None
+                or "missing_commission_currency" in item["issues"]
+                else realized - costs
+            )
+        item.pop("in_period")
         result.append(
             {
                 **item,
