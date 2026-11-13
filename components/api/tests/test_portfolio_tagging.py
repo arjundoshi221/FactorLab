@@ -83,7 +83,7 @@ def test_account_fees_are_positive_costs_per_currency(monkeypatch):
     def query(sql, params=None):
         seen.update(params or {})
         if "broker.executions" in sql:
-            assert params["fx"] == ["CASH", "forex"]
+            assert (params or {})["fx"] == ["CASH", "forex"]
             return [{"currency": "SGD", "amount": "2.5684"}]
         return [
             {"currency": "USD", "cash_flow_type": "fee", "amount": "-10.5", "events": 2},

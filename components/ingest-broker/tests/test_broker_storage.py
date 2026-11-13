@@ -78,7 +78,8 @@ class Client:
         if "FROM ref.execution_methods" in sql:
             return Result([(10, "api_trade_engine_v1")])
         if "FROM broker.executions FINAL" in sql:
-            rows = [self.uncosted[i] for i in parameters["ids"] if i in self.uncosted]
+            ids = (parameters or {})["ids"]
+            rows = [self.uncosted[i] for i in ids if i in self.uncosted]
             columns = list(rows[0]) if rows else []
             return Result([[row[c] for c in columns] for row in rows], columns)
         if "FROM broker.executions" in sql:
@@ -242,8 +243,12 @@ def test_flex_executions_keep_gateway_rows_and_mark_unknown_clients(storage, now
     assert manual["execution_method_id"] == MANUAL_EXECUTION_METHOD  # isAPIOrder="N"
 
 
+def _flex_executions() -> list[ExecutionRecord]:
+    return [row for row in _flex_rows(ExecutionRecord) if isinstance(row, ExecutionRecord)]
+
+
 def test_flex_fills_in_missing_gateway_commission_without_rewriting_the_order(storage, now_utc):
-    rows = _flex_rows(ExecutionRecord)
+    rows = _flex_executions()
     known = next(row for row in rows if row.commission is not None and row.commission_ccy)
     stored = {
         "exec_id": known.exec_id,
@@ -272,7 +277,7 @@ def test_flex_fills_in_missing_gateway_commission_without_rewriting_the_order(st
 
 
 def test_flex_leaves_costed_gateway_fills_alone(storage, now_utc):
-    rows = _flex_rows(ExecutionRecord)
+    rows = _flex_executions()
     storage.client.known_exec_ids = {rows[0].exec_id}
     storage.write_executions(rows, provenance=_provenance(storage, now_utc, "ibkr:flex_statement"))
     assert rows[0].exec_id not in {r["exec_id"] for r in storage.client.rows("broker.executions")}
