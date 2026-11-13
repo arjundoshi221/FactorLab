@@ -300,25 +300,31 @@ class V2BrokerStorage(V2USStorage):
                 "maintenance_margin_contribution": None,
             },
         )
-        if _is_history(provenance):
-            # The Gateway provider records its own manifests; a statement's are recorded
-            # here so readers can find the latest statement snapshot per account.
-            accounts: dict[datetime, set[str]] = {}
-            for row in rows:
-                accounts.setdefault(row.snapshot_time, set()).add(row.account_id)
-            for snapshot_time, ids in sorted(accounts.items()):
-                self.record_broker_snapshot(
-                    sorted(ids),
-                    broker_code=rows[0].broker_code,
-                    dataset="positions",
-                    snapshot_time=snapshot_time,
-                    provenance=provenance,
-                )
+        self._record_statement_snapshots(rows, provenance, "positions")
         return written
+
+    def _record_statement_snapshots(
+        self, rows: Sequence[Any], provenance: Provenance, dataset: str
+    ) -> None:
+        """The Gateway provider records its own manifests; a statement's are recorded here
+        so readers can find the latest statement snapshot per account."""
+        if not rows or not _is_history(provenance):
+            return
+        accounts: dict[datetime, set[str]] = {}
+        for row in rows:
+            accounts.setdefault(row.snapshot_time, set()).add(row.account_id)
+        for snapshot_time, ids in sorted(accounts.items()):
+            self.record_broker_snapshot(
+                sorted(ids),
+                broker_code=rows[0].broker_code,
+                dataset=dataset,
+                snapshot_time=snapshot_time,
+                provenance=provenance,
+            )
 
     def write_account_state(self, rows: Sequence[Any], *, provenance: Provenance) -> int:
         canonical = self.canonical_metrics(rows[0].broker_code) if rows else {}
-        return self._write(
+        written = self._write(
             ACCOUNT_STATE_TABLE,
             rows,
             provenance,
@@ -326,6 +332,8 @@ class V2BrokerStorage(V2USStorage):
                 "metric_canonical": canonical.get(row.metric, ""),
             },
         )
+        self._record_statement_snapshots(rows, provenance, "account_state")
+        return written
 
     def existing_exec_ids(self, broker_code: str, exec_ids: Iterable[str]) -> set[str]:
         values = sorted({value for value in exec_ids if value})

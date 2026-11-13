@@ -70,7 +70,7 @@ configured US resolution uses SchwabListings and canonical reference sinks.
   `fundamentals.line_items`, `broker.positions_snapshot`,
   `broker.account_state_snapshot`, `broker.executions`, `broker.open_orders_snapshot`,
   `broker.order_events`, `broker.cash_flows`, `broker.statement_rows`. Executions written under a `HISTORY_CHANNELS` channel (`flex_statement`) skip any `exec_id` already stored, except that a stored fill still lacking a commission or its currency is re-versioned with the statement's commission (and realized PnL if missing), keeping every other column;
-  positions written under one also record a `broker_snapshots` manifest entry (`dataset` = `positions`) per account and snapshot time, as the Gateway provider does for its own snapshots.
+  positions and account state written under one also record a `broker_snapshots` manifest entry (`dataset` = `positions` / `account_state`) per account and snapshot time, as the Gateway provider does for its own snapshots.
 - Reads for enrichment: `ref.exchanges`, `ref.currencies`, `ref.broker_metrics_map`,
   `ref.execution_methods`.
 - `country_code` is `IN` for `V2IndiaStorage` and `US` for `V2USStorage` and subclasses.

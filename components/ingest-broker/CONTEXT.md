@@ -79,7 +79,8 @@ on XNYS trading days; `--run-on-start` also takes an immediate snapshot.
   `meta.ingestion_runs`. Reads `ref.broker_metrics_map` and `ref.execution_methods`.
 - On demand, `engine run --dataset broker.flex_activity --market USA` backfills
   `broker.executions`, `broker.order_events`, `broker.cash_flows`, end-of-day
-  `broker.positions_snapshot` rows and `broker.statement_rows` (every statement row, Wave 17)
+  `broker.positions_snapshot` and `broker.account_state_snapshot` (net liquidation, cash,
+  gross position value, cash per currency, FX to base) rows and `broker.statement_rows` (every statement row, Wave 17)
   from an IBKR Flex statement
   (`raw.archive` `transport='http'`, `source_channel` = `ibkr:flex_statement`). Run it on the
   VPS, because the token is IP-restricted. Normally the hub's portfolio page starts it

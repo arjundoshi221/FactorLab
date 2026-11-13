@@ -24,6 +24,7 @@ from factorlab.sources.ibkr.normalize import (
     normalize_positions,
 )
 from factorlab.sources.ibkr.shapes import (
+    AccountStateRow,
     CashFlowRecord,
     ExecutionRecord,
     OrderEventRecord,
@@ -329,6 +330,27 @@ def test_flex_positions_carry_fx_and_record_a_snapshot_manifest(storage, now_utc
     assert (manifest["account_id"], manifest["dataset"]) == ("U0000001", "positions")
     assert manifest["source_channel"] == "ibkr:flex_statement"
     assert manifest["snapshot_time"] == aapl["snapshot_time"].isoformat()
+
+
+def test_flex_account_state_records_a_snapshot_manifest(storage, now_utc):
+    storage._broker_snapshots = []
+    close = datetime(2026, 11, 12, 21, 0, tzinfo=UTC)
+    rows = [
+        AccountStateRow(close, "ibkr", "U0000001", "live", "US", metric, "", "SGD", value, None)
+        for metric, value in (
+            ("NetLiquidation", Decimal("46301.33")),
+            ("GrossPositionValue", Decimal("261102.4")),
+        )
+    ]
+    provenance = _provenance(storage, now_utc, "ibkr:flex_statement")
+
+    assert storage.write_account_state(rows, provenance=provenance) == 2
+    nav, _ = storage.client.rows("broker.account_state_snapshot")
+    assert set(nav) == wave7_columns("broker.account_state_snapshot")
+    [manifest] = storage._broker_snapshots
+    assert (manifest["account_id"], manifest["dataset"]) == ("U0000001", "account_state")
+    assert manifest["snapshot_time"] == close.isoformat()
+    assert manifest["source_channel"] == "ibkr:flex_statement"
 
 
 def test_gateway_positions_record_no_manifest_in_the_writer(storage, mock_ib_paper, now_utc):

@@ -13,6 +13,9 @@ several accounts (``<FlexStatement accountId=...>``); each yields:
 * ``<OpenPosition levelOfDetail="SUMMARY">`` -> :class:`PositionSnapshot` as of the
   report date's 16:00 New York close, with ``realized_pnl_ytd`` from the same
   statement's MTD/YTD performance summary when present;
+* ``<EquitySummaryByReportDateInBase>`` -> :class:`AccountStateRow` (``NetLiquidation``,
+  ``TotalCashValue``, ``GrossPositionValue`` in base) per report date's close, plus
+  ``CashBalance`` per currency and ``ExchangeRate`` to base on the last report date;
 * every element of every section, the ``<FlexStatement>`` itself included ->
   :class:`StatementRow` with all of its attributes, so sections no typed table
   models (performance summaries, taxes, ...) are kept as reported.
@@ -55,6 +58,7 @@ from factorlab.sources.ibkr.normalize import (
     to_decimal,
 )
 from factorlab.sources.ibkr.shapes import (
+    AccountStateRow,
     CashFlowRecord,
     ExecutionRecord,
     Mode,
@@ -68,8 +72,18 @@ log = logging.getLogger(__name__)
 FLEX_TIMEZONE = ZoneInfo("America/New_York")
 ORDER_SUMMARY_EVENT_SEQ = 2**32 - 1  # UInt32 max: after any streamed event of the order
 REPORT_CLOSE = "160000"  # positions are as of the report date's New York close
+# Equity-summary columns that hold positions (cash and accruals are not positions); each
+# has <name>Long and <name>Short, and gross position value sums their absolute values.
+POSITION_CLASSES = ("stock", "options", "bonds", "notes", "funds", "commodities", "crypto")
 
-FlexRecord = ExecutionRecord | OrderEventRecord | CashFlowRecord | PositionSnapshot | StatementRow
+FlexRecord = (
+    ExecutionRecord
+    | OrderEventRecord
+    | CashFlowRecord
+    | PositionSnapshot
+    | AccountStateRow
+    | StatementRow
+)
 
 _CASH_FLOW_TYPES = {
     "dividends": "dividend",
@@ -250,6 +264,90 @@ def _position(
     )
 
 
+def _account_state(statement: Any, account: str, mode: Mode, country: str) -> list[AccountStateRow]:
+    """Account-wide balances in the Gateway's metric names, as of each report date's close.
+
+    ``EquitySummaryByReportDateInBase`` gives, per report date and in the base currency,
+    ``NetLiquidation`` (``total``), ``TotalCashValue`` (``cash``) and ``GrossPositionValue``
+    (|long| + |short| over the position classes). The statement's last report date also
+    gets ``CashBalance`` per currency (``CashReportCurrency`` ``endingCash``, which is as of
+    the statement's end) and ``ExchangeRate`` to the base currency (``ConversionRate``).
+    Margin requirements and excess liquidity are not in a Flex statement.
+    """
+    days: dict[str, Any] = {}
+    for row in statement.iter("EquitySummaryByReportDateInBase"):
+        report = re.sub(r"\D", "", row.get("reportDate", ""))[:8]
+        if len(report) == 8:
+            days[report] = row  # a date reported twice carries the same figures
+    if not days:
+        return []
+    rows: list[AccountStateRow] = []
+
+    def add(when: datetime, owner: str, metric: str, currency: str, value: Decimal | None) -> None:
+        if value is None or not currency:
+            return
+        rows.append(
+            AccountStateRow(
+                snapshot_time=when,
+                broker_code=BROKER_CODE,
+                account_id=owner,
+                account_mode=mode,
+                country_code=country,
+                metric=metric,
+                segment="",
+                currency=currency,
+                value_num=value,
+                value_str=None,
+            )
+        )
+
+    for report, row in sorted(days.items()):
+        when = flex_time(report + REPORT_CLOSE)
+        owner = row.get("accountId") or account
+        base = row.get("currency", "")
+        legs = [
+            to_decimal(row.get(f"{name}{side}"))
+            for name in POSITION_CLASSES
+            for side in ("Long", "Short")
+        ]
+        known = [abs(leg) for leg in legs if leg is not None]
+        add(when, owner, "NetLiquidation", base, to_decimal(row.get("total")))
+        add(when, owner, "TotalCashValue", base, to_decimal(row.get("cash")))
+        add(when, owner, "GrossPositionValue", base, sum(known, Decimal(0)) if known else None)
+
+    last = max(days)
+    end = re.sub(r"\D", "", statement.get("toDate", ""))[:8]
+    when = flex_time(last + REPORT_CLOSE)
+    base = days[last].get("currency", "")
+    holder = days[last].get("accountId") or account
+    if end == last:  # ending cash is as of the statement's end, not of an earlier date
+        for cash in statement.iter("CashReportCurrency"):
+            if cash.get("levelOfDetail", "").lower() != "currency":
+                continue  # BaseCurrency rows total every currency in base
+            owner = cash.get("accountId") or account
+            add(
+                when,
+                owner,
+                "CashBalance",
+                cash.get("currency", ""),
+                to_decimal(cash.get("endingCash")),
+            )
+    for rate in statement.iter("ConversionRate"):
+        if (
+            re.sub(r"\D", "", rate.get("reportDate", ""))[:8] == last
+            and base
+            and rate.get("toCurrency") == base
+        ):
+            add(
+                when,
+                holder,
+                "ExchangeRate",
+                rate.get("fromCurrency", ""),
+                to_decimal(rate.get("rate")),
+            )
+    return rows
+
+
 def _realized_ytd(statement: Any) -> dict[str, Decimal]:
     realized: dict[str, Decimal] = {}
     for row in statement.iter("MTDYTDPerformanceSummaryUnderlying"):
@@ -343,6 +441,7 @@ def normalize_flex_statement(
             )
             if position is not None:
                 rows.append(position)
+        rows.extend(_account_state(statement, account, mode, country_code))
         rows.extend(_statement_rows(statement, account, mode, country_code))
     return rows
 

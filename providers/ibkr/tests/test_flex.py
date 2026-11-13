@@ -20,6 +20,7 @@ from factorlab.sources.ibkr.flex_normalize import (
 )
 from factorlab.sources.ibkr.flex_source import IbkrFlexActivity, IbkrFlexSettings
 from factorlab.sources.ibkr.shapes import (
+    AccountStateRow,
     CashFlowRecord,
     ExecutionRecord,
     OrderEventRecord,
@@ -252,6 +253,71 @@ def test_every_statement_row_is_kept_whole():
     assert lot.attributes["originatingOrderID"] == "987654321"
     assert (lot.vendor_id, lot.report_date) == ("265598", datetime(2026, 10, 23).date())
     assert {r.account_mode for r in rows if r.account_id == "DU0000002"} == {"paper"}
+
+
+BALANCES = b"""<FlexQueryResponse><FlexStatements><FlexStatement accountId="U1" fromDate="20261111"
+ toDate="20261112" whenGenerated="20261113;034647">
+<EquitySummaryInBase>
+<EquitySummaryByReportDateInBase accountId="U1" currency="SGD" reportDate="20261111" cash="-164861.5"
+ stock="210861.25" stockLong="210861.25" stockShort="0" total="45843.22" />
+<EquitySummaryByReportDateInBase accountId="U1" currency="SGD" reportDate="20261112" cash="-214619.55"
+ stock="261102.4" stockLong="261102.4" stockShort="0" optionsLong="500" optionsShort="-200"
+ bondsLong="" total="46301.33" />
+<EquitySummaryByReportDateInBase accountId="U1" currency="SGD" reportDate="20261112" cash="-214619.55"
+ stock="261102.4" stockLong="261102.4" stockShort="0" optionsLong="500" optionsShort="-200"
+ bondsLong="" total="46301.33" />
+</EquitySummaryInBase>
+<CashReport>
+<CashReportCurrency accountId="U1" currency="BASE_SUMMARY" levelOfDetail="BaseCurrency" endingCash="-214619.55" />
+<CashReportCurrency accountId="U1" currency="SGD" levelOfDetail="Currency" endingCash="3893.03" />
+<CashReportCurrency accountId="U1" currency="USD" levelOfDetail="Currency" endingCash="-169824.02" />
+</CashReport>
+<ConversionRates>
+<ConversionRate reportDate="20261111" fromCurrency="USD" toCurrency="SGD" rate="1.2850" />
+<ConversionRate reportDate="20261112" fromCurrency="USD" toCurrency="SGD" rate="1.2867" />
+<ConversionRate reportDate="20261112" fromCurrency="SGD" toCurrency="USD" rate="0.7772" />
+</ConversionRates>
+</FlexStatement></FlexStatements></FlexQueryResponse>"""
+
+
+def _balances(body: bytes) -> dict[tuple[datetime, str, str], Decimal | None]:
+    rows = [r for r in normalize_flex_statement(body) if isinstance(r, AccountStateRow)]
+    assert all((r.account_id, r.account_mode, r.segment) == ("U1", "live", "") for r in rows)
+    return {(r.snapshot_time, r.metric, r.currency): r.value_num for r in rows}
+
+
+def test_equity_summary_becomes_account_state_as_of_each_report_close():
+    balances = _balances(BALANCES)
+    nov11 = datetime(2026, 11, 11, 21, 0, tzinfo=UTC)  # 16:00 EST
+    nov12 = datetime(2026, 11, 12, 21, 0, tzinfo=UTC)
+
+    assert balances == {
+        (nov11, "NetLiquidation", "SGD"): Decimal("45843.22"),
+        (nov11, "TotalCashValue", "SGD"): Decimal("-164861.5"),
+        (nov11, "GrossPositionValue", "SGD"): Decimal("210861.25"),
+        (nov12, "NetLiquidation", "SGD"): Decimal("46301.33"),
+        (nov12, "TotalCashValue", "SGD"): Decimal("-214619.55"),
+        # |long| + |short| over position classes; a blank class is skipped.
+        (nov12, "GrossPositionValue", "SGD"): Decimal("261802.4"),
+        # Ending cash per currency (not the base-currency total) and rates into base,
+        # both only on the statement's last report date.
+        (nov12, "CashBalance", "SGD"): Decimal("3893.03"),
+        (nov12, "CashBalance", "USD"): Decimal("-169824.02"),
+        (nov12, "ExchangeRate", "USD"): Decimal("1.2867"),
+    }
+
+
+def test_ending_cash_is_not_stamped_on_an_earlier_report_date():
+    # The equity summary stops a day before the statement's end: its last date is not
+    # the date ending cash describes, so no cash lines are written for it.
+    body = BALANCES.replace(b'toDate="20261112"', b'toDate="20261113"')
+    metrics = {metric for _, metric, _ in _balances(body)}
+    assert "CashBalance" not in metrics
+    assert "NetLiquidation" in metrics
+
+
+def test_a_statement_without_an_equity_summary_has_no_account_state():
+    assert not [r for r in normalize_flex_statement(STATEMENT) if isinstance(r, AccountStateRow)]
 
 
 def test_identical_statement_rows_get_distinct_keys():
