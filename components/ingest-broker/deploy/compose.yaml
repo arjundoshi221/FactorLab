@@ -25,6 +25,12 @@ services:
       FACTORLAB_COMPONENT: ingest-broker
       FACTORLAB_SERVICE: ibkr-snapshot
       FACTORLAB_LOG_DIR: /var/log/factorlab/ingest-broker
+      # notify.jsonl must land in the mounted log dir; the image's /app/logs is not writable.
+      FACTORLAB_LOG_ROOT: /var/log/factorlab/ingest-broker
+      FACTORLAB_NOTIFY_BACKEND: ${FACTORLAB_NOTIFY_BACKEND:-jsonl}
+      FACTORLAB_NOTIFY_TO: ${FACTORLAB_NOTIFY_TO:-}
+      FACTORLAB_NOTIFY_URL: ${FACTORLAB_NOTIFY_URL:-}
+      FACTORLAB_NOTIFY_PIN: ${FACTORLAB_NOTIFY_PIN:-}
       # Laptop Gateway over Tailscale: its Tailscale IP with ports 4002/4001.
       # VPS Gateways (ibkr-gateway profile): the defaults below.
       IBKR_HOST_PAPER: ${IBKR_HOST_PAPER:-ibkr-gateway-paper}

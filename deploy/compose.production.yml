@@ -190,6 +190,11 @@ services:
       FACTORLAB_COMPONENT: ingest-broker
       FACTORLAB_SERVICE: ibkr-snapshot
       FACTORLAB_LOG_DIR: /var/log/factorlab/ingest-broker
+      FACTORLAB_LOG_ROOT: /var/log/factorlab/ingest-broker
+      FACTORLAB_NOTIFY_BACKEND: ${FACTORLAB_NOTIFY_BACKEND:-jsonl}
+      FACTORLAB_NOTIFY_TO: ${FACTORLAB_NOTIFY_TO:-}
+      FACTORLAB_NOTIFY_URL: ${FACTORLAB_NOTIFY_URL:-}
+      FACTORLAB_NOTIFY_PIN: ${FACTORLAB_NOTIFY_PIN:-}
       IBKR_HOST_PAPER: ${IBKR_HOST_PAPER:-ibkr-gateway-paper}
       IBKR_PORT_PAPER: ${IBKR_PORT_PAPER:-4004}
       IBKR_HOST_LIVE: ${IBKR_HOST_LIVE:-ibkr-gateway-live}

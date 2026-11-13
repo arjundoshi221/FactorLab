@@ -8,7 +8,8 @@ response is archived to ``raw.archive`` (``transport='tcp_socket'``) and the
 
 A Gateway that is down (logged out, restarting, awaiting 2FA) marks only its
 own units failed; the run finishes ``partial``, ``meta.source_status`` for
-``ibkr`` reports it, and a notification is sent.
+``ibkr`` reports it, and a notification is sent once per outage (see
+``OutageAlerts``), with one recovery notice when snapshots succeed again.
 
 Usage:
     python scripts/us/ibkr/us_portfolio_ibkr_snapshot.py --once
@@ -91,6 +92,31 @@ def describe(summary: RunSummary) -> str:
     return f"IBKR snapshot {summary.status}: {summary.rows_written} rows; failed units: {failed}"
 
 
+class OutageAlerts:
+    """Alert once per outage, not once per run.
+
+    A failure is identified by the run status and its failed units. The first run with a
+    given failure alerts, identical failures after it are logged only, a different failure
+    alerts again, and the first success after a failure sends one recovery notice.
+    """
+
+    def __init__(self) -> None:
+        self._failure: tuple[str, tuple[str, ...]] | None = None
+
+    def should_alert(self, summary: RunSummary) -> bool:
+        failure = (
+            None
+            if summary.status == "success"
+            else (summary.status, tuple(sorted(unit.name for unit in summary.failed_units)))
+        )
+        changed = failure != self._failure
+        self._failure = failure
+        return changed
+
+
+_ALERTS = OutageAlerts()
+
+
 def report(storage: Any, summary: RunSummary, *, dry_run: bool) -> None:
     """Publish the run outcome to logs, ``meta.source_status`` and notifications."""
     detail = describe(summary)
@@ -108,7 +134,13 @@ def report(storage: Any, summary: RunSummary, *, dry_run: bool) -> None:
         storage.source_status(STATUS_BY_RUN[summary.status], detail, source="ibkr")
     except Exception:
         log.exception("Could not write meta.source_status for ibkr")
-    if summary.status != "success":
+    if not _ALERTS.should_alert(summary):
+        if summary.status != "success":
+            log.info("IBKR outage unchanged; alert already sent")
+        return
+    if summary.status == "success":
+        _notify("IBKR snapshot recovered", detail, severity="info", context={})
+    else:
         _notify(
             f"IBKR snapshot {summary.status}",
             detail,

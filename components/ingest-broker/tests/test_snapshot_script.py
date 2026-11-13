@@ -17,6 +17,11 @@ def script():
     return importlib.reload(importlib.import_module("factorlab.components.ingest_broker.snapshot"))
 
 
+@pytest.fixture(autouse=True)
+def fresh_alerts(script, monkeypatch):
+    monkeypatch.setattr(script, "_ALERTS", script.OutageAlerts())
+
+
 class StatusStorage:
     def __init__(self):
         self.statuses = []
@@ -59,6 +64,26 @@ def test_report_maps_run_status_and_notifies_on_partial(script, monkeypatch):
     storage = StatusStorage()
     script.report(storage, _summary("success"), dry_run=False)
     assert storage.statuses[0][1] == "ready"
+
+
+def test_report_alerts_once_per_outage_then_on_recovery(script, monkeypatch):
+    sent = []
+    monkeypatch.setattr(script, "_notify", lambda subject, body, **kw: sent.append(subject))
+    storage = StatusStorage()
+    for _ in range(3):
+        script.report(storage, _summary("failed", failed=["live:connect"]), dry_run=False)
+    script.report(storage, _summary("partial", failed=["live:positions"]), dry_run=False)
+    script.report(storage, _summary("success"), dry_run=False)
+    script.report(storage, _summary("success"), dry_run=False)
+    script.report(storage, _summary("failed", failed=["live:connect"]), dry_run=False)
+    assert sent == [
+        "IBKR snapshot failed",
+        "IBKR snapshot partial",
+        "IBKR snapshot recovered",
+        "IBKR snapshot failed",
+    ]
+    # Every run still records its own status.
+    assert len(storage.statuses) == 7
 
 
 def test_report_dry_run_writes_nothing(script, monkeypatch):
