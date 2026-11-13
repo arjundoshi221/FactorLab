@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_LIMITS, computeRisk, contributionToReach, deployableCapacity, hasReconciliationGap, overallStatus, statusOf, stressTests } from "./riskModel";
+import { DEFAULT_LIMITS, computeRisk, contributionToReach, deployableCapacity, estimateBeta, hasReconciliationGap, overallStatus, statusOf, stressTests } from "./riskModel";
 import type { BrokerRow } from "./types";
 
 const balance = (metric: string, value: number, currency = "SGD", segment = ""): BrokerRow => ({ metric, segment, currency, value_num: String(value) });
@@ -17,7 +17,8 @@ const position = (symbol: string, usd: number, extra: BrokerRow = {}): BrokerRow
 const positions = [position("BOXX", 50_289.23), position("LLY", 32_898.46), position("CSPX", 20_442.31), position("CRWD", 11_573.08), position("GRID", 3_731.54)];
 
 describe("risk engine", () => {
-  const state = computeRisk("SGD", balances, positions, ["BOXX"]);
+  // Betas loaded with no measurements: every equity beta is assumed 1.0.
+  const state = computeRisk("SGD", balances, positions, ["BOXX"], {});
 
   it("reads account-wide base-currency figures and converts positions with the broker FX rate", () => {
     expect(state.nav).toBe(43_637);
@@ -32,7 +33,7 @@ describe("risk engine", () => {
   });
 
   it("flags unreconciled exposure and never reports green on it", () => {
-    const gapped = computeRisk("SGD", balances.map(row => (row.metric === "GrossPositionValue" ? balance("GrossPositionValue", 197_685) : row)), positions, ["BOXX"]);
+    const gapped = computeRisk("SGD", balances.map(row => (row.metric === "GrossPositionValue" ? balance("GrossPositionValue", 197_685) : row)), positions, ["BOXX"], {});
     expect(gapped.unreconciled).toBeCloseTo(43_070, 0);
     expect(hasReconciliationGap(gapped)).toBe(true);
     const relaxed = Object.fromEntries(Object.entries(DEFAULT_LIMITS).map(([key, limit]) => [key, key === "excessLiquidity" ? { target: 0, hard: 0 } : { target: 99, hard: 99 }]));
@@ -65,6 +66,42 @@ describe("risk engine", () => {
     const gross = capacity.constraints.find(item => item.key === "grossLeverage");
     expect(gross?.amount).toBeCloseTo(2.5 * 43_637 - 154_615, 6);
     expect(contributionToReach(state, 2.5)).toBeCloseTo(154_615 / 2.5 - 43_637, 6);
+  });
+
+  it("nets shorts in net leverage and weights exposure by beta", () => {
+    const withShort = [...positions, position("QQQ", -10_000, { listing_id: "qqq" })];
+    const longs = [position("LLY", 32_898.46, { listing_id: "lly" }), position("CSPX", 20_442.31), position("BOXX", 50_289.23), position("QQQ", -10_000, { listing_id: "qqq" })];
+    const mixed = computeRisk("SGD", balances, withShort, ["BOXX"]);
+    expect(mixed.metrics.netLeverage).toBeCloseTo((154_615 - 65_376 - 13_000) / 43_637, 2);
+    expect(mixed.metrics.equityLeverage).toBeCloseTo((154_615 - 65_376 + 13_000) / 43_637, 2);
+    // Betas still loading: beta-adjusted leverage is unknown rather than guessed.
+    expect(mixed.metrics.betaLeverage).toBeNull();
+    const betaState = computeRisk("SGD", balances, longs, ["BOXX"], { lly: 0.5, qqq: 1.2 });
+    const lly = betaState.holdings.find(holding => holding.symbol === "LLY")!;
+    expect([lly.beta, lly.betaSource]).toEqual([0.5, "measured"]);
+    expect(betaState.holdings.find(holding => holding.symbol === "CSPX")?.betaSource).toBe("assumed");
+    expect(betaState.holdings.find(holding => holding.symbol === "BOXX")?.beta).toBe(0);
+    expect(betaState.assumedBetas).toEqual(["CSPX"]);
+    expect(betaState.betaExposure).toBeCloseTo(32_898.46 * 1.3 * 0.5 + 20_442.31 * 1.3 - 10_000 * 1.3 * 1.2, 0);
+    expect(betaState.metrics.betaLeverage).toBeCloseTo((betaState.betaExposure as number) / 43_637, 6);
+  });
+
+  it("estimates beta from shared trading days only", () => {
+    const days = Array.from({ length: 80 }, (_, index) => `2026-01-${String(1 + (index % 28)).padStart(2, "0")}T00:00:00Z`.replace("-01-", `-${String(1 + Math.floor(index / 28)).padStart(2, "0")}-`));
+    let market = 100, asset = 50;
+    const bench = [], stock = [];
+    for (const [index, t] of days.entries()) {
+      const move = ((index * 7) % 11 - 5) / 500;
+      market *= 1 + move; asset *= 1 + 1.5 * move;
+      bench.push({ t, close: market }); stock.push({ t, close: asset });
+    }
+    expect(estimateBeta(stock, bench)?.beta).toBeCloseTo(1.5, 6);
+    expect(estimateBeta(stock.slice(0, 30), bench)).toBeNull();
+  });
+
+  it("scales market shocks by beta", () => {
+    const betaState = computeRisk("SGD", balances, [position("LLY", 10_000, { listing_id: "lly" })], [], { lly: 0.5 });
+    expect(stressTests(betaState, DEFAULT_LIMITS).find(row => row.id === "eq-0.1")?.navImpact).toBeCloseTo(-0.1 * 0.5 * 13_000, 6);
   });
 
   it("shocks equities but holds cash equivalents flat", () => {

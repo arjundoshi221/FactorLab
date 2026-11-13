@@ -6,6 +6,7 @@ import {
   DEFAULT_CASH_LIKE, DEFAULT_LIMITS, LIMIT_SPECS, computeRisk, contributionToReach, deployableCapacity, hasReconciliationGap,
   overallStatus, statusOf, stressTests, type Limit, type LimitKey, type LimitSpec, type Limits, type RiskState, type Status,
 } from "./riskModel";
+import { BENCHMARK, useBetas, type BetaResult } from "./betas";
 import type { AccountSummary, BrokerAccount, ItemsPage, Profile, SnapshotPage } from "./types";
 import { EmptyState, PortfolioHeader, ProfileSelect, setPortfolioQuery } from "./PortfolioUI";
 import "./Portfolio.css";
@@ -228,7 +229,7 @@ function Concentration({ state, limits }: { state: RiskState; limits: Limits }) 
   const nav = state.nav;
   return <Card title="Positions & concentration" aside={<span className="pf-muted">% of net liquidation</span>}>
     {state.holdings.length ? <div className="pf-table-scroll"><table className="pf-table" aria-label="Positions and concentration">
-      <thead><tr><th scope="col">Position</th><th scope="col" className="num">Value ({state.base})</th><th scope="col" className="num">% NAV</th><th scope="col" className="num">Limit</th><th scope="col">Status</th></tr></thead>
+      <thead><tr><th scope="col">Position</th><th scope="col" className="num">Value ({state.base})</th><th scope="col" className="num">% NAV</th><th scope="col" className="num">Beta</th><th scope="col" className="num">Limit</th><th scope="col">Status</th></tr></thead>
       <tbody>{state.holdings.map((holding, index) => {
         const share = holding.value === null || nav === null || nav <= 0 ? null : Math.abs(holding.value) / nav;
         const limit = holding.cashLike ? limits.cashLike : limits.singleName;
@@ -237,11 +238,55 @@ function Concentration({ state, limits }: { state: RiskState; limits: Limits }) 
           <th scope="row"><span className="pf-limits__name">{holding.symbol}</span><small>{holding.cashLike ? "Cash equivalent" : holding.currency}{holding.currency && holding.currency !== state.base && holding.native !== null ? ` · ${money(holding.native, holding.currency, true)}` : ""}</small></th>
           <td className="num">{money(holding.value)}</td>
           <td className={`num pf-ink--${status}`}>{pct(share)}</td>
+          <td className="num">{holding.beta === null ? "…" : holding.beta.toFixed(2)}{holding.betaSource === "assumed" && <small>assumed</small>}</td>
           <td className="num pf-muted">≤ {holding.cashLike ? times(limit.target) : pct(limit.target, 0)}</td>
           <td><StatusTag status={status}>{status === "red" ? "Trim" : status === "amber" ? "Above target" : status === "unknown" ? "No FX rate" : "OK"}</StatusTag></td>
         </tr>;
       })}</tbody>
     </table></div> : <p className="pf-muted pf-pad">No open positions in the latest snapshot.</p>}
+  </Card>;
+}
+
+const LEVERAGE_KEYS: LimitKey[] = ["grossLeverage", "equityLeverage", "netLeverage", "betaLeverage", "borrowing"];
+
+function Leverage({ state, limits, beta }: { state: RiskState; limits: Limits; beta: BetaResult }) {
+  const base = state.base;
+  const parts = [
+    { label: "Cash equivalents", value: Math.abs(state.cashLikeValue), tone: "var(--series-1)" },
+    { label: "Equities", value: state.equityExposure, tone: "var(--series-2)" },
+    ...(hasReconciliationGap(state) && state.unreconciled !== null && state.unreconciled > 0 ? [{ label: "Unreconciled", value: state.unreconciled, tone: "var(--faint)" }] : []),
+  ].filter(part => part.value > 0);
+  const total = parts.reduce((sum, part) => sum + part.value, 0);
+  const measured = state.holdings.filter(holding => holding.betaSource === "measured");
+  return <Card title="Leverage" className="pf-card--leverage" aside={<span className="pf-muted">× net liquidation ({money(state.nav, base, true)})</span>}>
+    <div className="pf-leverage">
+      <ul className="pf-leverage__ladder">{LEVERAGE_KEYS.map(key => {
+        const spec = LIMIT_SPECS.find(item => item.key === key)!;
+        const value = state.metrics[key];
+        const status = statusOf(value, limits[key], spec.direction);
+        const loading = key === "betaLeverage" && beta.betas === null;
+        return <li key={key}>
+          <div className="pf-leverage__head"><span>{spec.label}</span><strong className={`pf-ink--${loading ? "unknown" : status}`}>{loading ? "…" : times(value)}</strong></div>
+          <LimitBar spec={spec} value={loading ? null : value} limit={limits[key]} />
+          <div className="pf-leverage__foot"><small>{spec.help}</small><small>Target {times(limits[key].target, 2)} · hard {times(limits[key].hard, 2)}</small></div>
+        </li>;
+      })}</ul>
+      <div className="pf-leverage__side"><section>
+        <h3>What makes up gross exposure</h3>
+        {total > 0 ? <>
+          <div className="pf-stackbar" role="img" aria-label={parts.map(part => `${part.label} ${money(part.value, base)}`).join(", ")}>
+            {parts.map(part => <span key={part.label} style={{ width: `${(part.value / total) * 100}%`, background: part.tone }} title={`${part.label}: ${money(part.value, base)}`} />)}
+          </div>
+          <ul className="pf-legend">{parts.map(part => <li key={part.label}><i style={{ background: part.tone }} aria-hidden="true" /><span>{part.label}</span><b>{money(part.value, undefined, true)}</b><em>{times(state.nav ? part.value / state.nav : null)}</em></li>)}</ul>
+        </> : <p className="pf-muted">No priced positions.</p>}
+      </section><section>
+        <h3>Betas</h3>
+        <p className="pf-muted">{beta.betas === null ? `Measuring 1-year daily betas against ${BENCHMARK}…`
+          : beta.problem ?? `1-year daily betas against ${BENCHMARK}${measured.length ? `, measured for ${measured.map(holding => `${holding.symbol} ${holding.beta?.toFixed(2)}`).join(", ")}` : ""}.`}
+          {beta.betas !== null && state.assumedBetas.length > 0 && !beta.problem && ` No usable price history for ${state.assumedBetas.join(", ")}; assumed 1.0.`}
+          {" "}Cash equivalents count as 0.</p>
+      </section></div>
+    </div>
   </Card>;
 }
 
@@ -303,7 +348,7 @@ function StressTable({ state, limits }: { state: RiskState; limits: Limits }) {
         </tr>;
       })}</tbody>
     </table></div> : <p className="pf-muted pf-pad">Net liquidation is needed to run stress tests.</p>}
-    <p className="pf-foot-note">Cash equivalents held flat; maintenance margin scales with each shocked position. Ignores FX, volatility and margin-rate changes.</p>
+    <p className="pf-foot-note">Market scenarios move each position by its beta × the market move; cash equivalents held flat; maintenance margin scales with each shocked position. Ignores FX, volatility and margin-rate changes.</p>
   </Card>;
 }
 
@@ -333,8 +378,10 @@ function RiskBoard({ account, userId }: { account: BrokerAccount; userId: string
   const [settings, setSettings] = useState<RiskSettings>(() => loadSettings(account));
   const currency = account.base_currency ?? "";
   const balances = summary.data?.balances;
-  const state = useMemo(() => computeRisk(currency, balances?.items ?? [], positions.data?.items ?? [], settings.cashLike),
-    [currency, balances, positions.data, settings.cashLike]);
+  const listingIds = (positions.data?.items ?? []).map(row => (row.listing_id ? String(row.listing_id) : "")).filter(Boolean);
+  const beta = useBetas(listingIds);
+  const state = useMemo(() => computeRisk(currency, balances?.items ?? [], positions.data?.items ?? [], settings.cashLike, beta.betas),
+    [currency, balances, positions.data, settings.cashLike, beta.betas]);
 
   if ((summary.loading && !summary.data) || (positions.loading && !positions.data)) return <p className="pf-muted pf-pad" role="status">Loading risk snapshot…</p>;
   if (!summary.data || !positions.data) return <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(summary.error ?? positions.error, "The broker snapshot is unavailable.")}</p>;
@@ -359,6 +406,7 @@ function RiskBoard({ account, userId }: { account: BrokerAccount; userId: string
       <KeyMetrics state={state} limits={settings.limits} />
       <Composition state={state} />
     </div>
+    <Leverage state={state} limits={settings.limits} beta={beta} />
     <div className="pf-grid pf-grid--mid">
       <LimitsTable state={state} settings={settings} onSave={next => { setSettings(next); saveSettings(account, next); }}
         onReset={() => { const next = { limits: DEFAULT_LIMITS, cashLike: DEFAULT_CASH_LIKE }; setSettings(next); saveSettings(account, null); }} />

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { PortfolioApp } from "./PortfolioApp";
@@ -47,6 +47,33 @@ it("renders the risk board in the portfolio shell with limits, concentration and
   expect(screen.getByText("Additional investment permitted")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Risk" })).toHaveAttribute("aria-current", "page");
   expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/portfolio?user_id=u1");
+});
+
+it("shows net and beta-adjusted leverage with betas measured against SPY", async () => {
+  // LLY moves half as much as SPY every day: a measured beta of 0.5. CSPX has no listing, so it is assumed 1.0.
+  const bars = (scale: number) => Array.from({ length: 90 }, (_, index) => ({ t: new Date(Date.UTC(2026, 0, 1 + index)).toISOString(), open: 1, high: 1, low: 1, volume: null,
+    close: 100 * Array.from({ length: index }, (_, step) => 1 + scale * (((step * 7) % 11) - 5) / 500).reduce((product, factor) => product * factor, 1) }));
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const path = new URL(url, "http://hub.test").pathname;
+    if (path.endsWith("/market-data/instruments")) return { ok: true, json: async () => ({ items: [{ id: "spy", listing_id: "spy", symbol: "SPY", active: true }], total: 1, limit: 20, offset: 0 }) };
+    if (path.endsWith("/listings/spy/prices")) return { ok: true, json: async () => ({ bars: bars(1) }) };
+    if (path.endsWith("/listings/lly/prices")) return { ok: true, json: async () => ({ bars: bars(0.5) }) };
+    if (path.endsWith("/positions")) return { ok: true, json: async () => snapshot([
+      { trading_symbol: "BOXX", currency: "SGD", position: 1, market_value: "80000" },
+      { trading_symbol: "LLY", listing_id: "lly", currency: "SGD", position: 1, market_value: "70000" },
+      { trading_symbol: "CSPX", currency: "SGD", position: 1, market_value: "50000" },
+    ]) };
+    return { ok: true, json: async () => api(url) };
+  }));
+  render(<PortfolioApp path="/portfolio/risk" />);
+  const leverage = await screen.findByRole("region", { name: "Leverage" });
+  // Net: (70k + 50k) / 100k. Beta-adjusted: (70k × 0.5 + 50k × 1.0) / 100k.
+  expect(within(leverage).getByText("Net leverage").nextSibling).toHaveTextContent("1.20×");
+  await waitFor(() => expect(within(leverage).getByText("Beta-adjusted leverage").nextSibling).toHaveTextContent("0.85×"));
+  expect(within(leverage).getByText(/measured for LLY 0.50/)).toBeInTheDocument();
+  expect(within(leverage).getByText(/No usable price history for CSPX; assumed 1.0/)).toBeInTheDocument();
+  const concentration = within(screen.getByRole("table", { name: "Positions and concentration" }));
+  expect(within(concentration.getByRole("row", { name: /CSPX/ })).getByText("assumed")).toBeInTheDocument();
 });
 
 it("saves edited limits per account and rejects a target looser than the hard limit", async () => {
