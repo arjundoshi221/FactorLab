@@ -130,7 +130,7 @@
 .portfolio-report-tools { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin: 12px 0 8px; }
 .portfolio-report-tools p { color: var(--ink-3); font-size: 11px; line-height: 1.7; }
 .portfolio-report-tools p span { margin: 0 6px; color: var(--faint); }
-.portfolio-page .portfolio-pnl-table { min-width: 780px; }
+.portfolio-page .portfolio-pnl-table { min-width: 880px; }
 .portfolio-pnl-table thead th:first-child { width: 30%; text-transform: capitalize; }
 .portfolio-page .portfolio-pnl-table tbody > tr > th { background: transparent; text-transform: none; letter-spacing: normal; box-shadow: none; }
 .portfolio-pnl-table th[scope="row"] > strong { color: var(--ink); font-family: Inter, "Segoe UI", system-ui, sans-serif; font-size: 12px; font-weight: 550; line-height: 1.6; overflow-wrap: anywhere; }
@@ -155,6 +155,11 @@
 .portfolio-account-fees { margin-top: 18px; }
 .portfolio-account-fees .portfolio-section-heading { margin-bottom: 8px; flex-wrap: wrap; }
 .portfolio-account-fees h3 { font-size: 14px; }
+/* IBKR-reported figures sit beside ours, set apart by a rule rather than a colour. */
+.portfolio-page .portfolio-ibkr { border-left: 1px solid var(--line); }
+.portfolio-reconciliation { margin-top: 18px; }
+.portfolio-reconciliation .portfolio-section-heading { margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
+.portfolio-reconciliation h3 { font-size: 14px; }
 .portfolio-cell-note { display: block; margin-top: 5px; color: var(--ink-3); font-size: 10px; font-weight: 400; line-height: 1.6; }
 .portfolio-text-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; color: color-mix(in srgb, var(--accent) 35%, var(--ink)); font-size: 11px; text-decoration: none; }
 .portfolio-text-link svg { width: 12px; height: 12px; }
@@ -235,3 +240,23 @@
 .portfolio-pnl-bars figure { margin: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--panel-soft); }
 .portfolio-pnl-bars figcaption { margin-bottom: 8px; color: var(--ink-3); font: 600 12px var(--sans); }
 .portfolio-pnl-bars .t-sbars li { grid-template-columns: minmax(80px, 160px) 1fr 72px; }
+/* Pivot by attribute (sector, ...): the control, subtotal rows inside holdings, and the overview exposure table. */
+.portfolio-pivot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: auto; }
+.portfolio-pivot .portfolio-selector { display: flex; align-items: center; gap: 8px; }
+.portfolio-pivot .portfolio-period { margin-left: 0; }
+.portfolio-page .portfolio-pivot-subtotal { background: var(--press); }
+.portfolio-page .portfolio-pivot-subtotal > th { text-transform: none; letter-spacing: normal; }
+.portfolio-pivot-subtotal > th strong { color: var(--ink); font-size: 12px; font-weight: 600; }
+.portfolio-pivot-subtotal + tr > td:first-child, .portfolio-pivot-subtotal ~ tr > td:first-child { padding-left: 20px; }
+.portfolio-exposure { margin-top: 16px; }
+.portfolio-exposure table { min-width: 620px; }
+.portfolio-page .portfolio-exposure tbody > tr > th { text-transform: none; letter-spacing: normal; }
+.portfolio-page .portfolio-exposure-toggle { display: inline-flex; gap: 6px; align-items: center; padding: 0; border: 0; background: transparent; color: var(--ink); font-size: 12px; font-weight: 550; cursor: pointer; box-shadow: none; }
+.portfolio-exposure-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.portfolio-page .portfolio-exposure tr.is-expanded { background: var(--press); }
+.portfolio-exposure-holding > td:first-child { padding-left: 28px; }
+.portfolio-allocation .portfolio-section-heading { flex-wrap: wrap; gap: 8px; }
+@media (max-width: 700px) {
+  .portfolio-report-tools { flex-wrap: wrap; }
+  .portfolio-pivot { margin-left: 0; width: 100%; }
+}

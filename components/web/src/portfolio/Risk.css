@@ -17,6 +17,44 @@
 .pf-foot-note b { color: var(--ink-2); font-weight: 600; }
 .pf-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .is-negative { color: var(--down) !important; }
+.is-positive { color: var(--up) !important; }
+.pf-ledger dt small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; font-weight: 400; }
+.pf-ledger .is-pnl { align-items: baseline; }
+
+/* Metric calculation (ⓘ): the button sits beside a metric label; the panel shows the exact arithmetic. */
+.pf-app .pf-info { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin: -4px 0 -4px 4px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--faint); vertical-align: middle; cursor: pointer; box-shadow: none; }
+.pf-app .pf-info:hover, .pf-app .pf-info.is-open { color: var(--accent); background: var(--accent-soft); }
+.pf-app .pf-info:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pf-calc { display: grid; gap: 12px; margin: 0 18px 16px; padding: 14px 16px; border: 1px solid var(--accent-line); border-radius: var(--radius-s); background: var(--raised); outline: none; }
+.pf-calc:focus-visible { box-shadow: 0 0 0 2px var(--accent-soft); }
+.pf-calc__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.pf-app .pf-calc__head h3 { margin: 0 0 6px; color: var(--ink); font: 600 14px var(--sans); }
+.pf-calc__head code { display: block; color: var(--ink-2); font: 500 12px/1.5 var(--mono); white-space: normal; }
+.pf-calc__body { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px 24px; align-items: start; }
+.pf-calc__body section { display: grid; gap: 6px; min-width: 0; }
+.pf-app .pf-calc h4 { margin: 0; color: var(--ink-2); font: 600 12px var(--sans); }
+.pf-calc h4 small { display: block; margin-top: 2px; color: var(--muted); font-weight: 400; }
+.pf-calc__value { margin: 0; color: var(--ink); font: 600 14px var(--mono); font-variant-numeric: tabular-nums; }
+.pf-calc__scroll { max-height: 260px; overflow: auto; }
+.pf-calc__terms { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pf-calc__terms th, .pf-calc__terms td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.pf-calc__terms thead th { color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--raised); }
+.pf-calc__terms tbody th { color: var(--ink); font-weight: 600; white-space: nowrap; }
+.pf-calc__terms small { display: block; color: var(--muted); font-weight: 400; }
+.pf-calc__terms .num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.pf-calc__inputs { color: var(--ink-3); font-family: var(--mono); }
+.pf-calc__terms tfoot th, .pf-calc__terms tfoot td { border-bottom: 0; border-top: 1px solid var(--line-2); color: var(--ink); font-weight: 600; }
+.pf-calc__result { margin: 0; padding-top: 10px; border-top: 1px solid var(--line); color: var(--ink-2); font: 500 13px var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pf-calc__result b { color: var(--ink); font-size: 15px; }
+.pf-calc__result small { color: var(--muted); font-family: var(--sans); }
+.pf-calc__note { margin: 0; color: var(--warn); font-size: 12px; }
+.pf-leverage__label { display: inline-flex; align-items: center; }
+.pf-leverage__calc .pf-calc { margin-top: 0; }
+@media (max-width: 720px) {
+  .pf-calc { margin: 0 12px 12px; padding: 12px; }
+  .pf-calc__body { grid-template-columns: minmax(0, 1fr); }
+  .pf-calc__inputs { white-space: normal; }
+}
 
 /* Verdict banner */
 .pf-verdict { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 20px; padding: 16px 20px; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); }

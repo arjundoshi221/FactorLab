@@ -26,6 +26,7 @@ when anything here is stale or invalid. The `feature` skill
 | [F-042](F-042-us-indexes-and-sectors.md) | Track official US indexes and show equal- and cap-weighted GICS sector indexes over the Russell 3000 | review | P1 | — | ingest-us, api, web, schema-migrator, storage, platform |
 | [F-045](F-045-collection-plan.md) | Show each ingestion service's universe, resolution and cadence in the hub | review | P1 | — | api, web, ingest-us, ingest-india, ingest-political, ingest-broker, ingest |
 | [F-046](F-046-terminal-ui.md) | Redesign the hub as a trading terminal with Data, Portfolio and Ops sections | review | P1 | — | web, api |
+| [F-048](F-048-portfolio-attribute-pivot.md) | Pivot portfolio holdings and tagged PnL by sector (and future attributes) | review | P1 | — | api, web |
 | [F-044](F-044-futures-curve-tab.md) | Show US futures curves and contracts on a Market Data Futures tab | review | P2 | — | api, web, ingest-us |
 | [F-047](F-047-flex-sync-from-hub.md) | Run the IBKR Flex history sync on demand from the hub | review | P2 | — | ingest-broker, api, web |
 | [F-006](F-006-restore-edge-access-invariants.md) | Restore the Cloudflare Access invariants on the hub hostname | planned | P0 | 2026-S20 | platform, api |

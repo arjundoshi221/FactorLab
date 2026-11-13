@@ -54,6 +54,28 @@ def latest_fills(executions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
 
+def unreconciled(
+    executions: list[dict[str, Any]],
+    marks: dict[tuple[str, str, str], dict[str, Any]],
+    snapshot_times: dict[tuple[str, str], datetime | None],
+) -> set[tuple[str, str, str]]:
+    """Instruments with an invalid fill, or whose fills up to the snapshot miss its position."""
+    expected: dict[tuple[str, str, str], Decimal] = defaultdict(Decimal)
+    invalid: set[tuple[str, str, str]] = set()
+    for row in executions:
+        cutoff = snapshot_times.get((row["broker_code"], row["account_id"]))
+        quantity = number(row.get("quantity"))
+        if quantity is None or quantity <= 0 or row.get("side") not in ("BUY", "SELL", "SSHORT"):
+            invalid.add(identity(row))
+        elif cutoff and timestamp(row["exec_time"]) <= cutoff:
+            expected[identity(row)] += quantity if row["side"] == "BUY" else -quantity
+    for key in set(expected) | set(marks):
+        actual = number(marks.get(key, {}).get("position", 0))
+        if actual is None or actual != expected[key]:
+            invalid.add(key)
+    return invalid
+
+
 def ledger(
     executions: list[dict[str, Any]],
     snapshots: list[dict[str, Any]],
@@ -89,19 +111,7 @@ def _ledger(
     marks = {
         identity(row): row for row in snapshots if row.get("product_type") not in FX_CONVERSIONS
     }
-    expected: dict[tuple[str, str, str], Decimal] = defaultdict(Decimal)
-    invalid: set[tuple[str, str, str]] = set()
-    for row in executions:
-        cutoff = snapshot_times.get((row["broker_code"], row["account_id"]))
-        quantity = number(row.get("quantity"))
-        if quantity is None or quantity <= 0 or row.get("side") not in ("BUY", "SELL", "SSHORT"):
-            invalid.add(identity(row))
-        elif cutoff and timestamp(row["exec_time"]) <= cutoff:
-            expected[identity(row)] += quantity if row["side"] == "BUY" else -quantity
-    for key in set(expected) | set(marks):
-        actual = number(marks.get(key, {}).get("position", 0))
-        if actual is None or actual != expected[key]:
-            invalid.add(key)
+    invalid = unreconciled(executions, marks, snapshot_times)
 
     buckets: dict[tuple[Any, ...], dict[str, Any]] = {}
     lots: dict[tuple[Any, ...], deque[list[Decimal]]] = defaultdict(deque)
@@ -192,6 +202,11 @@ def _ledger(
             if commission_currency == "UNKNOWN":
                 item["issues"].add("missing_commission_currency")
                 costs["issues"].add("missing_commission_currency")
+        taxes = number(row.get("taxes"))
+        if in_period and taxes:
+            # Transaction taxes (GST on commissions, stamp duty) from the Flex trade row are
+            # costs in the trade currency, as in IBKR's cost basis; reported with the fees.
+            item["commissions"] += taxes
 
     result: list[dict[str, Any]] = []
     fatal = {
@@ -317,6 +332,11 @@ def _summarize(details: list[dict[str, Any]], group_by: str, period: bool) -> li
                 "excluded": [],
                 "issues": set(),
                 "details": [],
+                "ibkr_realized": ZERO,
+                "ibkr_unrealized": ZERO,
+                "ibkr_valued": 0,
+                "ibkr_excluded": [],
+                "ibkr_issues": set(),
             },
         )
         realized, unrealized = number(row["realized"]), number(row["unrealized"])
@@ -337,12 +357,30 @@ def _summarize(details: list[dict[str, Any]], group_by: str, period: bool) -> li
             item["commissions"] += commissions
         if COST_UNKNOWN & set(row["issues"]):
             item["costs_unknown"] = True
+        broker_realized = number(row.get("ibkr_realized"))
+        broker_unrealized = number(row.get("ibkr_unrealized"))
+        if broker_realized is not None and (period or broker_unrealized is not None):
+            item["ibkr_realized"] += broker_realized
+            item["ibkr_unrealized"] += broker_unrealized or ZERO
+            item["ibkr_valued"] += 1
+        elif "ibkr_total" in row and (row["orders"] or number(row["quantity"])):
+            item["ibkr_excluded"].append(
+                {
+                    "trading_symbol": row["trading_symbol"],
+                    "account_id": row["account_id"],
+                    "issues": row.get("ibkr_issues", []),
+                }
+            )
+        item["ibkr_issues"].update(row.get("ibkr_issues", []))
         item["issues"].update(row["issues"])
         item["details"].append(row)
     result = []
     for item in grouped.values():
         valued = item.pop("valued") > 0
         costs_unknown = item.pop("costs_unknown")
+        broker_valued = item.pop("ibkr_valued") > 0
+        broker_realized = item["ibkr_realized"] if broker_valued else None
+        broker_unrealized = item["ibkr_unrealized"] if broker_valued else None
         realized = item["realized"] if valued else None
         unrealized = item["unrealized"] if valued else None
         commissions = None if costs_unknown else item["commissions"]
@@ -362,6 +400,21 @@ def _summarize(details: list[dict[str, Any]], group_by: str, period: bool) -> li
                     item["excluded"], key=lambda row: (row["trading_symbol"], row["account_id"])
                 ),
                 "issues": sorted(item["issues"]),
+                # IBKR's figures are net of commissions: total = realized + unrealized.
+                "ibkr_realized": _text(broker_realized),
+                "ibkr_unrealized": _text(broker_unrealized),
+                "ibkr_total": None
+                if broker_realized is None or broker_unrealized is None
+                else str(broker_realized + (ZERO if period else broker_unrealized)),
+                "ibkr_excluded": sorted(
+                    item["ibkr_excluded"],
+                    key=lambda row: (row["trading_symbol"], row["account_id"]),
+                ),
+                "ibkr_issues": sorted(item["ibkr_issues"]),
             }
         )
     return result
+
+
+def _text(value: Decimal | None) -> str | None:
+    return None if value is None else str(value)

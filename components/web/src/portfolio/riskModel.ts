@@ -59,9 +59,18 @@ export const ASSUMED_BETA = 1;
 
 export interface Holding {
   symbol: string; listingId: string | null; beta: number | null; betaSource: BetaSource | null; currency: string; quantity: number | null; native: number | null;
-  value: number | null; cashLike: boolean; maint: number | null; unrealized: number | null;
+  /** Native → base rate used for this position; null when no rate is known. */
+  fx: number | null;
+  value: number | null; cashLike: boolean; maint: number | null;
+  /** Broker-reported unrealized PnL on the open position, in base currency. */
+  unrealized: number | null;
+  /** Broker-reported realized PnL year to date for this instrument, in base currency. */
+  realized: number | null;
 }
-export interface CashLine { currency: string; native: number; value: number | null }
+export interface CashLine { currency: string; native: number; fx: number | null; value: number | null }
+
+/** Where the account's unrealized PnL comes from: the broker's account-wide figure, or the sum of open positions. */
+export type PnlSource = "broker" | "positions";
 
 export interface RiskState {
   base: string;
@@ -75,6 +84,10 @@ export interface RiskState {
   unconverted: string[];
   /** Broker gross position value minus the sum of converted |positions|; null when either is unknown. */
   unreconciled: number | null;
+  /** Unrealized PnL in base currency; null when unreported or a position cannot be converted. */
+  unrealized: number | null; unrealizedSource: PnlSource | null;
+  /** Σ realized PnL year to date over the open positions, in base currency; null when unreported or unconvertible. */
+  realized: number | null;
   metrics: Record<LimitKey, number | null>;
 }
 
@@ -83,15 +96,18 @@ function balance(rows: BrokerRow[], metric: string, currency: string): number | 
   return num(row?.value_num);
 }
 
+/** Native → base rate: the row's Flex `fx_rate_to_base`, else 1 in the base currency, else the broker's `ExchangeRate`; null when unknown. */
+export function positionRate(base: string, balances: BrokerRow[], currency: string, row?: BrokerRow): number | null {
+  const flex = num(row?.fx_rate_to_base);
+  if (flex) return flex;
+  if (currency === base) return 1;
+  return balance(balances, "ExchangeRate", currency);
+}
+
 /** `betas` is null while betas are loading: beta-adjusted leverage is then unknown, not guessed. */
 export function computeRisk(base: string, balances: BrokerRow[], positions: BrokerRow[], cashLikeSymbols: string[], betas: BetaMap | null = null): RiskState {
   const cashLikeSet = new Set(cashLikeSymbols.map(symbol => symbol.trim().toUpperCase()).filter(Boolean));
-  const rate = (currency: string, row?: BrokerRow): number | null => {
-    const flex = num(row?.fx_rate_to_base);
-    if (flex) return flex;
-    if (currency === base) return 1;
-    return balance(balances, "ExchangeRate", currency);
-  };
+  const rate = (currency: string, row?: BrokerRow): number | null => positionRate(base, balances, currency, row);
   const nav = balance(balances, "NetLiquidation", base);
   const gross = balance(balances, "GrossPositionValue", base);
   const initMargin = balance(balances, "InitMarginReq", base);
@@ -105,7 +121,7 @@ export function computeRisk(base: string, balances: BrokerRow[], positions: Brok
       const currency = String(row.currency);
       const native = num(row.value_num) as number;
       const fx = rate(currency);
-      return { currency, native, value: fx === null ? null : native * fx };
+      return { currency, native, fx, value: fx === null ? null : native * fx };
     })
     .sort((a, b) => (a.currency === base ? -1 : b.currency === base ? 1 : a.currency.localeCompare(b.currency)));
   const borrowing = cash.some(line => line.value === null && line.native < 0) ? null
@@ -125,9 +141,10 @@ export function computeRisk(base: string, balances: BrokerRow[], positions: Brok
     const betaSource: BetaSource | null = cashLike ? "cash" : betas === null ? null : measured !== undefined ? "measured" : "assumed";
     const beta = betaSource === null ? null : betaSource === "cash" ? 0 : measured ?? ASSUMED_BETA;
     return {
-      symbol, listingId, beta, betaSource, currency, quantity: num(row.position), native, value: toBase(native),
+      symbol, listingId, beta, betaSource, currency, quantity: num(row.position), native, fx, value: toBase(native),
       cashLike,
       maint: toBase(num(row.maintenance_margin_contribution)), unrealized: toBase(num(row.unrealized_pnl)),
+      realized: toBase(num(row.realized_pnl_ytd)),
     };
   }).sort((a, b) => Math.abs(b.value ?? 0) - Math.abs(a.value ?? 0));
 
@@ -143,11 +160,28 @@ export function computeRisk(base: string, balances: BrokerRow[], positions: Brok
   const complete = unconverted.size === 0;
   const unreconciled = gross !== null && complete && holdings.length ? gross - positionsGross : null;
   const ratio = (value: number | null) => value === null || nav === null || nav <= 0 ? null : value / nav;
+  // Sum of a per-position PnL field: null when no position reports it, or when a reported value cannot be converted.
+  const sumPnl = (pick: (holding: Holding) => number | null) => {
+    let total = 0, any = false;
+    for (const holding of holdings) {
+      const value = pick(holding);
+      if (value !== null) { total += value; any = true; }
+    }
+    return any && complete ? total : null;
+  };
+  // Same reading as the overview: the Gateway reports account-wide unrealized PnL only as a "BASE" ledger tag
+  // (already in the base currency); the ledger row labelled with the base currency covers only that currency.
+  const brokerUnrealized = balance(balances, "UnrealizedPnL", base) ?? balance(balances, "$LEDGER-UnrealizedPnL", "BASE");
+  const positionsUnrealized = sumPnl(holding => holding.unrealized);
+  const unrealized = brokerUnrealized ?? positionsUnrealized;
+  const unrealizedSource: PnlSource | null = brokerUnrealized !== null ? "broker" : positionsUnrealized !== null ? "positions" : null;
+  const realized = sumPnl(holding => holding.realized);
   const largest = holdings.filter(holding => !holding.cashLike && holding.value !== null).reduce((max, holding) => Math.max(max, Math.abs(holding.value as number)), 0);
 
   return {
     base, nav, gross, initMargin, maintMargin, excess, totalCash, cash, borrowing,
     holdings, positionsGross, equityExposure, equityNet, cashLikeValue, betaExposure, assumedBetas, unconverted: [...unconverted], unreconciled,
+    unrealized, unrealizedSource, realized,
     metrics: {
       grossLeverage: ratio(gross ?? (complete && holdings.length ? positionsGross : null)),
       equityLeverage: complete ? ratio(equityExposure) : null,
@@ -297,4 +331,104 @@ export function contributionToReach(state: RiskState, multiple: number): number 
   const exposure = state.gross ?? null;
   if (exposure === null || state.nav === null) return null;
   return Math.max(0, exposure / multiple - state.nav);
+}
+
+/** One input to a metric's numerator, in base currency. `native`/`fx` show a currency conversion and
+ * `beta` a beta weighting, so the UI can print the exact arithmetic behind `value`. */
+export interface CalcTerm {
+  label: string; value: number | null;
+  native?: { amount: number; currency: string; fx: number | null };
+  beta?: { value: number; source: BetaSource; exposure: number | null };
+  note?: string;
+}
+export interface Calculation {
+  key: LimitKey; label: string; formula: string;
+  numerator: { label: string; value: number | null; source: string; terms: CalcTerm[]; transform?: "abs" };
+  denominator: { label: string; value: number | null; source: string };
+  result: number | null;
+  notes: string[];
+}
+
+const NAV_SOURCE = "Broker NetLiquidation (account-wide, base currency)";
+
+/** The exact calculation behind one metric, from the same state the board displays: every numerator term,
+ * the denominator and the result. Terms sum to the numerator (before `transform`). */
+export function explainMetric(state: RiskState, key: LimitKey): Calculation {
+  const spec = LIMIT_SPECS.find(item => item.key === key)!;
+  const notes: string[] = [];
+  const position = (holding: Holding, value: number | null, extra: Partial<CalcTerm> = {}): CalcTerm => ({
+    label: holding.symbol, value,
+    ...(holding.native !== null && holding.currency && holding.currency !== state.base ? { native: { amount: holding.native, currency: holding.currency, fx: holding.fx } } : {}),
+    ...extra,
+  });
+  const abs = (value: number | null) => (value === null ? null : Math.abs(value));
+  const equity = state.holdings.filter(holding => !holding.cashLike);
+  const cashLike = state.holdings.filter(holding => holding.cashLike);
+  const blocked = state.unconverted.length > 0;
+  if (blocked && key !== "grossLeverage" && !["initUtil", "maintUtil", "excessLiquidity", "borrowing"].includes(key))
+    notes.push(`Unavailable: no ${state.unconverted.join(", ")} → ${state.base} rate in this snapshot.`);
+  if (state.nav === null) notes.push("Unavailable: the broker did not report net liquidation.");
+  else if (state.nav <= 0) notes.push("Unavailable: net liquidation is zero or negative, so ratios to it are undefined.");
+
+  let numerator: Calculation["numerator"];
+  const denominatorLabel = "Net liquidation value";
+  switch (key) {
+    case "grossLeverage": {
+      const terms = state.holdings.map(holding => position(holding, abs(holding.value)));
+      if (state.gross !== null) {
+        if (state.unreconciled !== null && state.unreconciled !== 0) terms.push({ label: "Unreconciled (broker gross − listed positions)", value: state.unreconciled });
+        else if (state.unreconciled === null && state.holdings.length) notes.push("Listed positions cannot all be converted, so they are shown for reference and may not sum to the broker figure.");
+        numerator = { label: "Gross position value", value: state.gross, source: "Broker GrossPositionValue (account-wide, base currency)", terms };
+      } else {
+        numerator = { label: "Gross position value", value: state.metrics.grossLeverage === null ? null : state.positionsGross, source: "Σ |position value| (broker gross not reported)", terms };
+      }
+      break;
+    }
+    case "equityLeverage":
+      numerator = { label: "Equity exposure", value: blocked ? null : state.equityExposure, source: "Σ |position value|, excluding cash equivalents", terms: equity.map(holding => position(holding, abs(holding.value))) };
+      break;
+    case "netLeverage":
+      numerator = { label: "Net equity exposure", value: blocked ? null : state.equityNet, source: "Σ signed position value (long +, short −), excluding cash equivalents", terms: equity.map(holding => position(holding, holding.value)) };
+      break;
+    case "betaLeverage":
+      if (state.betaExposure === null) notes.push("Betas are still being measured.");
+      numerator = {
+        label: "Beta-weighted exposure", value: blocked ? null : state.betaExposure, source: "Σ position value × 1-year daily beta to SPY, excluding cash equivalents",
+        terms: equity.map(holding => position(holding, holding.value === null || holding.beta === null ? null : holding.value * holding.beta,
+          holding.beta === null || holding.betaSource === null ? {} : { beta: { value: holding.beta, source: holding.betaSource, exposure: holding.value } })),
+      };
+      break;
+    case "singleName": {
+      const largest = equity.filter(holding => holding.value !== null).reduce<Holding | null>((max, holding) => (max === null || Math.abs(holding.value as number) > Math.abs(max.value as number) ? holding : max), null);
+      numerator = { label: "Largest single position", value: blocked ? null : largest ? Math.abs(largest.value as number) : 0, source: "Largest |position value|, excluding cash equivalents", terms: largest ? [position(largest, abs(largest.value))] : [] };
+      break;
+    }
+    case "cashLike":
+      numerator = { label: "Cash-equivalent ETFs", value: blocked ? null : Math.abs(state.cashLikeValue), source: `|Σ position value| of ${cashLike.length ? cashLike.map(holding => holding.symbol).join(", ") : "cash-equivalent symbols"}`, terms: cashLike.map(holding => position(holding, holding.value)), transform: "abs" };
+      break;
+    case "initUtil":
+      numerator = { label: "Initial margin requirement", value: state.initMargin, source: "Broker InitMarginReq (account-wide, base currency)", terms: [] };
+      break;
+    case "maintUtil":
+      numerator = { label: "Maintenance margin requirement", value: state.maintMargin, source: "Broker MaintMarginReq (account-wide, base currency)", terms: [] };
+      break;
+    case "excessLiquidity":
+      numerator = { label: "Excess liquidity", value: state.excess, source: "Broker ExcessLiquidity (equity with loan value − maintenance margin)", terms: [] };
+      break;
+    case "borrowing": {
+      const debits = state.cash.filter(line => line.native < 0);
+      if (state.borrowing === null) notes.push("A debit cash balance has no FX rate to the base currency.");
+      numerator = {
+        label: "Borrowing", value: state.borrowing, source: "Σ |negative cash balance| per currency, converted to base",
+        terms: debits.map(line => ({ label: `${line.currency} cash debit`, value: line.value === null ? null : -line.value,
+          ...(line.currency !== state.base ? { native: { amount: -line.native, currency: line.currency, fx: line.fx } } : {}) })),
+      };
+      break;
+    }
+  }
+  return {
+    key, label: spec.label, formula: `${spec.label} = ${numerator.label} ÷ ${denominatorLabel}`,
+    numerator, denominator: { label: denominatorLabel, value: state.nav, source: NAV_SOURCE },
+    result: state.metrics[key], notes,
+  };
 }

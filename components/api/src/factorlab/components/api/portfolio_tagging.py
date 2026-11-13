@@ -13,13 +13,21 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from factorlab.components.api.portfolio import ItemsPage, PortfolioRepository, Repo
+from factorlab.components.api.portfolio_attributes import Reader, enrich, parse_dims
 from factorlab.components.api.portfolio_pnl import (
     FX_CONVERSIONS,
     TAG_FIELDS,
+    identity,
     latest_fills,
     ledger,
     number,
     summarize,
+)
+from factorlab.components.api.portfolio_reconcile import (
+    reconcile,
+    statement,
+    statement_meta,
+    with_broker_pnl,
 )
 from factorlab.storage.portfolio_book import CATALOGS, CatalogKind, PortfolioBookStorage
 
@@ -253,21 +261,78 @@ class Book:
                 )
         return result
 
+    def taxes(self, account: dict[str, Any]) -> dict[str, Decimal]:
+        """Transaction taxes per execution from Flex trade rows, as positive costs.
+
+        IBKR includes them (e.g. GST on commissions, UK stamp duty) in cost basis and
+        realized PnL, but they are not part of the commission. Fills not yet in a Flex
+        statement have none until the next sync.
+        """
+        rows = self.repo.query(
+            "SELECT attributes['ibExecID'] AS exec_id, any(attributes['taxes']) AS taxes "
+            "FROM broker.statement_rows FINAL WHERE broker_code = {broker:String} "
+            "AND account_id = {account:String} AND section = 'Trades' "
+            "AND level_of_detail = 'EXECUTION' AND attributes['taxes'] NOT IN ('', '0') "
+            "GROUP BY exec_id",
+            {"broker": account["broker_code"], "account": account["account_id"]},
+        )
+        result = {}
+        for row in rows:
+            value = number(row["taxes"])
+            if value:
+                result[str(row["exec_id"])] = -value  # Flex reports taxes as signed cash
+        return result
+
+    def statement(self, account: dict[str, Any]) -> dict[str, Any] | None:
+        """The account's latest Flex statement: its open positions and their FIFO cost basis."""
+        params = {"broker": account["broker_code"], "account": account["account_id"]}
+        headers = self.repo.query(
+            "SELECT generated_at, statement_to FROM broker.statement_rows FINAL "
+            "WHERE broker_code = {broker:String} AND account_id = {account:String} "
+            "AND section = 'FlexStatement' ORDER BY generated_at DESC LIMIT 1",
+            params,
+        )
+        if not headers:
+            return None
+        rows = self.repo.query(
+            "SELECT level_of_detail, vendor_id, trading_symbol, currency, asset_category, "
+            "attributes['position'] AS position, attributes['costBasisMoney'] AS cost_basis, "
+            "attributes['originatingOrderID'] AS perm_id FROM broker.statement_rows FINAL "
+            "WHERE broker_code = {broker:String} AND account_id = {account:String} "
+            "AND section = 'OpenPositions' AND element = 'OpenPosition' "
+            "AND generated_at = {generated:DateTime64(3, 'UTC')}",
+            {**params, "generated": headers[0]["generated_at"]},
+        )
+        return statement(headers[0], rows)
+
     def pnl(
         self,
         user_id: UUID,
         kind: CatalogKind,
         accounts: list[dict[str, Any]],
         since: datetime | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
+        """Tagged groups with IBKR's figures beside ours, and the all-time reconciliation."""
         fills: list[dict[str, Any]] = []
         snapshots: list[dict[str, Any]] = []
         times = {}
+        order_tags: dict[tuple[str, str, int], tuple[str | None, ...]] = {}
+        statements: dict[tuple[str, str], dict[str, Any] | None] = {}
         # Bound the total request as well as each ClickHouse query.
         if len(accounts) > 20:
             raise HTTPException(422, "Select one account to report more than 20 accounts")
         for account in accounts:
-            fills.extend(self.fills(account, self.assignments(account)))
+            broker, account_id = str(account["broker_code"]), str(account["account_id"])
+            assignments = self.assignments(account)
+            for perm, tags in assignments.items():
+                order_tags[broker, account_id, perm] = tuple(
+                    str(tags[field]) if tags.get(field) else None for field in TAG_FIELDS
+                )
+            taxes = self.taxes(account)
+            fills.extend(
+                {**row, "taxes": taxes.get(str(row["exec_id"]))}
+                for row in self.fills(account, assignments)
+            )
             if len(fills) > 20000:
                 raise HTTPException(
                     422, "Recorded history exceeds the 20,000-fill report limit; select one account"
@@ -275,18 +340,48 @@ class Book:
             snapshot = self.repo.snapshot(account, "positions")
             snapshots.extend([{**row, "simulated": account["simulated"]} for row in snapshot.items])
             times[account["broker_code"], account["account_id"]] = snapshot.snapshot_time
+            statements[broker, account_id] = self.statement(account)
+        marks = {
+            identity(row): row for row in snapshots if row.get("product_type") not in FX_CONVERSIONS
+        }
         details = ledger(fills, snapshots, times, since=since)
+        everything = details if since is None else ledger(fills, snapshots, times)
+        details = with_broker_pnl(details, fills, statements, marks, order_tags, since=since)
         field = CATALOGS[kind][1]
         names = {row["id"]: row["name"] for row in self.catalog(kind, user_id)}
-        return [
-            {
-                **row,
-                "name": names.get(
-                    row["id"], "Unassigned" if row["id"] is None else "Archived entry"
-                ),
-            }
-            for row in summarize(details, field, period=since is not None)
+        return {
+            "items": [
+                {
+                    **row,
+                    "name": names.get(
+                        row["id"], "Unassigned" if row["id"] is None else "Archived entry"
+                    ),
+                }
+                for row in summarize(details, field, period=since is not None)
+            ],
+            "reconciliation": reconcile(everything, fills, statements, marks),
+            "statements": statement_meta(statements),
+        }
+
+
+def with_attributes(
+    repo: Reader, groups: list[dict[str, Any]], names: list[str]
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Label each group's holdings in one pass; excluded rows share their detail's labels."""
+    details = [row for group in groups for row in group["details"]]
+    labelled, failed = enrich(repo, details, names)
+    position = 0
+    result = []
+    for group in groups:
+        rows = labelled[position : position + len(group["details"])]
+        position += len(group["details"])
+        found = {(row["trading_symbol"], row["account_id"]): row.get("attributes") for row in rows}
+        excluded = [
+            {**row, "attributes": found.get((row["trading_symbol"], row["account_id"])) or {}}
+            for row in group.get("excluded", [])
         ]
+        result.append({**group, "details": rows, "excluded": excluded})
+    return result, failed
 
 
 @router.get("/catalogs/{kind}", response_model=ItemsPage)
@@ -384,13 +479,24 @@ def pnl(
     broker_code: str = "",
     account_id: str = "",
     since: date | None = None,
+    dims: Annotated[str, Query(max_length=200)] = "",
 ) -> dict[str, Any]:
-    """``since`` (a New York trading date, e.g. 1 January for YTD) windows realized PnL and fees."""
+    """``since`` (a New York trading date, e.g. 1 January for YTD) windows realized PnL and fees.
+
+    ``dims=sector`` labels every holding (``details`` and ``excluded``) with
+    ``attributes.sector`` so the UI can pivot groups by it.
+    """
     book = Book(repo)
     accounts = book.report_accounts(user_id, broker_code, account_id)
     start = period_start(since)
+    report = book.pnl(user_id, kind, accounts, start)
+    names = parse_dims(dims)
+    if names:
+        report["items"], report["unavailable_dimensions"] = with_attributes(
+            repo, report["items"], names
+        )
     return {
-        "items": book.pnl(user_id, kind, accounts, start),
+        **report,
         "basis": "available_recorded_history",
         "supported": ["stocks", "ETFs"],
         "period": None

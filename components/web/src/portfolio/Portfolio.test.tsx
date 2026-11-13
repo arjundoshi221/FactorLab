@@ -124,6 +124,24 @@ it("prefers broker-reported base-currency unrealized and gross values over posit
   expect(overview.getAllByText("Broker-reported, all positions")).toHaveLength(2);
 });
 
+it("reads the Gateway's account-wide unrealized PnL from the BASE ledger row, not the base-currency ledger row", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const path = new URL(url, "http://localhost");
+    if (path.pathname.endsWith("/summary")) return { ok: true, json: async () => ({ account: accounts[0], balances: snapshot([
+      { metric: "NetLiquidation", value_num: "44403.85", currency: "USD" },
+      { metric: "$LEDGER-UnrealizedPnL", value_num: "0", currency: "USD" },
+      { metric: "$LEDGER-UnrealizedPnL", value_num: "2737.06", currency: "GBP" },
+      { metric: "$LEDGER-UnrealizedPnL", value_num: "3526.10", currency: "BASE" }]) }) };
+    if (path.pathname.endsWith("/positions")) return { ok: true, json: async () => snapshot([
+      { trading_symbol: "TCS", position: 5, market_value: "-90000.00", unrealized_pnl: "-5000.00", currency: "INR" }]) };
+    return { ok: true, json: async () => response(url) };
+  }));
+  render(<Portfolio />);
+  const overview = within(await screen.findByLabelText("Account overview"));
+  expect(await overview.findByText(/3,526\.10/)).toHaveClass("portfolio-amount--positive");
+  expect(overview.getByText("Unrealized").parentElement).toHaveTextContent("Broker-reported, all positions");
+});
+
 it("shows unknown, not zero, when no position is in the base currency", async () => {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     const path = new URL(url, "http://localhost");
@@ -170,4 +188,35 @@ it("hides the Flex sync for simulated accounts", async () => {
   render(<Portfolio />);
   await screen.findByRole("table", { name: "Positions" });
   expect(screen.queryByRole("button", { name: "Sync IBKR history" })).not.toBeInTheDocument();
+});
+
+it("pivots the allocation by sector in the base currency, rows expanding to positions", async () => {
+  const tech = { id: "45", label: "Information Technology" };
+  const energy = { id: "10", label: "Energy" };
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const path = new URL(url, "http://localhost");
+    if (path.pathname.endsWith("/dimensions")) return { ok: true, json: async () => ({ items: [{ id: "sector", label: "Sector", buckets: [energy, tech, { id: null, label: "Unclassified" }] }] }) };
+    if (path.pathname.endsWith("/summary")) return { ok: true, json: async () => ({ account: accounts[0], balances: snapshot([{ metric: "ExchangeRate", segment: "", currency: "EUR", value_num: "2" }]) }) };
+    if (path.pathname.endsWith("/positions")) {
+      const labelled = path.searchParams.get("dims") === "sector";
+      const row = (symbol: string, currency: string, value: string, pnl: string, sector: typeof tech) =>
+        ({ trading_symbol: symbol, position: 1, currency, market_value: value, unrealized_pnl: pnl, ...(labelled ? { attributes: { sector } } : {}) });
+      return { ok: true, json: async () => snapshot([row("AAPL", "USD", "300", "60", tech), row("SAP", "EUR", "50", "10", tech), row("XOM", "USD", "200", "-20", energy)]) };
+    }
+    return { ok: true, json: async () => response(url) };
+  }));
+  render(<Portfolio />);
+  fireEvent.change(await screen.findByLabelText("Pivot by"), { target: { value: "sector" } });
+  expect(window.location.search).toContain("pivot=sector");
+  const table = await screen.findByRole("table", { name: "Exposure by sector" });
+  const rows = within(table).getAllByRole("row").slice(1);
+  // EUR 50 converts at 2 → USD 100, so tech gross is 400 of 600.
+  expect(rows[0]).toHaveTextContent("Energy");
+  expect(rows[0]).toHaveTextContent("200.00");
+  expect(rows[1]).toHaveTextContent("Information Technology");
+  expect(rows[1]).toHaveTextContent("400.00");
+  expect(rows[1]).toHaveTextContent("66.7%");
+  expect(rows[1]).toHaveTextContent("80.00");
+  fireEvent.click(within(rows[1]).getByRole("button", { name: /Information Technology/ }));
+  expect(within(table).getByText("SAP")).toBeInTheDocument();
 });

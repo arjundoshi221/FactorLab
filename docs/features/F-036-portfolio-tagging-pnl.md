@@ -9,7 +9,7 @@ sprint: null
 decisions: []
 links: []
 created: 2026-10-15
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # F-036 Profile-owned order tags and portfolio PnL
@@ -62,6 +62,28 @@ strategy or named trade is performing across a profile's broker accounts.
 - Gateway fills recorded before their commission report get the commission (and, if
   missing, realized PnL) from the next Flex statement, as a new version of the same
   row; perm_id, order id and client id, which carry the order's tags, are kept.
+- IBKR figures and reconciliation (2026-11-14): every row and group also carries
+  `ibkr_realized`, `ibkr_unrealized`, `ibkr_total` and `ibkr_issues`, IBKR's own numbers
+  from Flex statements, net of commissions (total = realized + unrealized). Realized is
+  each fill's `fifoPnlRealized` under the closing order's tags; IBKR matches lots per
+  account, not per tag, so for an instrument held under several tags it can land on a
+  different tag than the tagged FIFO. Unrealized is the latest statement's open-position
+  `costBasisMoney` valued at the ledger's mark, under the tag that holds the position;
+  with lot-level Open Positions (`originatingOrderID`) each lot goes to its opening
+  order's tags, otherwise a position open under several tags is `ibkr_split_position`.
+  Fills after the statement's report-date close, or a position that no longer matches
+  the snapshot, are `ibkr_awaiting_statement` until the next Flex sync. The response's
+  `reconciliation` compares each account/instrument's all-time total (ours: realized +
+  unrealized - commissions; IBKR: realized + unrealized), which does not depend on lot
+  matching, with a tolerance of 0.01 per fill; `statements` names each account's latest
+  statement and whether it has lot detail. Groups list instruments missing from the
+  IBKR figure in `ibkr_excluded`.
+- Transaction taxes (2026-11-14): each Flex trade row's `taxes` (GST on commissions,
+  UK stamp duty), read from `broker.statement_rows` by `ibExecID`, is a cost in the
+  trade currency and counts in the row's fees (`commissions`), as IBKR includes it in
+  cost basis and realized PnL. Fills not yet in a Flex statement have none until the
+  next sync. Before this, the reconciliation showed ours above IBKR by 9% of every
+  commission (GST) and by the stamp duty on UK buys.
 
 ## Non-goals
 
@@ -108,6 +130,13 @@ on-demand; archived entries are available through Show archived and Restore.
 Profile/account selections carry through navigation URLs.
 
 ## Log
+
+- 2026-11-14: Added the IBKR column and the per-instrument reconciliation
+  (`portfolio_reconcile.py`). The live Flex query reports Open Positions at SUMMARY
+  level only, so per-tag IBKR unrealized needs "Lot" detail added to that section.
+  Read-only against live data, the first run found 27 instruments differing by the
+  untracked Flex `taxes`; with taxes counted as fees, all 56 comparable instruments
+  match (4 remain unavailable on our side for incomplete history).
 
 - 2026-10-19: the local portfolio UI cleanup shipped with the F-038 to F-040 branch
   trial `0.0.0-trial.8bea6df4a265`; see [VPS state](../VPS.md).

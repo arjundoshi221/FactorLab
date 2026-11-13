@@ -1,10 +1,10 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { errorMessage, useRemote } from "../shared/api";
 import { formatTime } from "../shared/format";
 import {
-  DEFAULT_CASH_LIKE, DEFAULT_LIMITS, LIMIT_SPECS, computeRisk, contributionToReach, deployableCapacity, hasReconciliationGap,
-  overallStatus, statusOf, stressTests, type Limit, type LimitKey, type LimitSpec, type Limits, type RiskState, type Status,
+  DEFAULT_CASH_LIKE, DEFAULT_LIMITS, LIMIT_SPECS, computeRisk, contributionToReach, deployableCapacity, explainMetric, hasReconciliationGap,
+  overallStatus, statusOf, stressTests, type CalcTerm, type Calculation, type Limit, type LimitKey, type LimitSpec, type Limits, type RiskState, type Status,
 } from "./riskModel";
 import { BENCHMARK, useBetas, type BetaResult } from "./betas";
 import type { AccountSummary, BrokerAccount, ItemsPage, Profile, SnapshotPage } from "./types";
@@ -27,6 +27,14 @@ function money(value: number | null, currency?: string, compact = false): string
 const times = (value: number | null, digits = 2) => (value === null || !Number.isFinite(value) ? "—" : `${value.toFixed(digits)}×`);
 const pct = (value: number | null, digits = 1) => (value === null || !Number.isFinite(value) ? "—" : `${(value * 100).toFixed(digits)}%`);
 const signedPct = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value * 100).toFixed(1)}%`;
+const signedMoney = (value: number | null, currency?: string) => (value === null || !Number.isFinite(value) ? "—" : `${value > 0 ? "+" : ""}${money(value, currency)}`);
+const pnlTone = (value: number | null) => (value === null || value === 0 ? "" : value < 0 ? "is-negative" : "is-positive");
+/** Two decimals, for showing the arithmetic behind a metric. */
+function exact(value: number | null, currency?: string): string {
+  if (value === null || !Number.isFinite(value)) return "—";
+  const text = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(value));
+  return `${value < 0 ? "−" : ""}${currency ? `${currency} ` : ""}${text}`;
+}
 const formatLimit = (spec: LimitSpec, value: number | null) => (spec.unit === "x" ? times(value) : pct(value));
 const comparator = (spec: LimitSpec) => (spec.direction === "max" ? "≤" : "≥");
 
@@ -98,6 +106,61 @@ function Donut({ slices, total, center, sub }: { slices: Slice[]; total: number;
   </div>;
 }
 
+/* ---------- calculation breakdown (i) ---------- */
+
+function useCalc() {
+  const [open, setOpen] = useState<LimitKey | null>(null);
+  return { open, toggle: (key: LimitKey) => setOpen(current => (current === key ? null : key)), close: () => setOpen(null) };
+}
+
+function InfoButton({ spec, open, onToggle }: { spec: LimitSpec; open: boolean; onToggle: () => void }) {
+  return <button type="button" className={`pf-info${open ? " is-open" : ""}`} aria-label={`How ${spec.label.toLowerCase()} is calculated`} aria-expanded={open} onClick={onToggle}>
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.4" /><circle cx="8" cy="4.8" r="1" fill="currentColor" /><path d="M8 7.2v4.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+  </button>;
+}
+
+function termInputs(term: CalcTerm, base: string): string {
+  const parts: string[] = [];
+  if (term.native) parts.push(`${exact(term.native.amount, term.native.currency)} × ${term.native.fx === null ? "no FX rate" : `${term.native.fx.toFixed(6)} ${term.native.currency}→${base}`}`);
+  if (term.beta) parts.push(`${term.native ? "" : `${exact(term.beta.exposure, base)} `}× β ${term.beta.value.toFixed(4)} (${term.beta.source})`);
+  return parts.join(" ");
+}
+
+function CalcPanel({ calc, base, onClose }: { calc: Calculation; base: string; onClose: () => void }) {
+  const spec = LIMIT_SPECS.find(item => item.key === calc.key)!;
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { ref.current?.focus({ preventScroll: true }); ref.current?.scrollIntoView?.({ block: "nearest" }); }, [calc.key]);
+  const { numerator, denominator, result } = calc;
+  const resultText = result === null ? "unavailable" : spec.unit === "x" ? `${result.toFixed(4)}×` : `${(result * 100).toFixed(2)}%`;
+  return <div ref={ref} tabIndex={-1} className="pf-calc" role="region" aria-label={`${calc.label} calculation`} onKeyDown={event => { if (event.key === "Escape") onClose(); }}>
+    <header className="pf-calc__head">
+      <div><h3>How {calc.label.toLowerCase()} is calculated</h3><code>{calc.formula}</code></div>
+      <button type="button" className="pf-btn pf-btn--ghost" aria-label="Close calculation" onClick={onClose}>×</button>
+    </header>
+    <div className="pf-calc__body">
+      <section>
+        <h4>{numerator.label}<small>{numerator.source}</small></h4>
+        {numerator.terms.length > 0 ? <div className="pf-table-scroll pf-calc__scroll"><table className="pf-calc__terms" aria-label={`${numerator.label} inputs`}>
+          <thead><tr><th scope="col">Item</th><th scope="col">Inputs</th><th scope="col" className="num">{base}</th></tr></thead>
+          <tbody>{numerator.terms.map((term, index) => <tr key={`${term.label}-${index}`}>
+            <th scope="row">{term.label}{term.note && <small>{term.note}</small>}</th>
+            <td className="pf-calc__inputs">{termInputs(term, base)}</td>
+            <td className="num">{exact(term.value)}</td>
+          </tr>)}</tbody>
+          <tfoot><tr><th scope="row" colSpan={2}>{numerator.transform === "abs" ? `|Σ| = ${numerator.label}` : `Σ = ${numerator.label}`}</th><td className="num">{exact(numerator.value)}</td></tr></tfoot>
+        </table></div> : <p className="pf-calc__value">{exact(numerator.value, base)}</p>}
+      </section>
+      <section>
+        <h4>{denominator.label}<small>{denominator.source}</small></h4>
+        <p className="pf-calc__value">{exact(denominator.value, base)}</p>
+      </section>
+    </div>
+    <p className="pf-calc__result"><span>{exact(numerator.value)} ÷ {exact(denominator.value)}</span> = <b>{resultText}</b>
+      {result !== null && <small> shown as {formatLimit(spec, result)}</small>}</p>
+    {calc.notes.map(note => <p key={note} className="pf-calc__note">{note}</p>)}
+  </div>;
+}
+
 /* ---------- panels ---------- */
 
 function Card({ title, aside, children, className = "" }: { title: string; aside?: ReactNode; children: ReactNode; className?: string }) {
@@ -117,24 +180,30 @@ function Snapshot({ state }: { state: RiskState }) {
       {state.cash.map(line => <div key={line.currency} className="is-sub"><dt>{line.currency} cash{line.native < 0 ? " (debit)" : ""}</dt>
         <dd className={line.native < 0 ? "is-negative" : ""}>{money(line.native, line.currency)}</dd></div>)}
       <div><dt>Excess liquidity</dt><dd>{money(state.excess, base)}</dd></div>
+      <div className="is-pnl"><dt>Unrealized PnL<small>{state.unrealizedSource === "broker" ? "Broker account-wide, open positions" : state.unrealizedSource === "positions" ? "Σ open positions" : "Not reported"}</small></dt>
+        <dd className={pnlTone(state.unrealized)}>{signedMoney(state.unrealized, base)}</dd></div>
+      <div className="is-pnl"><dt>Realized PnL · YTD<small>Σ instruments still held; closed-out names are on Themes</small></dt>
+        <dd className={pnlTone(state.realized)}>{signedMoney(state.realized, base)}</dd></div>
     </dl>
   </Card>;
 }
 
 function KeyMetrics({ state, limits }: { state: RiskState; limits: Limits }) {
   const keys: LimitKey[] = ["grossLeverage", "equityLeverage", "initUtil", "maintUtil", "excessLiquidity"];
+  const calc = useCalc();
   return <Card title="Key risk metrics" className="pf-card--metrics">
     <div className="pf-tiles">{keys.map(key => {
       const spec = LIMIT_SPECS.find(item => item.key === key)!;
       const value = state.metrics[key];
       const status = statusOf(value, limits[key], spec.direction);
       return <div key={key} className={`pf-tile pf-tile--${status}`}>
-        <span className="pf-tile__label">{spec.label}</span>
+        <span className="pf-tile__label">{spec.label}<InfoButton spec={spec} open={calc.open === key} onToggle={() => calc.toggle(key)} /></span>
         <strong className="pf-tile__value">{formatLimit(spec, value)}</strong>
         <span className="pf-tile__foot"><StatusIcon status={status} />Target {comparator(spec)} {formatLimit(spec, limits[key].target)}</span>
         {key === "excessLiquidity" && state.excess !== null && <span className="pf-tile__note">{money(state.excess, state.base, true)}</span>}
       </div>;
     })}</div>
+    {calc.open && <CalcPanel calc={explainMetric(state, calc.open)} base={state.base} onClose={calc.close} />}
   </Card>;
 }
 
@@ -174,6 +243,7 @@ function LimitsTable({ state, settings, onSave, onReset }: {
 }) {
   const [draft, setDraft] = useState<Record<LimitKey, { target: string; hard: string }> | null>(null);
   const [cashDraft, setCashDraft] = useState("");
+  const calc = useCalc();
   const display = (spec: LimitSpec, value: number) => String(spec.unit === "pct" ? +(value * 100).toFixed(4) : value);
   function edit() {
     setDraft(Object.fromEntries(LIMIT_SPECS.map(spec => [spec.key, { target: display(spec, settings.limits[spec.key].target), hard: display(spec, settings.limits[spec.key].hard) }])) as Record<LimitKey, { target: string; hard: string }>);
@@ -208,7 +278,7 @@ function LimitsTable({ state, settings, onSave, onReset }: {
             value={draft![spec.key][field]} onChange={event => setDraft({ ...draft!, [spec.key]: { ...draft![spec.key], [field]: event.target.value } })} />
           <span>{spec.unit === "pct" ? "%" : "×"}</span></label>;
         return <tr key={spec.key} className={`is-${status}`}>
-          <th scope="row"><span className="pf-limits__name">{spec.label}</span><small>{spec.help}</small></th>
+          <th scope="row"><span className="pf-limits__name">{spec.label}<InfoButton spec={spec} open={calc.open === spec.key} onToggle={() => calc.toggle(spec.key)} /></span><small>{spec.help}</small></th>
           <td className={`num pf-limits__current pf-ink--${status}`}>{formatLimit(spec, value)}</td>
           <td className="pf-limits__bar-col"><LimitBar spec={spec} value={value} limit={limit} /></td>
           <td className="num pf-col-target">{editing ? input("target") : `${comparator(spec)} ${formatLimit(spec, limit.target)}`}</td>
@@ -217,6 +287,7 @@ function LimitsTable({ state, settings, onSave, onReset }: {
         </tr>;
       })}</tbody>
     </table></div>
+    {calc.open && <CalcPanel calc={explainMetric(state, calc.open)} base={state.base} onClose={calc.close} />}
     {editing && <div className="pf-limits__cash"><label><span>Cash-equivalent symbols</span>
       <input value={cashDraft} onChange={event => setCashDraft(event.target.value)} placeholder="BOXX, SGOV" aria-label="Cash-equivalent symbols" /></label>
       <p className="pf-muted">Excluded from equity leverage, single-name concentration and stress shocks.</p></div>}
@@ -227,9 +298,9 @@ function LimitsTable({ state, settings, onSave, onReset }: {
 
 function Concentration({ state, limits }: { state: RiskState; limits: Limits }) {
   const nav = state.nav;
-  return <Card title="Positions & concentration" aside={<span className="pf-muted">% of net liquidation</span>}>
+  return <Card title="Positions & concentration" aside={<span className="pf-muted">{state.base} · % of net liquidation</span>}>
     {state.holdings.length ? <div className="pf-table-scroll"><table className="pf-table" aria-label="Positions and concentration">
-      <thead><tr><th scope="col">Position</th><th scope="col" className="num">Value ({state.base})</th><th scope="col" className="num">% NAV</th><th scope="col" className="num">Beta</th><th scope="col" className="num">Limit</th><th scope="col">Status</th></tr></thead>
+      <thead><tr><th scope="col">Position</th><th scope="col" className="num">Value ({state.base})</th><th scope="col" className="num">% NAV</th><th scope="col" className="num">Beta</th><th scope="col" className="num">Unrealized</th><th scope="col" className="num">Realized YTD</th><th scope="col" className="num">Limit</th><th scope="col">Status</th></tr></thead>
       <tbody>{state.holdings.map((holding, index) => {
         const share = holding.value === null || nav === null || nav <= 0 ? null : Math.abs(holding.value) / nav;
         const limit = holding.cashLike ? limits.cashLike : limits.singleName;
@@ -239,6 +310,8 @@ function Concentration({ state, limits }: { state: RiskState; limits: Limits }) 
           <td className="num">{money(holding.value)}</td>
           <td className={`num pf-ink--${status}`}>{pct(share)}</td>
           <td className="num">{holding.beta === null ? "…" : holding.beta.toFixed(2)}{holding.betaSource === "assumed" && <small>assumed</small>}</td>
+          <td className={`num ${pnlTone(holding.unrealized)}`}>{signedMoney(holding.unrealized)}</td>
+          <td className={`num ${pnlTone(holding.realized)}`}>{signedMoney(holding.realized)}</td>
           <td className="num pf-muted">≤ {holding.cashLike ? times(limit.target) : pct(limit.target, 0)}</td>
           <td><StatusTag status={status}>{status === "red" ? "Trim" : status === "amber" ? "Above target" : status === "unknown" ? "No FX rate" : "OK"}</StatusTag></td>
         </tr>;
@@ -258,6 +331,7 @@ function Leverage({ state, limits, beta }: { state: RiskState; limits: Limits; b
   ].filter(part => part.value > 0);
   const total = parts.reduce((sum, part) => sum + part.value, 0);
   const measured = state.holdings.filter(holding => holding.betaSource === "measured");
+  const calc = useCalc();
   return <Card title="Leverage" className="pf-card--leverage" aside={<span className="pf-muted">× net liquidation ({money(state.nav, base, true)})</span>}>
     <div className="pf-leverage">
       <ul className="pf-leverage__ladder">{LEVERAGE_KEYS.map(key => {
@@ -266,11 +340,12 @@ function Leverage({ state, limits, beta }: { state: RiskState; limits: Limits; b
         const status = statusOf(value, limits[key], spec.direction);
         const loading = key === "betaLeverage" && beta.betas === null;
         return <li key={key}>
-          <div className="pf-leverage__head"><span>{spec.label}</span><strong className={`pf-ink--${loading ? "unknown" : status}`}>{loading ? "…" : times(value)}</strong></div>
+          <div className="pf-leverage__head"><span className="pf-leverage__label">{spec.label}<InfoButton spec={spec} open={calc.open === key} onToggle={() => calc.toggle(key)} /></span><strong className={`pf-ink--${loading ? "unknown" : status}`}>{loading ? "…" : times(value)}</strong></div>
           <LimitBar spec={spec} value={loading ? null : value} limit={limits[key]} />
           <div className="pf-leverage__foot"><small>{spec.help}</small><small>Target {times(limits[key].target, 2)} · hard {times(limits[key].hard, 2)}</small></div>
         </li>;
       })}</ul>
+      {calc.open && <div className="pf-leverage__calc"><CalcPanel calc={explainMetric(state, calc.open)} base={state.base} onClose={calc.close} /></div>}
       <div className="pf-leverage__side"><section>
         <h3>What makes up gross exposure</h3>
         {total > 0 ? <>

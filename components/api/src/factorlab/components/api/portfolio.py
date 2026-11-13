@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from factorlab.clickhouse import ClickHouse, rows
 
+from .portfolio_attributes import dimensions, enrich, parse_dims
 from .source_health import broker_snapshot_stale
 
 router = APIRouter()
@@ -34,6 +35,8 @@ class SnapshotPage(ItemsPage):
     source_channel: str | None
     simulated: bool
     freshness: Literal["not_reported", "fresh", "stale"]
+    # Pivot dimensions (``dims=``) that could not be resolved for these rows.
+    unavailable_dimensions: list[str] = []
 
 
 class AccountSummary(BaseModel):
@@ -330,13 +333,29 @@ def equity(
     )
 
 
+@router.get("/dimensions", response_model=ItemsPage)
+def pivot_dimensions() -> ItemsPage:
+    """Attributes rows can be pivoted by (``dims=``), each with its buckets in display order."""
+    return ItemsPage(items=dimensions())
+
+
 @router.get("/accounts/{broker_code}/{account_id}/positions", response_model=SnapshotPage)
 def positions(
-    repo: Repo, broker_code: str, account_id: str, user_id: ProfileFilter = ""
+    repo: Repo,
+    broker_code: str,
+    account_id: str,
+    user_id: ProfileFilter = "",
+    dims: Annotated[str, Query(max_length=200)] = "",
 ) -> SnapshotPage:
-    return repo.snapshot(
+    """``dims=sector`` labels each row with ``attributes.sector`` for pivoting."""
+    page = repo.snapshot(
         repo.account(broker_code, account_id, validate_profile_filter(user_id)), "positions"
     )
+    names = parse_dims(dims)
+    if not names:
+        return page
+    items, failed = enrich(repo, page.items, names)
+    return page.model_copy(update={"items": items, "unavailable_dimensions": failed})
 
 
 @router.get("/accounts/{broker_code}/{account_id}/open-orders", response_model=SnapshotPage)

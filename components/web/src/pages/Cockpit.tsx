@@ -188,7 +188,10 @@ function PortfolioPanel() {
   const equity = useRemote<{ currency: string | null; points: { t: string; value: string }[] }>(base && `${base}/equity?${filter}&range=3m`, 300_000);
 
   const currency = account?.base_currency ?? "";
-  const metric = (name: string) => toNumber(summary.data?.balances.items.find((row) => row.metric === name && !row.segment && row.currency === currency)?.value_num);
+  const find = (tag: string, unit: string) => toNumber(summary.data?.balances.items.find((row) => row.metric === tag && !row.segment && row.currency === unit)?.value_num);
+  // Account-wide PnL comes from the Gateway only as a "BASE" ledger tag (already in the base currency);
+  // the ledger row labelled with the base currency covers that currency's positions only.
+  const metric = (name: string) => (currency ? find(name, currency) ?? (name === "UnrealizedPnL" ? find("$LEDGER-UnrealizedPnL", "BASE") : null) : null);
   const netLiq = metric("NetLiquidation");
   const cash = metric("TotalCashValue");
   const rows = positions.data?.items ?? [];

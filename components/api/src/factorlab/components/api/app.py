@@ -96,6 +96,7 @@ from factorlab.components.api.political_observability import (
 from factorlab.components.api.portfolio import router as portfolio_router
 from factorlab.components.api.portfolio_ledger import router as portfolio_ledger_router
 from factorlab.components.api.portfolio_tagging import router as portfolio_tagging_router
+from factorlab.components.api.portfolio_trades import router as portfolio_trades_router
 from factorlab.components.api.schema_map import (
     SchemaMapRepository,
     SchemaMapResponse,
@@ -183,6 +184,7 @@ app.include_router(monitoring_router, prefix="/hub/api/v1/monitoring", tags=["hu
 app.include_router(portfolio_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
 app.include_router(portfolio_tagging_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
 app.include_router(portfolio_ledger_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
+app.include_router(portfolio_trades_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
 app.include_router(flex_sync_router, prefix="/hub/api/v1/portfolio", tags=["hub-portfolio"])
 
 

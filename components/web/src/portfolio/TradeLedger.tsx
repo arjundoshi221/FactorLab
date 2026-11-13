@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 
 import type { CatalogEntry, CatalogKind, ItemsPage, LedgerPage, LedgerRow, LedgerTagStatus, OrderAssignment, Profile } from "./types";
 import { errorMessage, fetchJson, useRemote } from "../shared/api";
@@ -84,7 +84,8 @@ function LedgerPulse({ counts, rows }: { counts: LedgerPage["counts"]; rows: Led
   </div>;
 }
 
-export function TradeLedger() {
+/** ``views`` is the Trades page's Orders / Open & closed switch, shown in the header. */
+export function TradeLedger({ views }: { views?: ReactNode } = {}) {
   const [params, update] = useUrlParams();
   const profiles = useRemote<ItemsPage<Profile>>(`${API}/profiles`, 60_000);
   const requested = params.get("user_id") ?? "";
@@ -145,6 +146,7 @@ export function TradeLedger() {
   const filtering = filterKeys.some(key => params.get(key));
   return <main className="portfolio-page trade-ledger">
     <PortfolioHeader title="Trades" description="Every executed order across your accounts, with the theme, strategy and trade name it belongs to.">
+      {views}
       <ProfileSelect profiles={profiles.data?.items ?? []} value={userId} disabled={profiles.loading && !profiles.data} onChange={value => { setSelected(new Set()); update(p => { p.set("user_id", value); p.delete("account"); p.delete("offset"); }, true); }} />
     </PortfolioHeader>
     {Boolean(profiles.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(profiles.error)}</p>}

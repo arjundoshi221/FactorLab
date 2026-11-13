@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
-import type { Profile } from "./types";
+import type { PivotRows } from "./pivot";
+import type { Dimension, Profile } from "./types";
 
 /** Refresh mounted panels without throwing away their last result or unsaved forms. */
 export function usePortfolioRefresh(revision: number, ...refreshers: Array<() => void>) {
@@ -79,4 +80,27 @@ export function PortfolioHeader({ title, description, eyebrow = "Portfolio", chi
     <div className="pf-head__text"><span className="pf-head__eyebrow">{eyebrow}</span><h1>{title}</h1><p>{description}</p></div>
     {children && <div className="pf-head__tools">{children}</div>}
   </header>;
+}
+
+/**
+ * "Pivot by" for any dimension the API offers (`/portfolio/dimensions`). With `groupLabel`
+ * it also flips the row order: groups first (e.g. Theme → Sector) or the attribute first.
+ */
+export function PivotControl({ dimensions, value, onChange, rows, onRows, groupLabel }: {
+  dimensions: Dimension[]; value: string; onChange: (value: string) => void;
+  rows?: PivotRows; onRows?: (rows: PivotRows) => void; groupLabel?: string;
+}) {
+  if (dimensions.length === 0) return null;
+  const dimension = dimensions.find(item => item.id === value);
+  return <div className="portfolio-pivot">
+    <label className="portfolio-selector"><span>Pivot by</span><select value={dimension ? value : ""} onChange={event => onChange(event.target.value)}>
+      <option value="">None</option>
+      {dimensions.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+    </select></label>
+    {dimension && groupLabel && rows && onRows && <div className="portfolio-period" role="group" aria-label="Row order">
+      {(["group", "attr"] as const).map(order => <button key={order} type="button" aria-pressed={rows === order} onClick={() => onRows(order)}>
+        {order === "group" ? `${groupLabel} → ${dimension.label}` : `${dimension.label} → ${groupLabel}`}
+      </button>)}
+    </div>}
+  </div>;
 }

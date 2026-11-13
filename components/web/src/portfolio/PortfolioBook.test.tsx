@@ -209,3 +209,99 @@ it("names the real blocker, lists excluded instruments and hides charts with no 
   expect(screen.getByText(/Total PnL by strategy · USD/)).toBeInTheDocument();
   expect(screen.queryByText(/Total PnL by strategy · SGD/)).not.toBeInTheDocument();
 });
+
+it("shows IBKR figures beside ours and reconciles instruments, problems first", async () => {
+  const withIbkr = { ...group, ibkr_realized: "598", ibkr_unrealized: "0", ibkr_total: "598", ibkr_issues: [] };
+  const split = { ...group, id: "other", name: "Earnings", ibkr_realized: "0", ibkr_unrealized: null, ibkr_total: null, ibkr_issues: ["ibkr_split_position"], ibkr_excluded: [{ trading_symbol: "MSFT", account_id: "U1", issues: ["ibkr_split_position"] }] };
+  const row = (symbol: string, status: string, difference: string | null, reasons: string[] = []) => ({ broker_code: "ibkr", account_id: "U1", account_mode: "live", simulated: false, trading_symbol: symbol, currency: "USD", quantity: "10", fills: 3,
+    ours: { realized: "100", unrealized: "700", commissions: "3", total: "797" }, ibkr: { realized: "598", unrealized: "199", total: difference === null ? null : "797" }, difference, status, reasons });
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, json: async () => url.endsWith("/profiles") ? { items: [{ user_id: A, display_name: "Alice" }] }
+    : url.includes("/accounts") ? { items: [account] } : url.includes("/pnl/") ? { items: [withIbkr, split], account_fees: [],
+      reconciliation: [row("NVDA", "mismatch", "-100"), row("TSLA", "ibkr_unavailable", null, ["ibkr_awaiting_statement"]), row("AAPL", "match", "0")],
+      statements: [{ broker_code: "ibkr", account_id: "U1", generated_at: "2026-11-13T13:46:47Z", statement_to: "2026-11-12", lot_detail: false }] } : { items: [] } })));
+  render(<PortfolioGroups kind="themes" />);
+  const table = await screen.findByRole("table", { name: "PnL by theme" });
+  expect(within(table).getByRole("columnheader", { name: "IBKR" })).toBeInTheDocument();
+  expect(within(table).getByText("598.00")).toBeInTheDocument();
+  expect(within(table).getByText("Excludes MSFT")).toBeInTheDocument();
+
+  const reconciliation = screen.getByRole("table", { name: "Reconciliation with IBKR" });
+  expect(screen.getByText(/1 of 3 match/)).toBeInTheDocument();
+  expect(within(reconciliation).getByText("Differs")).toBeInTheDocument();
+  expect(within(reconciliation).getByText(/Traded or changed since the latest IBKR Flex statement/)).toBeInTheDocument();
+  expect(within(reconciliation).queryByText("AAPL")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Show matches" }));
+  expect(within(reconciliation).getByText("AAPL")).toBeInTheDocument();
+  expect(screen.getByText(/Add “Lot” level of detail/)).toBeInTheDocument();
+});
+
+it("pivots tagged PnL by sector both ways, keeping the choice in the URL", async () => {
+  const tech = { id: "45", label: "Information Technology" };
+  const energy = { id: "10", label: "Energy" };
+  const holding = (symbol: string, sector: typeof tech, theme: string, realized: string) => ({
+    broker_code: "ibkr", account_id: "SIM_A", account_mode: "paper", simulated: true, trading_symbol: symbol, currency: "USD",
+    quantity: "1", orders: ["1"], realized, unrealized: "0", commissions: "1", total: String(Number(realized) - 1), issues: [],
+    price_time: null, history_start: null, theme_id: theme, strategy_id: null, trade_name_id: null, attributes: { sector },
+  });
+  const requests: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const path = new URL(url, "http://localhost");
+    requests.push(path.pathname + path.search);
+    let result: unknown;
+    if (path.pathname.endsWith("/dimensions")) result = { items: [{ id: "sector", label: "Sector", buckets: [energy, tech, { id: null, label: "Unclassified" }] }] };
+    else if (path.pathname.endsWith("/profiles")) result = { items: [{ user_id: A, display_name: "Alice", active: true }] };
+    else if (path.pathname.endsWith("/accounts")) result = { items: [account] };
+    else if (path.pathname.includes("/pnl/")) {
+      const dims = path.searchParams.get("dims") === "sector";
+      const strip = (row: ReturnType<typeof holding>) => dims ? row : { ...row, attributes: undefined };
+      result = { items: [
+        { ...group, issues: [], realized: "30", unrealized: "0", commissions: "2", total: "28", details: [holding("AAPL", tech, "theme", "10"), holding("XOM", energy, "theme", "20")].map(strip) },
+        { ...group, id: "value", name: "Value", issues: [], realized: "5", unrealized: "0", commissions: "1", total: "4", details: [holding("MSFT", tech, "value", "5")].map(strip) },
+      ] };
+    } else result = { items: entries.themes };
+    return { ok: true, json: async () => result };
+  }));
+  render(<PortfolioGroups kind="themes" />);
+  const select = await screen.findByLabelText("Pivot by");
+  fireEvent.change(select, { target: { value: "sector" } });
+  expect(window.location.search).toContain("pivot=sector");
+  await waitFor(() => expect(requests.some(request => request.includes("/pnl/themes") && request.includes("dims=sector"))).toBe(true));
+
+  // Theme → Sector: each theme splits into sector subtotals.
+  fireEvent.click(await screen.findByRole("button", { name: /View holdings for AI/ }));
+  const holdings = await screen.findByRole("table", { name: "AI holdings" });
+  const subtotals = within(holdings).getAllByRole("rowheader").map(cell => cell.textContent);
+  expect(subtotals[0]).toContain("Energy");
+  expect(subtotals[1]).toContain("Information Technology");
+
+  // Sector → Theme: sectors become the rows, combining both themes' tech holdings.
+  fireEvent.click(screen.getByRole("button", { name: "Sector → Theme" }));
+  expect(window.location.search).toContain("rows=attr");
+  const table = await screen.findByRole("table", { name: "PnL by sector" });
+  const tech_row = within(table).getByRole("rowheader", { name: /Information Technology/ }).closest("tr")!;
+  expect(tech_row).toHaveTextContent("15.00");
+  fireEvent.click(within(tech_row).getByRole("button", { name: /View holdings for Information Technology/ }));
+  const byTheme = await screen.findByRole("table", { name: "Information Technology holdings" });
+  expect(within(byTheme).getAllByRole("rowheader").map(cell => cell.textContent?.split(/\d/)[0])).toEqual(["AI", "Value"]);
+
+  fireEvent.change(screen.getByLabelText("Pivot by"), { target: { value: "" } });
+  expect(window.location.search).not.toContain("pivot");
+  expect(window.location.search).not.toContain("rows");
+});
+
+it("shows the report unpivoted and says so when sector classification fails", async () => {
+  window.history.replaceState(null, "", "/portfolio/themes?pivot=sector");
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const path = new URL(url, "http://localhost");
+    let result: unknown;
+    if (path.pathname.endsWith("/dimensions")) result = { items: [{ id: "sector", label: "Sector", buckets: [] }] };
+    else if (path.pathname.endsWith("/profiles")) result = { items: [{ user_id: A, display_name: "Alice", active: true }] };
+    else if (path.pathname.endsWith("/accounts")) result = { items: [account] };
+    else if (path.pathname.includes("/pnl/")) result = { items: [group], unavailable_dimensions: ["sector"] };
+    else result = { items: entries.themes };
+    return { ok: true, json: async () => result };
+  }));
+  render(<PortfolioGroups kind="themes" />);
+  expect(await screen.findByText(/Sector classification is unavailable right now/)).toBeInTheDocument();
+  expect(screen.getByRole("table", { name: "PnL by theme" })).toBeInTheDocument();
+});

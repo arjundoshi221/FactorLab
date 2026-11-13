@@ -18,8 +18,8 @@ function api(url: string, freshness = "fresh") {
   if (path.endsWith("/summary")) return { account, balances: snapshot(balances, freshness) };
   if (path.endsWith("/positions")) return snapshot([
     { trading_symbol: "BOXX", currency: "SGD", position: 1, market_value: "80000" },
-    { trading_symbol: "LLY", currency: "SGD", position: 1, market_value: "70000" },
-    { trading_symbol: "CSPX", currency: "SGD", position: 1, market_value: "50000" },
+    { trading_symbol: "LLY", currency: "SGD", position: 1, market_value: "70000", unrealized_pnl: "1500", realized_pnl_ytd: "-250" },
+    { trading_symbol: "CSPX", currency: "SGD", position: 1, market_value: "50000", unrealized_pnl: "-400", realized_pnl_ytd: "0" },
   ], freshness);
   return { items: [] };
 }
@@ -111,4 +111,30 @@ it("toggles and remembers the portfolio theme", async () => {
   expect(window.localStorage.getItem("factorlab.portfolio.theme")).toBe("light");
   expect(screen.getByRole("link", { name: /Terminal/ })).toHaveAttribute("href", "/");
   await screen.findByRole("table", { name: "Risk limits" });
+});
+
+it("splits unrealized and realized PnL and shows the exact calculation behind a leverage metric", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, json: async () => api(url) })));
+  render(<PortfolioApp path="/portfolio/risk" />);
+  const snapshotCard = await screen.findByRole("region", { name: "Account snapshot" });
+  expect(within(snapshotCard).getByText(/Unrealized PnL/).closest("div")).toHaveTextContent("+SGD 1,100");
+  expect(within(snapshotCard).getByText(/Realized PnL · YTD/).closest("div")).toHaveTextContent("−SGD 250");
+  const lly = within(screen.getByRole("table", { name: "Positions and concentration" })).getByRole("row", { name: /LLY/ });
+  expect(within(lly).getByText("+1,500")).toHaveClass("is-positive");
+  expect(within(lly).getByText("−250")).toHaveClass("is-negative");
+
+  const leverage = screen.getByRole("region", { name: "Leverage" });
+  const info = within(leverage).getByRole("button", { name: "How gross leverage is calculated" });
+  fireEvent.click(info);
+  expect(info).toHaveAttribute("aria-expanded", "true");
+  const calc = within(leverage).getByRole("region", { name: "Gross leverage calculation" });
+  expect(calc).toHaveTextContent("Gross leverage = Gross position value ÷ Net liquidation value");
+  expect(calc).toHaveTextContent("Broker GrossPositionValue");
+  expect(within(calc).getByRole("row", { name: /LLY/ })).toHaveTextContent("70,000.00");
+  expect(calc).toHaveTextContent("200,000.00 ÷ 100,000.00 = 2.0000×");
+  // Switching metric replaces the panel; Escape closes it.
+  fireEvent.click(within(leverage).getByRole("button", { name: "How net leverage is calculated" }));
+  expect(within(leverage).getByRole("region", { name: "Net leverage calculation" })).toHaveTextContent("120,000.00 ÷ 100,000.00 = 1.2000×");
+  fireEvent.keyDown(within(leverage).getByRole("region", { name: "Net leverage calculation" }), { key: "Escape" });
+  expect(within(leverage).queryByRole("region", { name: /calculation/ })).not.toBeInTheDocument();
 });

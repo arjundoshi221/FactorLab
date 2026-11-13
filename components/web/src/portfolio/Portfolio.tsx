@@ -1,13 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
-import type { AccountSummary, BrokerAccount, BrokerRow, ExecutionPage, ItemsPage, Profile, SnapshotPage } from "./types";
+import type { AccountSummary, Attributed, BrokerAccount, BrokerRow, Dimension, ExecutionPage, ItemsPage, Profile, SnapshotPage } from "./types";
 import { Segmented } from "../components/ui";
 import { ApiError, errorMessage, fetchJson, useRemote } from "../shared/api";
 import { AreaChart, Treemap } from "../shared/charts";
 import { formatDate, formatTime } from "../shared/format";
 import { compactMoney, signedPct, toNumber } from "../shared/market";
 import { OrderTagging } from "./PortfolioBook";
-import { Amount, EmptyState, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery, usePortfolioRefresh } from "./PortfolioUI";
+import { AccountTrades } from "./TradeHistory";
+import { Amount, EmptyState, PivotControl, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery, usePortfolioRefresh } from "./PortfolioUI";
+import { exposureBy, type ExposureBucket } from "./exposurePivot";
+import { useDimensions, usePivotParams } from "./pivot";
 import "./Portfolio.css";
 
 const API = "/hub/api/v1/portfolio";
@@ -37,7 +40,11 @@ function AccountMetrics({ account, summary, positions, orders }: {
   const currency = account.base_currency;
   function metric(name: string) {
     // Only show an account-wide value in its stated base currency; never add currencies or segments.
-    return currency ? summary?.balances.items.find(row => row.metric === name && !row.segment && row.currency === currency)?.value_num : null;
+    if (!currency) return null;
+    const find = (tag: string, unit: string) => summary?.balances.items.find(row => row.metric === tag && !row.segment && row.currency === unit)?.value_num;
+    // The Gateway reports account-wide PnL only as a ledger tag in "BASE" (already converted to the base
+    // currency). The ledger row labelled with the base currency itself covers only that currency's positions.
+    return find(name, currency) ?? (name === "UnrealizedPnL" ? find("$LEDGER-UnrealizedPnL", "BASE") : undefined);
   }
   // Prefer the broker's account-wide figure, already converted to the base currency. Otherwise sum
   // base-currency positions only, so currencies are never added together; with no such positions
@@ -61,7 +68,17 @@ function AccountMetrics({ account, summary, positions, orders }: {
 type EquityRange = "1m" | "3m" | "1y" | "max";
 interface EquityHistory { currency: string | null; points: { t: string; value: string }[]; basis: string }
 
-function Performance({ base, filter, positions }: { base: string; filter: string; positions: SnapshotPage | null }) {
+interface PivotProps { dimensions: Dimension[]; pivot: string; setPivot: (value: string) => void }
+
+function Performance({ base, filter, positions, balances, currency, pivot: pivotProps }: {
+  base: string; filter: string; positions: SnapshotPage | null; balances: BrokerRow[]; currency: string; pivot: PivotProps;
+}) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const dimension = pivotProps.dimensions.find(item => item.id === pivotProps.pivot);
+  const failed = Boolean(dimension && positions?.unavailable_dimensions?.includes(dimension.id));
+  // Pivot only rows the API labelled, so an unlabelled position is never shown as Unclassified.
+  const active = dimension && positions && !failed && positions.items.every(row => (row as Attributed).attributes?.[dimension.id]) ? dimension : undefined;
+  const buckets = active && positions ? exposureBy(positions.items, balances, currency, active.id, active.buckets) : null;
   const [range, setRange] = useState<EquityRange>("3m");
   const equity = useRemote<EquityHistory>(`${base}/equity?${filter}&range=${range}`, 300_000);
   const points = (equity.data?.points ?? []).map(point => ({ t: point.t, value: Number(point.value) })).filter(point => Number.isFinite(point.value));
@@ -76,7 +93,13 @@ function Performance({ base, filter, positions }: { base: string; filter: string
     return { key: `${symbol}-${index}`, label: symbol, size: Math.abs(value), change: ret, scale: 0.15, sublabel: signedPct(ret, 1),
       title: `${symbol}: ${compactMoney(value)} ${row.currency ?? ""} · unrealized ${compactMoney(pnl)} (${signedPct(ret, 1)})` };
   });
-  return <section className="portfolio-performance-band" aria-label="Performance">
+  const bucketTiles = (buckets ?? []).map(bucket => ({
+    key: bucket.key, label: bucket.value.label, size: bucket.size, change: bucket.ret, scale: 0.15,
+    sublabel: bucket.share === null ? signedPct(bucket.ret, 1) : `${(bucket.share * 100).toFixed(1)}%`,
+    title: `${bucket.value.label}: ${bucket.holdings.length} ${bucket.holdings.length === 1 ? "position" : "positions"} · gross ${bucket.gross === null ? "unavailable" : compactMoney(bucket.gross)} ${currency} · unrealized ${compactMoney(bucket.unrealized)} (${signedPct(bucket.ret, 1)})${bucket.unconverted.length ? ` · ${bucket.unconverted.join(", ")} not converted` : ""}`,
+    onSelect: () => setSelected(selected === bucket.key ? null : bucket.key), selected: selected === bucket.key,
+  }));
+  return <><section className="portfolio-performance-band" aria-label="Performance">
     <div className="portfolio-section portfolio-equity">
       <div className="portfolio-section-heading"><h3>Net liquidation{equity.data?.currency ? ` · ${equity.data.currency}` : ""}
         {change !== null && <span className={`portfolio-change portfolio-amount--${change >= 0 ? "positive" : "negative"}`}>{change >= 0 ? "▲" : "▼"} {signedPct(change)}</span>}</h3>
@@ -88,9 +111,35 @@ function Performance({ base, filter, positions }: { base: string; filter: string
       {equity.data && <p className="portfolio-footnote">{equity.data.basis}</p>}
     </div>
     <div className="portfolio-section portfolio-allocation">
-      <div className="portfolio-section-heading"><h3>Allocation</h3><span className="portfolio-footnote">Size = |market value| · colour = unrealized return</span></div>
-      <Treemap items={tiles} label="Holdings by market value" height={200} empty={positions?.snapshot_time ? "No open positions" : "Positions not reported yet"} />
+      <div className="portfolio-section-heading"><h3>Allocation{active ? ` by ${active.label.toLowerCase()}` : ""}</h3><PivotControl dimensions={pivotProps.dimensions} value={pivotProps.pivot} onChange={value => { pivotProps.setPivot(value); setSelected(null); }} /></div>
+      {failed && dimension && <p className="portfolio-notice portfolio-notice--error" role="alert">{dimension.label} classification is unavailable right now; showing holdings.</p>}
+      {dimension && !active && !failed && positions && <p className="portfolio-empty-inline" role="status">Labelling holdings by {dimension.label.toLowerCase()}…</p>}
+      <Treemap items={buckets ? bucketTiles : tiles} label={buckets && active ? `Holdings by ${active.label.toLowerCase()}` : "Holdings by market value"} height={200} empty={positions?.snapshot_time ? "No open positions" : "Positions not reported yet"} />
+      <p className="portfolio-footnote">Size = |market value|{buckets ? `, ${currency || "base"}` : ""} · colour = unrealized return{buckets ? " · label = share of gross" : ""}</p>
     </div>
+  </section>
+  {buckets && active && buckets.length > 0 && <Exposure buckets={buckets} label={active.label} currency={currency} selected={selected} onSelect={setSelected} />}
+  </>;
+}
+
+/** Gross, net and unrealized per pivot bucket in the base currency; a row expands to its positions. */
+function Exposure({ buckets, label, currency, selected, onSelect }: {
+  buckets: ExposureBucket[]; label: string; currency: string; selected: string | null; onSelect: (key: string | null) => void;
+}) {
+  const money = (value: number | null) => <Amount value={value === null ? null : value.toFixed(2)} />;
+  const pnl = (value: number | null) => <Amount value={value === null ? null : value.toFixed(2)} signed />;
+  return <section className="portfolio-section portfolio-exposure" aria-label={`Exposure by ${label.toLowerCase()}`}>
+    <div className="portfolio-section-heading"><div><span className="portfolio-eyebrow">Allocation</span><h3>Exposure by {label.toLowerCase()}</h3></div><span className="portfolio-footnote">{currency || "Base currency"} · converted at the broker's rates</span></div>
+    <div className="portfolio-table-scroll" role="region" aria-label={`Exposure by ${label.toLowerCase()} table`} tabIndex={0}><table aria-label={`Exposure by ${label.toLowerCase()}`}>
+      <thead><tr><th scope="col">{label}</th><th scope="col" className="portfolio-numeric">Positions</th><th scope="col" className="portfolio-numeric">Gross</th><th scope="col" className="portfolio-numeric">Share of gross</th><th scope="col" className="portfolio-numeric">Net</th><th scope="col" className="portfolio-numeric">Unrealized</th></tr></thead>
+      <tbody>{buckets.map(bucket => {
+        const open = selected === bucket.key;
+        return <Fragment key={bucket.key}><tr className={open ? "is-expanded" : ""}><th scope="row"><button type="button" className="portfolio-exposure-toggle" aria-expanded={open} onClick={() => onSelect(open ? null : bucket.key)}><PortfolioIcon name="chevron" />{bucket.value.label}</button>
+          {bucket.unconverted.length > 0 && <small className="portfolio-cell-note">{bucket.unconverted.join(", ")}: no FX rate to {currency || "base"}</small>}</th>
+          <td className="portfolio-numeric">{bucket.holdings.length}</td><td className="portfolio-numeric">{money(bucket.gross)}</td><td className="portfolio-numeric">{bucket.share === null ? "—" : `${(bucket.share * 100).toFixed(1)}%`}</td><td className="portfolio-numeric">{pnl(bucket.net)}</td><td className="portfolio-numeric">{pnl(bucket.unrealized)}</td></tr>
+          {open && bucket.holdings.map((holding, index) => <tr key={index} className="portfolio-exposure-holding"><td>{holding.symbol}<small className="portfolio-cell-note">{String(holding.row.currency ?? "")}</small></td><td className="portfolio-numeric"><Amount value={holding.row.position} quantity /></td><td className="portfolio-numeric">{money(holding.value === null ? null : Math.abs(holding.value))}</td><td /><td className="portfolio-numeric">{pnl(holding.value)}</td><td className="portfolio-numeric">{pnl(holding.unrealized)}</td></tr>)}
+        </Fragment>;
+      })}</tbody></table></div>
   </section>;
 }
 
@@ -140,7 +189,10 @@ function AccountDetails({ account, userId }: { account: BrokerAccount; userId: s
   const base = `${API}/accounts/${encodeURIComponent(account.broker_code)}/${encodeURIComponent(account.account_id)}`;
   const filter = `user_id=${encodeURIComponent(userId)}`;
   const summary = useRemote<AccountSummary>(`${base}/summary?${filter}`, 60_000);
-  const positions = useRemote<SnapshotPage>(`${base}/positions?${filter}`, 60_000);
+  const dimensions = useDimensions();
+  const { pivot, setPivot } = usePivotParams();
+  const dims = dimensions.some(item => item.id === pivot) ? `&dims=${encodeURIComponent(pivot)}` : "";
+  const positions = useRemote<SnapshotPage>(`${base}/positions?${filter}${dims}`, 60_000);
   const orders = useRemote<SnapshotPage>(`${base}/open-orders?${filter}`, 60_000);
   const refreshAccount = () => { summary.refresh(); positions.refresh(); orders.refresh(); setOffset(0); setTradeRevision(value => value + 1); };
   return <section aria-label="Selected account" className="portfolio-details">
@@ -151,7 +203,7 @@ function AccountDetails({ account, userId }: { account: BrokerAccount; userId: s
     </header>
     {[summary, positions, orders].some(remote => remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">Account refresh failed. Showing any last successful snapshots for this account.</p>}
     <AccountMetrics account={account} summary={summary.data} positions={positions.data} orders={orders.data} />
-    <Performance base={base} filter={filter} positions={positions.data} />
+    <Performance base={base} filter={filter} positions={positions.data} balances={summary.data?.balances.items ?? []} currency={account.base_currency ?? ""} pivot={{ dimensions, pivot, setPivot }} />
     <div className="portfolio-workspace">
       <OrderTagging account={account} revision={tradeRevision} />
       <section className="portfolio-section portfolio-positions"><div className="portfolio-section-heading"><div><span className="portfolio-eyebrow">Holdings</span><h3>Open positions</h3></div><span className="portfolio-count">{positions.data?.items.length ?? "—"}</span></div>
@@ -162,6 +214,7 @@ function AccountDetails({ account, userId }: { account: BrokerAccount; userId: s
         </> : <p className="portfolio-empty-inline">Positions unavailable.</p>}
       </section>
     </div>
+    <AccountTrades account={account} revision={tradeRevision} />
     <details className="portfolio-section portfolio-disclosure"><summary><span>Account activity<small>Working orders, executions and balance details</small></span><PortfolioIcon name="chevron" /></summary>
       <div className="portfolio-activity">
         <section><div className="portfolio-section-heading"><h3>Open orders</h3>{orders.data && <SnapshotTime data={orders.data} />}</div>

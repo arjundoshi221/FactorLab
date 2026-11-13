@@ -2,11 +2,11 @@ import { Portfolio } from "./Portfolio";
 import { PortfolioGroups } from "./PortfolioBook";
 import { PortfolioShell } from "./PortfolioShell";
 import { Risk } from "./Risk";
-import { TradeLedger } from "./TradeLedger";
+import { TradesPage } from "./TradeHistory";
 
 function PortfolioPage({ path }: { path: string }) {
   if (path === "/portfolio/risk") return <Risk />;
-  if (path === "/portfolio/trades") return <TradeLedger />;
+  if (path === "/portfolio/trades") return <TradesPage />;
   if (path === "/portfolio/themes") return <PortfolioGroups kind="themes" />;
   if (path === "/portfolio/strategies") return <PortfolioGroups kind="strategies" />;
   if (path === "/portfolio/trade-names") return <PortfolioGroups kind="trade-names" />;

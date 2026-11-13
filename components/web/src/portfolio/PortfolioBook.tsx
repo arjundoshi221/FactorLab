@@ -1,11 +1,13 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 
-import type { AccountFee, BrokerAccount, CatalogEntry, CatalogKind, ItemsPage, OrderAssignment, OrdersPage, PnlGroup, PnlReport as PnlReportPayload, Profile, TaggedOrder } from "./types";
+import type { AccountFee, AttrValue, BrokerAccount, CatalogEntry, CatalogKind, IbkrValues, ItemsPage, OrderAssignment, OrdersPage, PnlDetail, PnlGroup, PnlReport as PnlReportPayload, Profile, ReconciliationRow, StatementInfo, TaggedOrder } from "./types";
 import { errorMessage, fetchJson, useRemote } from "../shared/api";
 import { SignedBars } from "../shared/charts";
 import { formatTime } from "../shared/format";
 import { compactMoney, toNumber } from "../shared/market";
-import { Amount, EmptyState, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery, usePortfolioRefresh } from "./PortfolioUI";
+import { Amount, EmptyState, PivotControl, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery, usePortfolioRefresh } from "./PortfolioUI";
+import { attributeOf, useDimensions, usePivotParams } from "./pivot";
+import { groupsByAttribute, subgroups } from "./pnlPivot";
 import "./Portfolio.css";
 
 const API = "/hub/api/v1/portfolio";
@@ -210,13 +212,18 @@ function CatalogManager({ kind, userId }: { kind: CatalogKind; userId: string })
   </section>;
 }
 
-const issueLabels: Record<string, string> = {
+export const issueLabels: Record<string, string> = {
   incomplete_history: "Opening history does not reconcile with the broker snapshot",
   missing_price: "Price unavailable", stale_price: "Stale price", unassigned: "Unassigned orders",
   missing_commission: "Commission not yet reported", missing_commission_currency: "Commission currency unavailable",
   unsupported_instrument: "PnL unsupported for this instrument", invalid_fill: "Invalid fill data",
   missing_instrument: "Instrument identity unavailable", history_unverified: "No snapshot available to check recorded history",
   missing_currency: "Trade currency unavailable",
+  ibkr_no_statement: "No IBKR Flex statement recorded for this account",
+  ibkr_awaiting_statement: "Traded or changed since the latest IBKR Flex statement; run a Flex sync",
+  ibkr_missing_realized: "IBKR has not reported realized PnL for a fill yet",
+  ibkr_missing_basis: "IBKR statement has no cost basis for this position",
+  ibkr_split_position: "Open position is held under several tags; IBKR reports one cost basis for it (enable lot detail in the Flex query to split it)",
 };
 
 function PnlReport({ kind, userId, selected, onSelect }: { kind: CatalogKind; userId: string; selected: string; onSelect: (value: string) => void }) {
@@ -240,12 +247,13 @@ function PnlReport({ kind, userId, selected, onSelect }: { kind: CatalogKind; us
     {Boolean(accounts.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(accounts.error)}</p>}
     {selected && !account ? <p className="portfolio-empty-inline" role={unavailable ? "alert" : "status"}>{accounts.loading ? "Loading account…" : "The selected account is unavailable. Choose an account to view its PnL."}</p> : <PnlValues key={`${filter}/${period}`} kind={kind} userId={userId} filter={filter} period={period} />}
     <details className="portfolio-calculation"><summary>How PnL is calculated</summary><p>All time: cumulative PnL from recorded stock and ETF fills. Total = realized + unrealized − commissions. YTD: realized PnL from closing fills and commissions on fills since 1 January (New York trading day); lots opened earlier keep their original cost. Unrealized is the current mark of open lots, so the YTD figure is net realized = realized − fees. An instrument that cannot be valued (for example, shares bought before the recorded history) is left out of its group's PnL and named under the group, but its fees still count. Matching uses FIFO within the same account, instrument, currency and three tags; use the same tags on closing orders. Retagging recalculates the recorded history.</p>
-      <p>Currencies, paper/live accounts and simulations stay separate. Missing data is unavailable, never zero. Dividends, financing and FX conversion are excluded. Currency conversions are not positions: they are left out of the table, and their commissions are listed with the account fees (data subscriptions, broker fees, commission adjustments from Flex statements) below it, outside the totals. Snapshot quantity reconciliation cannot prove complete inception history.</p></details>
+      <p>Currencies, paper/live accounts and simulations stay separate. Missing data is unavailable, never zero. Dividends, financing and FX conversion are excluded. Currency conversions are not positions: they are left out of the table, and their commissions are listed with the account fees (data subscriptions, broker fees, commission adjustments from Flex statements) below it, outside the totals. Snapshot quantity reconciliation cannot prove complete inception history.</p>
+      <p>IBKR column: IBKR’s own figures from Flex statements, already net of commissions, so IBKR = realized + unrealized with no fees subtracted. Realized is each fill’s FIFO realized PnL, shown under the tags of the order that closed it. IBKR matches lots across the whole account, not per tag, so for an instrument held under several tags its realized PnL can land on a different tag than ours. Unrealized is IBKR’s open-position cost basis valued at the same price as ours, shown under the tag that holds the position. The reconciliation compares each instrument’s all-time total, which does not depend on lot matching, so the two should agree.</p></details>
   </section>;
 }
 
 /** Total PnL per group as diverging bars, one chart per currency so values are never compared across currencies. */
-function PnlBars({ groups, kind, metric }: { groups: PnlGroup[]; kind: CatalogKind; metric: string }) {
+function PnlBars({ groups, label, metric }: { groups: PnlGroup[]; label: string; metric: string }) {
   // A chart whose every value is unavailable shows nothing but dashes, so leave it out.
   const currencies = Array.from(new Set(groups.filter(group => group.total !== null).map(group => group.currency)));
   if (currencies.length === 0) return null;
@@ -254,37 +262,69 @@ function PnlBars({ groups, kind, metric }: { groups: PnlGroup[]; kind: CatalogKi
       key: JSON.stringify([group.id, group.account_mode, group.simulated]), label: group.name, value: toNumber(group.total),
       display: `${compactMoney(toNumber(group.total))}`, title: `${group.name} · ${group.account_mode}${group.simulated ? " · simulated" : ""}: ${metric.toLowerCase()} ${group.total ?? "unavailable"} ${currency}`,
     })).sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
-    return <figure key={currency}><figcaption>{metric} by {singular[kind]} · {currency}</figcaption><SignedBars bars={bars} label={`${metric} by ${singular[kind]}, ${currency}`} /></figure>;
+    return <figure key={currency}><figcaption>{metric} by {label} · {currency}</figcaption><SignedBars bars={bars} label={`${metric} by ${label}, ${currency}`} /></figure>;
   })}</div>;
+}
+
+/** Names the instruments a row's totals leave out (they cannot be valued; their fees still count). */
+function ExcludedNote({ rows, total }: { rows: PnlGroup["excluded"]; total: string | null }) {
+  if (!rows?.length) return null;
+  return <small className="portfolio-cell-note" title={rows.map(row => `${row.trading_symbol}: ${row.issues.filter(issue => issue !== "unassigned").map(issue => issueLabels[issue] ?? issue).join(", ")}`).join("\n")}>Excludes {rows.map(row => row.trading_symbol).join(", ")}{total !== null ? " (fees included)" : ""}</small>;
 }
 
 function PnlValues({ kind, userId, filter, period }: { kind: CatalogKind; userId: string; filter: string; period: Period }) {
   const ytd = period === "ytd";
-  const remote = useRemote<PnlReportPayload>(`${API}/pnl/${kind}?user_id=${userId}${filter}${ytd ? `&since=${ytdStart()}` : ""}`, 60_000);
+  const dimensions = useDimensions();
+  const { pivot, rows: rowOrder, setPivot, setRows } = usePivotParams();
+  const dimension = dimensions.find(item => item.id === pivot);
+  const remote = useRemote<PnlReportPayload>(`${API}/pnl/${kind}?user_id=${userId}${filter}${ytd ? `&since=${ytdStart()}` : ""}${dimension ? `&dims=${encodeURIComponent(dimension.id)}` : ""}`, 60_000);
   const [expanded, setExpanded] = useState<string | null>(null);
   const metric = ytd ? "Net realized YTD" : "Total PnL";
   const suffix = ytd ? " YTD" : "";
-  return <><div className="portfolio-report-tools"><p>{ytd ? <>Realized − fees since {ytdStart()} <span>·</span> Unrealized is the current open mark</> : "Realized + unrealized − fees"} <span>·</span> Values shown in each row’s currency</p><button className="portfolio-button portfolio-button--ghost" onClick={remote.refresh} disabled={remote.refreshing}><PortfolioIcon name="refresh" />{remote.refreshing ? "Refreshing…" : "Refresh PnL"}</button></div>
+  // Pivot only rows the API labelled, so an unlabelled holding is never shown as Unclassified.
+  const failed = Boolean(dimension && remote.data?.unavailable_dimensions?.includes(dimension.id));
+  const active = dimension && remote.data && !failed && remote.data.items.every(group => group.details.every(detail => detail.attributes?.[dimension.id])) ? dimension : undefined;
+  const byAttribute = Boolean(active && rowOrder === "attr");
+  const tagged = remote.data?.items ?? [];
+  const groupOrder: AttrValue[] = [...new Map(tagged.map(group => [group.id, { id: group.id, label: group.name }])).values()];
+  const groupOf = (detail: PnlDetail): AttrValue => {
+    const id = detail[fields[kind]];
+    return groupOrder.find(value => value.id === id) ?? { id, label: id === null ? "Unassigned" : "Archived entry" };
+  };
+  const groups = active && byAttribute ? groupsByAttribute(tagged, active.id, active.buckets, ytd) : tagged;
+  const split = (group: PnlGroup) => !active ? null : byAttribute ? subgroups(group.details, groupOf, groupOrder, ytd) : subgroups(group.details, detail => attributeOf(detail, active.id), active.buckets, ytd);
+  const rowLabel = active && byAttribute ? active.label : singular[kind];
+  const holding = (detail: PnlDetail, key: string) => <tr key={key}><td><strong>{detail.trading_symbol}</strong></td><td className="portfolio-numeric"><Amount value={detail.quantity} quantity /></td><td className="portfolio-numeric"><Amount value={detail.realized} signed /></td><td className="portfolio-numeric"><Amount value={detail.unrealized} signed /></td><td className="portfolio-numeric"><Amount value={detail.commissions} /></td><td className="portfolio-numeric"><Amount value={detail.total} signed /></td><IbkrCell values={detail} ytd={ytd} />
+    <td><span className="portfolio-cell-note">{detail.price_time ? formatTime(detail.price_time) : "No open-position valuation"}</span>{detail.history_start && <small className="portfolio-cell-note">Recorded since {formatTime(detail.history_start)}</small>}<a className="portfolio-text-link" href={`/portfolio?user_id=${userId}&account=${encodeURIComponent(JSON.stringify([detail.broker_code, detail.account_id]))}`}>{detail.orders.length ? `${detail.orders.length} contributing ${detail.orders.length === 1 ? "order" : "orders"}` : "View account"}<PortfolioIcon name="arrow" /></a></td></tr>;
+  return <><div className="portfolio-report-tools"><p>{ytd ? <>Realized − fees since {ytdStart()} <span>·</span> Unrealized is the current open mark</> : "Realized + unrealized − fees"} <span>·</span> Values shown in each row’s currency</p>
+    <PivotControl dimensions={dimensions} value={pivot} onChange={value => { setPivot(value); setExpanded(null); }} rows={rowOrder} onRows={value => { setRows(value); setExpanded(null); }} groupLabel={groupLabels[kind]} />
+    <button className="portfolio-button portfolio-button--ghost" onClick={remote.refresh} disabled={remote.refreshing}><PortfolioIcon name="refresh" />{remote.refreshing ? "Refreshing…" : "Refresh PnL"}</button></div>
     {Boolean(remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(remote.error, "PnL refresh failed.")} Any visible report is from the last successful refresh.</p>}
-    {remote.loading && !remote.data ? <p className="portfolio-empty-inline" role="status">Calculating PnL…</p> : remote.data?.items.length === 0 ? <EmptyState title="No performance to show yet">PnL appears here when this profile has recorded fills or holdings.</EmptyState> : remote.data && <><PnlBars groups={remote.data.items} kind={kind} metric={metric} /><div className="portfolio-table-scroll" role="region" aria-label="Performance table" tabIndex={0}><table className="portfolio-pnl-table" aria-label={`PnL by ${singular[kind]}`}><thead><tr><th scope="col">{singular[kind]}</th><th scope="col">Currency</th><th scope="col" className="portfolio-numeric">Realized{suffix}</th><th scope="col" className="portfolio-numeric">{ytd ? "Unrealized (open)" : "Unrealized"}</th><th scope="col" className="portfolio-numeric">Fees{suffix}</th><th scope="col" className="portfolio-numeric portfolio-total">{metric}</th><th scope="col"><span className="sr-only">Details</span></th></tr></thead><tbody>{remote.data.items.map(group => {
-      const key = JSON.stringify([group.id, group.account_mode, group.simulated, group.currency]);
+    {failed && dimension && <p className="portfolio-notice portfolio-notice--error" role="alert">{dimension.label} classification is unavailable right now, so the report is shown without the pivot.</p>}
+    {dimension && !active && !failed && remote.data && remote.loading && <p className="portfolio-empty-inline" role="status">Labelling holdings by {dimension.label.toLowerCase()}…</p>}
+    {remote.loading && !remote.data ? <p className="portfolio-empty-inline" role="status">Calculating PnL…</p> : remote.data?.items.length === 0 ? <EmptyState title="No performance to show yet">PnL appears here when this profile has recorded fills or holdings.</EmptyState> : remote.data && <><PnlBars groups={groups} label={rowLabel.toLowerCase()} metric={metric} /><div className="portfolio-table-scroll" role="region" aria-label="Performance table" tabIndex={0}><table className="portfolio-pnl-table" aria-label={`PnL by ${rowLabel.toLowerCase()}`}><thead><tr><th scope="col">{rowLabel}</th><th scope="col">Currency</th><th scope="col" className="portfolio-numeric">Realized{suffix}</th><th scope="col" className="portfolio-numeric">{ytd ? "Unrealized (open)" : "Unrealized"}</th><th scope="col" className="portfolio-numeric">Fees{suffix}</th><th scope="col" className="portfolio-numeric portfolio-total">{metric}</th><th scope="col" className="portfolio-numeric portfolio-ibkr" title="IBKR-reported, net of commissions">IBKR{suffix}</th><th scope="col"><span className="sr-only">Details</span></th></tr></thead><tbody>{groups.map(group => {
+      const key = JSON.stringify([byAttribute, group.id, group.account_mode, group.simulated, group.currency]);
       const open = expanded === key;
+      const parts = open ? split(group) : null;
       return <Fragment key={key}><tr className={open ? "is-expanded" : ""}><th scope="row"><strong>{group.name}</strong><div className="portfolio-group-meta"><span>{group.account_mode}</span>{group.simulated && <span>Simulated</span>}
         {group.issues.length > 0 && <span className="portfolio-stale" title={group.issues.map(issue => issueLabels[issue] ?? issue).join(" · ")}>{badgeFor(group.issues)}</span>}</div>
-        {(group.excluded?.length ?? 0) > 0 && <small className="portfolio-cell-note" title={group.excluded!.map(row => `${row.trading_symbol}: ${row.issues.filter(issue => issue !== "unassigned").map(issue => issueLabels[issue] ?? issue).join(", ")}`).join("\n")}>Excludes {group.excluded!.map(row => row.trading_symbol).join(", ")}{group.total !== null ? " (fees included)" : ""}</small>}</th>
-        <td><span className="portfolio-currency">{group.currency}</span></td><td className="portfolio-numeric"><Amount value={group.realized} signed /></td><td className="portfolio-numeric"><Amount value={group.unrealized} signed /></td><td className="portfolio-numeric"><Amount value={group.commissions} /></td><td className="portfolio-numeric portfolio-total"><Amount value={group.total} signed /></td>
+        <ExcludedNote rows={group.excluded} total={group.total} /></th>
+        <td><span className="portfolio-currency">{group.currency}</span></td><td className="portfolio-numeric"><Amount value={group.realized} signed /></td><td className="portfolio-numeric"><Amount value={group.unrealized} signed /></td><td className="portfolio-numeric"><Amount value={group.commissions} /></td><td className="portfolio-numeric portfolio-total"><Amount value={group.total} signed /></td><IbkrCell values={group} excluded={group.ibkr_excluded} ytd={ytd} />
         <td><button className="portfolio-expand" aria-label={`${open ? "Hide" : "View"} holdings for ${group.name}, ${group.currency}, ${group.account_mode}${group.simulated ? ", simulated" : ""}`} aria-expanded={open} onClick={() => setExpanded(open ? null : key)}><PortfolioIcon name="chevron" /></button></td></tr>
-        {open && <tr className="portfolio-expanded-row"><td colSpan={7}><div className="portfolio-holdings"><div className="portfolio-section-heading"><h3>{group.name} · Holdings & orders</h3><span className="portfolio-footnote">— means unavailable</span></div>
+        {open && <tr className="portfolio-expanded-row"><td colSpan={8}><div className="portfolio-holdings"><div className="portfolio-section-heading"><h3>{group.name} · {parts && active ? `By ${byAttribute ? singular[kind] : active.label.toLowerCase()}` : "Holdings & orders"}</h3><span className="portfolio-footnote">— means unavailable</span></div>
           {group.issues.length > 0 && <ul className="portfolio-issue-list">{group.issues.map(issue => <li key={issue}>{issueLabels[issue] ?? issue}</li>)}</ul>}
-          {group.details.length === 0 ? <p className="portfolio-footnote">No contributing holdings reported.</p> : <table aria-label={`${group.name} holdings`}><thead><tr><th scope="col">Instrument</th><th scope="col" className="portfolio-numeric">Quantity</th><th scope="col" className="portfolio-numeric">Realized{suffix}</th><th scope="col" className="portfolio-numeric">{ytd ? "Unrealized (open)" : "Unrealized"}</th><th scope="col" className="portfolio-numeric">Fees{suffix}</th><th scope="col" className="portfolio-numeric">{ytd ? "Net realized" : "Total"}</th><th scope="col">Valuation & orders</th></tr></thead>
-            <tbody>{group.details.map((detail, index) => <tr key={index}><td><strong>{detail.trading_symbol}</strong></td><td className="portfolio-numeric"><Amount value={detail.quantity} quantity /></td><td className="portfolio-numeric"><Amount value={detail.realized} signed /></td><td className="portfolio-numeric"><Amount value={detail.unrealized} signed /></td><td className="portfolio-numeric"><Amount value={detail.commissions} /></td><td className="portfolio-numeric"><Amount value={detail.total} signed /></td>
-              <td><span className="portfolio-cell-note">{detail.price_time ? formatTime(detail.price_time) : "No open-position valuation"}</span><small className="portfolio-cell-note">Recorded since {formatTime(detail.history_start)}</small><a className="portfolio-text-link" href={`/portfolio?user_id=${userId}&account=${encodeURIComponent(JSON.stringify([detail.broker_code, detail.account_id]))}`}>{detail.orders.length ? `${detail.orders.length} contributing ${detail.orders.length === 1 ? "order" : "orders"}` : "View account"}<PortfolioIcon name="arrow" /></a></td></tr>)}</tbody></table>}
+          {group.details.length === 0 ? <p className="portfolio-footnote">No contributing holdings reported.</p> : <table aria-label={`${group.name} holdings`}><thead><tr><th scope="col">Instrument</th><th scope="col" className="portfolio-numeric">Quantity</th><th scope="col" className="portfolio-numeric">Realized{suffix}</th><th scope="col" className="portfolio-numeric">{ytd ? "Unrealized (open)" : "Unrealized"}</th><th scope="col" className="portfolio-numeric">Fees{suffix}</th><th scope="col" className="portfolio-numeric">{ytd ? "Net realized" : "Total"}</th><th scope="col" className="portfolio-numeric portfolio-ibkr" title="IBKR-reported, net of commissions">IBKR</th><th scope="col">Valuation & orders</th></tr></thead>
+            <tbody>{parts ? parts.map(part => <Fragment key={part.key}><tr className="portfolio-pivot-subtotal"><th scope="rowgroup" colSpan={2}><strong>{part.value.label}</strong><small className="portfolio-cell-note">{part.rows.length} {part.rows.length === 1 ? "holding" : "holdings"}</small><ExcludedNote rows={part.totals.excluded} total={part.totals.total} /></th><td className="portfolio-numeric"><Amount value={part.totals.realized} signed /></td><td className="portfolio-numeric"><Amount value={part.totals.unrealized} signed /></td><td className="portfolio-numeric"><Amount value={part.totals.commissions} /></td><td className="portfolio-numeric"><Amount value={part.totals.total} signed /></td><IbkrCell values={part.totals} excluded={part.totals.ibkr_excluded} ytd={ytd} /><td /></tr>
+              {part.rows.map((detail, index) => holding(detail, `${part.key}/${index}`))}</Fragment>) : group.details.map((detail, index) => holding(detail, String(index)))}</tbody></table>}
         </div></td></tr>}
       </Fragment>;
     })}</tbody></table></div></>}
+    {remote.data?.reconciliation && <Reconciliation rows={remote.data.reconciliation} statements={remote.data.statements ?? []} />}
     {remote.data && <AccountFees rows={remote.data.account_fees ?? []} ytd={ytd} />}
   </>;
 }
+
+const groupLabels = { themes: "Theme", strategies: "Strategy", "trade-names": "Trade name" };
 
 type Period = "all" | "ytd";
 
@@ -304,6 +344,50 @@ function badgeFor(issues: string[]): string {
 function ytdStart(): string {
   const year = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric" }).format(new Date());
   return `${year}-01-01`;
+}
+
+/** IBKR's figure beside ours; the title carries its realized/unrealized split and why parts are missing. */
+function IbkrCell({ values, excluded = [], ytd }: { values: IbkrValues; excluded?: { trading_symbol: string }[]; ytd: boolean }) {
+  const issues = values.ibkr_issues ?? [];
+  const title = [
+    `IBKR realized ${values.ibkr_realized ?? "unavailable"}${ytd ? "" : ` · unrealized ${values.ibkr_unrealized ?? "unavailable"}`} (net of commissions)`,
+    ...issues.map(issue => issueLabels[issue] ?? issue),
+  ].join("\n");
+  return <td className="portfolio-numeric portfolio-ibkr" title={title}><Amount value={values.ibkr_total} signed />
+    {excluded.length > 0 && <small className="portfolio-cell-note">Excludes {excluded.map(row => row.trading_symbol).join(", ")}</small>}
+    {excluded.length === 0 && values.ibkr_total == null && issues.length > 0 && <small className="portfolio-cell-note">{issueLabels[issues[0]]?.split(";")[0] ?? issues[0]}</small>}
+  </td>;
+}
+
+const reconciliationLabels: Record<ReconciliationRow["status"], string> = {
+  match: "Matches", mismatch: "Differs", ours_unavailable: "Ours unavailable",
+  ibkr_unavailable: "IBKR unavailable", not_comparable: "Fees in another currency",
+};
+
+/** All-time instrument totals, ours vs IBKR; problems first, matches collapsed. */
+function Reconciliation({ rows, statements }: { rows: ReconciliationRow[]; statements: StatementInfo[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const matched = rows.filter(row => row.status === "match").length;
+  const differing = rows.filter(row => row.status === "mismatch").length;
+  const visible = showAll ? rows : rows.filter(row => row.status !== "match");
+  const latest = statements.map(row => row.generated_at).filter((value): value is string => Boolean(value)).sort().at(-1);
+  const label = "Reconciliation with IBKR";
+  return <div className="portfolio-reconciliation"><div className="portfolio-section-heading"><h3>{label}</h3>
+      <span className="portfolio-footnote">All time, per instrument · {matched} of {rows.length} match{differing > 0 && <strong className="portfolio-stale"> · {differing} differ</strong>}{latest ? <> · IBKR statement {formatTime(latest)}</> : " · no IBKR statement recorded"}</span>
+      {rows.length > 0 && matched > 0 && <button type="button" className="portfolio-button portfolio-button--ghost" aria-pressed={showAll} onClick={() => setShowAll(!showAll)}>{showAll ? "Hide matches" : "Show matches"}</button>}</div>
+    {rows.length === 0 ? <p className="portfolio-footnote">No stock or ETF positions or fills to reconcile.</p> : visible.length === 0 ? <p className="portfolio-footnote">Every instrument matches IBKR.</p> :
+      <div className="portfolio-table-scroll" role="region" aria-label={label} tabIndex={0}><table aria-label={label}><thead><tr><th scope="col">Instrument / Account</th><th scope="col">Currency</th><th scope="col" className="portfolio-numeric">Ours</th><th scope="col" className="portfolio-numeric">IBKR</th><th scope="col" className="portfolio-numeric">Difference</th><th scope="col">Status</th></tr></thead>
+        <tbody>{visible.map(row => <tr key={JSON.stringify([row.broker_code, row.account_id, row.trading_symbol, row.currency])}>
+          <th scope="row"><strong>{row.trading_symbol || "Unknown"}</strong><small className="portfolio-cell-note">{row.broker_code.toUpperCase()} · {row.account_id}</small></th>
+          <td><span className="portfolio-currency">{row.currency}</span></td>
+          <td className="portfolio-numeric" title={`Realized ${row.ours.realized ?? "unavailable"} + unrealized ${row.ours.unrealized ?? "unavailable"} − fees ${row.ours.commissions ?? "unavailable"}`}><Amount value={row.ours.total} signed /></td>
+          <td className="portfolio-numeric" title={`Realized ${row.ibkr.realized ?? "unavailable"} + unrealized ${row.ibkr.unrealized ?? "unavailable"} (net of commissions)`}><Amount value={row.ibkr.total} signed /></td>
+          <td className="portfolio-numeric"><Amount value={row.difference} signed /></td>
+          <td><span className={row.status === "match" ? "" : "portfolio-stale"}>{reconciliationLabels[row.status] ?? row.status}</span>
+            {row.reasons.length > 0 && <small className="portfolio-cell-note">{row.reasons.map(reason => issueLabels[reason] ?? reason).join(" · ")}</small>}</td>
+        </tr>)}</tbody></table></div>}
+    {statements.length > 0 && !statements.some(row => row.lot_detail) && <p className="portfolio-footnote">IBKR open positions are reported per instrument, so an instrument open under several tags shows no IBKR figure per tag. Add “Lot” level of detail to the Open Positions section of the Flex query to split it by opening order.</p>}
+  </div>;
 }
 
 /** Account-level Flex costs, kept apart because they cannot be attributed to a tag. */

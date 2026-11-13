@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_LIMITS, computeRisk, contributionToReach, deployableCapacity, estimateBeta, hasReconciliationGap, overallStatus, statusOf, stressTests } from "./riskModel";
+import { DEFAULT_LIMITS, LIMIT_SPECS, computeRisk, contributionToReach, deployableCapacity, estimateBeta, explainMetric, hasReconciliationGap, overallStatus, statusOf, stressTests } from "./riskModel";
 import type { BrokerRow } from "./types";
 
 const balance = (metric: string, value: number, currency = "SGD", segment = ""): BrokerRow => ({ metric, segment, currency, value_num: String(value) });
@@ -110,5 +110,49 @@ describe("risk engine", () => {
     expect(ten.navImpact).toBeCloseTo(-0.1 * (154_615 - 65_376), 0);
     expect(rows.find(row => row.id === "gap")?.label).toBe("LLY gaps −30%");
     expect(rows.find(row => row.id === "eq-0.35")?.result).toBe("call");
+  });
+
+  it("splits unrealized from realized PnL, preferring the broker's account-wide unrealized figure", () => {
+    const withPnl = positions.map((row, index) => ({ ...row, unrealized_pnl: String(100 * (index + 1)), realized_pnl_ytd: index === 1 ? "-50" : null }));
+    const summed = computeRisk("SGD", balances, withPnl, ["BOXX"], {});
+    expect(summed.unrealizedSource).toBe("positions");
+    expect(summed.unrealized).toBeCloseTo(1_500 * 1.3, 6);
+    expect(summed.realized).toBeCloseTo(-50 * 1.3, 6);
+    expect(summed.holdings.find(holding => holding.symbol === "LLY")?.realized).toBeCloseTo(-65, 6);
+    const broker = computeRisk("SGD", [...balances, balance("UnrealizedPnL", 777)], withPnl, ["BOXX"], {});
+    expect(broker.unrealizedSource).toBe("broker");
+    expect(broker.unrealized).toBe(777);
+    // Gateway: the base-currency ledger row covers SGD positions only; the "BASE" ledger tag is account-wide.
+    const ledger = computeRisk("SGD", [...balances, balance("$LEDGER-UnrealizedPnL", 5, "SGD"), balance("$LEDGER-UnrealizedPnL", 888, "BASE")], withPnl, ["BOXX"], {});
+    expect(ledger.unrealized).toBe(888);
+    expect(computeRisk("SGD", balances, positions, ["BOXX"], {}).realized).toBeNull();
+    // An unconvertible position makes the position sums unavailable rather than partial.
+    const missing = computeRisk("SGD", balances.filter(row => row.metric !== "ExchangeRate"), withPnl, ["BOXX"], {});
+    expect(missing.unrealized).toBeNull();
+    expect(missing.realized).toBeNull();
+  });
+
+  it("explains every metric with terms that reproduce the displayed value", () => {
+    for (const spec of LIMIT_SPECS) {
+      const calc = explainMetric(state, spec.key);
+      expect(calc.result).toBe(state.metrics[spec.key]);
+      expect(calc.denominator.value).toBe(43_637);
+      if (calc.result !== null && calc.numerator.value !== null) expect(calc.numerator.value / 43_637).toBeCloseTo(calc.result, 9);
+      if (calc.numerator.terms.length) {
+        const sum = calc.numerator.terms.reduce((total, term) => total + (term.value ?? 0), 0);
+        expect(calc.numerator.transform === "abs" ? Math.abs(sum) : sum).toBeCloseTo(calc.numerator.value as number, 6);
+      }
+    }
+    const gross = explainMetric(state, "grossLeverage");
+    expect(gross.formula).toBe("Gross leverage = Gross position value ÷ Net liquidation value");
+    expect(gross.numerator.terms.find(term => term.label === "LLY")?.native).toEqual({ amount: 32_898.46, currency: "USD", fx: 1.3 });
+    expect(explainMetric(state, "betaLeverage").numerator.terms[0].beta).toMatchObject({ value: 1, source: "assumed" });
+    expect(explainMetric(state, "borrowing").numerator.terms).toEqual([{ label: "USD cash debit", value: 124_040 * 1.3, native: { amount: 124_040, currency: "USD", fx: 1.3 } }]);
+  });
+
+  it("names why a metric is unavailable", () => {
+    const missing = computeRisk("SGD", balances.filter(row => row.metric !== "ExchangeRate"), positions, ["BOXX"]);
+    expect(explainMetric(missing, "equityLeverage").notes[0]).toMatch(/no USD → SGD rate/);
+    expect(explainMetric(missing, "betaLeverage").notes).toContain("Betas are still being measured.");
   });
 });
