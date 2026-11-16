@@ -205,6 +205,47 @@ class Book:
             return [self.repo.account(broker, account_id, profile)]
         return self.repo.accounts(profile)
 
+    def fx_rates(self, accounts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Latest broker ``ExchangeRate`` per account and currency: 1 ``currency`` = ``rate`` ``base``.
+
+        Lets the UI show one report in any currency. Rates older than 30 days are left out,
+        so a currency without a recent rate stays unconvertible rather than guessed.
+        """
+        bases = {
+            (str(a["broker_code"]), str(a["account_id"])): str(a.get("base_currency") or "")
+            for a in accounts
+        }
+        bases = {key: base for key, base in bases.items() if base}
+        if not bases:
+            return []
+        rows = self.repo.query(
+            "SELECT broker_code, account_id, currency, argMax(value_num, snapshot_time) AS rate, "
+            "max(snapshot_time) AS as_of FROM broker.account_state_snapshot FINAL "
+            "WHERE (broker_code, account_id) IN {accounts:Array(Tuple(String, String))} "
+            "AND metric = 'ExchangeRate' AND segment = '' "
+            "AND snapshot_time >= now() - INTERVAL 30 DAY "
+            "GROUP BY broker_code, account_id, currency",
+            {"accounts": sorted(bases)},
+        )
+        result = [
+            {"currency": base, "base": base, "rate": "1", "as_of": None}
+            for base in sorted(set(bases.values()))
+        ]
+        for row in rows:
+            base = bases.get((str(row["broker_code"]), str(row["account_id"])))
+            currency = str(row["currency"] or "")
+            if not base or not currency or currency == base or not row["rate"]:
+                continue
+            result.append(
+                {
+                    "currency": currency,
+                    "base": base,
+                    "rate": str(row["rate"]),
+                    "as_of": row["as_of"],
+                }
+            )
+        return result
+
     def account_fees(
         self, accounts: list[dict[str, Any]], since: datetime | None
     ) -> list[dict[str, Any]]:
@@ -503,6 +544,7 @@ def pnl(
         if since is None
         else {"since": since.isoformat(), "start": start, "timezone": "America/New_York"},
         "account_fees": book.account_fees(accounts, start),
+        "fx_rates": book.fx_rates(accounts),
     }
 
 

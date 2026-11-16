@@ -128,3 +128,47 @@ def test_account_fees_are_positive_costs_per_currency(monkeypatch):
 def test_pnl_route_reports_period_and_rejects_bad_dates(api):
     url = f"/hub/api/v1/portfolio/pnl/themes?user_id={USER}"
     assert api.get(f"{url}&since=2026-13-01").status_code == 422
+
+
+def test_fx_rates_quote_each_currency_in_its_account_base(monkeypatch):
+    seen = {}
+
+    def query(sql, params=None):
+        seen.update(params or {})
+        assert "ExchangeRate" in sql
+        return [
+            {
+                "broker_code": "ibkr",
+                "account_id": "U1",
+                "currency": "USD",
+                "rate": "1.29",
+                "as_of": "t",
+            },
+            {
+                "broker_code": "ibkr",
+                "account_id": "U1",
+                "currency": "SGD",
+                "rate": "1",
+                "as_of": "t",
+            },
+            {
+                "broker_code": "ibkr",
+                "account_id": "U1",
+                "currency": "GBP",
+                "rate": None,
+                "as_of": "t",
+            },
+        ]
+
+    reader = PortfolioRepository(None)
+    monkeypatch.setattr(reader, "query", query)
+    accounts = [
+        {"broker_code": "ibkr", "account_id": "U1", "base_currency": "SGD"},
+        {"broker_code": "ibkr", "account_id": "U2", "base_currency": ""},  # no base: no rates
+    ]
+    assert Book(reader).fx_rates(accounts) == [
+        {"currency": "SGD", "base": "SGD", "rate": "1", "as_of": None},
+        {"currency": "USD", "base": "SGD", "rate": "1.29", "as_of": "t"},
+    ]
+    assert seen["accounts"] == [("ibkr", "U1")]
+    assert Book(reader).fx_rates([accounts[1]]) == []

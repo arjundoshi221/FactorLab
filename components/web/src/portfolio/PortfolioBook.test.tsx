@@ -131,18 +131,18 @@ it("keeps an unfinished tag selection during refresh and lets users filter the c
   expect(screen.getByText("No matching orders")).toBeInTheDocument();
 });
 
-it("puts each currency in its own section and expands holdings inline with the account link", async () => {
+it("shows every currency in the display currency and expands holdings inline with the account link", async () => {
   const detail = { broker_code: "ibkr", account_id: "SIM_A", account_mode: "paper", simulated: true, currency: "USD", trading_symbol: "AAPL", quantity: "4", realized: "0", unrealized: "10", commissions: ".35", total: "9.65", issues: [], price_time: "2026-10-15T12:00:00Z", history_start: "2026-10-15T10:00:00Z", orders: ["123"], theme_id: "theme", strategy_id: null, trade_name_id: null };
   vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, json: async () => url.endsWith("/profiles") ? { items: [{ user_id: A, display_name: "Alice" }] }
     : url.includes("/accounts") ? { items: [account] } : url.includes("/pnl/") ? { items: [{ ...group, details: [detail] }, { ...group, currency: "EUR", total: null, realized: null, issues: ["missing_price"], details: [] }] } : { items: [] } })));
   render(<PortfolioGroups kind="themes" />);
   const table = await screen.findByRole("treegrid", { name: "PnL by theme" });
+  // One section: the EUR group merges into the same theme; with no EUR rate it is flagged, never guessed.
   const sections = within(table).getAllByRole("rowgroup").slice(1);
-  expect(sections.map(section => section.getAttribute("aria-label"))).toEqual(["EUR, paper, simulated", "USD, paper, simulated"]);
-  expect(within(sections[1]).getByText("447.00")).toBeInTheDocument();
-  // The EUR group has no holdings: nothing to expand, and its badge names the missing price.
-  expect(within(sections[0]).getByText("Price unavailable")).toBeInTheDocument();
-  expect(within(sections[0]).queryByRole("button", { name: /Expand/ })).not.toBeInTheDocument();
+  expect(sections.map(section => section.getAttribute("aria-label"))).toEqual(["USD, paper, simulated"]);
+  expect(within(sections[0]).getAllByText("447.00")).not.toHaveLength(0);
+  expect(within(sections[0]).getAllByText("No FX rate")).not.toHaveLength(0);
+  expect(screen.getByLabelText("Display currency")).toHaveValue("USD");
   expect(within(table).queryByText("AAPL")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Expand AI (USD, paper, simulated)" }));
   expect(within(table).getByText("AAPL")).toBeInTheDocument();

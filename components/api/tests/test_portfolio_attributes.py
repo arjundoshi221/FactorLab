@@ -1,3 +1,4 @@
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -29,6 +30,11 @@ class Reader:
 
     def query(self, sql, parameters=None):
         self.queries.append(sql)
+        # ClickHouse resolves WHERE names to SELECT aliases first, so ``toString(x) AS x``
+        # turns ``x IN {ids:Array(UUID)}`` into a String comparison that never matches.
+        for source, alias in re.findall(r"toString\((?:\w+\.)?(\w+)\) AS (\w+)", sql):
+            if source == alias:
+                assert not re.search(r"WHERE[^)]*(?<![\w.])" + alias + r" IN", sql), sql
         parameters = parameters or {}
         if "ref.identifier_aliases" in sql:
             table = {"265598": ("listing", NVDA)}
@@ -38,7 +44,7 @@ class Reader:
                 if v in table
             ]
         if "ref.contracts" in sql:
-            return [{"contract_id": FUT, "underlying_listing_id": AAPL}]
+            return [{"id": FUT, "underlying_listing_id": AAPL}]
         if "ref.listings" in sql:
             table = {
                 AAPL: ("AAPL", "common"),
@@ -56,7 +62,7 @@ class Reader:
                 raise RuntimeError("clickhouse down")
             table = {AAPL: ("45", "Information Technology"), NVDA: ("45", "Information Technology")}
             return [
-                {"listing_id": i, "sector_id": table[i][0], "sector": table[i][1]}
+                {"id": i, "sector_id": table[i][0], "sector": table[i][1]}
                 for i in parameters["ids"]
                 if i in table
             ]

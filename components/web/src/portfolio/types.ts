@@ -71,6 +71,8 @@ export interface PnlReport extends ItemsPage<PnlGroup> {
   reconciliation?: ReconciliationRow[];
   statements?: StatementInfo[];
   unavailable_dimensions?: string[];
+  /** Latest broker exchange rates per account: 1 `currency` = `rate` `base`. */
+  fx_rates?: { currency: string; base: string; rate: string; as_of: string | null }[];
 }
 
 export type LedgerTagStatus = "tagged" | "untagged" | "not_taggable";

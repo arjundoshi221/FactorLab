@@ -81,11 +81,12 @@ class SectorAttribute:
         sectors: dict[str, dict[str, Any]] = {}
         if ids:
             for row in reader.query(
-                f"SELECT toString(listing_id) AS listing_id, sector_id, sector "
+                # Never alias toString(x) AS x here: WHERE would compare the String alias.
+                f"SELECT toString(listing_id) AS id, sector_id, sector "
                 f"FROM ({current_sector_sql()}) WHERE listing_id IN {{ids:Array(UUID)}}",
                 {"ids": ids},
             ):
-                sectors[str(row["listing_id"])] = {
+                sectors[str(row["id"])] = {
                     "id": str(row["sector_id"]),
                     "label": str(row["sector"] or row["sector_id"]),
                 }
@@ -178,9 +179,9 @@ def resolve(reader: Reader, rows: Sequence[dict[str, Any]]) -> list[Instrument]:
     underlying: dict[str, str] = {}
     if contracts:
         underlying = {
-            str(row["contract_id"]): str(row["underlying_listing_id"])
+            str(row["id"]): str(row["underlying_listing_id"])
             for row in reader.query(
-                "SELECT toString(contract_id) AS contract_id, "
+                "SELECT toString(contract_id) AS id, "
                 "toString(underlying_listing_id) AS underlying_listing_id "
                 "FROM ref.contracts FINAL WHERE contract_id IN {ids:Array(UUID)}",
                 {"ids": contracts},

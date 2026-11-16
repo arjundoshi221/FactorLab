@@ -6,6 +6,7 @@ import { formatTime } from "../shared/format";
 import { toNumber } from "../shared/market";
 import { Amount, EmptyState, GroupByChips, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery, usePortfolioRefresh } from "./PortfolioUI";
 import { sumDecimals, treeKeys, useDimensions, useGroupBy, type Level } from "./pivot";
+import { DISPLAY_CURRENCIES, FX_UNAVAILABLE, inCurrency } from "./fx";
 import { attributeLevel, pnlSections, tagLevel, TAG_LEVELS, type PnlNode, type PnlSection, type PnlTotals } from "./pnlPivot";
 import "./Portfolio.css";
 
@@ -213,6 +214,7 @@ function CatalogManager({ kind, userId }: { kind: CatalogKind; userId: string })
 
 export const issueLabels: Record<string, string> = {
   incomplete_history: "Opening history does not reconcile with the broker snapshot",
+  [FX_UNAVAILABLE]: "No recent broker exchange rate into the display currency",
   missing_price: "Price unavailable", stale_price: "Stale price", unassigned: "Unassigned orders",
   missing_commission: "Commission not yet reported", missing_commission_currency: "Commission currency unavailable",
   unsupported_instrument: "PnL unsupported for this instrument", invalid_fill: "Invalid fill data",
@@ -237,16 +239,26 @@ function PnlReport({ kind, userId, selected, onSelect }: { kind: CatalogKind; us
     if (value === "ytd") url.searchParams.set("period", "ytd"); else url.searchParams.delete("period");
     window.history.replaceState(null, "", url);
   };
+  const [currency, setCurrency] = useState(() => new URLSearchParams(window.location.search).get("ccy")?.toUpperCase() || "USD");
+  const chooseCurrency = (value: string) => {
+    setCurrency(value);
+    const url = new URL(window.location.href);
+    if (value === "USD") url.searchParams.delete("ccy"); else url.searchParams.set("ccy", value);
+    window.history.replaceState(null, "", url);
+  };
+  const currencies = [...new Set([...DISPLAY_CURRENCIES, currency])];
   return <section className="portfolio-section portfolio-performance"><div className="portfolio-section-heading"><div><span className="portfolio-eyebrow">Recorded performance</span><h2>PnL by {singular[kind]}</h2></div>
     <div className="portfolio-period" role="group" aria-label="PnL period">{(["all", "ytd"] as const).map(value => <button key={value} type="button" aria-pressed={period === value} onClick={() => choosePeriod(value)}>{value === "ytd" ? `YTD ${ytdStart().slice(0, 4)}` : "All time"}</button>)}</div>
     <label className="portfolio-selector"><span className="sr-only">PnL account</span><select value={selected} onChange={event => onSelect(event.target.value)} disabled={accounts.loading && !accounts.data}><option value="">All profile accounts</option>
       {selected && !account && <option value={selected} disabled>{accounts.loading ? "Loading account…" : "Account unavailable"}</option>}
       {(accounts.data?.items ?? []).map(item => <option key={JSON.stringify([item.broker_code, item.account_id])} value={JSON.stringify([item.broker_code, item.account_id])}>{item.broker_code.toUpperCase()} · {item.account_id}</option>)}
-    </select></label></div>
+    </select></label>
+    <label className="portfolio-selector"><span className="sr-only">Display currency</span><select aria-label="Display currency" value={currency} onChange={event => chooseCurrency(event.target.value)}>
+      {currencies.map(code => <option key={code} value={code}>{code}</option>)}</select></label></div>
     {Boolean(accounts.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(accounts.error)}</p>}
-    {selected && !account ? <p className="portfolio-empty-inline" role={unavailable ? "alert" : "status"}>{accounts.loading ? "Loading account…" : "The selected account is unavailable. Choose an account to view its PnL."}</p> : <PnlValues key={`${filter}/${period}`} kind={kind} userId={userId} filter={filter} period={period} />}
+    {selected && !account ? <p className="portfolio-empty-inline" role={unavailable ? "alert" : "status"}>{accounts.loading ? "Loading account…" : "The selected account is unavailable. Choose an account to view its PnL."}</p> : <PnlValues key={`${filter}/${period}`} kind={kind} userId={userId} filter={filter} period={period} currency={currency} />}
     <details className="portfolio-calculation"><summary>How PnL is calculated</summary><p>All time: cumulative PnL from recorded stock and ETF fills. Total = realized + unrealized − commissions. YTD: realized PnL from closing fills and commissions on fills since 1 January (New York trading day); lots opened earlier keep their original cost. Unrealized is the current mark of open lots, so the YTD figure is net realized = realized − fees. An instrument that cannot be valued (for example, shares bought before the recorded history) is left out of its group's PnL and named under the group, but its fees still count. Matching uses FIFO within the same account, instrument, currency and three tags; use the same tags on closing orders. Retagging recalculates the recorded history.</p>
-      <p>Currencies, paper/live accounts and simulations stay separate. Missing data is unavailable, never zero. Dividends, financing and FX conversion are excluded. Currency conversions are not positions: they are left out of the table, and their commissions are listed with the account fees (data subscriptions, broker fees, commission adjustments from Flex statements) below it, outside the totals. Snapshot quantity reconciliation cannot prove complete inception history.</p>
+      <p>Values are shown in the selected currency, converted at each account's latest broker exchange rate (from the statement or Gateway snapshot); a holding with no recent rate is excluded and flagged, never guessed. Paper/live accounts and simulations stay separate. Missing data is unavailable, never zero. Dividends, financing and FX conversion are excluded. Currency conversions are not positions: they are left out of the table, and their commissions are listed with the account fees (data subscriptions, broker fees, commission adjustments from Flex statements) below it, outside the totals. Snapshot quantity reconciliation cannot prove complete inception history.</p>
       <p>IBKR column: IBKR’s own figures from Flex statements, already net of commissions, so IBKR = realized + unrealized with no fees subtracted. Realized is each fill’s FIFO realized PnL, shown under the tags of the order that closed it. IBKR matches lots across the whole account, not per tag, so for an instrument held under several tags its realized PnL can land on a different tag than ours. Unrealized is IBKR’s open-position cost basis valued at the same price as ours, shown under the tag that holds the position. The reconciliation compares each instrument’s all-time total, which does not depend on lot matching, so the two should agree.</p></details>
   </section>;
 }
@@ -266,7 +278,7 @@ function symbolList(rows: { trading_symbol: string }[]): string {
 const ownLevel = { themes: "theme", strategies: "strategy", "trade-names": "trade_name" } as const;
 type SortKey = "realized" | "unrealized" | "commissions" | "total" | "ibkr_total";
 
-function PnlValues({ kind, userId, filter, period }: { kind: CatalogKind; userId: string; filter: string; period: Period }) {
+function PnlValues({ kind, userId, filter, period, currency }: { kind: CatalogKind; userId: string; filter: string; period: Period; currency: string }) {
   const ytd = period === "ytd";
   const dimensions = useDimensions();
   const own = ownLevel[kind];
@@ -280,7 +292,8 @@ function PnlValues({ kind, userId, filter, period }: { kind: CatalogKind; userId
   const names = useRemote<ItemsPage<CatalogEntry>>(catalog("trade-names"), 60_000);
   const catalogs = { themes, strategies, "trade-names": names };
   const metric = ytd ? "Net realized YTD" : "Total PnL";
-  const groups = remote.data?.items ?? [];
+  // Every holding in the display currency at the broker's rates; same-tag groups merge across currencies.
+  const groups = remote.data ? inCurrency(remote.data.items, currency, remote.data.fx_rates ?? []) : [];
   const unavailable = remote.data?.unavailable_dimensions ?? [];
   // Group by an attribute only once the API has labelled every holding, so an unlabelled one is never shown as Unclassified.
   const failed = requested.filter(dimension => unavailable.includes(dimension.id));
@@ -330,7 +343,7 @@ function PnlTree({ sections, levels, ytd, userId, metric }: { sections: PnlSecti
     ["total", metric, " portfolio-total"], ["ibkr_total", `IBKR${suffix}`, " portfolio-ibkr"],
   ];
   return <>
-    <div className="portfolio-tree-tools"><span className="portfolio-footnote">{sections.length > 1 ? "One section per currency and account type; values never mix currencies" : "Values in the section's currency"} · — means unavailable</span>
+    <div className="portfolio-tree-tools"><span className="portfolio-footnote">Values in {sections[0]?.currency ?? "the display currency"} at the latest broker exchange rates{sections.length > 1 ? "; paper, live and simulated accounts stay separate" : ""} · — means unavailable</span>
       <span className="portfolio-tree-tools__buttons"><button type="button" className="portfolio-button portfolio-button--ghost" onClick={() => setOpen(new Set(allKeys))}>Expand all</button>
         <button type="button" className="portfolio-button portfolio-button--ghost" disabled={open.size === 0} onClick={() => setOpen(new Set())}>Collapse all</button></span></div>
     <div className="portfolio-table-scroll" role="region" aria-label="Performance table" tabIndex={0}><table className="portfolio-pnl-table portfolio-tree" role="treegrid" aria-label={`PnL by ${levels[0].label.toLowerCase()}`}>
@@ -396,7 +409,7 @@ type Period = "all" | "ytd";
 const badgePriority: [string, string][] = [
   ["incomplete_history", "History incomplete"], ["unsupported_instrument", "Unsupported instrument"],
   ["missing_commission", "Fees not yet reported"], ["missing_commission_currency", "Fee currency unknown"],
-  ["invalid_fill", "Invalid fill"], ["missing_instrument", "Unknown instrument"], ["missing_currency", "Currency unknown"],
+  ["invalid_fill", "Invalid fill"], ["missing_instrument", "Unknown instrument"], ["missing_currency", "Currency unknown"], [FX_UNAVAILABLE, "No FX rate"],
   ["missing_price", "Price unavailable"], ["stale_price", "Stale price"], ["history_unverified", "Unverified history"],
   ["unassigned", "Needs tags"],
 ];
