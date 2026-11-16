@@ -23,6 +23,12 @@ def _flex_runner(argv: list[str]) -> int:
     return cli(argv)
 
 
+def _link_instruments(argv: list[str]) -> int:
+    from factorlab.components.ingest_broker.link_instruments import cli
+
+    return cli(argv)
+
+
 def _engine(argv: list[str]) -> int:
     from factorlab.components.ingest_broker.providers import PROVIDERS
     from factorlab.orchestration import cli as engine_cli
@@ -54,6 +60,9 @@ COMMANDS = {
     "simulate": Command("ingest synthetic paper broker responses (no Gateway)", _simulate),
     "snapshot": Command("account snapshot (one run or the scheduled daemon)", _snapshot),
     "flex-runner": Command("backend HTTP runner for on-demand Flex history syncs", _flex_runner),
+    "link-instruments": Command(
+        "link IBKR conids from stored Flex statements to FactorLab listings", _link_instruments
+    ),
     "engine": Command("provider-agnostic engine: validate, run, daemon, replay", _engine),
 }
 

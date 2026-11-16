@@ -346,6 +346,25 @@ class V2BrokerStorage(V2USStorage):
         )
         return {str(row[0]) for row in result.result_rows}
 
+    def statement_identities(
+        self, broker_code: str, *, required: str, vendor_ids: Iterable[str] = ()
+    ) -> list[dict[str, str]]:
+        """Each instrument's latest stored statement attributes that carry ``required``.
+
+        One map per ``vendor_id`` (the newest statement wins), for re-linking
+        instruments a broker described in any past statement.
+        """
+        values = sorted({value for value in vendor_ids if value})
+        scope = "AND vendor_id IN {ids:Array(String)} " if values else ""
+        result = self.client.query(
+            f"SELECT argMax(attributes, generated_at) FROM {STATEMENT_ROWS_TABLE} FINAL "
+            "WHERE broker_code = {broker:String} AND vendor_id != '' "
+            "AND attributes[{required:String}] != '' "
+            f"{scope}GROUP BY vendor_id ORDER BY vendor_id",
+            parameters={"broker": broker_code, "required": required, "ids": values},
+        )
+        return [dict(row[0]) for row in result.result_rows]
+
     def uncosted_executions(
         self, broker_code: str, exec_ids: Iterable[str]
     ) -> dict[str, dict[str, Any]]:

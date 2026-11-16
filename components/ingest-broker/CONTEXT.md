@@ -32,6 +32,7 @@ component (image `ghcr.io/arjundoshi221/factorlab-ingest-broker`, manifest
   - `flex-runner [--listen 0.0.0.0:8091] [--cooldown-seconds 300] [--timeout-seconds 600]
     [--dry-run]`: the backend HTTP runner for on-demand Flex syncs
     ([flex_runner.py](src/factorlab/components/ingest_broker/flex_runner.py)).
+  - `link-instruments [--conid N ...] [--dry-run]` ([link_instruments.py](src/factorlab/components/ingest_broker/link_instruments.py)): links each conid's newest stored `broker.statement_rows` identity (with a `listingExchange`) via `link_instruments`, run `broker.instrument_link:ibkr`; idempotent; prints still-unlinked conids (exit 1).
 - Compose service `ibkr-snapshot` ([deploy/compose.yaml](deploy/compose.yaml)), profile
   `ibkr`: `snapshot --daemon --run-on-start --modes ${IBKR_SNAPSHOT_MODES:-paper,live}`,
   `mem_limit: 384m`, `stop_grace_period: 60s`, network `backend`, no ports.
@@ -63,9 +64,7 @@ component (image `ghcr.io/arjundoshi221/factorlab-ingest-broker`, manifest
 No IBKR Gateway logins reach this container; they go only to the Gateway volumes. The
 read-only Flex Web Service token does (`ibkr_client_runtime`).
 
-Production override (2026-09-30): `IBKR_SNAPSHOT_TIMES` contains all 24 hourly
-slots (`00:00,01:00,...,23:00`). Snapshots run at the top of every New York hour
-on XNYS trading days; `--run-on-start` also takes an immediate snapshot.
+Production override (2026-09-30): `IBKR_SNAPSHOT_TIMES` has all 24 hourly slots (`00:00,...,23:00`): snapshots run every New York hour on XNYS trading days; `--run-on-start` also takes one immediately.
 
 ## Data
 
@@ -134,8 +133,7 @@ production until the rollout completes.
 
 ## Pitfalls
 
-- With `FACTORLAB_IBKR_ENABLED` off the service is absent from the model; the manifest marks
-  it profile-gated, so a deploy updates the pin and verifies nothing.
+- With `FACTORLAB_IBKR_ENABLED` off the service is absent from the model; the manifest marks it profile-gated, so a deploy updates the pin and verifies nothing.
 - Releases never recreate the Gateways; they keep their logged-in sessions. A Gateway that is
   logged out or awaiting 2FA fails only its own mode's units (run `partial`).
 - The heartbeat does not tick during a snapshot; a run that outlasts the 300 s max age
