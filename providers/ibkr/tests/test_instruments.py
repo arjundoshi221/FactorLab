@@ -72,3 +72,11 @@ def test_one_record_per_conid_preferring_the_row_with_an_isin():
         ("599900800", "CA11271J1075"),
         ("9160", "US5324571083"),
     ]
+
+
+def test_us_listings_trade_in_usd_whatever_the_row_reports():
+    # A base-currency (SGD) account reports its NYSE position's currency as SGD.
+    record = instrument_record(row(currency="SGD").attrib)
+    assert record is not None and record.currency == "USD"
+    london = instrument_record(row(listingExchange="LSEETF", currency="USD").attrib)
+    assert london is not None and (london.ref.exchange_code, london.currency) == ("XLON", "USD")

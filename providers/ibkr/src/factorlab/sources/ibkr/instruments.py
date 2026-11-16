@@ -36,6 +36,11 @@ EXCHANGES: Mapping[str, tuple[str, str]] = {
     "LSEETF": ("XLON", "GB"),
 }
 
+# A venue's trading currency where it has only one. Some Flex sections report a row's
+# ``currency`` in the account's base currency (an SGD account's NYSE position says
+# SGD), so the attribute is trusted only on venues that list several currencies.
+VENUE_CURRENCIES: Mapping[str, str] = {"US": "USD"}
+
 # IBKR subCategory -> FactorLab product type (stocks only; anything else is "common").
 SUB_CATEGORIES: Mapping[str, str] = {
     "COMMON": "common",
@@ -74,6 +79,7 @@ def instrument_record(attributes: Mapping[str, str]) -> InstrumentRecord | None:
     if not symbol or len(currency) != 3:
         return None
     mic, country = EXCHANGES[venue]
+    currency = VENUE_CURRENCIES.get(country, currency)
     return InstrumentRecord(
         ref=InstrumentRef(
             alias_kind=ALIAS_KIND,
@@ -108,6 +114,7 @@ __all__ = [
     "ALIAS_KIND",
     "EXCHANGES",
     "SUB_CATEGORIES",
+    "VENUE_CURRENCIES",
     "factorlab_symbol",
     "instrument_record",
     "instrument_records",

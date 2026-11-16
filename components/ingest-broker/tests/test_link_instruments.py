@@ -57,3 +57,8 @@ def test_link_with_nothing_stored_still_records_a_run():
 
 def test_command_is_registered():
     assert "link-instruments" in COMMANDS
+
+
+def test_us_listing_currency_ignores_a_base_currency_row():
+    (record,) = records_from([stock("118089500", "ABBV", currency="SGD")])
+    assert record.currency == "USD"

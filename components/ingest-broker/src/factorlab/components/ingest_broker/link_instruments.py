@@ -30,8 +30,10 @@ from factorlab.sources.ibkr.instruments import instrument_record
 BROKER_CODE = "ibkr"
 PIPELINE = "broker.instrument_link:ibkr"
 SOURCE_CHANNEL = "ibkr:instrument_link"
-# Only rows that name a venue carry a usable identity (summary rows do not).
-REQUIRED_ATTRIBUTE = "listingExchange"
+# Only rows that name a venue and currency carry a usable identity (summary rows
+# often lack one); a row with an ISIN beats a newer one without.
+REQUIRED_ATTRIBUTES = ("conid", "listingExchange", "currency")
+PREFERRED_ATTRIBUTE = "isin"
 
 log = logging.getLogger("factorlab.ibkr.link_instruments")
 
@@ -106,7 +108,7 @@ def cli(argv: list[str] | None = None) -> int:
 
     storage = V2BrokerStorage.from_environment()
     identities = storage.statement_identities(
-        BROKER_CODE, required=REQUIRED_ATTRIBUTE, vendor_ids=args.conid
+        BROKER_CODE, required=REQUIRED_ATTRIBUTES, prefer=PREFERRED_ATTRIBUTE, vendor_ids=args.conid
     )
     print(f"stored identities: {len(identities)}")
     if args.dry_run:

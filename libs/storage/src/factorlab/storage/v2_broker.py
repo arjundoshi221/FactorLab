@@ -347,21 +347,34 @@ class V2BrokerStorage(V2USStorage):
         return {str(row[0]) for row in result.result_rows}
 
     def statement_identities(
-        self, broker_code: str, *, required: str, vendor_ids: Iterable[str] = ()
+        self,
+        broker_code: str,
+        *,
+        required: Sequence[str],
+        prefer: str = "",
+        vendor_ids: Iterable[str] = (),
     ) -> list[dict[str, str]]:
-        """Each instrument's latest stored statement attributes that carry ``required``.
+        """Each instrument's stored statement attributes that carry every ``required`` key.
 
-        One map per ``vendor_id`` (the newest statement wins), for re-linking
-        instruments a broker described in any past statement.
+        One map per ``vendor_id``: a row with ``prefer`` set wins, then the newest
+        statement; for re-linking instruments a broker described in any past statement.
         """
         values = sorted({value for value in vendor_ids if value})
         scope = "AND vendor_id IN {ids:Array(String)} " if values else ""
+        complete = "".join(
+            f"AND attributes[{{required{index}:String}}] != '' " for index in range(len(required))
+        )
         result = self.client.query(
-            f"SELECT argMax(attributes, generated_at) FROM {STATEMENT_ROWS_TABLE} FINAL "
+            "SELECT argMax(attributes, (attributes[{prefer:String}] != '', generated_at)) "
+            f"FROM {STATEMENT_ROWS_TABLE} FINAL "
             "WHERE broker_code = {broker:String} AND vendor_id != '' "
-            "AND attributes[{required:String}] != '' "
-            f"{scope}GROUP BY vendor_id ORDER BY vendor_id",
-            parameters={"broker": broker_code, "required": required, "ids": values},
+            f"{complete}{scope}GROUP BY vendor_id ORDER BY vendor_id",
+            parameters={
+                "broker": broker_code,
+                "prefer": prefer,
+                "ids": values,
+                **{f"required{index}": key for index, key in enumerate(required)},
+            },
         )
         return [dict(row[0]) for row in result.result_rows]
 
