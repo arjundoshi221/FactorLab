@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { PivotRows } from "./pivot";
 import type { Dimension, Profile } from "./types";
@@ -102,5 +102,45 @@ export function PivotControl({ dimensions, value, onChange, rows, onRows, groupL
         {order === "group" ? `${groupLabel} → ${dimension.label}` : `${dimension.label} → ${groupLabel}`}
       </button>)}
     </div>}
+  </div>;
+}
+
+/**
+ * Ordered grouping levels as chips: drag (or ←/→) to reorder, × to remove, "+ Add level" to
+ * nest another. At least one level always remains.
+ */
+export function GroupByChips({ available, value, onChange, label = "Group by" }: {
+  available: { id: string; label: string }[]; value: string[]; onChange: (levels: string[]) => void; label?: string;
+}) {
+  const [dragging, setDragging] = useState<number | null>(null);
+  const known = value.filter(id => available.some(level => level.id === id));
+  const name = (id: string) => available.find(level => level.id === id)?.label ?? id;
+  const unused = available.filter(level => !value.includes(level.id));
+  const move = (from: number, to: number) => {
+    if (to < 0 || to >= value.length || from === to) return;
+    const next = [...value];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    onChange(next);
+  };
+  return <div className="portfolio-groupby"><span className="portfolio-groupby__label" id="portfolio-groupby-label">{label}</span>
+    <ol className="portfolio-groupby__chips" aria-labelledby="portfolio-groupby-label">{value.map((id, index) => {
+      if (!known.includes(id)) return null;
+      return <li key={id} className={`portfolio-chip${dragging === index ? " is-dragging" : ""}`} draggable
+        onDragStart={event => { setDragging(index); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", id); }}
+        onDragEnd={() => setDragging(null)}
+        onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }}
+        onDrop={event => { event.preventDefault(); if (dragging !== null) move(dragging, index); setDragging(null); }}>
+        <span className="portfolio-chip__grip" aria-hidden="true">⋮⋮</span>
+        <span className="portfolio-chip__name">{name(id)}</span>
+        <button type="button" className="portfolio-chip__move" aria-label={`Move ${name(id)} earlier`} disabled={index === 0} onClick={() => move(index, index - 1)}>‹</button>
+        <button type="button" className="portfolio-chip__move" aria-label={`Move ${name(id)} later`} disabled={index === value.length - 1} onClick={() => move(index, index + 1)}>›</button>
+        <button type="button" className="portfolio-chip__remove" aria-label={`Remove ${name(id)}`} disabled={value.length <= 1} onClick={() => onChange(value.filter(item => item !== id))}>×</button>
+      </li>;
+    })}</ol>
+    {unused.length > 0 && <select className="portfolio-groupby__add" aria-label="Add grouping level" value="" onChange={event => { if (event.target.value) onChange([...value, event.target.value]); }}>
+      <option value="">+ Add level</option>
+      {unused.map(level => <option key={level.id} value={level.id}>{level.label}</option>)}
+    </select>}
   </div>;
 }

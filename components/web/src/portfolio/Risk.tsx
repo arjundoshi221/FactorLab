@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { errorMessage, useRemote } from "../shared/api";
 import { formatTime } from "../shared/format";
@@ -7,8 +7,11 @@ import {
   overallStatus, statusOf, stressTests, type CalcTerm, type Calculation, type Limit, type LimitKey, type LimitSpec, type Limits, type RiskState, type Status,
 } from "./riskModel";
 import { BENCHMARK, useBetas, type BetaResult } from "./betas";
-import type { AccountSummary, BrokerAccount, ItemsPage, Profile, SnapshotPage } from "./types";
-import { EmptyState, PortfolioHeader, ProfileSelect, setPortfolioQuery } from "./PortfolioUI";
+import type { AccountSummary, Attributed, BrokerAccount, CatalogEntry, CatalogKind, Dimension, ItemsPage, PnlReport, Profile, SnapshotPage } from "./types";
+import { EmptyState, GroupByChips, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery } from "./PortfolioUI";
+import { pivotTree, treeKeys, useDimensions, useGroupBy, type Level, type TreeNode } from "./pivot";
+import { attributeLevel, tagLevel, TAG_LEVELS } from "./pnlPivot";
+import { aggregateExposure, splitPositions, type ExposureSlice, type ExposureTotals } from "./riskExposure";
 import "./Portfolio.css";
 import "./Risk.css";
 
@@ -443,6 +446,106 @@ function Triggers({ state, limits }: { state: RiskState; limits: Limits }) {
   </Card>;
 }
 
+/* ---------- exposure by theme / sector ---------- */
+
+type ExposureNode = TreeNode<ExposureSlice, ExposureTotals>;
+type ExposureSort = "gross" | "net" | "beta" | "unrealized";
+
+/** Open exposure grouped by any order of tags and attributes (theme › sector by default). */
+function ExposureByGroup({ account, userId, state }: { account: BrokerAccount; userId: string; state: RiskState }) {
+  const owner = account.user_id ?? (userId && userId !== "unassigned" ? userId : "");
+  const dimensions = useDimensions();
+  const [groupBy, setGroupBy] = useGroupBy(["theme", "sector"]);
+  const requested = dimensions.filter(dimension => groupBy.includes(dimension.id));
+  const dims = requested.map(dimension => dimension.id).join(",");
+  const where = `${API}/accounts/${encodeURIComponent(account.broker_code)}/${encodeURIComponent(account.account_id)}`;
+  const labelled = useRemote<SnapshotPage>(dims ? `${where}/positions?user_id=${encodeURIComponent(userId)}&dims=${encodeURIComponent(dims)}` : null, 60_000);
+  const scope = `user_id=${encodeURIComponent(owner)}&broker_code=${encodeURIComponent(account.broker_code)}&account_id=${encodeURIComponent(account.account_id)}`;
+  const pnl = useRemote<PnlReport>(owner ? `${API}/pnl/themes?${scope}` : null, 60_000);
+  const catalog = (kind: CatalogKind) => owner ? `${API}/catalogs/${kind}?user_id=${encodeURIComponent(owner)}` : null;
+  const catalogs = { themes: useRemote<ItemsPage<CatalogEntry>>(catalog("themes"), 60_000), strategies: useRemote<ItemsPage<CatalogEntry>>(catalog("strategies"), 60_000), "trade-names": useRemote<ItemsPage<CatalogEntry>>(catalog("trade-names"), 60_000) };
+  const [open, setOpen] = useState<Set<string> | null>(null);
+  const [sort, setSort] = useState<{ key: ExposureSort; desc: boolean }>({ key: "gross", desc: true });
+
+  const failed = requested.filter(dimension => labelled.data?.unavailable_dimensions?.includes(dimension.id));
+  const rows = labelled.data?.items ?? [];
+  const ready = (dimension: Dimension) => !failed.includes(dimension) && labelled.data !== null && rows.every(row => (row as Attributed).attributes?.[dimension.id]);
+  const tagsReady = !owner || pnl.data !== null;
+  const levels = groupBy.flatMap((id): Level<ExposureSlice>[] => {
+    const tag = TAG_LEVELS.find(item => item.id === id);
+    if (tag) {
+      if (!tagsReady) return [];
+      const entries = catalogs[tag.kind].data?.items;
+      return [tagLevel(tag, entries ? new Map(entries.map(entry => [entry.id, entry.name])) : null)];
+    }
+    const dimension = requested.find(item => item.id === id);
+    return dimension && ready(dimension) ? [attributeLevel(dimension)] : [];
+  });
+  const slices = splitPositions(state.holdings, rows, pnl.data?.items.flatMap(group => group.details) ?? [], account.account_id);
+  const nodes = levels.length ? pivotTree(slices, levels, aggregateExposure) : [];
+  const total = aggregateExposure(slices);
+  const scale = total.gross ?? 0;
+  const opened = open ?? new Set(levels.length > 1 ? nodes.map(node => node.key) : []);
+  const toggle = (key: string) => { const next = new Set(opened); if (next.has(key)) next.delete(key); else next.add(key); setOpen(next); };
+  const compare = (a: number | null, b: number | null) => a === null ? (b === null ? 0 : 1) : b === null ? -1 : sort.desc ? b - a : a - b;
+  const ordered = (list: ExposureNode[]) => [...list].sort((a, b) => (a.value.id === null ? 1 : 0) - (b.value.id === null ? 1 : 0) || compare(a.totals[sort.key], b.totals[sort.key]));
+  const sliceValue = (slice: ExposureSlice, key: ExposureSort) => key === "gross" ? (slice.value === null ? null : Math.abs(slice.value)) : key === "net" ? slice.value
+    : key === "beta" ? (slice.cashLike ? 0 : slice.value === null || slice.beta === null ? null : slice.value * slice.beta) : slice.unrealized;
+  const share = (gross: number | null) => gross === null || state.nav === null || state.nav <= 0 ? null : gross / state.nav;
+  const columns: [ExposureSort, string][] = [["gross", `Gross (${state.base})`], ["net", "Net"], ["beta", "β-adjusted"], ["unrealized", "Unrealized"]];
+  const available = [...TAG_LEVELS.map(tag => ({ id: tag.id, label: tag.label })), ...dimensions.map(dimension => ({ id: dimension.id, label: dimension.label }))];
+  const pending = [...(owner && !tagsReady && !pnl.error ? ["tags"] : []), ...requested.filter(dimension => !failed.includes(dimension) && !ready(dimension)).map(dimension => dimension.label.toLowerCase())];
+
+  const figures = (gross: number | null, net: number | null, beta: number | null, unrealized: number | null) => <>
+    <td className="num">{money(gross)}{gross !== null && scale > 0 && <span className="pf-share" aria-hidden="true"><i style={{ width: `${Math.min(100, (gross / scale) * 100)}%` }} /></span>}</td>
+    <td className="num">{pct(share(gross))}</td>
+    <td className="num">{money(net)}</td>
+    <td className="num">{beta === null ? state.betaExposure === null && !state.unconverted.length ? "…" : "—" : money(beta)}</td>
+    <td className={`num ${pnlTone(unrealized)}`}>{signedMoney(unrealized)}</td></>;
+  const row = (node: ExposureNode, path: string[]): ReactNode[] => {
+    const isOpen = opened.has(node.key);
+    const name = [...path, node.value.label];
+    const next = levels[node.depth + 1]?.label.toLowerCase();
+    return [<tr key={node.key} aria-level={node.depth + 1} aria-expanded={isOpen} className={`portfolio-tree-row portfolio-tree-row--d${Math.min(node.depth, 3)}${isOpen ? " is-expanded" : ""}`}>
+      <th scope="row" style={{ paddingLeft: `${12 + node.depth * 20}px` }}><div className="portfolio-tree-name">
+        <button type="button" className="portfolio-expand" aria-expanded={isOpen} aria-label={`${isOpen ? "Collapse" : "Expand"} ${name.join(" › ")}`} onClick={() => toggle(node.key)}><PortfolioIcon name="chevron" /></button>
+        <div><strong>{node.value.label}</strong><small>{node.children.length && next ? `${node.children.length} ${next}${node.children.length === 1 ? "" : "s"} · ` : ""}{node.totals.positions} {node.totals.positions === 1 ? "position" : "positions"}{node.totals.unconverted.length ? ` · no FX rate for ${node.totals.unconverted.join(", ")}` : ""}</small></div></div></th>
+      {figures(node.totals.gross, node.totals.net, node.totals.beta, node.totals.unrealized)}</tr>,
+      ...(!isOpen ? [] : node.children.length ? ordered(node.children).flatMap(child => row(child, name))
+        : [...node.rows].sort((a, b) => compare(sliceValue(a, sort.key), sliceValue(b, sort.key))).map(slice => <tr key={`${node.key}#${slice.key}`} aria-level={node.depth + 2} className="portfolio-tree-leaf">
+          <th scope="row" style={{ paddingLeft: `${12 + (node.depth + 1) * 20}px` }}><div className="portfolio-tree-name"><span className="portfolio-tree-spacer" /><div><strong>{slice.symbol}</strong>
+            <small>{slice.cashLike ? "Cash equivalent · " : ""}{slice.share < 0.9999 ? `${pct(slice.share, 0)} of the position` : slice.currency}</small></div></div></th>
+          {figures(slice.value === null ? null : Math.abs(slice.value), slice.value, sliceValue(slice, "beta"), slice.unrealized)}</tr>))];
+  };
+
+  return <Card title="Exposure by group" className="pf-card--exposure" aside={<span className="pf-muted">{state.base} · % of net liquidation</span>}>
+    <div className="pf-exposure__tools"><GroupByChips available={available} value={groupBy} onChange={levels => { setGroupBy(levels); setOpen(null); }} />
+      {nodes.length > 0 && <span className="portfolio-tree-tools__buttons"><button type="button" className="portfolio-button portfolio-button--ghost" onClick={() => setOpen(new Set(treeKeys(nodes)))}>Expand all</button>
+        <button type="button" className="portfolio-button portfolio-button--ghost" disabled={opened.size === 0} onClick={() => setOpen(new Set())}>Collapse all</button></span>}</div>
+    {!owner && <p className="pf-notice pf-notice--warn pf-exposure__note">This account has no profile, so it has no order tags: every position is Untagged.</p>}
+    {Boolean(pnl.error) && !pnl.data && <p className="pf-notice pf-notice--warn pf-exposure__note" role="alert">Order tags are unavailable right now ({errorMessage(pnl.error)}), so tag levels are hidden.</p>}
+    {failed.map(dimension => <p key={dimension.id} className="pf-notice pf-notice--warn pf-exposure__note" role="alert">{dimension.label} classification is unavailable right now, so that level is hidden.</p>)}
+    {pending.length > 0 && <p className="pf-muted pf-exposure__note" role="status">Loading {pending.join(" and ")}…</p>}
+    {!state.holdings.length ? <p className="pf-muted pf-pad">No open positions in the latest snapshot.</p> : nodes.length > 0 && <div className="pf-table-scroll"><table className="pf-table portfolio-tree" role="treegrid" aria-label={`Exposure by ${levels.map(level => level.label.toLowerCase()).join(" and ")}`}>
+      <thead><tr><th scope="col">{levels.map(level => level.label).join(" › ")}</th>
+        {columns.map(([key, label], index) => <Fragment key={key}><th scope="col" className="num" aria-sort={sort.key === key ? sort.desc ? "descending" : "ascending" : undefined}>
+          <button type="button" className="portfolio-sort" onClick={() => setSort(sort.key === key ? { key, desc: !sort.desc } : { key, desc: true })}>{label}<span aria-hidden="true">{sort.key === key ? sort.desc ? " ↓" : " ↑" : ""}</span></button></th>
+          {index === 0 && <th scope="col" className="num">% NAV</th>}</Fragment>)}</tr></thead>
+      <tbody>{ordered(nodes).flatMap(node => row(node, []))}</tbody>
+      <tfoot><tr><th scope="row">All positions</th>{figures(total.gross, total.net, total.beta, total.unrealized)}</tr></tfoot>
+    </table></div>}
+    <p className="pf-foot-note">Positions are split across tags by the open quantity of each tagged holding; quantity no tag explains is Untagged. Gross ÷ net liquidation is the share of NAV.</p>
+  </Card>;
+}
+
+/** A folded group of cards; the summary carries the key fact so a closed fold still informs. */
+function Fold({ title, summary, open, children }: { title: string; summary: ReactNode; open: boolean; children: ReactNode }) {
+  // Opened once from the data; afterwards the reader decides (saving limits never snaps it shut).
+  const [isOpen, setOpen] = useState(open);
+  return <details className="pf-fold" open={isOpen} onToggle={event => setOpen(event.currentTarget.open)}><summary><PortfolioIcon name="chevron" /><h2>{title}</h2><span className="pf-muted">{summary}</span></summary>
+    <div className="pf-fold__body">{children}</div></details>;
+}
+
 /* ---------- page ---------- */
 
 function RiskBoard({ account, userId }: { account: BrokerAccount; userId: string }) {
@@ -466,6 +569,14 @@ function RiskBoard({ account, userId }: { account: BrokerAccount; userId: string
   const verdict = overallStatus(state, settings.limits, stale);
   const snapshotTime = summary.data.balances.snapshot_time;
   const gap = hasReconciliationGap(state);
+  const limitCounts = { red: 0, amber: 0 };
+  for (const spec of LIMIT_SPECS) {
+    const status = statusOf(state.metrics[spec.key], settings.limits[spec.key], spec.direction);
+    if (status === "red" || status === "amber") limitCounts[status] += 1;
+  }
+  const stress = stressTests(state, settings.limits);
+  const worst = stress.find(row => row.result === "call" || row.result === "breach") ?? stress.find(row => row.result === "pressure");
+  const stressSummary = !stress.length ? "Needs net liquidation" : worst ? `First problem: ${worst.label}` : `All ${stress.length} scenarios within cushion`;
   return <div className="pf-risk">
     <section className={`pf-verdict pf-verdict--${verdict.status}`} aria-label="Risk status">
       <div className="pf-verdict__main"><span className="pf-verdict__label">Risk status</span><strong><StatusIcon status={verdict.status} />{VERDICT_LABEL[verdict.status]}</strong></div>
@@ -476,21 +587,27 @@ function RiskBoard({ account, userId }: { account: BrokerAccount; userId: string
     {gap && state.unreconciled !== null && <p className="pf-notice pf-notice--warn" role="status"><b>Unreconciled exposure.</b> The broker reports {money(state.gross, currency)} gross position value, but the listed positions total {money(state.positionsGross, currency)} — a gap of {money(state.unreconciled, currency)}. Position-level figures exclude it until it is explained.</p>}
     {state.unconverted.length > 0 && <p className="pf-notice pf-notice--warn" role="status"><b>Missing FX rates.</b> No {state.unconverted.join(", ")} → {currency} rate in this snapshot; equity leverage and concentration are unavailable.</p>}
 
-    <div className="pf-grid pf-grid--top">
-      <Snapshot state={state} />
-      <KeyMetrics state={state} limits={settings.limits} />
+    <KeyMetrics state={state} limits={settings.limits} />
+    <div className="pf-grid pf-grid--wide">
+      <ExposureByGroup account={account} userId={userId} state={state} />
+      <div className="pf-stack"><Snapshot state={state} /><CapacityCard state={state} limits={settings.limits} /></div>
+    </div>
+    <div className="pf-grid pf-grid--wide">
+      <Concentration state={state} limits={settings.limits} />
       <Composition state={state} />
     </div>
     <Leverage state={state} limits={settings.limits} beta={beta} />
-    <div className="pf-grid pf-grid--mid">
-      <LimitsTable state={state} settings={settings} onSave={next => { setSettings(next); saveSettings(account, next); }}
-        onReset={() => { const next = { limits: DEFAULT_LIMITS, cashLike: DEFAULT_CASH_LIKE }; setSettings(next); saveSettings(account, null); }} />
-      <div className="pf-stack"><Concentration state={state} limits={settings.limits} /><StressTable state={state} limits={settings.limits} /></div>
-    </div>
-    <div className="pf-grid pf-grid--bottom">
-      <CapacityCard state={state} limits={settings.limits} />
-      <div className="pf-stack"><OperatingRange state={state} limits={settings.limits} /><Triggers state={state} limits={settings.limits} /></div>
-    </div>
+    <Fold title="Limits & operating envelope" open={limitCounts.red + limitCounts.amber > 0}
+      summary={limitCounts.red + limitCounts.amber === 0 ? "All measured limits within target" : [limitCounts.red && `${limitCounts.red} hard ${limitCounts.red === 1 ? "limit" : "limits"} breached`, limitCounts.amber && `${limitCounts.amber} above target`].filter(Boolean).join(" · ")}>
+      <div className="pf-grid pf-grid--mid">
+        <LimitsTable state={state} settings={settings} onSave={next => { setSettings(next); saveSettings(account, next); }}
+          onReset={() => { const next = { limits: DEFAULT_LIMITS, cashLike: DEFAULT_CASH_LIKE }; setSettings(next); saveSettings(account, null); }} />
+        <OperatingRange state={state} limits={settings.limits} />
+      </div>
+    </Fold>
+    <Fold title="Stress tests & triggers" open={verdict.status === "red"} summary={stressSummary}>
+      <div className="pf-grid pf-grid--mid"><StressTable state={state} limits={settings.limits} /><Triggers state={state} limits={settings.limits} /></div>
+    </Fold>
   </div>;
 }
 

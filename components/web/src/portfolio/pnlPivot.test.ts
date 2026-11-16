@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { exposureBy } from "./exposurePivot";
-import { aggregatePnl, groupsByAttribute, subgroups } from "./pnlPivot";
-import { attributeOf } from "./pivot";
+import { aggregatePnl, attributeLevel, pnlSections, tagLevel, TAG_LEVELS } from "./pnlPivot";
 import type { PnlDetail, PnlGroup } from "./types";
 
 const tech = { id: "45", label: "Information Technology" };
@@ -40,28 +39,46 @@ describe("aggregatePnl", () => {
   });
 });
 
-describe("pivoting tagged PnL", () => {
+describe("pnlSections", () => {
   const groups: PnlGroup[] = [
     { id: "t1", name: "AI", account_mode: "live", simulated: false, currency: "USD", realized: "3", unrealized: "0", commissions: "2", total: "1", issues: [],
       details: [detail("AAPL", tech, { realized: "1", total: "0" }), detail("XOM", energy, { realized: "2", total: "1" })] },
     { id: "t2", name: "Value", account_mode: "live", simulated: false, currency: "USD", realized: "4", unrealized: "0", commissions: "1", total: "3", issues: [],
-      details: [detail("MSFT", tech, { realized: "4", total: "3", theme_id: "t2" })] },
+      details: [detail("MSFT", tech, { realized: "4", total: "3", theme_id: "t2", strategy_id: "s1" })] },
     { id: "t2", name: "Value", account_mode: "live", simulated: false, currency: "EUR", realized: "9", unrealized: "0", commissions: "1", total: "8", issues: [],
       details: [detail("SAP", tech, { realized: "9", total: "8", theme_id: "t2", currency: "EUR" })] },
   ];
+  const names = new Map([["t1", "AI"], ["t2", "Value"], ["s1", "Momentum"]]);
+  const theme = tagLevel<PnlDetail>(TAG_LEVELS[0], names);
+  const strategy = tagLevel<PnlDetail>(TAG_LEVELS[1], names);
+  const sector = attributeLevel<PnlDetail>({ id: "sector", label: "Sector", buckets: order });
 
-  it("group subtotals by attribute reconcile to the group total", () => {
-    const parts = subgroups(groups[0].details, row => attributeOf(row, "sector"), order, false);
-    expect(parts.map(part => [part.value.label, part.totals.total])).toEqual([["Energy", "1"], ["Information Technology", "0"]]);
+  it("keeps currencies apart and uses the API's own group totals at the first level", () => {
+    const sections = pnlSections(groups, [theme, sector], "theme", false);
+    expect(sections.map(section => [section.currency, section.totals.realized, section.nodes.map(node => [node.value.label, node.totals.total])])).toEqual([
+      ["EUR", "9", [["Value", "8"]]],
+      ["USD", "7", [["AI", "1"], ["Value", "3"]]],
+    ]);
+    const ai = sections[1].nodes[0];
+    expect(ai.children.map(child => [child.value.label, child.totals.total, child.rows.map(row => row.trading_symbol)])).toEqual([
+      ["Energy", "1", ["XOM"]], ["Information Technology", "0", ["AAPL"]],
+    ]);
   });
 
-  it("attribute-first rows never merge currencies", () => {
-    const rows = groupsByAttribute(groups, "sector", order, false);
-    expect(rows.map(row => [row.name, row.currency, row.realized, row.details.map(d => d.trading_symbol)])).toEqual([
-      ["Energy", "USD", "2", ["XOM"]],
-      ["Information Technology", "EUR", "9", ["SAP"]],
-      ["Information Technology", "USD", "5", ["AAPL", "MSFT"]],
-    ]);
+  it("regroups every holding when an attribute comes first, three levels deep", () => {
+    const [, usd] = pnlSections(groups, [sector, theme, strategy], "theme", false);
+    expect(usd.nodes.map(node => [node.value.label, node.totals.realized])).toEqual([["Energy", "2"], ["Information Technology", "5"]]);
+    const tech = usd.nodes[1];
+    expect(tech.children.map(node => node.value.label)).toEqual(["AI", "Value"]);
+    expect(tech.children[1].children.map(node => node.value.label)).toEqual(["Momentum"]);
+    expect(tech.children[0].children.map(node => node.value.label)).toEqual(["Untagged"]);
+  });
+
+  it("lists a group without holdings and sums the section from the groups", () => {
+    const feesOnly: PnlGroup = { id: "t3", name: "Old", account_mode: "live", simulated: false, currency: "USD", realized: "0", unrealized: "0", commissions: "5", total: "-5", issues: ["incomplete_history"], details: [] };
+    const [, usd] = pnlSections([...groups, feesOnly], [sector], "theme", false);
+    expect(usd.nodes.map(node => node.value.label)).toEqual(["Energy", "Information Technology", "Old (no holdings)"]);
+    expect(usd.totals).toMatchObject({ realized: "7", commissions: "8", total: "-1", issues: ["incomplete_history"] });
   });
 });
 

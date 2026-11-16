@@ -89,3 +89,53 @@ export function usePivotParams(): { pivot: string; rows: PivotRows; setPivot: (d
     setRows: rows => update(next => { if (rows === "attr") next.set("rows", "attr"); else next.delete("rows"); }),
   };
 }
+
+/** One grouping level: how a row maps to a bucket, and the buckets' display order. */
+export interface Level<T> { id: string; label: string; valueOf: (row: T) => AttrValue; order?: AttrValue[] }
+
+export interface TreeNode<T, A> {
+  /** Unique within the tree: the path of bucket keys. */
+  key: string; value: AttrValue; depth: number; totals: A; rows: T[];
+  /** Next level's buckets; empty at the last level, where `rows` are the leaves. */
+  children: TreeNode<T, A>[];
+}
+
+/** Group rows level by level (any depth), each node carrying `aggregate` of its rows. */
+export function pivotTree<T, A>(rows: T[], levels: Level<T>[], aggregate: (rows: T[]) => A, depth = 0, prefix = ""): TreeNode<T, A>[] {
+  const [level, ...rest] = levels;
+  if (!level) return [];
+  return pivotRows(rows, level.valueOf, level.order).map(bucket => {
+    const key = `${prefix}/${level.id}:${bucket.key}`;
+    return { key, value: bucket.value, depth, rows: bucket.rows, totals: aggregate(bucket.rows), children: pivotTree(bucket.rows, rest, aggregate, depth + 1, key) };
+  });
+}
+
+/** Every node key in a tree, for "Expand all". */
+export function treeKeys<T, A>(nodes: TreeNode<T, A>[]): string[] {
+  return nodes.flatMap(node => [node.key, ...treeKeys(node.children)]);
+}
+
+/** Parse `group=` (comma-separated level ids), honouring the older `pivot=` / `rows=attr` links. */
+export function parseGroupBy(params: URLSearchParams, defaults: string[]): string[] {
+  const group = params.get("group");
+  if (group !== null) {
+    const ids = [...new Set(group.split(",").map(item => item.trim()).filter(Boolean))];
+    if (ids.length) return ids;
+  }
+  const pivot = params.get("pivot"), first = defaults[0];
+  if (!pivot || pivot === first) return defaults;
+  return params.get("rows") === "attr" ? [pivot, first] : [first, pivot];
+}
+
+/**
+ * URL-backed grouping order for tag pages and the risk exposure tree: `group=theme,sector`.
+ * Writing it drops the older `pivot` / `rows` parameters.
+ */
+export function useGroupBy(defaults: string[]): [string[], (levels: string[]) => void] {
+  const [params, update] = useUrlParams();
+  const levels = parseGroupBy(params, defaults);
+  return [levels, next => update(url => {
+    url.delete("pivot"); url.delete("rows");
+    if (next.join(",") === defaults.join(",")) url.delete("group"); else url.set("group", next.join(","));
+  })];
+}

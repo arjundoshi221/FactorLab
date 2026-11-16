@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { attributeOf, pivotRows, sumDecimals, UNCLASSIFIED } from "./pivot";
+import { attributeOf, parseGroupBy, pivotRows, pivotTree, sumDecimals, treeKeys, UNCLASSIFIED } from "./pivot";
 
 describe("sumDecimals", () => {
   it("adds exactly across scales and subtracts signed terms", () => {
@@ -43,5 +43,34 @@ describe("pivotRows", () => {
   it("falls back to label order for buckets the order does not name", () => {
     const buckets = pivotRows(rows, row => attributeOf(row, "sector"));
     expect(buckets.map(b => b.value.label)).toEqual(["Energy", "Information Technology", "Unclassified"]);
+  });
+});
+
+describe("pivotTree", () => {
+  const rows = [
+    { s: "AAPL", sector: "Tech", theme: "AI" }, { s: "MSFT", sector: "Tech", theme: "Cloud" },
+    { s: "XOM", sector: "Energy", theme: "AI" }, { s: "ZZZ", sector: null, theme: "AI" },
+  ];
+  const level = (id: "sector" | "theme") => ({ id, label: id, valueOf: (row: typeof rows[number]) => row[id] === null ? UNCLASSIFIED : { id: row[id], label: row[id] as string } });
+
+  it("nests any number of levels, each node aggregating its rows", () => {
+    const tree = pivotTree(rows, [level("theme"), level("sector")], items => items.length);
+    expect(tree.map(node => [node.value.label, node.totals, node.depth, node.children.map(child => [child.value.label, child.totals, child.depth])])).toEqual([
+      ["AI", 3, 0, [["Energy", 1, 1], ["Tech", 1, 1], ["Unclassified", 1, 1]]],
+      ["Cloud", 1, 0, [["Tech", 1, 1]]],
+    ]);
+    expect(tree[0].children[0].children).toEqual([]);
+    expect(new Set(treeKeys(tree)).size).toBe(6);
+  });
+});
+
+describe("parseGroupBy", () => {
+  const parse = (query: string, defaults = ["theme"]) => parseGroupBy(new URLSearchParams(query), defaults);
+  it("reads group= and maps the older pivot links", () => {
+    expect(parse("")).toEqual(["theme"]);
+    expect(parse("", ["theme", "sector"])).toEqual(["theme", "sector"]);
+    expect(parse("group=sector,theme,sector")).toEqual(["sector", "theme"]);
+    expect(parse("pivot=sector")).toEqual(["theme", "sector"]);
+    expect(parse("pivot=sector&rows=attr")).toEqual(["sector", "theme"]);
   });
 });

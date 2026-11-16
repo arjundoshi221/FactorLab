@@ -5,8 +5,8 @@
  * in `excluded` while its fees still count; an unknown fill cost makes fees and total
  * unavailable; IBKR figures are net of commissions.
  */
-import { attributeOf, pivotRows, sumDecimals, type PivotBucket } from "./pivot";
-import type { AttrValue, PnlDetail, PnlGroup } from "./types";
+import { attributeOf, pivotTree, sumDecimals, type Level, type TreeNode } from "./pivot";
+import type { AttrValue, Attributed, CatalogKind, Dimension, OrderAssignment, PnlDetail, PnlGroup } from "./types";
 
 const COST_UNKNOWN = ["missing_commission", "missing_commission_currency"];
 
@@ -43,30 +43,71 @@ export function aggregatePnl(details: PnlDetail[], ytd: boolean): PnlTotals {
   };
 }
 
-/**
- * Attribute-first rows: one synthetic group per attribute bucket, account mode, simulation
- * and currency (currencies and modes never merge), holding every tagged group's holdings.
- */
-export function groupsByAttribute(groups: PnlGroup[], dim: string, order: AttrValue[], ytd: boolean): PnlGroup[] {
-  const result: PnlGroup[] = [];
-  const split = new Map<string, PnlDetail[]>();
-  for (const group of groups) for (const detail of group.details) {
-    const key = JSON.stringify([group.account_mode, group.simulated, group.currency]);
-    split.set(key, [...(split.get(key) ?? []), detail]);
-  }
-  for (const [key, details] of [...split.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    const [accountMode, simulated, currency] = JSON.parse(key) as [string, boolean, string];
-    for (const bucket of pivotRows(details, row => attributeOf(row, dim), order)) {
-      result.push({ id: bucket.value.id, name: bucket.value.label, account_mode: accountMode, simulated, currency, details: bucket.rows, ...aggregatePnl(bucket.rows, ytd) });
-    }
-  }
-  return result.sort((a, b) => order.findIndex(v => v.id === a.id) - order.findIndex(v => v.id === b.id)
-    || a.currency.localeCompare(b.currency) || a.account_mode.localeCompare(b.account_mode));
+export type PnlNode = TreeNode<PnlDetail, PnlTotals>;
+
+/** The three order tags as grouping levels; their ids are what `group=` carries. */
+export const TAG_LEVELS = [
+  { id: "theme", kind: "themes", field: "theme_id", label: "Theme" },
+  { id: "strategy", kind: "strategies", field: "strategy_id", label: "Strategy" },
+  { id: "trade_name", kind: "trade-names", field: "trade_name_id", label: "Trade name" },
+] as const satisfies readonly { id: string; kind: CatalogKind; field: keyof OrderAssignment; label: string }[];
+
+export const UNTAGGED: AttrValue = { id: null, label: "Untagged" };
+
+/** A tag level; `names` maps entry id to name (null while the catalog loads). */
+export function tagLevel<T extends OrderAssignment>(tag: (typeof TAG_LEVELS)[number], names: Map<string, string> | null): Level<T> {
+  return {
+    id: tag.id, label: tag.label,
+    valueOf: row => {
+      const id = row[tag.field];
+      return id === null ? UNTAGGED : { id, label: names?.get(id) ?? (names ? "Archived entry" : "…") };
+    },
+  };
 }
 
-export interface PnlSubgroup extends PivotBucket<PnlDetail> { totals: PnlTotals }
+/** A pivot dimension the API labels rows with (`dims=`), e.g. Sector. */
+export function attributeLevel<T extends Attributed>(dimension: Dimension): Level<T> {
+  return { id: dimension.id, label: dimension.label, valueOf: row => attributeOf(row, dimension.id), order: dimension.buckets };
+}
 
-/** Split one row's holdings by the other axis, each with its own subtotals. */
-export function subgroups(details: PnlDetail[], valueOf: (row: PnlDetail) => AttrValue, order: AttrValue[], ytd: boolean): PnlSubgroup[] {
-  return pivotRows(details, valueOf, order).map(bucket => ({ ...bucket, totals: aggregatePnl(bucket.rows, ytd) }));
+function totalsOf(group: PnlGroup): PnlTotals {
+  const { realized, unrealized, commissions, total, issues, excluded, ibkr_realized, ibkr_unrealized, ibkr_total, ibkr_excluded, ibkr_issues } = group;
+  return { realized, unrealized, commissions, total, issues, excluded, ibkr_realized, ibkr_unrealized, ibkr_total, ibkr_excluded, ibkr_issues };
+}
+
+/** One currency, account mode and simulation flag: values in different sections never add up. */
+export interface PnlSection { key: string; currency: string; account_mode: string; simulated: boolean; totals: PnlTotals; nodes: PnlNode[] }
+
+/**
+ * The report as a tree per section. When the first level is the page's own tag (`groupLevel`),
+ * its rows are the API's groups with the API's own totals; deeper levels re-aggregate holdings.
+ * Otherwise every holding is regrouped, and a group with no holdings is listed on its own.
+ */
+export function pnlSections(groups: PnlGroup[], levels: Level<PnlDetail>[], groupLevel: string, ytd: boolean): PnlSection[] {
+  const aggregate = (rows: PnlDetail[]) => aggregatePnl(rows, ytd);
+  const split = new Map<string, PnlGroup[]>();
+  for (const group of groups) {
+    const key = JSON.stringify([group.currency, group.account_mode, group.simulated]);
+    split.set(key, [...(split.get(key) ?? []), group]);
+  }
+  return [...split.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, members]) => {
+    const [currency, account_mode, simulated] = JSON.parse(key) as [string, string, boolean];
+    const details = members.flatMap(group => group.details);
+    const empty = members.filter(group => group.details.length === 0);
+    const own = (group: PnlGroup, prefix: string): PnlNode => {
+      const nodeKey = `${key}${prefix}:${group.id ?? ""}`;
+      return { key: nodeKey, value: { id: group.id, label: group.name }, depth: 0, rows: group.details, totals: totalsOf(group),
+        children: prefix.startsWith(`/${groupLevel}`) ? pivotTree(group.details, levels.slice(1), aggregate, 1, nodeKey) : [] };
+    };
+    const nodes = levels[0]?.id === groupLevel ? members.map(group => own(group, `/${groupLevel}`))
+      : [...pivotTree(details, levels, aggregate, 0, key), ...empty.map(group => ({ ...own(group, "/no-holdings"), value: { id: group.id, label: `${group.name} (no holdings)` } }))];
+    // Fees-only groups carry totals that no holding explains, so then the section sums the groups.
+    const totals = empty.length === 0 ? aggregate(details) : {
+      ...aggregate(details),
+      ...Object.fromEntries((["realized", "unrealized", "commissions", "total", "ibkr_realized", "ibkr_unrealized", "ibkr_total"] as const)
+        .map(field => [field, sumDecimals(members.map(group => group[field]))])),
+      issues: [...new Set(members.flatMap(group => group.issues))].sort(),
+    };
+    return { key, currency, account_mode, simulated, totals, nodes };
+  });
 }

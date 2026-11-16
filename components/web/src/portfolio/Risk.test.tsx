@@ -138,3 +138,37 @@ it("splits unrealized and realized PnL and shows the exact calculation behind a 
   fireEvent.keyDown(within(leverage).getByRole("region", { name: "Net leverage calculation" }), { key: "Escape" });
   expect(within(leverage).queryByRole("region", { name: /calculation/ })).not.toBeInTheDocument();
 });
+
+it("groups exposure by theme and sector, splitting a position across its tags", async () => {
+  const tech = { id: "45", label: "Health Care" };
+  const holding = (symbol: string, quantity: string, theme: string | null) => ({ broker_code: "ibkr", account_id: "U1", account_mode: "live", simulated: false, trading_symbol: symbol, currency: "SGD", quantity, orders: ["1"],
+    realized: "0", unrealized: "0", commissions: "0", total: "0", issues: [], price_time: null, history_start: null, theme_id: theme, strategy_id: null, trade_name_id: null });
+  const requests: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const path = new URL(url, "http://hub.test");
+    requests.push(path.pathname + path.search);
+    if (path.pathname.endsWith("/dimensions")) return { ok: true, json: async () => ({ items: [{ id: "sector", label: "Sector", buckets: [tech] }] }) };
+    if (path.pathname.endsWith("/catalogs/themes")) return { ok: true, json: async () => ({ items: [{ id: "glp1", user_id: "u1", name: "GLP-1", description: "", active: true }] }) };
+    if (path.pathname.endsWith("/pnl/themes")) return { ok: true, json: async () => ({ items: [{ id: "glp1", name: "GLP-1", account_mode: "live", simulated: false, currency: "SGD", realized: "0", unrealized: "0", commissions: "0", total: "0", issues: [], details: [holding("LLY", "0.5", "glp1")] }] }) };
+    if (path.pathname.endsWith("/positions") && path.searchParams.get("dims") === "sector") {
+      const rows = (api(url) as { items: Record<string, unknown>[] }).items.map(row => row.trading_symbol === "LLY" ? { ...row, attributes: { sector: tech } } : { ...row, attributes: { sector: { id: null, label: "Unclassified" } } });
+      return { ok: true, json: async () => snapshot(rows) };
+    }
+    return { ok: true, json: async () => api(url) };
+  }));
+  render(<PortfolioApp path="/portfolio/risk" />);
+  const table = await screen.findByRole("treegrid", { name: "Exposure by theme and sector" });
+  expect(requests.some(request => request.includes("/pnl/themes") && request.includes("account_id=U1"))).toBe(true);
+  // Half of LLY (70k) is tagged GLP-1; the other half, BOXX and CSPX are Untagged. Untagged sorts last.
+  const top = () => within(table).getAllByRole("row").filter(row => row.getAttribute("aria-level") === "1");
+  expect(top().map(row => row.querySelector("strong")!.textContent)).toEqual(["GLP-1", "Untagged"]);
+  expect(top()[0]).toHaveTextContent("35,000");
+  expect(top()[0]).toHaveTextContent("35.0%");
+  expect(top()[1]).toHaveTextContent("165,000");
+  // Theme › Sector opens on the first level.
+  expect(within(table).getAllByRole("row").filter(row => row.getAttribute("aria-level") === "2").map(row => row.querySelector("strong")!.textContent)).toEqual(["Health Care", "Health Care", "Unclassified"]);
+  fireEvent.click(within(table).getByRole("button", { name: "Expand GLP-1 › Health Care" }));
+  expect(within(table).getByText("50% of the position")).toBeInTheDocument();
+  // Limits are breached here, so their fold opens; the stress fold opens on a red verdict too.
+  expect(screen.getByText("Limits & operating envelope").closest("details")).toHaveAttribute("open");
+});

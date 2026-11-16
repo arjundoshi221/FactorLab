@@ -1,13 +1,12 @@
-import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
-import type { AccountFee, AttrValue, BrokerAccount, CatalogEntry, CatalogKind, IbkrValues, ItemsPage, OrderAssignment, OrdersPage, PnlDetail, PnlGroup, PnlReport as PnlReportPayload, Profile, ReconciliationRow, StatementInfo, TaggedOrder } from "./types";
+import type { AccountFee, AttrValue, BrokerAccount, CatalogEntry, CatalogKind, Dimension, IbkrValues, ItemsPage, OrderAssignment, OrdersPage, PnlDetail, PnlGroup, PnlReport as PnlReportPayload, Profile, ReconciliationRow, StatementInfo, TaggedOrder } from "./types";
 import { errorMessage, fetchJson, useRemote } from "../shared/api";
-import { SignedBars } from "../shared/charts";
 import { formatTime } from "../shared/format";
-import { compactMoney, toNumber } from "../shared/market";
-import { Amount, EmptyState, PivotControl, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery, usePortfolioRefresh } from "./PortfolioUI";
-import { attributeOf, useDimensions, usePivotParams } from "./pivot";
-import { groupsByAttribute, subgroups } from "./pnlPivot";
+import { toNumber } from "../shared/market";
+import { Amount, EmptyState, GroupByChips, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery, usePortfolioRefresh } from "./PortfolioUI";
+import { sumDecimals, treeKeys, useDimensions, useGroupBy, type Level } from "./pivot";
+import { attributeLevel, pnlSections, tagLevel, TAG_LEVELS, type PnlNode, type PnlSection, type PnlTotals } from "./pnlPivot";
 import "./Portfolio.css";
 
 const API = "/hub/api/v1/portfolio";
@@ -252,79 +251,144 @@ function PnlReport({ kind, userId, selected, onSelect }: { kind: CatalogKind; us
   </section>;
 }
 
-/** Total PnL per group as diverging bars, one chart per currency so values are never compared across currencies. */
-function PnlBars({ groups, label, metric }: { groups: PnlGroup[]; label: string; metric: string }) {
-  // A chart whose every value is unavailable shows nothing but dashes, so leave it out.
-  const currencies = Array.from(new Set(groups.filter(group => group.total !== null).map(group => group.currency)));
-  if (currencies.length === 0) return null;
-  return <div className="portfolio-pnl-bars">{currencies.map(currency => {
-    const bars = groups.filter(group => group.currency === currency).map(group => ({
-      key: JSON.stringify([group.id, group.account_mode, group.simulated]), label: group.name, value: toNumber(group.total),
-      display: `${compactMoney(toNumber(group.total))}`, title: `${group.name} · ${group.account_mode}${group.simulated ? " · simulated" : ""}: ${metric.toLowerCase()} ${group.total ?? "unavailable"} ${currency}`,
-    })).sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
-    return <figure key={currency}><figcaption>{metric} by {label} · {currency}</figcaption><SignedBars bars={bars} label={`${metric} by ${label}, ${currency}`} /></figure>;
-  })}</div>;
-}
-
 /** Names the instruments a row's totals leave out (they cannot be valued; their fees still count). */
 function ExcludedNote({ rows, total }: { rows: PnlGroup["excluded"]; total: string | null }) {
   if (!rows?.length) return null;
-  return <small className="portfolio-cell-note" title={rows.map(row => `${row.trading_symbol}: ${row.issues.filter(issue => issue !== "unassigned").map(issue => issueLabels[issue] ?? issue).join(", ")}`).join("\n")}>Excludes {rows.map(row => row.trading_symbol).join(", ")}{total !== null ? " (fees included)" : ""}</small>;
+  return <small className="portfolio-cell-note" title={rows.map(row => `${row.trading_symbol}: ${row.issues.filter(issue => issue !== "unassigned").map(issue => issueLabels[issue] ?? issue).join(", ")}`).join("\n")}>Excludes {symbolList(rows)}{total !== null ? " (fees included)" : ""}</small>;
 }
+
+/** A few symbols by name; a long list as a count (the full list is in the cell's title). */
+function symbolList(rows: { trading_symbol: string }[]): string {
+  const symbols = [...new Set(rows.map(row => row.trading_symbol))];
+  return symbols.length <= 3 ? symbols.join(", ") : `${symbols.length} instruments`;
+}
+
+const ownLevel = { themes: "theme", strategies: "strategy", "trade-names": "trade_name" } as const;
+type SortKey = "realized" | "unrealized" | "commissions" | "total" | "ibkr_total";
 
 function PnlValues({ kind, userId, filter, period }: { kind: CatalogKind; userId: string; filter: string; period: Period }) {
   const ytd = period === "ytd";
   const dimensions = useDimensions();
-  const { pivot, rows: rowOrder, setPivot, setRows } = usePivotParams();
-  const dimension = dimensions.find(item => item.id === pivot);
-  const remote = useRemote<PnlReportPayload>(`${API}/pnl/${kind}?user_id=${userId}${filter}${ytd ? `&since=${ytdStart()}` : ""}${dimension ? `&dims=${encodeURIComponent(dimension.id)}` : ""}`, 60_000);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const own = ownLevel[kind];
+  const [groupBy, setGroupBy] = useGroupBy([own]);
+  const requested = dimensions.filter(dimension => groupBy.includes(dimension.id));
+  const dims = requested.map(dimension => dimension.id).join(",");
+  const remote = useRemote<PnlReportPayload>(`${API}/pnl/${kind}?user_id=${userId}${filter}${ytd ? `&since=${ytdStart()}` : ""}${dims ? `&dims=${encodeURIComponent(dims)}` : ""}`, 60_000);
+  const catalog = (tag: CatalogKind) => `${API}/catalogs/${tag}?user_id=${encodeURIComponent(userId)}`;
+  const themes = useRemote<ItemsPage<CatalogEntry>>(catalog("themes"), 60_000);
+  const strategies = useRemote<ItemsPage<CatalogEntry>>(catalog("strategies"), 60_000);
+  const names = useRemote<ItemsPage<CatalogEntry>>(catalog("trade-names"), 60_000);
+  const catalogs = { themes, strategies, "trade-names": names };
   const metric = ytd ? "Net realized YTD" : "Total PnL";
-  const suffix = ytd ? " YTD" : "";
-  // Pivot only rows the API labelled, so an unlabelled holding is never shown as Unclassified.
-  const failed = Boolean(dimension && remote.data?.unavailable_dimensions?.includes(dimension.id));
-  const active = dimension && remote.data && !failed && remote.data.items.every(group => group.details.every(detail => detail.attributes?.[dimension.id])) ? dimension : undefined;
-  const byAttribute = Boolean(active && rowOrder === "attr");
-  const tagged = remote.data?.items ?? [];
-  const groupOrder: AttrValue[] = [...new Map(tagged.map(group => [group.id, { id: group.id, label: group.name }])).values()];
-  const groupOf = (detail: PnlDetail): AttrValue => {
-    const id = detail[fields[kind]];
-    return groupOrder.find(value => value.id === id) ?? { id, label: id === null ? "Unassigned" : "Archived entry" };
-  };
-  const groups = active && byAttribute ? groupsByAttribute(tagged, active.id, active.buckets, ytd) : tagged;
-  const split = (group: PnlGroup) => !active ? null : byAttribute ? subgroups(group.details, groupOf, groupOrder, ytd) : subgroups(group.details, detail => attributeOf(detail, active.id), active.buckets, ytd);
-  const rowLabel = active && byAttribute ? active.label : singular[kind];
-  const holding = (detail: PnlDetail, key: string) => <tr key={key}><td><strong>{detail.trading_symbol}</strong></td><td className="portfolio-numeric"><Amount value={detail.quantity} quantity /></td><td className="portfolio-numeric"><Amount value={detail.realized} signed /></td><td className="portfolio-numeric"><Amount value={detail.unrealized} signed /></td><td className="portfolio-numeric"><Amount value={detail.commissions} /></td><td className="portfolio-numeric"><Amount value={detail.total} signed /></td><IbkrCell values={detail} ytd={ytd} />
-    <td><span className="portfolio-cell-note">{detail.price_time ? formatTime(detail.price_time) : "No open-position valuation"}</span>{detail.history_start && <small className="portfolio-cell-note">Recorded since {formatTime(detail.history_start)}</small>}<a className="portfolio-text-link" href={`/portfolio?user_id=${userId}&account=${encodeURIComponent(JSON.stringify([detail.broker_code, detail.account_id]))}`}>{detail.orders.length ? `${detail.orders.length} contributing ${detail.orders.length === 1 ? "order" : "orders"}` : "View account"}<PortfolioIcon name="arrow" /></a></td></tr>;
-  return <><div className="portfolio-report-tools"><p>{ytd ? <>Realized − fees since {ytdStart()} <span>·</span> Unrealized is the current open mark</> : "Realized + unrealized − fees"} <span>·</span> Values shown in each row’s currency</p>
-    <PivotControl dimensions={dimensions} value={pivot} onChange={value => { setPivot(value); setExpanded(null); }} rows={rowOrder} onRows={value => { setRows(value); setExpanded(null); }} groupLabel={groupLabels[kind]} />
+  const groups = remote.data?.items ?? [];
+  const unavailable = remote.data?.unavailable_dimensions ?? [];
+  // Group by an attribute only once the API has labelled every holding, so an unlabelled one is never shown as Unclassified.
+  const failed = requested.filter(dimension => unavailable.includes(dimension.id));
+  const labelled = (dimension: Dimension) => !failed.includes(dimension) && remote.data !== null && groups.every(group => group.details.every(detail => detail.attributes?.[dimension.id]));
+  const pending = requested.filter(dimension => !failed.includes(dimension) && !labelled(dimension));
+  const levels = groupBy.flatMap((id): Level<PnlDetail>[] => {
+    const tag = TAG_LEVELS.find(item => item.id === id);
+    if (tag) {
+      const entries = catalogs[tag.kind].data?.items;
+      const known = new Map((entries ?? []).map(entry => [entry.id, entry.name]));
+      if (tag.id === own) for (const group of groups) if (group.id !== null) known.set(group.id, group.name);
+      return [tagLevel(tag, entries || tag.id === own ? known : null)];
+    }
+    const dimension = requested.find(item => item.id === id);
+    return dimension && labelled(dimension) ? [attributeLevel(dimension)] : [];
+  });
+  const shown = levels.length ? levels : [tagLevel<PnlDetail>(TAG_LEVELS.find(item => item.id === own)!, new Map(groups.map(group => [group.id ?? "", group.name])))];
+  const sections = remote.data ? pnlSections(groups, shown, own, ytd) : [];
+  const available = [...TAG_LEVELS.map(tag => ({ id: tag.id, label: tag.label })), ...dimensions.map(dimension => ({ id: dimension.id, label: dimension.label }))];
+  return <><div className="portfolio-report-tools">
+    <GroupByChips available={available} value={groupBy} onChange={setGroupBy} />
     <button className="portfolio-button portfolio-button--ghost" onClick={remote.refresh} disabled={remote.refreshing}><PortfolioIcon name="refresh" />{remote.refreshing ? "Refreshing…" : "Refresh PnL"}</button></div>
     {Boolean(remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(remote.error, "PnL refresh failed.")} Any visible report is from the last successful refresh.</p>}
-    {failed && dimension && <p className="portfolio-notice portfolio-notice--error" role="alert">{dimension.label} classification is unavailable right now, so the report is shown without the pivot.</p>}
-    {dimension && !active && !failed && remote.data && remote.loading && <p className="portfolio-empty-inline" role="status">Labelling holdings by {dimension.label.toLowerCase()}…</p>}
-    {remote.loading && !remote.data ? <p className="portfolio-empty-inline" role="status">Calculating PnL…</p> : remote.data?.items.length === 0 ? <EmptyState title="No performance to show yet">PnL appears here when this profile has recorded fills or holdings.</EmptyState> : remote.data && <><PnlBars groups={groups} label={rowLabel.toLowerCase()} metric={metric} /><div className="portfolio-table-scroll" role="region" aria-label="Performance table" tabIndex={0}><table className="portfolio-pnl-table" aria-label={`PnL by ${rowLabel.toLowerCase()}`}><thead><tr><th scope="col">{rowLabel}</th><th scope="col">Currency</th><th scope="col" className="portfolio-numeric">Realized{suffix}</th><th scope="col" className="portfolio-numeric">{ytd ? "Unrealized (open)" : "Unrealized"}</th><th scope="col" className="portfolio-numeric">Fees{suffix}</th><th scope="col" className="portfolio-numeric portfolio-total">{metric}</th><th scope="col" className="portfolio-numeric portfolio-ibkr" title="IBKR-reported, net of commissions">IBKR{suffix}</th><th scope="col"><span className="sr-only">Details</span></th></tr></thead><tbody>{groups.map(group => {
-      const key = JSON.stringify([byAttribute, group.id, group.account_mode, group.simulated, group.currency]);
-      const open = expanded === key;
-      const parts = open ? split(group) : null;
-      return <Fragment key={key}><tr className={open ? "is-expanded" : ""}><th scope="row"><strong>{group.name}</strong><div className="portfolio-group-meta"><span>{group.account_mode}</span>{group.simulated && <span>Simulated</span>}
-        {group.issues.length > 0 && <span className="portfolio-stale" title={group.issues.map(issue => issueLabels[issue] ?? issue).join(" · ")}>{badgeFor(group.issues)}</span>}</div>
-        <ExcludedNote rows={group.excluded} total={group.total} /></th>
-        <td><span className="portfolio-currency">{group.currency}</span></td><td className="portfolio-numeric"><Amount value={group.realized} signed /></td><td className="portfolio-numeric"><Amount value={group.unrealized} signed /></td><td className="portfolio-numeric"><Amount value={group.commissions} /></td><td className="portfolio-numeric portfolio-total"><Amount value={group.total} signed /></td><IbkrCell values={group} excluded={group.ibkr_excluded} ytd={ytd} />
-        <td><button className="portfolio-expand" aria-label={`${open ? "Hide" : "View"} holdings for ${group.name}, ${group.currency}, ${group.account_mode}${group.simulated ? ", simulated" : ""}`} aria-expanded={open} onClick={() => setExpanded(open ? null : key)}><PortfolioIcon name="chevron" /></button></td></tr>
-        {open && <tr className="portfolio-expanded-row"><td colSpan={8}><div className="portfolio-holdings"><div className="portfolio-section-heading"><h3>{group.name} · {parts && active ? `By ${byAttribute ? singular[kind] : active.label.toLowerCase()}` : "Holdings & orders"}</h3><span className="portfolio-footnote">— means unavailable</span></div>
-          {group.issues.length > 0 && <ul className="portfolio-issue-list">{group.issues.map(issue => <li key={issue}>{issueLabels[issue] ?? issue}</li>)}</ul>}
-          {group.details.length === 0 ? <p className="portfolio-footnote">No contributing holdings reported.</p> : <table aria-label={`${group.name} holdings`}><thead><tr><th scope="col">Instrument</th><th scope="col" className="portfolio-numeric">Quantity</th><th scope="col" className="portfolio-numeric">Realized{suffix}</th><th scope="col" className="portfolio-numeric">{ytd ? "Unrealized (open)" : "Unrealized"}</th><th scope="col" className="portfolio-numeric">Fees{suffix}</th><th scope="col" className="portfolio-numeric">{ytd ? "Net realized" : "Total"}</th><th scope="col" className="portfolio-numeric portfolio-ibkr" title="IBKR-reported, net of commissions">IBKR</th><th scope="col">Valuation & orders</th></tr></thead>
-            <tbody>{parts ? parts.map(part => <Fragment key={part.key}><tr className="portfolio-pivot-subtotal"><th scope="rowgroup" colSpan={2}><strong>{part.value.label}</strong><small className="portfolio-cell-note">{part.rows.length} {part.rows.length === 1 ? "holding" : "holdings"}</small><ExcludedNote rows={part.totals.excluded} total={part.totals.total} /></th><td className="portfolio-numeric"><Amount value={part.totals.realized} signed /></td><td className="portfolio-numeric"><Amount value={part.totals.unrealized} signed /></td><td className="portfolio-numeric"><Amount value={part.totals.commissions} /></td><td className="portfolio-numeric"><Amount value={part.totals.total} signed /></td><IbkrCell values={part.totals} excluded={part.totals.ibkr_excluded} ytd={ytd} /><td /></tr>
-              {part.rows.map((detail, index) => holding(detail, `${part.key}/${index}`))}</Fragment>) : group.details.map((detail, index) => holding(detail, String(index)))}</tbody></table>}
-        </div></td></tr>}
-      </Fragment>;
-    })}</tbody></table></div></>}
+    {failed.map(dimension => <p key={dimension.id} className="portfolio-notice portfolio-notice--error" role="alert">{dimension.label} classification is unavailable right now, so the report is shown without that level.</p>)}
+    {pending.length > 0 && remote.data && <p className="portfolio-empty-inline" role="status">Labelling holdings by {pending.map(dimension => dimension.label.toLowerCase()).join(" and ")}…</p>}
+    {remote.loading && !remote.data ? <p className="portfolio-empty-inline" role="status">Calculating PnL…</p> : remote.data?.items.length === 0 ? <EmptyState title="No performance to show yet">PnL appears here when this profile has recorded fills or holdings.</EmptyState>
+      : remote.data && <PnlTree key={shown.map(level => level.id).join(",")} sections={sections} levels={shown} ytd={ytd} userId={userId} metric={metric} />}
     {remote.data?.reconciliation && <Reconciliation rows={remote.data.reconciliation} statements={remote.data.statements ?? []} />}
     {remote.data && <AccountFees rows={remote.data.account_fees ?? []} ytd={ytd} />}
   </>;
 }
 
-const groupLabels = { themes: "Theme", strategies: "Strategy", "trade-names": "Trade name" };
+const sortLast = (node: { value: AttrValue }) => node.value.id === null ? 1 : 0;
+
+/** The PnL report as one tree table: a section per currency, the same columns at every depth. */
+function PnlTree({ sections, levels, ytd, userId, metric }: { sections: PnlSection[]; levels: Level<PnlDetail>[]; ytd: boolean; userId: string; metric: string }) {
+  const [open, setOpen] = useState<Set<string>>(() => new Set(levels.length > 1 ? sections.flatMap(section => section.nodes.map(node => node.key)) : []));
+  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "total", desc: true });
+  const suffix = ytd ? " YTD" : "";
+  const allKeys = sections.flatMap(section => treeKeys(section.nodes));
+  const toggle = (key: string) => setOpen(previous => { const next = new Set(previous); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  const compare = (a: number | null, b: number | null) => a === null ? (b === null ? 0 : 1) : b === null ? -1 : sort.desc ? b - a : a - b;
+  const ordered = (nodes: PnlNode[]) => [...nodes].sort((a, b) => sortLast(a) - sortLast(b) || compare(toNumber(a.totals[sort.key]), toNumber(b.totals[sort.key])));
+  const orderedRows = (rows: PnlDetail[]) => [...rows].sort((a, b) => compare(toNumber(a[sort.key]), toNumber(b[sort.key])) || a.trading_symbol.localeCompare(b.trading_symbol));
+  const columns: [SortKey, string, string][] = [
+    ["realized", `Realized${suffix}`, ""], ["unrealized", ytd ? "Unrealized (open)" : "Unrealized", ""], ["commissions", `Fees${suffix}`, ""],
+    ["total", metric, " portfolio-total"], ["ibkr_total", `IBKR${suffix}`, " portfolio-ibkr"],
+  ];
+  return <>
+    <div className="portfolio-tree-tools"><span className="portfolio-footnote">{sections.length > 1 ? "One section per currency and account type; values never mix currencies" : "Values in the section's currency"} · — means unavailable</span>
+      <span className="portfolio-tree-tools__buttons"><button type="button" className="portfolio-button portfolio-button--ghost" onClick={() => setOpen(new Set(allKeys))}>Expand all</button>
+        <button type="button" className="portfolio-button portfolio-button--ghost" disabled={open.size === 0} onClick={() => setOpen(new Set())}>Collapse all</button></span></div>
+    <div className="portfolio-table-scroll" role="region" aria-label="Performance table" tabIndex={0}><table className="portfolio-pnl-table portfolio-tree" role="treegrid" aria-label={`PnL by ${levels[0].label.toLowerCase()}`}>
+      <thead><tr><th scope="col">{levels.map(level => level.label).join(" › ")}</th>{columns.map(([key, label, extra]) => <th key={key} scope="col" className={`portfolio-numeric${extra}`} aria-sort={sort.key === key ? sort.desc ? "descending" : "ascending" : undefined}
+        title={key === "ibkr_total" ? "IBKR-reported, net of commissions" : undefined}>
+        <button type="button" className="portfolio-sort" onClick={() => setSort(sort.key === key ? { key, desc: !sort.desc } : { key, desc: true })}>{label}<span aria-hidden="true">{sort.key === key ? sort.desc ? " ↓" : " ↑" : ""}</span></button></th>)}</tr></thead>
+      {sections.map(section => {
+        const where = [section.currency, section.account_mode, ...(section.simulated ? ["simulated"] : [])].join(", ");
+        const scale = Math.max(0, ...treeValues(section.nodes).map(value => Math.abs(value)));
+        const cells = (values: PnlTotals | PnlDetail, excluded?: PnlTotals["ibkr_excluded"]) => <>
+          <td className="portfolio-numeric"><Amount value={values.realized} signed /></td><td className="portfolio-numeric"><Amount value={values.unrealized} signed /></td>
+          <td className="portfolio-numeric"><Amount value={values.commissions} /></td>
+          <td className="portfolio-numeric portfolio-total"><Amount value={values.total} signed /><DataBar value={toNumber(values.total)} scale={scale} /></td>
+          <IbkrCell values={values} excluded={excluded} ytd={ytd} ours={values.total} /></>;
+        const holding = (detail: PnlDetail, depth: number, key: string) => <tr key={key} aria-level={depth + 1} className="portfolio-tree-leaf">
+          <th scope="row" style={{ paddingLeft: `${12 + depth * 20}px` }}><div className="portfolio-tree-name"><span className="portfolio-tree-spacer" />
+            <div><strong>{detail.trading_symbol}</strong><div className="portfolio-group-meta"><span>Qty <Amount value={detail.quantity} quantity /></span>
+              {detail.issues.some(issue => issue !== "unassigned") && <span className="portfolio-stale" title={detail.issues.map(issue => issueLabels[issue] ?? issue).join(" · ")}>{badgeFor(detail.issues)}</span>}
+              <a className="portfolio-text-link" title={[detail.price_time ? `Valued ${formatTime(detail.price_time)}` : "No open-position valuation", detail.history_start ? `Recorded since ${formatTime(detail.history_start)}` : ""].filter(Boolean).join(" · ")}
+                href={`/portfolio?user_id=${userId}&account=${encodeURIComponent(JSON.stringify([detail.broker_code, detail.account_id]))}`}>{detail.orders.length ? `${detail.orders.length} contributing ${detail.orders.length === 1 ? "order" : "orders"}` : "View account"}<PortfolioIcon name="arrow" /></a></div></div></div></th>
+          {cells(detail)}</tr>;
+        const row = (node: PnlNode, path: string[]): ReactNode[] => {
+          const isOpen = open.has(node.key);
+          const expandable = node.children.length > 0 || node.rows.length > 0;
+          const name = [...path, node.value.label];
+          const next = levels[node.depth + 1]?.label.toLowerCase();
+          const count = node.children.length && next ? `${node.children.length} ${next}${node.children.length === 1 ? "" : "s"}` : `${node.rows.length} ${node.rows.length === 1 ? "holding" : "holdings"}`;
+          return [<tr key={node.key} aria-level={node.depth + 1} aria-expanded={expandable ? isOpen : undefined} className={`portfolio-tree-row portfolio-tree-row--d${Math.min(node.depth, 3)}${isOpen ? " is-expanded" : ""}`}>
+            <th scope="row" style={{ paddingLeft: `${12 + node.depth * 20}px` }}><div className="portfolio-tree-name">
+              {expandable ? <button type="button" className="portfolio-expand" aria-expanded={isOpen} aria-label={`${isOpen ? "Collapse" : "Expand"} ${name.join(" › ")} (${where})`} onClick={() => toggle(node.key)}><PortfolioIcon name="chevron" /></button> : <span className="portfolio-tree-spacer" />}
+              <div><strong>{node.value.label}</strong><div className="portfolio-group-meta"><span>{count}</span>
+                {node.totals.issues.length > 0 && <span className="portfolio-stale" title={node.totals.issues.map(issue => issueLabels[issue] ?? issue).join(" · ")}>{badgeFor(node.totals.issues)}</span>}</div>
+                <ExcludedNote rows={node.totals.excluded} total={node.totals.total} /></div></div></th>
+            {cells(node.totals, node.totals.ibkr_excluded)}</tr>,
+            ...(!isOpen ? [] : node.children.length ? ordered(node.children).flatMap(child => row(child, name)) : orderedRows(node.rows).map((detail, index) => holding(detail, node.depth + 1, `${node.key}#${index}`)))];
+        };
+        return <tbody key={section.key} aria-label={where}>
+          <tr className="portfolio-tree-section"><th scope="rowgroup"><span className="portfolio-currency">{section.currency}</span><span className="portfolio-tree-section__mode">{section.account_mode}{section.simulated ? " · simulated" : ""}</span></th>
+            <td className="portfolio-numeric"><Amount value={section.totals.realized} signed /></td><td className="portfolio-numeric"><Amount value={section.totals.unrealized} signed /></td>
+            <td className="portfolio-numeric"><Amount value={section.totals.commissions} /></td><td className="portfolio-numeric portfolio-total"><Amount value={section.totals.total} signed /></td>
+            <IbkrCell values={section.totals} ytd={ytd} ours={section.totals.total} /></tr>
+          {ordered(section.nodes).flatMap(node => row(node, []))}
+        </tbody>;
+      })}
+    </table></div></>;
+}
+
+/** Every total in a tree, nodes and holdings, to scale a section's bars. */
+function treeValues(nodes: PnlNode[]): number[] {
+  return nodes.flatMap(node => [toNumber(node.totals.total), ...node.rows.map(row => toNumber(row.total)), ...treeValues(node.children)].filter((value): value is number => value !== null));
+}
+
+/** Diverging bar from the cell's centre: right for gains, left for losses (sign and colour also on the figure). */
+function DataBar({ value, scale }: { value: number | null; scale: number }) {
+  if (value === null || !scale) return null;
+  const width = Math.min(50, (Math.abs(value) / scale) * 50);
+  return <span className="portfolio-databar" aria-hidden="true"><i className={value < 0 ? "is-negative" : "is-positive"} style={value < 0 ? { right: "50%", width: `${width}%` } : { left: "50%", width: `${width}%` }} /></span>;
+}
 
 type Period = "all" | "ytd";
 
@@ -347,14 +411,17 @@ function ytdStart(): string {
 }
 
 /** IBKR's figure beside ours; the title carries its realized/unrealized split and why parts are missing. */
-function IbkrCell({ values, excluded = [], ytd }: { values: IbkrValues; excluded?: { trading_symbol: string }[]; ytd: boolean }) {
+function IbkrCell({ values, excluded = [], ytd, ours }: { values: IbkrValues; excluded?: { trading_symbol: string }[]; ytd: boolean; ours?: string | null }) {
   const issues = values.ibkr_issues ?? [];
+  const gap = ours == null || values.ibkr_total == null ? null : sumDecimals([values.ibkr_total, [ours, -1]]);
+  const differs = gap !== null && Math.abs(Number(gap)) >= 0.005;
   const title = [
     `IBKR realized ${values.ibkr_realized ?? "unavailable"}${ytd ? "" : ` · unrealized ${values.ibkr_unrealized ?? "unavailable"}`} (net of commissions)`,
     ...issues.map(issue => issueLabels[issue] ?? issue),
   ].join("\n");
-  return <td className="portfolio-numeric portfolio-ibkr" title={title}><Amount value={values.ibkr_total} signed />
-    {excluded.length > 0 && <small className="portfolio-cell-note">Excludes {excluded.map(row => row.trading_symbol).join(", ")}</small>}
+  return <td className="portfolio-numeric portfolio-ibkr" title={differs ? `${title}\nDiffers from ours by ${gap}` : title}><Amount value={values.ibkr_total} signed />
+    {differs && <span className="portfolio-ibkr-gap" aria-label={`Differs from ours by ${gap}`}>≠</span>}
+    {excluded.length > 0 && <small className="portfolio-cell-note" title={excluded.map(row => row.trading_symbol).join(", ")}>Excludes {symbolList(excluded)}</small>}
     {excluded.length === 0 && values.ibkr_total == null && issues.length > 0 && <small className="portfolio-cell-note">{issueLabels[issues[0]]?.split(";")[0] ?? issues[0]}</small>}
   </td>;
 }
@@ -372,9 +439,9 @@ function Reconciliation({ rows, statements }: { rows: ReconciliationRow[]; state
   const visible = showAll ? rows : rows.filter(row => row.status !== "match");
   const latest = statements.map(row => row.generated_at).filter((value): value is string => Boolean(value)).sort().at(-1);
   const label = "Reconciliation with IBKR";
-  return <div className="portfolio-reconciliation"><div className="portfolio-section-heading"><h3>{label}</h3>
-      <span className="portfolio-footnote">All time, per instrument · {matched} of {rows.length} match{differing > 0 && <strong className="portfolio-stale"> · {differing} differ</strong>}{latest ? <> · IBKR statement {formatTime(latest)}</> : " · no IBKR statement recorded"}</span>
-      {rows.length > 0 && matched > 0 && <button type="button" className="portfolio-button portfolio-button--ghost" aria-pressed={showAll} onClick={() => setShowAll(!showAll)}>{showAll ? "Hide matches" : "Show matches"}</button>}</div>
+  return <details className="portfolio-fold portfolio-reconciliation"><summary><PortfolioIcon name="chevron" /><h3>{label}</h3>
+      <span className="portfolio-footnote">All time, per instrument · {matched} of {rows.length} match{differing > 0 && <strong className="portfolio-stale"> · {differing} differ</strong>}{latest ? <> · IBKR statement {formatTime(latest)}</> : " · no IBKR statement recorded"}</span></summary>
+    {rows.length > 0 && matched > 0 && <div className="portfolio-fold__tools"><button type="button" className="portfolio-button portfolio-button--ghost" aria-pressed={showAll} onClick={() => setShowAll(!showAll)}>{showAll ? "Hide matches" : "Show matches"}</button></div>}
     {rows.length === 0 ? <p className="portfolio-footnote">No stock or ETF positions or fills to reconcile.</p> : visible.length === 0 ? <p className="portfolio-footnote">Every instrument matches IBKR.</p> :
       <div className="portfolio-table-scroll" role="region" aria-label={label} tabIndex={0}><table aria-label={label}><thead><tr><th scope="col">Instrument / Account</th><th scope="col">Currency</th><th scope="col" className="portfolio-numeric">Ours</th><th scope="col" className="portfolio-numeric">IBKR</th><th scope="col" className="portfolio-numeric">Difference</th><th scope="col">Status</th></tr></thead>
         <tbody>{visible.map(row => <tr key={JSON.stringify([row.broker_code, row.account_id, row.trading_symbol, row.currency])}>
@@ -387,17 +454,17 @@ function Reconciliation({ rows, statements }: { rows: ReconciliationRow[]; state
             {row.reasons.length > 0 && <small className="portfolio-cell-note">{row.reasons.map(reason => issueLabels[reason] ?? reason).join(" · ")}</small>}</td>
         </tr>)}</tbody></table></div>}
     {statements.length > 0 && !statements.some(row => row.lot_detail) && <p className="portfolio-footnote">IBKR open positions are reported per instrument, so an instrument open under several tags shows no IBKR figure per tag. Add “Lot” level of detail to the Open Positions section of the Flex query to split it by opening order.</p>}
-  </div>;
+  </details>;
 }
 
 /** Account-level Flex costs, kept apart because they cannot be attributed to a tag. */
 function AccountFees({ rows, ytd }: { rows: AccountFee[]; ytd: boolean }) {
   const label = `Account fees${ytd ? " YTD" : ""}`;
-  return <div className="portfolio-account-fees"><div className="portfolio-section-heading"><h3>{label}</h3><span className="portfolio-footnote">From IBKR · not included in the totals above</span></div>
+  return <details className="portfolio-fold portfolio-account-fees" open={rows.length > 0}><summary><PortfolioIcon name="chevron" /><h3>{label}</h3><span className="portfolio-footnote">From IBKR · not included in the totals above{rows.length === 0 ? " · none reported" : ""}</span></summary>
     {rows.length === 0 ? <p className="portfolio-footnote">No account-level fees, commission adjustments or FX conversion commissions reported {ytd ? "this year" : "in recorded statements"}. Run a Flex sync if the latest statement is missing.</p> :
       <div className="portfolio-table-scroll" role="region" aria-label={label} tabIndex={0}><table aria-label={label}><thead><tr><th scope="col">Currency</th><th scope="col" className="portfolio-numeric">Fees</th><th scope="col" className="portfolio-numeric">Commission adjustments</th><th scope="col" className="portfolio-numeric">FX conversions</th><th scope="col" className="portfolio-numeric portfolio-total">Total</th></tr></thead>
         <tbody>{rows.map(row => <tr key={JSON.stringify([row.broker_code, row.account_id, row.currency])}><th scope="row"><span className="portfolio-currency">{row.currency}</span>{row.simulated && <div className="portfolio-group-meta"><span>Simulated</span></div>}</th><td className="portfolio-numeric"><Amount value={row.fees} /></td><td className="portfolio-numeric"><Amount value={row.commission_adjustments} signed /></td><td className="portfolio-numeric"><Amount value={row.fx_conversions ?? "0"} /></td><td className="portfolio-numeric portfolio-total"><Amount value={row.total} /></td></tr>)}</tbody></table></div>}
-  </div>;
+  </details>;
 }
 
 export function PortfolioGroups({ kind }: { kind: CatalogKind }) {

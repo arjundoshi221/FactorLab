@@ -60,8 +60,8 @@ it("creates, edits and archives catalog names and displays PnL freshness", async
     return { ok: true, json: async () => result };
   }));
   render(<PortfolioGroups kind="themes" />);
-  expect(await screen.findByText("447.00")).toBeInTheDocument();
-  expect(screen.getByText("Stale price")).toBeInTheDocument();
+  expect(await screen.findAllByText("447.00")).not.toHaveLength(0);
+  expect(screen.getAllByText("Stale price")).not.toHaveLength(0);
   fireEvent.click(screen.getByRole("button", { name: "New theme" }));
   fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Energy" } });
   fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Thesis" } });
@@ -94,16 +94,16 @@ it("clears another profile's and another account's report even when their replac
     return { ok: true, json: async () => result };
   }));
   render(<PortfolioGroups kind="themes" />);
-  expect(await screen.findByText("447.00")).toBeInTheDocument();
+  expect(await screen.findAllByText("447.00")).not.toHaveLength(0);
   failRefresh = true;
   fireEvent.click(screen.getByRole("button", { name: "Refresh PnL" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("PnL refresh failed");
-  expect(screen.getByText("447.00")).toBeInTheDocument();
+  expect(screen.getAllByText("447.00")).not.toHaveLength(0);
   fireEvent.change(screen.getByLabelText("PnL account"), { target: { value: JSON.stringify(["ibkr", "SIM_A"]) } });
-  await waitFor(() => expect(screen.queryByText("447.00")).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryAllByText("447.00")).toHaveLength(0));
   expect(await screen.findByRole("alert")).toHaveTextContent("PnL refresh failed");
   fireEvent.change(screen.getByLabelText("Profile"), { target: { value: B } });
-  expect(screen.queryByText("447.00")).not.toBeInTheDocument();
+  expect(screen.queryAllByText("447.00")).toHaveLength(0);
 });
 
 it("keeps an unfinished tag selection during refresh and lets users filter the current page", async () => {
@@ -131,25 +131,28 @@ it("keeps an unfinished tag selection during refresh and lets users filter the c
   expect(screen.getByText("No matching orders")).toBeInTheDocument();
 });
 
-it("keeps currencies separate and expands holdings with the correct account link", async () => {
-  const detail = { broker_code: "ibkr", account_id: "SIM_A", trading_symbol: "AAPL", quantity: "4", realized: "0", unrealized: "10", commissions: ".35", total: "9.65", price_time: "2026-10-15T12:00:00Z", history_start: "2026-10-15T10:00:00Z", orders: ["123"] };
+it("puts each currency in its own section and expands holdings inline with the account link", async () => {
+  const detail = { broker_code: "ibkr", account_id: "SIM_A", account_mode: "paper", simulated: true, currency: "USD", trading_symbol: "AAPL", quantity: "4", realized: "0", unrealized: "10", commissions: ".35", total: "9.65", issues: [], price_time: "2026-10-15T12:00:00Z", history_start: "2026-10-15T10:00:00Z", orders: ["123"], theme_id: "theme", strategy_id: null, trade_name_id: null };
   vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, json: async () => url.endsWith("/profiles") ? { items: [{ user_id: A, display_name: "Alice" }] }
     : url.includes("/accounts") ? { items: [account] } : url.includes("/pnl/") ? { items: [{ ...group, details: [detail] }, { ...group, currency: "EUR", total: null, realized: null, issues: ["missing_price"], details: [] }] } : { items: [] } })));
   render(<PortfolioGroups kind="themes" />);
-  const table = await screen.findByRole("table", { name: "PnL by theme" });
-  expect(within(table).getByText("USD")).toBeInTheDocument();
-  expect(within(table).getByText("EUR")).toBeInTheDocument();
-  expect(within(table).getByText("447.00")).toBeInTheDocument();
-  expect(screen.queryByRole("table", { name: "AI holdings" })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "View holdings for AI, USD, paper, simulated" }));
-  expect(screen.getByRole("table", { name: "AI holdings" })).toHaveTextContent("AAPL");
+  const table = await screen.findByRole("treegrid", { name: "PnL by theme" });
+  const sections = within(table).getAllByRole("rowgroup").slice(1);
+  expect(sections.map(section => section.getAttribute("aria-label"))).toEqual(["EUR, paper, simulated", "USD, paper, simulated"]);
+  expect(within(sections[1]).getByText("447.00")).toBeInTheDocument();
+  // The EUR group has no holdings: nothing to expand, and its badge names the missing price.
+  expect(within(sections[0]).getByText("Price unavailable")).toBeInTheDocument();
+  expect(within(sections[0]).queryByRole("button", { name: /Expand/ })).not.toBeInTheDocument();
+  expect(within(table).queryByText("AAPL")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Expand AI (USD, paper, simulated)" }));
+  expect(within(table).getByText("AAPL")).toBeInTheDocument();
   const link = new URL(screen.getByRole("link", { name: "1 contributing order" }).getAttribute("href")!, "http://localhost");
   expect(link.searchParams.get("user_id")).toBe(A);
   expect(link.searchParams.get("account")).toBe(JSON.stringify(["ibkr", "SIM_A"]));
-  fireEvent.click(screen.getByRole("button", { name: "View holdings for AI, EUR, paper, simulated" }));
-  // Once as the row's badge, once in the expanded issue list.
-  expect(screen.getAllByText("Price unavailable")).toHaveLength(2);
-  expect(screen.queryByText("AAPL")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
+  expect(within(table).queryByText("AAPL")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
+  expect(within(table).getByText("AAPL")).toBeInTheDocument();
 });
 
 it("creates a catalog entry from the tag dropdown and selects it", async () => {
@@ -202,12 +205,26 @@ it("names the real blocker, lists excluded instruments and hides charts with no 
   vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, json: async () => url.endsWith("/profiles") ? { items: [{ user_id: A, display_name: "Alice" }] }
     : url.includes("/accounts") ? { items: [account] } : url.includes("/pnl/") ? { items: [partial, blank], account_fees: [] } : { items: [] } })));
   render(<PortfolioGroups kind="strategies" />);
-  const table = await screen.findByRole("table", { name: "PnL by strategy" });
-  expect(within(table).getByText("History incomplete")).toBeInTheDocument();
-  expect(within(table).getByText("Unsupported instrument")).toBeInTheDocument();
+  const table = await screen.findByRole("treegrid", { name: "PnL by strategy" });
+  expect(within(table).getAllByText("History incomplete")).not.toHaveLength(0);
+  expect(within(table).getAllByText("Unsupported instrument")).not.toHaveLength(0);
   expect(within(table).getByText("Excludes CRWD (fees included)")).toBeInTheDocument();
-  expect(screen.getByText(/Total PnL by strategy · USD/)).toBeInTheDocument();
-  expect(screen.queryByText(/Total PnL by strategy · SGD/)).not.toBeInTheDocument();
+});
+
+it("shortens a long excluded list to a count and sorts by any column", async () => {
+  const many = ["AMAT", "ASND", "BN", "CSCO", "META"].map(trading_symbol => ({ trading_symbol, account_id: "U1", issues: ["incomplete_history"] }));
+  const loser = { ...group, id: "loser", name: "Loser", total: "-50", realized: "900", excluded: many };
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, json: async () => url.endsWith("/profiles") ? { items: [{ user_id: A, display_name: "Alice" }] }
+    : url.includes("/accounts") ? { items: [account] } : url.includes("/pnl/") ? { items: [loser, { ...group, issues: [] }], account_fees: [] } : { items: [] } })));
+  render(<PortfolioGroups kind="themes" />);
+  const table = await screen.findByRole("treegrid", { name: "PnL by theme" });
+  const note = within(table).getByText("Excludes 5 instruments (fees included)");
+  expect(note).toHaveAttribute("title", expect.stringContaining("META"));
+  const names = () => within(table).getAllByRole("row").filter(row => row.getAttribute("aria-level") === "1").map(row => row.querySelector("strong")!.textContent);
+  expect(names()).toEqual(["AI", "Loser"]);
+  fireEvent.click(within(table).getByRole("button", { name: "Realized" }));
+  expect(names()).toEqual(["Loser", "AI"]);
+  expect(within(table).getByRole("columnheader", { name: "Realized" })).toHaveAttribute("aria-sort", "descending");
 });
 
 it("shows IBKR figures beside ours and reconciles instruments, problems first", async () => {
@@ -220,11 +237,14 @@ it("shows IBKR figures beside ours and reconciles instruments, problems first", 
       reconciliation: [row("NVDA", "mismatch", "-100"), row("TSLA", "ibkr_unavailable", null, ["ibkr_awaiting_statement"]), row("AAPL", "match", "0")],
       statements: [{ broker_code: "ibkr", account_id: "U1", generated_at: "2026-11-13T13:46:47Z", statement_to: "2026-11-12", lot_detail: false }] } : { items: [] } })));
   render(<PortfolioGroups kind="themes" />);
-  const table = await screen.findByRole("table", { name: "PnL by theme" });
+  const table = await screen.findByRole("treegrid", { name: "PnL by theme" });
   expect(within(table).getByRole("columnheader", { name: "IBKR" })).toBeInTheDocument();
-  expect(within(table).getByText("598.00")).toBeInTheDocument();
+  expect(within(table).getAllByText("598.00")).not.toHaveLength(0);
+  expect(within(table).getAllByLabelText("Differs from ours by 151")).not.toHaveLength(0);
   expect(within(table).getByText("Excludes MSFT")).toBeInTheDocument();
 
+  // Folded under the report; the summary carries the counts.
+  expect(screen.getByText("Reconciliation with IBKR").closest("details")).not.toHaveAttribute("open");
   const reconciliation = screen.getByRole("table", { name: "Reconciliation with IBKR" });
   expect(screen.getByText(/1 of 3 match/)).toBeInTheDocument();
   expect(within(reconciliation).getByText("Differs")).toBeInTheDocument();
@@ -262,31 +282,33 @@ it("pivots tagged PnL by sector both ways, keeping the choice in the URL", async
     return { ok: true, json: async () => result };
   }));
   render(<PortfolioGroups kind="themes" />);
-  const select = await screen.findByLabelText("Pivot by");
-  fireEvent.change(select, { target: { value: "sector" } });
-  expect(window.location.search).toContain("pivot=sector");
+  const add = await screen.findByLabelText("Add grouping level");
+  await waitFor(() => expect(within(add).getByRole("option", { name: "Sector" })).toBeInTheDocument());
+  fireEvent.change(add, { target: { value: "sector" } });
+  expect(new URLSearchParams(window.location.search).get("group")).toBe("theme,sector");
   await waitFor(() => expect(requests.some(request => request.includes("/pnl/themes") && request.includes("dims=sector"))).toBe(true));
 
-  // Theme → Sector: each theme splits into sector subtotals.
-  fireEvent.click(await screen.findByRole("button", { name: /View holdings for AI/ }));
-  const holdings = await screen.findByRole("table", { name: "AI holdings" });
-  const subtotals = within(holdings).getAllByRole("rowheader").map(cell => cell.textContent);
-  expect(subtotals[0]).toContain("Energy");
-  expect(subtotals[1]).toContain("Information Technology");
+  // Theme › Sector: each theme opens into sector subtotals.
+  const table = await screen.findByRole("treegrid", { name: "PnL by theme" });
+  await waitFor(() => expect(within(table).getByRole("columnheader", { name: "Theme › Sector" })).toBeInTheDocument());
+  const level2 = () => within(table).getAllByRole("row").filter(row => row.getAttribute("aria-level") === "2").map(row => row.querySelector("strong")!.textContent);
+  expect(level2()).toEqual(["Energy", "Information Technology", "Information Technology"]);
 
-  // Sector → Theme: sectors become the rows, combining both themes' tech holdings.
-  fireEvent.click(screen.getByRole("button", { name: "Sector → Theme" }));
-  expect(window.location.search).toContain("rows=attr");
-  const table = await screen.findByRole("table", { name: "PnL by sector" });
-  const tech_row = within(table).getByRole("rowheader", { name: /Information Technology/ }).closest("tr")!;
-  expect(tech_row).toHaveTextContent("15.00");
-  fireEvent.click(within(tech_row).getByRole("button", { name: /View holdings for Information Technology/ }));
-  const byTheme = await screen.findByRole("table", { name: "Information Technology holdings" });
-  expect(within(byTheme).getAllByRole("rowheader").map(cell => cell.textContent?.split(/\d/)[0])).toEqual(["AI", "Value"]);
+  // Sector › Theme: sectors become the rows, combining both themes' tech holdings.
+  fireEvent.click(screen.getByRole("button", { name: "Move Sector earlier" }));
+  expect(new URLSearchParams(window.location.search).get("group")).toBe("sector,theme");
+  const bySector = await screen.findByRole("treegrid", { name: "PnL by sector" });
+  const techRow = within(bySector).getAllByRole("row").find(row => row.getAttribute("aria-level") === "1" && row.textContent?.startsWith("Information Technology"))!;
+  expect(techRow).toHaveTextContent("15.00");
+  expect(within(bySector).getAllByRole("row").filter(row => row.getAttribute("aria-level") === "2").map(row => row.querySelector("strong")!.textContent)).toEqual(["AI", "AI", "Value"]);
 
-  fireEvent.change(screen.getByLabelText("Pivot by"), { target: { value: "" } });
-  expect(window.location.search).not.toContain("pivot");
-  expect(window.location.search).not.toContain("rows");
+  // Strategy as a third level; then remove Sector to return to the default (no group= in the URL).
+  fireEvent.change(screen.getByLabelText("Add grouping level"), { target: { value: "strategy" } });
+  expect(new URLSearchParams(window.location.search).get("group")).toBe("sector,theme,strategy");
+  fireEvent.click(screen.getByRole("button", { name: "Remove Strategy" }));
+  fireEvent.click(screen.getByRole("button", { name: "Remove Sector" }));
+  expect(window.location.search).not.toContain("group");
+  expect(screen.getByRole("button", { name: "Remove Theme" })).toBeDisabled();
 });
 
 it("shows the report unpivoted and says so when sector classification fails", async () => {
@@ -303,5 +325,5 @@ it("shows the report unpivoted and says so when sector classification fails", as
   }));
   render(<PortfolioGroups kind="themes" />);
   expect(await screen.findByText(/Sector classification is unavailable right now/)).toBeInTheDocument();
-  expect(screen.getByRole("table", { name: "PnL by theme" })).toBeInTheDocument();
+  expect(screen.getByRole("treegrid", { name: "PnL by theme" })).toBeInTheDocument();
 });

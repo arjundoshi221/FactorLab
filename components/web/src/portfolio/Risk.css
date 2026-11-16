@@ -1,9 +1,8 @@
 /* Risk board (portfolio app). Roles only; status colours always ship with an icon + label. */
 .pf-risk { display: grid; gap: 16px; }
 .pf-grid { display: grid; gap: 16px; align-items: start; }
-.pf-grid--top { grid-template-columns: minmax(260px, .9fr) minmax(0, 1.9fr) minmax(300px, 1.1fr); }
 .pf-grid--mid { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
-.pf-grid--bottom { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); }
+.pf-grid--wide { grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); }
 .pf-stack { display: grid; gap: 16px; min-width: 0; }
 .pf-risk-page .pf-account-select { width: min(100%, 320px); }
 
@@ -224,12 +223,9 @@
 
 @media (max-width: 1100px) { .pf-leverage__ladder { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 1280px) {
-  .pf-grid--top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .pf-grid--top > .pf-card--metrics { grid-column: 1 / -1; grid-row: 1; }
-  .pf-grid--mid, .pf-grid--bottom { grid-template-columns: minmax(0, 1fr); }
+  .pf-grid--mid, .pf-grid--wide { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 860px) {
-  .pf-grid--top { grid-template-columns: minmax(0, 1fr); }
   .pf-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pf-verdict { grid-template-columns: 1fr; gap: 10px; }
   .pf-composition { flex-direction: column; align-items: stretch; }
@@ -238,3 +234,20 @@
   .pf-leverage__ladder { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pf-leverage__side { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Exposure by group: the PnL tree's styles (Portfolio.css) on the risk card. */
+.pf-exposure__tools { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 18px 4px; }
+.pf-exposure__note { margin: 8px 18px 0 !important; }
+.pf-card--exposure .pf-table th small { display: block; color: var(--muted); font-size: 11px; font-weight: 400; }
+.pf-card--exposure tfoot th, .pf-card--exposure tfoot td { border-top: 1px solid var(--line-2); color: var(--ink); font-weight: 600; }
+.pf-share { display: block; height: 3px; margin-top: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.pf-share i { display: block; height: 100%; background: var(--accent); }
+
+/* Folded groups of cards; the summary carries the headline. */
+.pf-fold { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.pf-fold > summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; padding: 14px 18px; cursor: pointer; list-style: none; }
+.pf-fold > summary::-webkit-details-marker { display: none; }
+.pf-fold > summary svg { align-self: center; transition: transform .15s; }
+.pf-fold[open] > summary svg { transform: rotate(90deg); }
+.pf-app .pf-fold > summary h2 { margin: 0; font: 600 17px/1.2 var(--serif); }
+.pf-fold__body { padding: 0 12px 12px; }

@@ -9,7 +9,7 @@ sprint: null
 decisions: []
 links: [F-036, F-037, F-042]
 created: 2026-11-14
-updated: 2026-11-14
+updated: 2026-11-16
 ---
 
 # F-048 Pivot portfolio views by attribute
@@ -38,15 +38,41 @@ new UI code.
   - A failed lookup is listed in `unavailable_dimensions`. It is never reported as
     Unclassified.
 - **Web, generic layer**:
-  - `pivot.ts`: `pivotRows`, exact `sumDecimals`, `useDimensions`, and URL-backed
-    `pivot=` / `rows=attr` parameters.
-  - `PivotControl`: the "Pivot by" select, plus the row-order flip.
-- **Tag pages**:
-  - Group → Sector shows sector subtotals inside each expanded group.
-  - Sector → Group shows sector rows, each expanding into per-group subtotals.
-  - Subtotals follow the API's `summarize` rules (`pnlPivot.ts`): unvalued holdings are
-    excluded with their fees counted, unknown costs make fees unavailable, and IBKR
-    figures are net of commissions. Currencies, modes and simulations never merge.
+  - `pivot.ts`: `pivotRows`, the N-level `pivotTree`, exact `sumDecimals`,
+    `useDimensions`, and the URL-backed grouping `group=theme,sector` (`useGroupBy`; the
+    older `pivot=` / `rows=attr` links still open the same view).
+  - `GroupByChips`: the grouping levels as ordered chips. Drag them or use ‹ › to reorder,
+    × to remove (at least one level remains), and "+ Add level" to nest another. The
+    levels are the three order tags (Theme, Strategy, Trade name) plus every API
+    dimension.
+  - `PivotControl` (single "Pivot by" select) remains for the overview.
+- **Tag pages**: one treegrid with a section per currency, account mode and
+  simulation.
+  - Each section has a header row with its totals. The same columns (realized,
+    unrealized, fees, total with an inline diverging bar, IBKR) appear at every depth,
+    down to the holdings.
+  - Rows can be expanded independently, with Expand all and Collapse all. The first
+    level is open when there are several levels.
+  - Clicking a column header sorts the rows by that column (Total, descending, by
+    default). Unclassified and Untagged sort last.
+  - When the first level is the page's own tag, its rows carry the API's group totals.
+    Deeper levels, and any other order, re-aggregate holdings with the API's
+    `summarize` rules (`pnlPivot.ts`, `pnlSections`): unvalued holdings are excluded with
+    their fees counted, unknown costs make fees unavailable, and IBKR figures are net of
+    commissions.
+  - Long excluded-instrument lists are shortened to a count, with the full list in the
+    tooltip.
+  - Reconciliation and Account fees are folded under the table, with their counts in
+    the summary.
+- **Risk**: an "Exposure by group" tree (default Theme › Sector) shows gross, % of NAV,
+  net, β-adjusted exposure and unrealized in the base currency.
+  - Positions are split across tags by the open quantity of each tagged holding from
+    `/pnl/themes` (`riskExposure.ts`). The remainder is Untagged.
+  - An unconvertible position makes its totals unavailable.
+  - The page is reordered as follows: key metrics; exposure beside the snapshot and
+    capacity; positions beside composition; leverage. "Limits & operating envelope" and
+    "Stress tests & triggers" are folds that open when a limit is breached or the
+    verdict is red.
 - **Overview**:
   - The Allocation treemap shows sector tiles.
   - An "Exposure by sector" table shows positions, gross, share of gross, net and
@@ -58,8 +84,7 @@ new UI code.
 
 - Point-in-time sectors (history starts at the first IWV snapshot).
 - Industry or sub-industry levels, and non-US sectors (no source yet).
-- A sector-concentration table on Risk and a sector filter on the trade ledger. These can
-  reuse the same pivot later.
+- A sector filter on the trade ledger (it can reuse the same pivot later).
 
 ## Acceptance criteria
 
@@ -69,6 +94,8 @@ new UI code.
 - [x] Sector → Group never merges currencies, account modes or simulations.
 - [x] The overview exposure is in the base currency, and an unconvertible position makes its bucket unavailable.
 - [x] The pivot choice survives a reload (URL), and a classification failure is shown as a notice with the report left unpivoted.
+- [x] Any order and depth of tags and attributes; old `pivot=` links still work; currencies are separate sections.
+- [x] Risk exposure by theme/sector splits each position by tagged quantity, and its totals reconcile with gross exposure.
 - [ ] Checked against production data on the VPS.
 
 ## Rollout
@@ -79,3 +106,4 @@ through the branch UI trial. There is no migration: it reads the existing `ref.*
 ## Log
 
 - 2026-11-14: created and implemented (API registry and routes, web pivot on overview and tag pages); in review.
+- 2026-11-16: tag pages redesigned as a currency-sectioned treegrid with Group-by chips (N levels, URL `group=`); Risk gains Exposure by group and a decluttered layout.
