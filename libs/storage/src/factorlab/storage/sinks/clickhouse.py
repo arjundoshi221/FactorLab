@@ -459,11 +459,70 @@ class ClickHouseSinks(PoliticalSinkMixin, FundamentalsSinkMixin, ClassificationS
         "StatementRow": "write_statement_rows",
     }
 
-    def write_snapshot(self, rows: Sequence[Any], *, provenance: Provenance) -> WriteResult:
-        """Route each broker shape to its ``V2BrokerStorage`` writer (identity + lineage there)."""
+    def link_instruments(
+        self, rows: Sequence[InstrumentRecord], *, provenance: Provenance
+    ) -> WriteResult:
+        """Link every instrument a broker reports to its FactorLab listing (07 §8.1).
+
+        A match (alias, ISIN, then exchange + ticker) gets the broker alias and keeps
+        its attributes; an instrument no listing has yet is minted with its alias; an
+        ambiguous one (its ISIN or ticker taken by a listing the resolver could not
+        pick) is parked, never guessed. Broker facts written afterwards resolve
+        through the alias.
+        """
         self._check_lineage(provenance)
+        rows = list({row.ref: row for row in rows}.values())
+        resolver = IdentityResolver(self.client)
+        known = resolver.listings(row.ref for row in rows)
+        linked = 0
+        new: list[InstrumentRecord] = []
+        ambiguous: list[InstrumentRef] = []
+        for row in rows:
+            identity = known.get(row.ref)
+            if identity is None:
+                if resolver.occupied(row.ref):
+                    ambiguous.append(row.ref)
+                else:
+                    new.append(row)
+                continue
+            if identity.confidence == "exact":
+                continue  # the alias is already in place
+            self.references.attach_alias(
+                target_kind="listing",
+                target_id=identity.listing_id,
+                alias_kind=row.ref.alias_kind,
+                alias_value=row.ref.alias_value,
+                scope_country=row.ref.country_code,
+                scope_exchange=row.ref.exchange_code or None,
+                source=provenance.source,
+                confidence=identity.confidence,
+            )
+            linked += 1
+        if ambiguous:
+            self._park(provenance, ambiguous, "ambiguous: its ISIN or ticker is already taken")
+        minted = (
+            self.upsert_instruments(new, provenance=provenance, mode="authoritative")
+            if new
+            else WriteResult(0)
+        )
+        return WriteResult(
+            linked + minted.rows_written, len(ambiguous) + minted.unresolved, len(known)
+        )
+
+    def write_snapshot(self, rows: Sequence[Any], *, provenance: Provenance) -> WriteResult:
+        """Route each broker shape to its ``V2BrokerStorage`` writer (identity + lineage there).
+
+        Instruments the statement describes are linked first, so the facts written
+        after them already resolve to FactorLab listings.
+        """
+        self._check_lineage(provenance)
+        instruments = [row for row in rows if isinstance(row, InstrumentRecord)]
+        if instruments:
+            self.link_instruments(instruments, provenance=provenance)
         groups: dict[str, list[Any]] = {}
         for row in rows:
+            if isinstance(row, InstrumentRecord):
+                continue
             name = type(row).__name__
             if name not in self._BROKER_WRITERS:
                 raise TypeError(f"not a broker record: {name}")

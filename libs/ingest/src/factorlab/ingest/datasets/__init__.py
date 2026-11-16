@@ -201,9 +201,13 @@ DATASETS: dict[str, DatasetSpec] = {
         ),
         DatasetSpec(
             # Broker statements (IBKR Flex): fills, filled orders, cash movements, end-of-day
-            # positions, and every statement row kept whole in broker.statement_rows.
+            # positions, and every statement row kept whole in broker.statement_rows. The
+            # instruments the statement describes (ISIN, exchange) are linked to FactorLab
+            # listings first (minted when new), so every broker fact resolves.
             id="broker.flex_activity",
             tables=(
+                "ref.listings",
+                "ref.identifier_aliases",
                 "broker.executions",
                 "broker.order_events",
                 "broker.cash_flows",
@@ -219,6 +223,7 @@ DATASETS: dict[str, DatasetSpec] = {
                 PositionSnapshot,
                 AccountStateRow,
                 StatementRow,
+                InstrumentRecord,
             ),
             sink_protocol=BrokerSink,
             sink_method="write_snapshot",

@@ -891,6 +891,54 @@
   }
  },
  {
+  "_type": "InstrumentRecord",
+  "ref": {
+   "_type": "InstrumentRef",
+   "alias_kind": "ibkr_conid",
+   "alias_value": "265598",
+   "exchange_code": "XNAS",
+   "trading_symbol": "AAPL",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "name": "AAPL",
+  "product_type": "common",
+  "currency": "USD",
+  "lot_size": 1,
+  "tick_size": null,
+  "active": true,
+  "first_traded": null,
+  "last_traded": null,
+  "sector_raw": null,
+  "attributes": {}
+ },
+ {
+  "_type": "InstrumentRecord",
+  "ref": {
+   "_type": "InstrumentRef",
+   "alias_kind": "ibkr_conid",
+   "alias_value": "272093",
+   "exchange_code": "XNAS",
+   "trading_symbol": "MSFT",
+   "country_code": "US",
+   "isin": null,
+   "cusip": null,
+   "figi": null
+  },
+  "name": "MSFT",
+  "product_type": "common",
+  "currency": "USD",
+  "lot_size": 1,
+  "tick_size": null,
+  "active": true,
+  "first_traded": null,
+  "last_traded": null,
+  "sector_raw": null,
+  "attributes": {}
+ },
+ {
   "_type": "CashFlowRecord",
   "event_time": "2026-08-01T13:00:00+00:00",
   "broker_code": "ibkr",

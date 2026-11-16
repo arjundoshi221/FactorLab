@@ -87,6 +87,10 @@ configured US resolution uses SchwabListings and canonical reference sinks.
   `provenance.ingest_run_id` differs from it (`_check_lineage`).
 - Identity (sinks): alias -> ISIN -> exchange + symbol; only `authoritative` mode
   mints; misses are parked in `meta.unresolved_entities`, never dropped.
+- `link_instruments` (broker instruments, routed from `write_snapshot` before the broker facts):
+  a match gets the broker alias and keeps its attributes; an instrument whose ISIN and ticker
+  no active listing holds is minted; one whose ISIN or ticker is taken but could not be
+  picked (`IdentityResolver.occupied`) is parked as ambiguous, never minted twice.
 - Every row gets `version = factorlab.clickhouse.version(now)`.
 - Sinks never branch on `provenance.source`; `ClickHouseSinks` and `InMemorySink`
   must behave identically (sink conformance suite).

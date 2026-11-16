@@ -49,7 +49,9 @@ from zoneinfo import ZoneInfo
 
 from defusedxml import ElementTree
 
+from factorlab.ingest.datasets.reference import InstrumentRecord
 from factorlab.sources.ibkr.errors import IBKRCaptureError
+from factorlab.sources.ibkr.instruments import instrument_records
 from factorlab.sources.ibkr.normalize import (
     BROKER_CODE,
     DEFAULT_COUNTRY_CODE,
@@ -83,6 +85,7 @@ FlexRecord = (
     | PositionSnapshot
     | AccountStateRow
     | StatementRow
+    | InstrumentRecord
 )
 
 _CASH_FLOW_TYPES = {
@@ -406,7 +409,7 @@ def _statement_rows(statement: Any, account: str, mode: Mode, country: str) -> l
 def normalize_flex_statement(
     body: bytes, *, country_code: str = DEFAULT_COUNTRY_CODE
 ) -> list[FlexRecord]:
-    """Every fill, executed order, cash movement, open position and raw row of a statement."""
+    """Every fill, executed order, cash movement, open position, raw row and instrument of a statement."""
     rows: list[FlexRecord] = []
     for statement in _statements(body):
         account = statement.get("accountId", "")
@@ -443,6 +446,8 @@ def normalize_flex_statement(
                 rows.append(position)
         rows.extend(_account_state(statement, account, mode, country_code))
         rows.extend(_statement_rows(statement, account, mode, country_code))
+        # Every stock the statement names, linked to (or minted as) a FactorLab listing.
+        rows.extend(instrument_records(statement.iter()))
     return rows
 
 

@@ -134,6 +134,15 @@ class InMemorySink(NullProviderStorage):
             return self.aliases[(ref.alias_kind, ref.alias_value)]
         return self._natural_match(ref)
 
+    def _occupied(self, ref: InstrumentRef) -> bool:
+        return any(
+            self._in_scope(ref, known)
+            and (
+                (ref.isin and known.isin == ref.isin) or known.trading_symbol == ref.trading_symbol
+            )
+            for known in self.listings.values()
+        )
+
     def resolve_contract(self, ref: InstrumentRef) -> UUID | None:
         return self.contract_aliases.get((ref.alias_kind, ref.alias_value))
 
@@ -405,9 +414,42 @@ class InMemorySink(NullProviderStorage):
             written += 1
         return WriteResult(written, unresolved, written)
 
+    def link_instruments(
+        self, rows: Sequence[InstrumentRecord], *, provenance: Provenance
+    ) -> WriteResult:
+        self._check_lineage(provenance)
+        rows = list({row.ref: row for row in rows}.values())
+        linked = unresolved = resolved = 0
+        new: list[InstrumentRecord] = []
+        for row in rows:
+            listing = self.resolve_listing(row.ref)
+            if listing is None:
+                if self._occupied(row.ref):
+                    self._park(
+                        provenance.source, row.ref, "ambiguous: its ISIN or ticker is already taken"
+                    )
+                    unresolved += 1
+                else:
+                    new.append(row)
+                continue
+            resolved += 1
+            key = (row.ref.alias_kind, row.ref.alias_value)
+            if key in self.aliases:
+                continue  # the alias is already in place
+            self.aliases[key] = listing
+            self._store("ref.identifier_aliases", row, provenance, listing)
+            linked += 1
+        minted = self.upsert_instruments(new, provenance=provenance) if new else WriteResult(0)
+        return WriteResult(linked + minted.rows_written, unresolved + minted.unresolved, resolved)
+
     def write_snapshot(self, rows: Sequence[Any], *, provenance: Provenance) -> WriteResult:
         self._check_lineage(provenance)
+        instruments = [row for row in rows if isinstance(row, InstrumentRecord)]
+        if instruments:
+            self.link_instruments(instruments, provenance=provenance)
         for row in rows:
+            if isinstance(row, InstrumentRecord):
+                continue
             self._store(f"broker.{type(row).__name__}", row, provenance, None)
         return WriteResult(len(rows), 0, len(rows))
 

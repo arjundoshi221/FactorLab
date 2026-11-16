@@ -82,38 +82,52 @@ class IdentityResolver:
                     found[ref] = latest[ref.alias_value][1]
         return found
 
-    def _natural_listing(self, ref: InstrumentRef) -> tuple[UUID, str] | None:
+    @staticmethod
+    def _scope(ref: InstrumentRef) -> tuple[str, dict[str, Any]]:
         # Blank exchange = country-scoped lookup (e.g. bare index tickers).
-        scope, scope_params = (
-            (
+        if ref.exchange_code:
+            return (
                 (
                     "l.exchange_code IN (SELECT exchange_code FROM ref.exchanges FINAL WHERE "
                     "(exchange_code = {exchange:String} OR mic = {exchange:String}) AND active)"
                 ),
                 {"exchange": ref.exchange_code},
             )
-            if ref.exchange_code
-            else ("l.country_code = {country:String}", {"country": ref.country_code})
-        )
-        if ref.isin:
-            rows = self.client.query(
+        return "l.country_code = {country:String}", {"country": ref.country_code}
+
+    def _isin_rows(self, ref: InstrumentRef) -> list[Any]:
+        if not ref.isin:
+            return []
+        scope, scope_params = self._scope(ref)
+        return list(
+            self.client.query(
                 "SELECT l.listing_id FROM ref.listings AS l FINAL "
                 "INNER JOIN ref.securities AS s FINAL ON s.security_id = l.security_id "
                 f"WHERE s.isin = {{isin:String}} AND {scope} AND l.active",
                 parameters={"isin": ref.isin, **scope_params},
             ).result_rows
-            if len(rows) == 1:
-                return rows[0][0], "high"
-            if len(rows) > 1:
-                return None  # ambiguous: never guess
+        )
+
+    def _symbol_rows(self, ref: InstrumentRef) -> list[Any]:
         if not ref.trading_symbol:
-            return None
-        rows = self.client.query(
-            "SELECT l.listing_id, s.isin FROM ref.listings AS l FINAL "
-            "INNER JOIN ref.securities AS s FINAL ON s.security_id = l.security_id "
-            f"WHERE {scope} AND l.trading_symbol = {{symbol:String}} AND l.active",
-            parameters={"symbol": ref.trading_symbol, **scope_params},
-        ).result_rows
+            return []
+        scope, scope_params = self._scope(ref)
+        return list(
+            self.client.query(
+                "SELECT l.listing_id, s.isin FROM ref.listings AS l FINAL "
+                "INNER JOIN ref.securities AS s FINAL ON s.security_id = l.security_id "
+                f"WHERE {scope} AND l.trading_symbol = {{symbol:String}} AND l.active",
+                parameters={"symbol": ref.trading_symbol, **scope_params},
+            ).result_rows
+        )
+
+    def _natural_listing(self, ref: InstrumentRef) -> tuple[UUID, str] | None:
+        rows = self._isin_rows(ref)
+        if len(rows) == 1:
+            return rows[0][0], "high"
+        if len(rows) > 1:
+            return None  # ambiguous: never guess
+        rows = self._symbol_rows(ref)
         if len(rows) != 1:
             return None
         listing_id, isin = rows[0]
@@ -121,6 +135,15 @@ class IdentityResolver:
         if ref.isin and known_isin and known_isin != ref.isin:
             return None  # same ticker, different security (ticker reuse)
         return listing_id, "medium"
+
+    def occupied(self, ref: InstrumentRef) -> bool:
+        """Whether any active listing in scope already has this ISIN or ticker.
+
+        A ref the resolver could not match but whose ISIN or ticker is taken is
+        ambiguous (several candidates, or a reused ticker): minting would duplicate
+        an identity, so callers must park it instead.
+        """
+        return bool(self._isin_rows(ref) or self._symbol_rows(ref))
 
     def listings(self, refs: Iterable[InstrumentRef]) -> dict[InstrumentRef, ListingIdentity]:
         refs = list(dict.fromkeys(refs))

@@ -667,3 +667,20 @@ def test_clickhouse_futures_quotes_carry_the_globex_trade_date():
     assert row["trade_date"] == date(2026, 10, 20)  # an evening quote trades the next day
     assert row["source_symbol"] == "/ESZ26" and row["settlement_price"] == Decimal("5790.75")
     assert row["raw_id"] is not None and row["source"] == "schwab"
+
+
+def test_link_instruments_links_existing_mints_new_and_parks_ambiguous(harness):
+    write(harness.sink, "upsert_instruments", [instrument(UPSTOX)])
+    known = ref("broker_id", "1", isin=ISIN)  # same ISIN: linked, never re-minted
+    fresh = ref("broker_id", "2", symbol="NEWCO", isin="INE111A01011")  # nothing matches: minted
+    reused = ref("broker_id", "3", isin="INE999A01011")  # ticker taken by another ISIN: parked
+    rows = [instrument(known), instrument(fresh), instrument(reused)]
+    result = write(harness.sink, "link_instruments", rows, source="broker")
+    assert (result.rows_written, result.unresolved, result.resolved) == (2, 1, 1)
+    assert harness.listing_count() == 2 and harness.parked() == 1
+    # Linked and minted instruments now resolve by their broker alias; a rerun adds nothing.
+    again = write(harness.sink, "link_instruments", rows, source="broker")
+    assert (again.rows_written, again.unresolved, again.resolved) == (0, 1, 2)
+    assert harness.listing_count() == 2
+    hint = ref("broker_id", "1", symbol="", isin=None)
+    assert write(harness.sink, "write_bars", [bar(hint)], source="broker").unresolved == 0
