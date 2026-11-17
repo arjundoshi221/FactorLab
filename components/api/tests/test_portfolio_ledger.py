@@ -231,3 +231,69 @@ def test_ledger_validates_inputs(ledger_api):
     assert client.get(url).status_code == 422
     repo._accounts = [{**ACCOUNT, "account_id": f"U{n}"} for n in range(21)]
     assert client.get(url, params={"user_id": USER}).status_code == 422
+
+
+MSFT = "66666666-6666-6666-6666-666666666666"
+
+
+def sector_answers(sql, params):
+    """Reference answers for the sector resolver: only MSFT is classified."""
+    if "security_type" in sql:
+        return [
+            {"listing_id": i, "symbol": "MSFT", "security_type": "common"}
+            for i in params["ids"]
+            if i == MSFT
+        ]
+    if "security_sector_history" in sql:
+        return [
+            {"id": i, "sector_id": "45", "sector": "Information Technology"}
+            for i in params["ids"]
+            if i == MSFT
+        ]
+    if "ref.identifier_aliases" in sql:
+        return []
+    return None
+
+
+def test_ledger_pivots_by_sector_and_filters_one_bucket(ledger_api):
+    client, repo = ledger_api
+    original = repo.query
+
+    def query(sql, parameters=None):
+        found = sector_answers(sql, parameters or {})
+        return original(sql, parameters) if found is None else found
+
+    repo.query = query
+    url = "/hub/api/v1/portfolio/ledger"
+    body = client.get(url, params={"user_id": USER, "dims": "sector"}).json()
+    assert body["unavailable_dimensions"] == []
+    buckets = [(b["id"], b["label"], sum(b["counts"].values())) for b in body["pivots"]["sector"]]
+    assert buckets == [("45", "Information Technology", 1), (None, "Unclassified", 3)]
+    assert {row["trading_symbol"]: row["attributes"]["sector"]["id"] for row in body["items"]} == {
+        "MSFT": "45",
+        "AAPL": None,
+        "NVDA": None,
+    }
+    tech = client.get(url, params={"user_id": USER, "bucket": "sector:45"}).json()
+    assert [row["trading_symbol"] for row in tech["items"]] == ["MSFT"]
+    assert tech["counts"]["untagged"] == 1 and len(tech["pivots"]["sector"]) == 2
+    rest = client.get(url, params={"user_id": USER, "bucket": "sector:"}).json()
+    assert rest["total"] == 3
+
+
+def test_ledger_bucket_filter_is_skipped_when_sectors_fail(ledger_api):
+    client, repo = ledger_api
+    original = repo.query
+
+    def query(sql, parameters=None):
+        if "security_sector_history" in sql:
+            raise RuntimeError("clickhouse down")
+        found = sector_answers(sql, parameters or {})
+        return original(sql, parameters) if found is None else found
+
+    repo.query = query
+    body = client.get(
+        "/hub/api/v1/portfolio/ledger", params={"user_id": USER, "bucket": "sector:45"}
+    ).json()
+    assert body["unavailable_dimensions"] == ["sector"] and body["pivots"] == {}
+    assert body["total"] == 4

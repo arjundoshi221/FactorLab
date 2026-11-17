@@ -73,18 +73,35 @@ new UI code.
     capacity; positions beside composition; leverage. "Limits & operating envelope" and
     "Stress tests & triggers" are folds that open when a limit is breached or the
     verdict is red.
+  - "Positions & concentration" has its own "Pivot by" (URL `by=sector`, separate from the
+    exposure tree's `group=`): positions sit under a subtotal row per sector (value, % NAV,
+    value-weighted beta, unrealized, realized YTD; a position without an FX rate makes its
+    sector's total unavailable), and Composition becomes a donut by sector. Single-name
+    limits still apply per position.
 - **Overview**:
+  - "Pivot by" sits in the account toolbar and applies to the whole account page (URL
+    `pivot=sector`).
   - The Allocation treemap shows sector tiles.
   - An "Exposure by sector" table shows positions, gross, share of gross, net and
     unrealized in the base currency. Each row expands to its positions.
   - A position that can't be converted makes its bucket unavailable rather than partial
     (`exposurePivot.ts`).
+  - Open positions are grouped under a header row per sector, and the account's open and
+    closed trades show each trade's sector (the "View all" link carries the pivot).
+- **Trades** (both the Orders ledger and Open & closed): a "Pivot by" select in the filter
+  bar (URL `pivot=sector`). The API labels every filtered row (`dims=sector` on `/ledger`
+  and `/trades`) and returns `pivots`: per sector over full matching history (not just the
+  page) and ignoring the sector filter itself. For trades: open and closed counts,
+  unrealized of open trades and closed results (net, else realized) per currency, mode and
+  simulation, and the win rate. For orders: counts by tag status and tag coverage. Choosing a
+  sector filters the list on the server (URL `bucket=<id>`, `none` for Unclassified; API
+  `bucket=sector:<id>`), and rows show their sector under the ticker. If the lookup fails,
+  the notice says so and the bucket filter is not applied.
 
 ## Non-goals
 
 - Point-in-time sectors (history starts at the first IWV snapshot).
 - Industry or sub-industry levels, and non-US sectors (no source yet).
-- A sector filter on the trade ledger (it can reuse the same pivot later).
 
 ## Acceptance criteria
 
@@ -96,6 +113,8 @@ new UI code.
 - [x] The pivot choice survives a reload (URL), and a classification failure is shown as a notice with the report left unpivoted.
 - [x] Any order and depth of tags and attributes; old `pivot=` links still work; currencies are separate sections.
 - [x] Risk exposure by theme/sector splits each position by tagged quantity, and its totals reconcile with gross exposure.
+- [x] Trades (orders and open/closed) pivot and filter by sector across full history; sector results never add currencies.
+- [x] Overview open positions and account trades follow the page pivot; Risk positions and composition pivot by sector.
 - [ ] Checked against production data on the VPS.
 
 ## Rollout
@@ -107,3 +126,4 @@ through the branch UI trial. There is no migration: it reads the existing `ref.*
 
 - 2026-11-14: created and implemented (API registry and routes, web pivot on overview and tag pages); in review.
 - 2026-11-16: tag pages redesigned as a currency-sectioned treegrid with Group-by chips (N levels, URL `group=`); Risk gains Exposure by group and a decluttered layout.
+- 2026-11-17: sector pivot extended to Trades (`dims=`/`bucket=` on `/ledger` and `/trades`, per-sector summaries), Overview open positions and account trades, and Risk positions and composition (`by=`).

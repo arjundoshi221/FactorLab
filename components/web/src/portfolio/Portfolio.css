@@ -297,3 +297,6 @@
 @media (max-width: 700px) {
   .portfolio-tree-tools__buttons { width: 100%; }
 }
+/* Open positions grouped by the page pivot (Records `groups`). */
+.portfolio-record-group th { padding: 7px 10px; background: var(--panel-soft); color: var(--ink); font-weight: 600; text-align: left; }
+.portfolio-record-group th span { margin-left: 8px; color: var(--muted); font: 400 10px var(--mono); }

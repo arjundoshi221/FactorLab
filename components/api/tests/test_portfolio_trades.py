@@ -238,3 +238,39 @@ def test_trades_endpoint_filters_status_and_tags_before_paging(trades_api):
     assert [row["trading_symbol"] for row in later["items"]] == ["AMD"]
     assert trades_api.get(url, params={"user_id": USER, "status": "maybe"}).status_code == 422
     assert trades_api.get(url, params={"user_id": USER, "broker_code": "ibkr"}).status_code == 422
+
+
+NVDA_LISTING = "55555555-5555-5555-5555-555555555555"
+
+
+def test_trades_pivot_by_sector_counts_every_status_and_filters_one_bucket(trades_api):
+    repo = app.dependency_overrides[repository]()
+    original = repo.query
+
+    def query(sql, parameters=None):
+        params = parameters or {}
+        if "ref.identifier_aliases" in sql:
+            return [{"alias_value": "4815747", "target_kind": "listing", "target_id": NVDA_LISTING}]
+        if "security_type" in sql:
+            return [{"listing_id": NVDA_LISTING, "symbol": "NVDA", "security_type": "common"}]
+        if "security_sector_history" in sql:
+            return [
+                {"id": i, "sector_id": "45", "sector": "Information Technology"}
+                for i in params["ids"]
+            ]
+        return original(sql, parameters)
+
+    repo.query = query
+    url = "/hub/api/v1/portfolio/trades"
+    body = trades_api.get(url, params={"user_id": USER, "dims": "sector"}).json()
+    tech, other = body["pivots"]["sector"]
+    assert (tech["id"], tech["counts"]) == ("45", {"open": 0, "closed": 1})
+    assert tech["summary"][0]["wins"] == 1 and tech["open"] == []
+    assert (other["id"], other["counts"]) == (None, {"open": 1, "closed": 0})
+    assert other["open"][0]["open"] == 1 and Decimal(other["open"][0]["unrealized"]) == 10
+    only = trades_api.get(
+        url, params={"user_id": USER, "status": "open", "bucket": "sector:45"}
+    ).json()
+    # The bucket narrows counts and items; the pivot still lists every bucket.
+    assert only["counts"] == {"open": 0, "closed": 1} and only["items"] == []
+    assert len(only["pivots"]["sector"]) == 2

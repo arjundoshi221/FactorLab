@@ -219,4 +219,11 @@ it("pivots the allocation by sector in the base currency, rows expanding to posi
   expect(rows[1]).toHaveTextContent("80.00");
   fireEvent.click(within(rows[1]).getByRole("button", { name: /Information Technology/ }));
   expect(within(table).getByText("SAP")).toBeInTheDocument();
+  // The same pivot groups the open positions table and labels the account's trades.
+  const positions = screen.getByRole("table", { name: "Positions by sector" });
+  const energyGroup = within(positions).getByRole("rowgroup", { name: "Energy" });
+  expect(energyGroup).toHaveTextContent("1 position");
+  expect(within(energyGroup).getByText("XOM")).toBeInTheDocument();
+  expect(within(within(positions).getByRole("rowgroup", { name: "Information Technology" })).getByText("SAP")).toBeInTheDocument();
+  expect(vi.mocked(fetch)).toHaveBeenCalledWith(expect.stringMatching(/\/trades\?.*dims=sector/), expect.anything());
 });

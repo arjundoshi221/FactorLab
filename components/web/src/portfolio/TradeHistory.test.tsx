@@ -83,3 +83,37 @@ it("formats holding periods", () => {
   expect(holding("2026-10-01T00:00:00Z", "2026-10-02T05:00:00Z")).toBe("29h");
   expect(holding("2026-10-01T00:00:00Z", "2026-10-11T00:00:00Z")).toBe("10d");
 });
+
+it("pivots open and closed trades by sector and filters to one sector", async () => {
+  const sector = { id: "45", label: "Information Technology" };
+  const fetcher = vi.fn(async (url: string) => {
+    const params = new URL(url, "http://x").searchParams;
+    const tech = params.get("bucket") === "sector:45";
+    const body = url.includes("/profiles") ? { items: [{ user_id: USER, display_name: "Jai", active: true }] }
+      : url.includes("/dimensions") ? { items: [{ id: "sector", label: "Sector", buckets: [sector, { id: null, label: "Unclassified" }] }] }
+      : url.includes("/catalogs/") ? { items: [] }
+      : {
+        ...page(tech ? [trade("NVDA", "closed", { attributes: { sector } })] : [trade("AMD", "open", { attributes: { sector: { id: null, label: "Unclassified" } } }), trade("NVDA", "closed", { attributes: { sector } })]),
+        pivots: { sector: [
+          { ...sector, counts: { open: 0, closed: 1 }, open: [], summary: [{ currency: "USD", account_mode: "live", simulated: false, closed: 1, valued: 1, wins: 1, losses: 0, realized: "150", net: "146" }] },
+          { id: null, label: "Unclassified", counts: { open: 1, closed: 0 }, summary: [], open: [{ currency: "USD", account_mode: "live", simulated: false, open: 1, unrealized: "20" }] },
+        ] },
+        unavailable_dimensions: [],
+      };
+    return { ok: true, status: 200, json: async () => body };
+  });
+  vi.stubGlobal("fetch", fetcher);
+  window.history.replaceState(null, "", "/portfolio/trades?view=positions&pivot=sector");
+  render(<TradesPage />);
+  const buckets = await screen.findByRole("table", { name: "Trades by sector" });
+  await waitFor(() => expect(fetcher).toHaveBeenCalledWith(expect.stringMatching(/\/trades\?.*dims=sector/), expect.anything()));
+  expect(within(buckets).getByText("100%")).toBeInTheDocument();
+  const trades = screen.getByRole("table", { name: "Open and closed trades" });
+  expect(within(trades).getByText("Information Technology")).toBeInTheDocument();
+  fireEvent.click(within(buckets).getByRole("button", { name: "Information Technology" }));
+  expect(window.location.search).toContain("bucket=45");
+  await waitFor(() => expect(fetcher).toHaveBeenLastCalledWith(expect.stringMatching(/bucket=sector%3A45/), expect.anything()));
+  await waitFor(() => expect(within(screen.getByRole("table", { name: "Open and closed trades" })).queryByText("AMD")).not.toBeInTheDocument());
+  fireEvent.click(screen.getByRole("button", { name: "Show every sector" }));
+  expect(window.location.search).not.toContain("bucket=");
+});

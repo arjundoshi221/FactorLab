@@ -10,19 +10,31 @@ import { OrderTagging } from "./PortfolioBook";
 import { AccountTrades } from "./TradeHistory";
 import { Amount, EmptyState, PivotControl, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery, usePortfolioRefresh } from "./PortfolioUI";
 import { exposureBy, type ExposureBucket } from "./exposurePivot";
-import { useDimensions, usePivotParams } from "./pivot";
+import { attributeOf, pivotRows, useDimensions, usePivotParams } from "./pivot";
 import "./Portfolio.css";
 
 const API = "/hub/api/v1/portfolio";
 type Column = [string, string, ("money" | "quantity" | "pnl" | "time")?];
 
-function Records({ title, rows, columns, empty }: { title: string; rows: BrokerRow[]; columns: Column[]; empty: string }) {
-  return rows.length ? <div className="portfolio-table-scroll" tabIndex={0} role="region" aria-label={`${title} table`}><table aria-label={title}>
+/** `groups` puts rows under a header row per bucket of the dimension, in its display order. */
+function Records({ title, rows, columns, empty, groups }: { title: string; rows: BrokerRow[]; columns: Column[]; empty: string; groups?: Dimension }) {
+  const line = (row: BrokerRow, index: number | string) => <tr key={String(row.exec_id ?? row.vendor_id ?? index)}>{columns.map(([key, label, format]) => <td key={key} data-label={label} className={format && format !== "time" ? "portfolio-numeric" : ""}>
+    {format === "time" ? formatTime(String(row[key] ?? ""), "—") : format ? <Amount value={row[key]} quantity={format === "quantity"} signed={format === "pnl"} /> : row[key] ?? "—"}
+  </td>)}</tr>;
+  const buckets = groups ? pivotRows(rows, row => attributeOf(row as Attributed, groups.id), groups.buckets) : null;
+  return rows.length ? <div className="portfolio-table-scroll" tabIndex={0} role="region" aria-label={`${title} table`}><table aria-label={groups ? `${title} by ${groups.label.toLowerCase()}` : title}>
     <thead><tr>{columns.map(([key, label, format]) => <th scope="col" key={key} className={format && format !== "time" ? "portfolio-numeric" : ""}>{label}</th>)}</tr></thead>
-    <tbody>{rows.map((row, index) => <tr key={String(row.exec_id ?? row.vendor_id ?? index)}>{columns.map(([key, label, format]) => <td key={key} data-label={label} className={format && format !== "time" ? "portfolio-numeric" : ""}>
-      {format === "time" ? formatTime(String(row[key] ?? ""), "—") : format ? <Amount value={row[key]} quantity={format === "quantity"} signed={format === "pnl"} /> : row[key] ?? "—"}
-    </td>)}</tr>)}</tbody>
+    {buckets ? buckets.map(bucket => <tbody key={bucket.key} aria-label={bucket.value.label}>
+      <tr className="portfolio-record-group"><th scope="rowgroup" colSpan={columns.length}>{bucket.value.label}<span>{bucket.rows.length} {bucket.rows.length === 1 ? "position" : "positions"}</span></th></tr>
+      {bucket.rows.map((row, index) => line(row, `${bucket.key}#${index}`))}
+    </tbody>) : <tbody>{rows.map(line)}</tbody>}
   </table></div> : <p className="portfolio-empty-inline">{empty}</p>;
+}
+
+/** The chosen dimension once every row carries its label (an unlabelled row is never shown as Unclassified). */
+function labelledBy(dimension: Dimension | undefined, page: SnapshotPage | null): Dimension | undefined {
+  if (!dimension || !page || page.unavailable_dimensions?.includes(dimension.id)) return undefined;
+  return page.items.every(row => (row as Attributed).attributes?.[dimension.id]) ? dimension : undefined;
 }
 
 function SnapshotTime({ data }: { data: SnapshotPage }) {
@@ -68,16 +80,12 @@ function AccountMetrics({ account, summary, positions, orders }: {
 type EquityRange = "1m" | "3m" | "1y" | "max";
 interface EquityHistory { currency: string | null; points: { t: string; value: string }[]; basis: string }
 
-interface PivotProps { dimensions: Dimension[]; pivot: string; setPivot: (value: string) => void }
-
-function Performance({ base, filter, positions, balances, currency, pivot: pivotProps }: {
-  base: string; filter: string; positions: SnapshotPage | null; balances: BrokerRow[]; currency: string; pivot: PivotProps;
+function Performance({ base, filter, positions, balances, currency, dimension }: {
+  base: string; filter: string; positions: SnapshotPage | null; balances: BrokerRow[]; currency: string; dimension: Dimension | undefined;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
-  const dimension = pivotProps.dimensions.find(item => item.id === pivotProps.pivot);
   const failed = Boolean(dimension && positions?.unavailable_dimensions?.includes(dimension.id));
-  // Pivot only rows the API labelled, so an unlabelled position is never shown as Unclassified.
-  const active = dimension && positions && !failed && positions.items.every(row => (row as Attributed).attributes?.[dimension.id]) ? dimension : undefined;
+  const active = labelledBy(dimension, positions);
   const buckets = active && positions ? exposureBy(positions.items, balances, currency, active.id, active.buckets) : null;
   const [range, setRange] = useState<EquityRange>("3m");
   const equity = useRemote<EquityHistory>(`${base}/equity?${filter}&range=${range}`, 300_000);
@@ -111,7 +119,7 @@ function Performance({ base, filter, positions, balances, currency, pivot: pivot
       {equity.data && <p className="portfolio-footnote">{equity.data.basis}</p>}
     </div>
     <div className="portfolio-section portfolio-allocation">
-      <div className="portfolio-section-heading"><h3>Allocation{active ? ` by ${active.label.toLowerCase()}` : ""}</h3><PivotControl dimensions={pivotProps.dimensions} value={pivotProps.pivot} onChange={value => { pivotProps.setPivot(value); setSelected(null); }} /></div>
+      <div className="portfolio-section-heading"><h3>Allocation{active ? ` by ${active.label.toLowerCase()}` : ""}</h3></div>
       {failed && dimension && <p className="portfolio-notice portfolio-notice--error" role="alert">{dimension.label} classification is unavailable right now; showing holdings.</p>}
       {dimension && !active && !failed && positions && <p className="portfolio-empty-inline" role="status">Labelling holdings by {dimension.label.toLowerCase()}…</p>}
       <Treemap items={buckets ? bucketTiles : tiles} label={buckets && active ? `Holdings by ${active.label.toLowerCase()}` : "Holdings by market value"} height={200} empty={positions?.snapshot_time ? "No open positions" : "Positions not reported yet"} />
@@ -183,16 +191,15 @@ function FlexSync({ onSynced }: { onSynced: () => void }) {
   </>;
 }
 
-function AccountDetails({ account, userId }: { account: BrokerAccount; userId: string }) {
+function AccountDetails({ account, userId, dimension }: { account: BrokerAccount; userId: string; dimension: Dimension | undefined }) {
   const [offset, setOffset] = useState(0);
   const [tradeRevision, setTradeRevision] = useState(0);
   const base = `${API}/accounts/${encodeURIComponent(account.broker_code)}/${encodeURIComponent(account.account_id)}`;
   const filter = `user_id=${encodeURIComponent(userId)}`;
   const summary = useRemote<AccountSummary>(`${base}/summary?${filter}`, 60_000);
-  const dimensions = useDimensions();
-  const { pivot, setPivot } = usePivotParams();
-  const dims = dimensions.some(item => item.id === pivot) ? `&dims=${encodeURIComponent(pivot)}` : "";
+  const dims = dimension ? `&dims=${encodeURIComponent(dimension.id)}` : "";
   const positions = useRemote<SnapshotPage>(`${base}/positions?${filter}${dims}`, 60_000);
+  const grouped = labelledBy(dimension, positions.data);
   const orders = useRemote<SnapshotPage>(`${base}/open-orders?${filter}`, 60_000);
   const refreshAccount = () => { summary.refresh(); positions.refresh(); orders.refresh(); setOffset(0); setTradeRevision(value => value + 1); };
   return <section aria-label="Selected account" className="portfolio-details">
@@ -203,18 +210,18 @@ function AccountDetails({ account, userId }: { account: BrokerAccount; userId: s
     </header>
     {[summary, positions, orders].some(remote => remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">Account refresh failed. Showing any last successful snapshots for this account.</p>}
     <AccountMetrics account={account} summary={summary.data} positions={positions.data} orders={orders.data} />
-    <Performance base={base} filter={filter} positions={positions.data} balances={summary.data?.balances.items ?? []} currency={account.base_currency ?? ""} pivot={{ dimensions, pivot, setPivot }} />
+    <Performance base={base} filter={filter} positions={positions.data} balances={summary.data?.balances.items ?? []} currency={account.base_currency ?? ""} dimension={dimension} />
     <div className="portfolio-workspace">
       <OrderTagging account={account} revision={tradeRevision} />
       <section className="portfolio-section portfolio-positions"><div className="portfolio-section-heading"><div><span className="portfolio-eyebrow">Holdings</span><h3>Open positions</h3></div><span className="portfolio-count">{positions.data?.items.length ?? "—"}</span></div>
         {positions.loading && !positions.data ? <p className="portfolio-empty-inline" role="status">Loading positions…</p> : positions.data ? <>
-          <Records title="Positions" rows={positions.data.items} columns={[["trading_symbol", "Instrument"], ["position", "Qty", "quantity"], ["market_price", "Price", "money"], ["unrealized_pnl", "Unrealized", "pnl"], ["currency", "CCY"]]} empty={positions.data.snapshot_time ? "No open positions in this snapshot." : "Positions have not been reported yet."} />
+          <Records title="Positions" rows={positions.data.items} groups={grouped} columns={[["trading_symbol", "Instrument"], ["position", "Qty", "quantity"], ["market_price", "Price", "money"], ["unrealized_pnl", "Unrealized", "pnl"], ["currency", "CCY"]]} empty={positions.data.snapshot_time ? "No open positions in this snapshot." : "Positions have not been reported yet."} />
           <SnapshotTime data={positions.data} />
           {positions.data.items.length > 0 && <p className="portfolio-footnote">Broker-reported positions and unrealized PnL.</p>}
         </> : <p className="portfolio-empty-inline">Positions unavailable.</p>}
       </section>
     </div>
-    <AccountTrades account={account} revision={tradeRevision} />
+    <AccountTrades account={account} revision={tradeRevision} dimension={dimension} />
     <details className="portfolio-section portfolio-disclosure"><summary><span>Account activity<small>Working orders, executions and balance details</small></span><PortfolioIcon name="chevron" /></summary>
       <div className="portfolio-activity">
         <section><div className="portfolio-section-heading"><h3>Open orders</h3>{orders.data && <SnapshotTime data={orders.data} />}</div>
@@ -245,6 +252,10 @@ function Executions({ base, filter, offset, setOffset, revision }: { base: strin
 
 function Accounts({ userId, selected, onSelect }: { userId: string; selected: string; onSelect: (value: string) => void }) {
   const remote = useRemote<ItemsPage<BrokerAccount>>(`${API}/accounts?user_id=${encodeURIComponent(userId)}`, 60_000);
+  // One pivot for the whole page (`pivot=sector`): allocation, exposure, open positions and the account's trades.
+  const dimensions = useDimensions();
+  const { pivot, setPivot } = usePivotParams();
+  const dimension = dimensions.find(item => item.id === pivot);
   const accounts = remote.data?.items ?? [];
   const account = accounts.find(item => JSON.stringify([item.broker_code, item.account_id]) === selected) ?? accounts[0];
   return <>
@@ -256,8 +267,8 @@ function Accounts({ userId, selected, onSelect }: { userId: string; selected: st
           {item.broker_code.toUpperCase()} · {item.account_id}{!userId ? ` · ${item.display_name}` : ""}
         </option>)}
       </select>
-    </label><span className="portfolio-footnote">Snapshots refresh every minute</span></div>}
-    {account && <AccountDetails key={JSON.stringify([userId, account.broker_code, account.account_id])} account={account} userId={userId} />}
+    </label><PivotControl dimensions={dimensions} value={pivot} onChange={setPivot} /><span className="portfolio-footnote">Snapshots refresh every minute</span></div>}
+    {account && <AccountDetails key={JSON.stringify([userId, account.broker_code, account.account_id])} account={account} userId={userId} dimension={dimension} />}
     {!remote.loading && !Boolean(remote.error) && !account && <EmptyState title="No accounts registered for this profile.">Choose another profile to view its accounts.</EmptyState>}
   </>;
 }

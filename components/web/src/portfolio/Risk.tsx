@@ -8,8 +8,10 @@ import {
 } from "./riskModel";
 import { BENCHMARK, useBetas, type BetaResult } from "./betas";
 import type { AccountSummary, Attributed, BrokerAccount, CatalogEntry, CatalogKind, Dimension, ItemsPage, PnlReport, Profile, SnapshotPage } from "./types";
-import { EmptyState, GroupByChips, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery } from "./PortfolioUI";
-import { pivotTree, treeKeys, useDimensions, useGroupBy, type Level, type TreeNode } from "./pivot";
+import { useUrlParams } from "../shared/urlState";
+import type { Holding } from "./riskModel";
+import { EmptyState, GroupByChips, PivotControl, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery } from "./PortfolioUI";
+import { attributeOf, pivotRows, pivotTree, treeKeys, useDimensions, useGroupBy, type Level, type TreeNode } from "./pivot";
 import { attributeLevel, tagLevel, TAG_LEVELS } from "./pnlPivot";
 import { aggregateExposure, splitPositions, type ExposureSlice, type ExposureTotals } from "./riskExposure";
 import "./Portfolio.css";
@@ -210,15 +212,21 @@ function KeyMetrics({ state, limits }: { state: RiskState; limits: Limits }) {
   </Card>;
 }
 
-function Composition({ state }: { state: RiskState }) {
+function Composition({ state, pivot }: { state: RiskState; pivot: Dimension | undefined }) {
   const priced = state.holdings.filter(holding => holding.value !== null && holding.value !== 0);
-  const top = priced.slice(0, 6);
-  const rest = priced.slice(6).reduce((sum, holding) => sum + Math.abs(holding.value as number), 0);
-  const slices: Slice[] = top.map((holding, index) => ({ key: holding.symbol + index, label: holding.symbol, value: Math.abs(holding.value as number), tone: `var(--series-${index + 1})` }));
-  if (rest > 0) slices.push({ key: "other", label: "Other positions", value: rest, tone: "var(--series-7)" });
+  // By a pivot dimension: one slice per bucket (Σ |value| of its priced positions), largest first.
+  const items = pivot
+    ? pivotRows(priced, holding => attributeOf(holding, pivot.id), pivot.buckets)
+      .map(bucket => ({ key: bucket.key, label: bucket.value.label, value: bucket.rows.reduce((sum, holding) => sum + Math.abs(holding.value as number), 0) }))
+      .sort((a, b) => b.value - a.value)
+    : priced.map((holding, index) => ({ key: holding.symbol + index, label: holding.symbol, value: Math.abs(holding.value as number) }));
+  const top = items.slice(0, 6);
+  const rest = items.slice(6).reduce((sum, item) => sum + item.value, 0);
+  const slices: Slice[] = top.map((item, index) => ({ ...item, tone: `var(--series-${index + 1})` }));
+  if (rest > 0) slices.push({ key: "other", label: pivot ? `Other ${pivot.label.toLowerCase()}s` : "Other positions", value: rest, tone: "var(--series-7)" });
   if (state.unreconciled !== null && state.unreconciled > 0 && hasReconciliationGap(state)) slices.push({ key: "gap", label: "Unreconciled", value: state.unreconciled, tone: "var(--faint)", note: "Broker gross not explained by listed positions" });
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
-  return <Card title="Composition" aside={<span className="pf-muted">{money(total, state.base, true)}</span>}>
+  return <Card title={pivot ? `Composition by ${pivot.label.toLowerCase()}` : "Composition"} aside={<span className="pf-muted">{money(total, state.base, true)}</span>}>
     {total > 0 ? <div className="pf-composition">
       <Donut slices={slices} total={total} center={money(total, undefined, true)} sub={state.metrics.grossLeverage !== null ? `${times(state.metrics.grossLeverage)} NAV` : state.base} />
       <ul className="pf-legend">{slices.map(slice => <li key={slice.key} title={slice.note}>
@@ -299,16 +307,36 @@ function LimitsTable({ state, settings, onSave, onReset }: {
   </Card>;
 }
 
-function Concentration({ state, limits }: { state: RiskState; limits: Limits }) {
+/** Σ of the values, or null if any is unavailable (never a partial sum). */
+const total = (values: (number | null)[]) => values.some(value => value === null) ? null : values.reduce<number>((sum, value) => sum + (value as number), 0);
+
+/** The "Pivot by" choice for positions and composition, read from `by=` (the exposure tree owns `group=`). */
+interface HoldingPivot { dimensions: Dimension[]; value: string; onChange: (value: string) => void; active: Dimension | undefined; failed: Dimension | undefined; pending: boolean }
+
+function Concentration({ state, limits, pivot }: { state: RiskState; limits: Limits; pivot: HoldingPivot }) {
   const nav = state.nav;
-  return <Card title="Positions & concentration" aside={<span className="pf-muted">{state.base} · % of net liquidation</span>}>
-    {state.holdings.length ? <div className="pf-table-scroll"><table className="pf-table" aria-label="Positions and concentration">
-      <thead><tr><th scope="col">Position</th><th scope="col" className="num">Value ({state.base})</th><th scope="col" className="num">% NAV</th><th scope="col" className="num">Beta</th><th scope="col" className="num">Unrealized</th><th scope="col" className="num">Realized YTD</th><th scope="col" className="num">Limit</th><th scope="col">Status</th></tr></thead>
-      <tbody>{state.holdings.map((holding, index) => {
-        const share = holding.value === null || nav === null || nav <= 0 ? null : Math.abs(holding.value) / nav;
+  const dimension = pivot.active;
+  const shareOf = (value: number | null) => value === null || nav === null || nav <= 0 ? null : Math.abs(value) / nav;
+  const groups = dimension ? pivotRows(state.holdings, holding => attributeOf(holding, dimension.id), dimension.buckets)
+    .map(bucket => ({ ...bucket, gross: total(bucket.rows.map(holding => holding.value === null ? null : Math.abs(holding.value))) }))
+    .sort((a, b) => (a.value.id === null ? 1 : 0) - (b.value.id === null ? 1 : 0) || (b.gross ?? -1) - (a.gross ?? -1)) : null;
+  const subtotal = (rows: Holding[], gross: number | null, label: string, key: string) => {
+    const priced = rows.filter(holding => holding.value !== null && !holding.cashLike);
+    const weight = priced.reduce((sum, holding) => sum + Math.abs(holding.value as number), 0);
+    const beta = priced.some(holding => holding.beta === null) || !weight ? null : priced.reduce((sum, holding) => sum + Math.abs(holding.value as number) * (holding.beta as number), 0) / weight;
+    return <tr key={key} className="pf-group-row">
+      <th scope="rowgroup"><span className="pf-limits__name">{label}</span><small>{rows.length} {rows.length === 1 ? "position" : "positions"}</small></th>
+      <td className="num">{money(gross)}</td><td className="num">{pct(shareOf(gross))}</td>
+      <td className="num" title="Value-weighted beta of the non-cash positions">{beta === null ? "—" : beta.toFixed(2)}</td>
+      <td className={`num ${pnlTone(total(rows.map(holding => holding.unrealized)))}`}>{signedMoney(total(rows.map(holding => holding.unrealized)))}</td>
+      <td className={`num ${pnlTone(total(rows.map(holding => holding.realized)))}`}>{signedMoney(total(rows.map(holding => holding.realized)))}</td>
+      <td /><td /></tr>;
+  };
+  const line = (holding: Holding, index: number | string, nested: boolean) => {
+        const share = shareOf(holding.value);
         const limit = holding.cashLike ? limits.cashLike : limits.singleName;
         const status = statusOf(share, limit, "max");
-        return <tr key={`${holding.symbol}-${index}`}>
+        return <tr key={`${holding.symbol}-${index}`} className={nested ? "pf-group-member" : undefined}>
           <th scope="row"><span className="pf-limits__name">{holding.symbol}</span><small>{holding.cashLike ? "Cash equivalent" : holding.currency}{holding.currency && holding.currency !== state.base && holding.native !== null ? ` · ${money(holding.native, holding.currency, true)}` : ""}</small></th>
           <td className="num">{money(holding.value)}</td>
           <td className={`num pf-ink--${status}`}>{pct(share)}</td>
@@ -318,8 +346,19 @@ function Concentration({ state, limits }: { state: RiskState; limits: Limits }) 
           <td className="num pf-muted">≤ {holding.cashLike ? times(limit.target) : pct(limit.target, 0)}</td>
           <td><StatusTag status={status}>{status === "red" ? "Trim" : status === "amber" ? "Above target" : status === "unknown" ? "No FX rate" : "OK"}</StatusTag></td>
         </tr>;
-      })}</tbody>
+  };
+  return <Card title={dimension ? `Positions & concentration by ${dimension.label.toLowerCase()}` : "Positions & concentration"}
+    aside={<><PivotControl dimensions={pivot.dimensions} value={pivot.value} onChange={pivot.onChange} /><span className="pf-muted">{state.base} · % of net liquidation</span></>}>
+    {pivot.failed && <p className="pf-notice pf-notice--warn pf-exposure__note" role="alert">{pivot.failed.label} classification is unavailable right now, so positions are not grouped.</p>}
+    {pivot.pending && <p className="pf-muted pf-exposure__note" role="status">Labelling positions…</p>}
+    {state.holdings.length ? <div className="pf-table-scroll"><table className="pf-table" aria-label={dimension ? `Positions and concentration by ${dimension.label.toLowerCase()}` : "Positions and concentration"}>
+      <thead><tr><th scope="col">{dimension ? `${dimension.label} › position` : "Position"}</th><th scope="col" className="num">Value ({state.base})</th><th scope="col" className="num">% NAV</th><th scope="col" className="num">Beta</th><th scope="col" className="num">Unrealized</th><th scope="col" className="num">Realized YTD</th><th scope="col" className="num">Limit</th><th scope="col">Status</th></tr></thead>
+      {groups ? groups.map(group => <tbody key={group.key} aria-label={group.value.label}>
+        {subtotal(group.rows, group.gross, group.value.label, `${group.key}/total`)}
+        {group.rows.map((holding, index) => line(holding, `${group.key}#${index}`, true))}
+      </tbody>) : <tbody>{state.holdings.map((holding, index) => line(holding, index, false))}</tbody>}
     </table></div> : <p className="pf-muted pf-pad">No open positions in the latest snapshot.</p>}
+    {dimension && <p className="pf-foot-note">Group rows sum |value| in {state.base}; a position without an FX rate makes its group's total unavailable. Single-name limits still apply per position.</p>}
   </Card>;
 }
 
@@ -552,7 +591,17 @@ function RiskBoard({ account, userId }: { account: BrokerAccount; userId: string
   const base = `${API}/accounts/${encodeURIComponent(account.broker_code)}/${encodeURIComponent(account.account_id)}`;
   const filter = `user_id=${encodeURIComponent(userId)}`;
   const summary = useRemote<AccountSummary>(`${base}/summary?${filter}`, 60_000);
-  const positions = useRemote<SnapshotPage>(`${base}/positions?${filter}`, 60_000);
+  const dimensions = useDimensions();
+  const [params, update] = useUrlParams();
+  const chosen = dimensions.find(item => item.id === params.get("by"));
+  const positions = useRemote<SnapshotPage>(`${base}/positions?${filter}${chosen ? `&dims=${encodeURIComponent(chosen.id)}` : ""}`, 60_000);
+  const failedPivot = chosen && positions.data?.unavailable_dimensions?.includes(chosen.id) ? chosen : undefined;
+  // Group only once every position carries the label, so an unlabelled one is never shown as Unclassified.
+  const activePivot = chosen && !failedPivot && positions.data?.items.every(row => (row as Attributed).attributes?.[chosen.id]) ? chosen : undefined;
+  const holdingPivot: HoldingPivot = {
+    dimensions, value: chosen?.id ?? "", active: activePivot, failed: failedPivot, pending: Boolean(chosen && !failedPivot && !activePivot),
+    onChange: value => update(next => { if (value) next.set("by", value); else next.delete("by"); }),
+  };
   const [settings, setSettings] = useState<RiskSettings>(() => loadSettings(account));
   const currency = account.base_currency ?? "";
   const balances = summary.data?.balances;
@@ -593,8 +642,8 @@ function RiskBoard({ account, userId }: { account: BrokerAccount; userId: string
       <div className="pf-stack"><Snapshot state={state} /><CapacityCard state={state} limits={settings.limits} /></div>
     </div>
     <div className="pf-grid pf-grid--wide">
-      <Concentration state={state} limits={settings.limits} />
-      <Composition state={state} />
+      <Concentration state={state} limits={settings.limits} pivot={holdingPivot} />
+      <Composition state={state} pivot={activePivot} />
     </div>
     <Leverage state={state} limits={settings.limits} beta={beta} />
     <Fold title="Limits & operating envelope" open={limitCounts.red + limitCounts.amber > 0}

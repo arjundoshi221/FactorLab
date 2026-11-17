@@ -16,6 +16,13 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from factorlab.components.api.portfolio import Repo
+from factorlab.components.api.portfolio_attributes import (
+    INSTRUMENT_KEYS,
+    label_rows,
+    parse_bucket,
+    parse_dims,
+    pivot_groups,
+)
 from factorlab.components.api.portfolio_pnl import TAG_FIELDS, number, timestamp
 from factorlab.components.api.portfolio_tagging import Book
 
@@ -41,6 +48,7 @@ class LedgerRow(BaseModel):
     listing_id: str | None
     security_id: str | None
     contract_id: str | None
+    vendor_id: str | None = None
     product_type: str
     currency: str
     side: str
@@ -60,6 +68,16 @@ class LedgerRow(BaseModel):
     tag_status: TagStatus
     fills: list[dict[str, Any]]
     fills_truncated: bool
+    # Pivot labels (``dims=sector``), e.g. ``{"sector": {"id": "45", "label": "..."}}``.
+    attributes: dict[str, dict[str, Any]] = {}
+
+
+class LedgerBucket(BaseModel):
+    """One pivot bucket (e.g. a sector): its orders by tag status."""
+
+    id: str | None
+    label: str
+    counts: dict[str, int]
 
 
 class LedgerPage(BaseModel):
@@ -70,6 +88,9 @@ class LedgerPage(BaseModel):
     counts: dict[str, int]
     accounts: list[dict[str, Any]]
     generated_at: datetime
+    # ``dims=sector``: buckets over every filtered order (all tag statuses, ignoring ``bucket``).
+    pivots: dict[str, list[LedgerBucket]] = {}
+    unavailable_dimensions: list[str] = []
 
 
 def text(value: Any) -> str | None:
@@ -129,6 +150,7 @@ def build_orders(
                     listing_id=text(first.get("listing_id")),
                     security_id=text(first.get("security_id")),
                     contract_id=text(first.get("contract_id")),
+                    vendor_id=text(first.get("vendor_id")) if first.get("vendor_id") else None,
                     product_type=str(first.get("product_type") or ""),
                     currency=str(first.get("currency") or ""),
                     side=sides[0] if len(sides) == 1 else "MIXED",
@@ -216,9 +238,17 @@ def ledger(
     tag: TagFilter = "all",
     start: datetime | None = None,
     end: datetime | None = None,
+    dims: Annotated[str, Query(max_length=200)] = "",
+    bucket: Annotated[str, Query(max_length=200)] = "",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0, le=20_000)] = 0,
 ) -> LedgerPage:
+    """Executed orders, newest first; filters run over full history before paging.
+
+    ``dims=sector`` labels each order's instrument and adds ``pivots`` (orders per sector
+    by tag status); ``bucket=sector:<id>`` (``sector:`` for Unclassified) keeps one bucket.
+    A failed lookup is named in ``unavailable_dimensions`` and its bucket filter not applied.
+    """
     if bool(broker_code) != bool(account_id):
         raise HTTPException(422, "broker_code and account_id must be supplied together")
     for value in (start, end):
@@ -285,6 +315,37 @@ def ledger(
             end=end,
         )
     ]
+    pivot_dims = parse_dims(dims)
+    chosen = parse_bucket(bucket)
+    if chosen and chosen[0] not in pivot_dims:
+        pivot_dims.append(chosen[0])
+    pivots: dict[str, list[LedgerBucket]] = {}
+    failed: list[str] = []
+    if pivot_dims and selected:
+        fields = set(INSTRUMENT_KEYS)
+        labels, failed = label_rows(
+            repo, [row.model_dump(include=fields) for row in selected], pivot_dims
+        )
+        selected = [
+            row.model_copy(update={"attributes": found})
+            for row, found in zip(selected, labels, strict=True)
+        ]
+        for name in pivot_dims:
+            if name in failed:
+                continue
+            pivots[name] = []
+            for value, members in pivot_groups(selected, labels, name):
+                tally: dict[str, int] = dict.fromkeys(("tagged", "untagged", "not_taggable"), 0)
+                for row in members:
+                    tally[row.tag_status] += 1
+                pivots[name].append(
+                    LedgerBucket(id=value["id"], label=str(value["label"]), counts=tally)
+                )
+        if chosen and chosen[0] not in failed:
+            dim, wanted = chosen
+            selected = [
+                row for row in selected if (row.attributes.get(dim) or {}).get("id") == wanted
+            ]
     # Chip counts reflect every filter except the tag status itself.
     counts: dict[str, int] = dict.fromkeys(("tagged", "untagged", "not_taggable"), 0)
     for row in selected:
@@ -308,4 +369,6 @@ def ledger(
             for a in profile_accounts
         ],
         generated_at=datetime.now(UTC),
+        pivots=pivots,
+        unavailable_dimensions=failed,
     )

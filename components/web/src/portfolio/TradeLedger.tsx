@@ -1,6 +1,6 @@
 import { Fragment, useState, type ReactNode } from "react";
 
-import type { CatalogEntry, CatalogKind, ItemsPage, LedgerPage, LedgerRow, LedgerTagStatus, OrderAssignment, Profile } from "./types";
+import type { CatalogEntry, CatalogKind, ItemsPage, LedgerBucket, LedgerPage, LedgerRow, LedgerTagStatus, OrderAssignment, Profile } from "./types";
 import { errorMessage, fetchJson, useRemote } from "../shared/api";
 import { SignedBars } from "../shared/charts";
 import { formatTime } from "../shared/format";
@@ -8,6 +8,7 @@ import { compactMoney, toNumber } from "../shared/market";
 import { tickerHref, useUrlParams } from "../shared/urlState";
 import { TagSelectors, hasTags, kinds, singular } from "./PortfolioBook";
 import { Amount, EmptyState, PortfolioHeader, PortfolioIcon, ProfileSelect } from "./PortfolioUI";
+import { BucketLabel, BucketTable, TradePivotControl, useTradePivot } from "./tradePivot";
 import "./Portfolio.css";
 import "./TradeLedger.css";
 
@@ -16,9 +17,20 @@ const PAGE = 50;
 const MAX_SELECTION = 200;
 const EMPTY: OrderAssignment = { theme_id: null, strategy_id: null, trade_name_id: null };
 const statusLabel: Record<LedgerTagStatus, string> = { tagged: "Tagged", untagged: "Needs tags", not_taggable: "Not taggable" };
-const filterKeys = ["account", "listing_id", "symbol", "theme_id", "strategy_id", "trade_name_id", "tag", "start", "end"] as const;
+const filterKeys = ["account", "listing_id", "symbol", "theme_id", "strategy_id", "trade_name_id", "tag", "start", "end", "bucket"] as const;
 
 type Result = { key: string; ok: boolean; message: string };
+
+function ledgerBucketCells(bucket: LedgerBucket) {
+  const total = bucket.counts.tagged + bucket.counts.untagged + bucket.counts.not_taggable;
+  const taggable = bucket.counts.tagged + bucket.counts.untagged;
+  return <>
+    <td className="portfolio-numeric">{total}</td>
+    <td className="portfolio-numeric">{bucket.counts.tagged}</td>
+    <td className="portfolio-numeric">{bucket.counts.untagged ? <span className="portfolio-stale">{bucket.counts.untagged}</span> : 0}</td>
+    <td className="portfolio-numeric">{taggable ? `${Math.round((bucket.counts.tagged / taggable) * 100)}%` : "—"}</td>
+  </>;
+}
 
 /** Run ``task`` over ``items`` with at most ``limit`` in flight; each failure is reported, not thrown. */
 export async function runPool<T>(items: T[], limit: number, task: (item: T) => Promise<void>) {
@@ -100,6 +112,8 @@ export function TradeLedger({ views }: { views?: ReactNode } = {}) {
   for (const key of ["listing_id", "symbol", "theme_id", "strategy_id", "trade_name_id", "tag"] as const) if (params.get(key)) query.set(key, params.get(key)!);
   if (params.get("start")) query.set("start", `${params.get("start")}T00:00:00Z`);
   if (params.get("end")) query.set("end", `${params.get("end")}T23:59:59Z`);
+  const pivot = useTradePivot();
+  for (const [key, value] of Object.entries(pivot.query)) query.set(key, value);
   const suffix = `?user_id=${encodeURIComponent(userId)}`;
   const ledger = useRemote<LedgerPage>(userId ? `${API}/ledger?${query}` : null, 60_000);
   const themes = useRemote<ItemsPage<CatalogEntry>>(userId ? `${API}/catalogs/themes${suffix}` : null, 60_000);
@@ -166,8 +180,12 @@ export function TradeLedger({ views }: { views?: ReactNode } = {}) {
           <select value={params.get(field) ?? ""} onChange={e => set({ [field]: e.target.value })}><option value="">Any {singular[kind]}</option>{catalogs[kind].map(entry => <option key={entry.id} value={entry.id}>{entry.name}{entry.active ? "" : " (archived)"}</option>)}</select></label>; })}
         <label className="portfolio-selector"><span>From</span><input type="date" value={params.get("start") ?? ""} onChange={e => set({ start: e.target.value })} /></label>
         <label className="portfolio-selector"><span>Through</span><input type="date" value={params.get("end") ?? ""} onChange={e => set({ end: e.target.value })} /></label>
+        <TradePivotControl pivot={pivot} />
         {filtering && <button type="button" className="portfolio-button portfolio-button--ghost" onClick={() => set(Object.fromEntries(filterKeys.map(k => [k, ""])))}>Clear filters</button>}
       </div>
+      {ledger.data && pivot.dimension && <BucketTable pivot={pivot} caption="Orders" buckets={ledger.data.pivots?.[pivot.dimension.id]}
+        failed={Boolean(ledger.data.unavailable_dimensions?.includes(pivot.dimension.id))}
+        headers={["Orders", "Tagged", "Needs tags", "Tag coverage"]} cells={ledgerBucketCells} />}
       {params.get("listing_id") && <p className="portfolio-footnote">Showing trades for one ticker, including security-level fills and derivatives on it. <a href={tickerHref(params.get("listing_id")!)}>Open the ticker →</a></p>}
       {chosen.length > 0 && <div className="ledger-bulk" role="region" aria-label="Tag selected orders">
         <strong>{chosen.length} selected</strong>
@@ -198,7 +216,7 @@ export function TradeLedger({ views }: { views?: ReactNode } = {}) {
                 onChange={e => { const next = new Set(selected); if (e.target.checked) next.add(row.key); else next.delete(row.key); setSelected(next); }} /></td>
               <td>{formatTime(row.last_fill_at, "—")}</td>
               <td>{row.listing_id ? <a href={tickerHref(row.listing_id)}>{row.trading_symbol}</a> : row.trading_symbol}
-                {row.contract_id && <small> {row.product_type}</small>}{row.simulated && <span className="portfolio-badge portfolio-badge--amber">Simulated</span>}</td>
+                {row.contract_id && <small> {row.product_type}</small>}{row.simulated && <span className="portfolio-badge portfolio-badge--amber">Simulated</span>}<BucketLabel row={row} dimension={pivot.dimension} /></td>
               <td><span className={`portfolio-side${row.side === "BUY" ? " portfolio-side--buy" : ""}`}>{row.side}</span></td>
               <td className="portfolio-numeric"><Amount value={row.quantity} quantity /></td>
               <td className="portfolio-numeric"><Amount value={row.avg_price} /> <small>{row.currency}</small></td>

@@ -1,6 +1,6 @@
 import { Fragment, useState, type ReactNode } from "react";
 
-import type { BrokerAccount, CatalogEntry, CatalogKind, ItemsPage, Profile, TradeRow, TradeStatus, TradesPage, TradeSummary } from "./types";
+import type { BrokerAccount, CatalogEntry, CatalogKind, Dimension, ItemsPage, Profile, TradeBucket, TradeRow, TradeStatus, TradesPage, TradeSummary } from "./types";
 import { Segmented } from "../components/ui";
 import { errorMessage, useRemote } from "../shared/api";
 import { formatTime } from "../shared/format";
@@ -9,13 +9,14 @@ import { tickerHref, useUrlParams } from "../shared/urlState";
 import { issueLabels, kinds, singular } from "./PortfolioBook";
 import { Amount, EmptyState, PortfolioHeader, PortfolioIcon, ProfileSelect, usePortfolioRefresh } from "./PortfolioUI";
 import { TradeLedger } from "./TradeLedger";
+import { BucketLabel, BucketTable, TradePivotControl, useTradePivot } from "./tradePivot";
 import "./Portfolio.css";
 import "./TradeLedger.css";
 import "./TradeHistory.css";
 
 const API = "/hub/api/v1/portfolio";
 const PAGE = 50;
-const filterKeys = ["account", "symbol", "theme_id", "strategy_id", "trade_name_id", "start", "end"] as const;
+const filterKeys = ["account", "symbol", "theme_id", "strategy_id", "trade_name_id", "start", "end", "bucket"] as const;
 const roleLabel = { open: "Open", add: "Add", reduce: "Reduce", close: "Close" };
 type View = "orders" | "positions";
 
@@ -73,7 +74,7 @@ function TradeDetail({ trade }: { trade: TradeRow }) {
 }
 
 /** Open and closed trades with an expandable fill-by-fill detail per row. */
-export function TradeTable({ rows, label, showAccount = true }: { rows: TradeRow[]; label: string; showAccount?: boolean }) {
+export function TradeTable({ rows, label, showAccount = true, dimension }: { rows: TradeRow[]; label: string; showAccount?: boolean; dimension?: Dimension }) {
   const [expanded, setExpanded] = useState("");
   const columns = showAccount ? 13 : 12;
   return <div className="portfolio-table-scroll ledger-scroll" tabIndex={0} role="region" aria-label={`${label} table`}><table className="ledger-table trade-table" aria-label={label}>
@@ -92,7 +93,8 @@ export function TradeTable({ rows, label, showAccount = true }: { rows: TradeRow
             <PortfolioIcon name="chevron" /><span className={`portfolio-badge${open ? " portfolio-badge--green" : ""}`}>{open ? "Open" : "Closed"}</span></button>
             <small className={`trade-direction trade-direction--${trade.direction}`}>{trade.direction}</small></td>
           <td>{trade.listing_id ? <a href={tickerHref(trade.listing_id)}>{trade.trading_symbol}</a> : trade.trading_symbol}{trade.contract_id && <small> {trade.product_type}</small>}
-            {trade.issues.some(issue => issue !== "history_unverified") && <span className="portfolio-stale trade-issue" title={trade.issues.map(issue => issueLabels[issue] ?? issue).join(" · ")}> ⚠</span>}</td>
+            {trade.issues.some(issue => issue !== "history_unverified") && <span className="portfolio-stale trade-issue" title={trade.issues.map(issue => issueLabels[issue] ?? issue).join(" · ")}> ⚠</span>}
+            <BucketLabel row={trade} dimension={dimension} /></td>
           <td>{formatTime(trade.opened_at, "—")}</td>
           <td>{open ? <span className="portfolio-footnote">Open · {holding(trade.opened_at, null)}</span> : <>{formatTime(trade.closed_at, "—")} <small>{holding(trade.opened_at, trade.closed_at)}</small></>}</td>
           <td className="portfolio-numeric"><Amount value={open ? trade.quantity : trade.max_quantity} quantity /></td>
@@ -123,6 +125,29 @@ function Summary({ rows }: { rows: TradeSummary[] }) {
   })}</dl>;
 }
 
+/** Per-currency figures, one line each; never added across currencies. */
+function PerCurrency({ items }: { items: { key: string; currency: string; value: string | null; note?: string }[] }) {
+  if (!items.length) return <span className="portfolio-footnote">—</span>;
+  return <>{items.map(item => <div key={item.key}><Amount value={item.value} signed /> <small>{item.currency}{item.note}</small></div>)}</>;
+}
+
+const where = (row: { currency: string; account_mode: string; simulated: boolean }) => ({
+  key: JSON.stringify([row.currency, row.account_mode, row.simulated]), currency: row.currency,
+  note: `${row.account_mode && row.account_mode !== "live" ? ` · ${row.account_mode}` : ""}${row.simulated ? " · sim" : ""}`,
+});
+
+function tradeBucketCells(bucket: TradeBucket) {
+  const valued = bucket.summary.reduce((total, row) => total + row.valued, 0);
+  const wins = bucket.summary.reduce((total, row) => total + row.wins, 0);
+  return <>
+    <td className="portfolio-numeric">{bucket.counts.open}</td>
+    <td className="portfolio-numeric">{bucket.counts.closed}</td>
+    <td className="portfolio-numeric"><PerCurrency items={bucket.open.map(row => ({ ...where(row), value: row.unrealized }))} /></td>
+    <td className="portfolio-numeric"><PerCurrency items={bucket.summary.map(row => ({ ...where(row), value: row.net ?? row.realized, note: `${where(row).note}${row.net === null ? " · fees unknown" : ""}` }))} /></td>
+    <td className="portfolio-numeric">{valued ? `${Math.round((wins / valued) * 100)}%` : "—"}</td>
+  </>;
+}
+
 /** The Trades page's open/closed view: every trade across the profile's accounts. */
 export function OpenClosedTrades({ views }: { views?: ReactNode }) {
   const [params, update] = useUrlParams();
@@ -141,6 +166,8 @@ export function OpenClosedTrades({ views }: { views?: ReactNode }) {
   for (const key of ["symbol", "theme_id", "strategy_id", "trade_name_id"] as const) if (params.get(key)) query.set(key, params.get(key)!);
   if (params.get("start")) query.set("start", `${params.get("start")}T00:00:00Z`);
   if (params.get("end")) query.set("end", `${params.get("end")}T23:59:59Z`);
+  const pivot = useTradePivot();
+  for (const [key, value] of Object.entries(pivot.query)) query.set(key, value);
   const suffix = `?user_id=${encodeURIComponent(userId)}`;
   const trades = useRemote<TradesPage>(userId ? `${API}/trades?${query}` : null, 60_000);
   const themes = useRemote<ItemsPage<CatalogEntry>>(userId ? `${API}/catalogs/themes${suffix}` : null, 60_000);
@@ -176,13 +203,17 @@ export function OpenClosedTrades({ views }: { views?: ReactNode }) {
           <select value={params.get(field) ?? ""} onChange={e => set({ [field]: e.target.value })}><option value="">Any {singular[kind]}</option>{catalogs[kind].map(entry => <option key={entry.id} value={entry.id}>{entry.name}{entry.active ? "" : " (archived)"}</option>)}</select></label>; })}
         <label className="portfolio-selector"><span>Active from</span><input type="date" value={params.get("start") ?? ""} onChange={e => set({ start: e.target.value })} /></label>
         <label className="portfolio-selector"><span>Through</span><input type="date" value={params.get("end") ?? ""} onChange={e => set({ end: e.target.value })} /></label>
+        <TradePivotControl pivot={pivot} />
         {filtering && <button type="button" className="portfolio-button portfolio-button--ghost" onClick={() => set(Object.fromEntries(filterKeys.map(k => [k, ""])))}>Clear filters</button>}
       </div>
+      {trades.data && pivot.dimension && <BucketTable pivot={pivot} caption="Trades" buckets={trades.data.pivots?.[pivot.dimension.id]}
+        failed={Boolean(trades.data.unavailable_dimensions?.includes(pivot.dimension.id))}
+        headers={["Open", "Closed", "Unrealized (open)", "Closed result", "Win rate"]} cells={tradeBucketCells} />}
       {Boolean(trades.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(trades.error, "Trades could not be loaded.")}</p>}
       {trades.loading && !trades.data && <p className="portfolio-empty-inline" role="status">Loading trades…</p>}
       {trades.data && <>
-        <p className="portfolio-list-meta">{trades.data.total.toLocaleString()} {status || ""} trades{filtering ? " match these filters" : ""} · latest activity first</p>
-        {rows.length > 0 && <TradeTable rows={rows} label="Open and closed trades" />}
+        <p className="portfolio-list-meta">{trades.data.total.toLocaleString()} {status || ""} trades{pivot.dimension && pivot.bucket !== undefined ? ` in ${trades.data.pivots?.[pivot.dimension.id]?.find(bucket => bucket.id === pivot.bucket)?.label ?? "the chosen " + pivot.dimension.label.toLowerCase()}` : ""}{filtering ? " match these filters" : ""} · latest activity first</p>
+        {rows.length > 0 && <TradeTable rows={rows} label="Open and closed trades" dimension={pivot.dimension} />}
         {!rows.length && <EmptyState title={filtering || status ? "No trades match these filters" : "No trades yet"}>{filtering || status ? "Try another status, account, ticker, tag or date range." : "Trades appear here once orders fill."}</EmptyState>}
         {trades.data.total > PAGE && <div className="portfolio-pagination">
           <button className="portfolio-button portfolio-button--secondary" disabled={offset === 0} onClick={() => set({ offset: String(Math.max(0, offset - PAGE)) })}>Previous</button>
@@ -205,16 +236,16 @@ export function TradesPage() {
 }
 
 /** Overview panel: the selected account's open or recently closed trades. */
-export function AccountTrades({ account, revision = 0 }: { account: BrokerAccount; revision?: number }) {
+export function AccountTrades({ account, revision = 0, dimension }: { account: BrokerAccount; revision?: number; dimension?: Dimension }) {
   const [status, setStatus] = useState<TradeStatus>("open");
   const userId = account.user_id;
-  const query = userId ? new URLSearchParams({ user_id: userId, broker_code: account.broker_code, account_id: account.account_id, status, limit: "10" }) : null;
+  const query = userId ? new URLSearchParams({ user_id: userId, broker_code: account.broker_code, account_id: account.account_id, status, limit: "10", ...(dimension ? { dims: dimension.id } : {}) }) : null;
   const trades = useRemote<TradesPage>(query ? `${API}/trades?${query}` : null, 60_000);
   usePortfolioRefresh(revision, trades.refresh);
   // A response without status counts is not a trades page: show it as unavailable, never guess.
   const data = trades.data?.counts && Array.isArray(trades.data.items) ? trades.data : null;
   const counts = data?.counts;
-  const all = userId ? `/portfolio/trades?${new URLSearchParams({ user_id: userId, view: "positions", status, account: JSON.stringify([account.broker_code, account.account_id]) })}` : "";
+  const all = userId ? `/portfolio/trades?${new URLSearchParams({ user_id: userId, view: "positions", status, account: JSON.stringify([account.broker_code, account.account_id]), ...(dimension ? { pivot: dimension.id } : {}) })}` : "";
   return <section className="portfolio-section trade-ledger account-trades" aria-label="Open and closed trades">
     <div className="portfolio-section-heading"><div><span className="portfolio-eyebrow">Trade history</span><h3>Open & closed trades</h3></div>
       <Segmented<TradeStatus> label="Trade status" value={status} onChange={setStatus}
@@ -223,7 +254,7 @@ export function AccountTrades({ account, revision = 0 }: { account: BrokerAccoun
       {Boolean(trades.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(trades.error, "Trades could not be loaded.")}</p>}
       {trades.loading && !trades.data ? <p className="portfolio-empty-inline" role="status">Loading trades…</p> : !data ? (trades.data && <p className="portfolio-empty-inline">Trades unavailable.</p>) : <>
         {status === "closed" && <Summary rows={data.summary ?? []} />}
-        {data.items.length ? <TradeTable rows={data.items} label={`${status === "open" ? "Open" : "Closed"} trades`} showAccount={false} />
+        {data.items.length ? <TradeTable rows={data.items} label={`${status === "open" ? "Open" : "Closed"} trades`} showAccount={false} dimension={dimension} />
           : <p className="portfolio-empty-inline">{status === "open" ? "No open trades in recorded history." : "No closed trades yet."}</p>}
         <a className="portfolio-text-link" href={all}>{data.total > data.items.length ? `View all ${data.total} ${status} trades` : "Open the trades view"}<PortfolioIcon name="arrow" /></a>
       </>}

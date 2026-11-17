@@ -4,7 +4,7 @@
  * figures (IBKR account values, segment "" and currency = base); positions are converted with
  * the Flex `fx_rate_to_base`, else the broker's `ExchangeRate` for that currency, else 1 for
  * base-currency positions. Anything that cannot be converted is reported, never guessed. */
-import type { BrokerRow } from "./types";
+import type { AttrValue, Attributed, BrokerRow } from "./types";
 
 export type Direction = "max" | "min";
 export type LimitKey = "grossLeverage" | "equityLeverage" | "netLeverage" | "betaLeverage" | "singleName" | "cashLike" | "initUtil" | "maintUtil" | "excessLiquidity" | "borrowing";
@@ -66,6 +66,8 @@ export interface Holding {
   unrealized: number | null;
   /** Broker-reported realized PnL year to date for this instrument, in base currency. */
   realized: number | null;
+  /** Pivot labels from the API (`dims=sector`), when requested. */
+  attributes?: Record<string, AttrValue>;
 }
 export interface CashLine { currency: string; native: number; fx: number | null; value: number | null }
 
@@ -145,6 +147,7 @@ export function computeRisk(base: string, balances: BrokerRow[], positions: Brok
       cashLike,
       maint: toBase(num(row.maintenance_margin_contribution)), unrealized: toBase(num(row.unrealized_pnl)),
       realized: toBase(num(row.realized_pnl_ytd)),
+      attributes: (row as Attributed).attributes,
     };
   }).sort((a, b) => Math.abs(b.value ?? 0) - Math.abs(a.value ?? 0));
 

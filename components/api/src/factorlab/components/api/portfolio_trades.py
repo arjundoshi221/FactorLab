@@ -19,6 +19,13 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from factorlab.components.api.portfolio import Repo
+from factorlab.components.api.portfolio_attributes import (
+    INSTRUMENT_KEYS,
+    label_rows,
+    parse_bucket,
+    parse_dims,
+    pivot_groups,
+)
 from factorlab.components.api.portfolio_ledger import CATALOG_KINDS, MAX_ACCOUNTS, MAX_FILLS
 from factorlab.components.api.portfolio_pnl import (
     FX_CONVERSIONS,
@@ -50,6 +57,7 @@ FATAL = {
 }
 
 router = APIRouter()
+INSTRUMENT_FIELDS = set(INSTRUMENT_KEYS)
 
 
 class TradeRow(BaseModel):
@@ -62,6 +70,7 @@ class TradeRow(BaseModel):
     listing_id: str | None
     security_id: str | None
     contract_id: str | None
+    vendor_id: str | None = None
     product_type: str
     currency: str
     direction: Literal["long", "short"]
@@ -95,6 +104,8 @@ class TradeRow(BaseModel):
     fills: list[dict[str, Any]]
     fills_truncated: bool
     issues: list[str]
+    # Pivot labels (``dims=sector``), e.g. ``{"sector": {"id": "45", "label": "..."}}``.
+    attributes: dict[str, dict[str, Any]] = {}
 
 
 class TradeSummary(BaseModel):
@@ -109,6 +120,25 @@ class TradeSummary(BaseModel):
     net: str | None
 
 
+class OpenSummary(BaseModel):
+    currency: str
+    account_mode: str
+    simulated: bool
+    open: int
+    # Σ unrealized of the open trades; null if any of them is unavailable.
+    unrealized: str | None
+
+
+class TradeBucket(BaseModel):
+    """One pivot bucket (e.g. a sector): status counts and results, never across currencies."""
+
+    id: str | None
+    label: str
+    counts: dict[str, int]
+    summary: list[TradeSummary]
+    open: list[OpenSummary]
+
+
 class TradesPage(BaseModel):
     items: list[TradeRow]
     total: int
@@ -118,6 +148,9 @@ class TradesPage(BaseModel):
     summary: list[TradeSummary]
     accounts: list[dict[str, Any]]
     generated_at: datetime
+    # ``dims=sector``: buckets over every filtered trade (all statuses, ignoring ``bucket``).
+    pivots: dict[str, list[TradeBucket]] = {}
+    unavailable_dimensions: list[str] = []
 
 
 def text(value: Any) -> str | None:
@@ -348,6 +381,7 @@ def _row(
         listing_id=text(row.get("listing_id")),
         security_id=text(row.get("security_id")),
         contract_id=text(row.get("contract_id")),
+        vendor_id=text(row.get("vendor_id")),
         product_type=str(row.get("product_type") or ""),
         currency=currency,
         direction=trade["direction"],
@@ -427,6 +461,50 @@ def summarize(rows: list[TradeRow]) -> list[TradeSummary]:
     ]
 
 
+def summarize_open(rows: list[TradeRow]) -> list[OpenSummary]:
+    """Open trades and their unrealized PnL per currency, account mode and simulation."""
+    groups: dict[tuple[str, str, bool], list[TradeRow]] = {}
+    for row in rows:
+        if row.status == "open":
+            groups.setdefault((row.currency, row.account_mode, row.simulated), []).append(row)
+    out: list[OpenSummary] = []
+    with localcontext() as context:
+        context.prec = 64
+        for (currency, mode, simulated), members in sorted(groups.items()):
+            known = all(row.unrealized is not None for row in members)
+            total = sum((Decimal(row.unrealized or 0) for row in members), ZERO)
+            out.append(
+                OpenSummary(
+                    currency=currency,
+                    account_mode=mode,
+                    simulated=simulated,
+                    open=len(members),
+                    unrealized=str(total) if known else None,
+                )
+            )
+    return out
+
+
+def bucket_summaries(
+    rows: list[TradeRow], attributes: list[dict[str, Any]], dim: str
+) -> list[TradeBucket]:
+    out: list[TradeBucket] = []
+    for value, members in pivot_groups(rows, attributes, dim):
+        counts = {"open": 0, "closed": 0}
+        for row in members:
+            counts[row.status] += 1
+        out.append(
+            TradeBucket(
+                id=value["id"],
+                label=str(value["label"]),
+                counts=counts,
+                summary=summarize(members),
+                open=summarize_open(members),
+            )
+        )
+    return out
+
+
 @router.get("/trades", response_model=TradesPage)
 def trades(
     repo: Repo,
@@ -440,10 +518,18 @@ def trades(
     status: StatusFilter = "all",
     start: datetime | None = None,
     end: datetime | None = None,
+    dims: Annotated[str, Query(max_length=200)] = "",
+    bucket: Annotated[str, Query(max_length=200)] = "",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0, le=20_000)] = 0,
 ) -> TradesPage:
-    """Trades active in [start, end], newest activity first; filters apply before paging."""
+    """Trades active in [start, end], newest activity first; filters apply before paging.
+
+    ``dims=sector`` labels each trade's instrument and adds ``pivots`` (per-sector counts
+    and results over every filtered trade); ``bucket=sector:<id>`` (``sector:`` for
+    Unclassified) then keeps one bucket. A failed lookup is named in
+    ``unavailable_dimensions`` and its bucket filter is not applied.
+    """
     if bool(broker_code) != bool(account_id):
         raise HTTPException(422, "broker_code and account_id must be supplied together")
     for value in (start, end):
@@ -491,6 +577,30 @@ def trades(
         and not (end and row.opened_at > end)
         and not (start and row.closed_at is not None and row.closed_at < start)
     ]
+    pivot_dims = parse_dims(dims)
+    chosen = parse_bucket(bucket)
+    if chosen and chosen[0] not in pivot_dims:
+        pivot_dims.append(chosen[0])
+    pivots: dict[str, list[TradeBucket]] = {}
+    failed: list[str] = []
+    if pivot_dims and selected:
+        labels, failed = label_rows(
+            repo, [row.model_dump(include=INSTRUMENT_FIELDS) for row in selected], pivot_dims
+        )
+        selected = [
+            row.model_copy(update={"attributes": found})
+            for row, found in zip(selected, labels, strict=True)
+        ]
+        pivots = {
+            name: bucket_summaries(selected, labels, name)
+            for name in pivot_dims
+            if name not in failed
+        }
+        if chosen and chosen[0] not in failed:
+            dim, wanted = chosen
+            selected = [
+                row for row in selected if (row.attributes.get(dim) or {}).get("id") == wanted
+            ]
     # Status counts and the closed-trade summary ignore the status filter itself.
     counts = {"open": 0, "closed": 0}
     for row in selected:
@@ -516,4 +626,6 @@ def trades(
             for a in profile_accounts
         ],
         generated_at=datetime.now(UTC),
+        pivots=pivots,
+        unavailable_dimensions=failed,
     )

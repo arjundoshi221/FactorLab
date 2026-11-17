@@ -172,3 +172,30 @@ it("groups exposure by theme and sector, splitting a position across its tags", 
   // Limits are breached here, so their fold opens; the stress fold opens on a red verdict too.
   expect(screen.getByText("Limits & operating envelope").closest("details")).toHaveAttribute("open");
 });
+
+it("pivots positions and composition by sector with subtotals per sector", async () => {
+  const health = { id: "35", label: "Health Care" };
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const path = new URL(url, "http://hub.test");
+    if (path.pathname.endsWith("/dimensions")) return { ok: true, json: async () => ({ items: [{ id: "sector", label: "Sector", buckets: [health, { id: null, label: "Unclassified" }] }] }) };
+    if (path.pathname.endsWith("/positions") && path.searchParams.get("dims") === "sector") {
+      const rows = (api(url) as { items: Record<string, unknown>[] }).items.map(row => ({ ...row, attributes: { sector: row.trading_symbol === "LLY" ? health : { id: null, label: "Unclassified" } } }));
+      return { ok: true, json: async () => snapshot(rows) };
+    }
+    return { ok: true, json: async () => api(url) };
+  }));
+  render(<PortfolioApp path="/portfolio/risk" />);
+  await screen.findByRole("table", { name: "Positions and concentration" });
+  fireEvent.change(within(screen.getByRole("region", { name: "Positions & concentration" })).getByLabelText("Pivot by"), { target: { value: "sector" } });
+  expect(window.location.search).toContain("by=sector");
+  const table = await screen.findByRole("table", { name: "Positions and concentration by sector" });
+  const health_ = within(table).getByRole("rowgroup", { name: "Health Care" });
+  expect(within(health_).getAllByRole("row")[0]).toHaveTextContent("70,000");
+  expect(within(health_).getAllByRole("row")[0]).toHaveTextContent("70.0%");
+  const other = within(table).getByRole("rowgroup", { name: "Unclassified" });
+  expect(within(other).getAllByRole("row")[0]).toHaveTextContent("130,000");
+  expect(within(other).getByText("BOXX")).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Composition by sector" })).toHaveTextContent("Health Care");
+  // The exposure tree keeps its own grouping.
+  expect(window.location.search).not.toContain("group=");
+});

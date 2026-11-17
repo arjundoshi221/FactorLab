@@ -251,3 +251,7 @@
 .pf-fold[open] > summary svg { transform: rotate(90deg); }
 .pf-app .pf-fold > summary h2 { margin: 0; font: 600 17px/1.2 var(--serif); }
 .pf-fold__body { padding: 0 12px 12px; }
+/* Positions & concentration grouped by a pivot dimension (`by=sector`). */
+.pf-app .pf-table .pf-group-row th, .pf-app .pf-table .pf-group-row td { background: var(--panel-soft); font-weight: 600; }
+.pf-app .pf-table tbody .pf-group-member th { padding-left: 28px; }
+.pf-card__aside .portfolio-pivot { margin-left: 0; }

@@ -76,7 +76,7 @@ export interface PnlReport extends ItemsPage<PnlGroup> {
 }
 
 export type LedgerTagStatus = "tagged" | "untagged" | "not_taggable";
-export interface LedgerRow extends OrderAssignment {
+export interface LedgerRow extends OrderAssignment, Attributed {
   key: string; broker_code: string; account_id: string; account_mode: string; simulated: boolean;
   perm_id: string; taggable: boolean; trading_symbol: string; listing_id: string | null;
   security_id: string | null; contract_id: string | null; product_type: string; currency: string;
@@ -85,10 +85,14 @@ export interface LedgerRow extends OrderAssignment {
   theme_name: string | null; strategy_name: string | null; trade_name_name: string | null;
   tag_status: LedgerTagStatus; fills: BrokerRow[]; fills_truncated: boolean;
 }
+/** A pivot bucket (e.g. a sector) over every filtered order, ignoring the bucket filter. */
+export interface LedgerBucket extends AttrValue { counts: Record<LedgerTagStatus, number> }
 export interface LedgerPage extends ItemsPage<LedgerRow> {
   total: number; limit: number; offset: number; counts: Record<LedgerTagStatus, number>;
   accounts: { broker_code: string; account_id: string; account_mode: string | null; simulated: boolean }[];
   generated_at: string;
+  /** `dims=sector`: buckets per dimension; a failed dimension is in `unavailable_dimensions`. */
+  pivots?: Record<string, LedgerBucket[]>; unavailable_dimensions?: string[];
 }
 
 export type TradeStatus = "open" | "closed";
@@ -97,7 +101,7 @@ export interface TradeFill {
   quantity: string; price: string; commission: string | null; commission_ccy: string | null;
 }
 /** One position's life from flat to flat in one account, instrument and currency. */
-export interface TradeRow extends OrderAssignment {
+export interface TradeRow extends OrderAssignment, Attributed {
   key: string; broker_code: string; account_id: string; account_mode: string; simulated: boolean;
   trading_symbol: string; listing_id: string | null; security_id: string | null; contract_id: string | null;
   product_type: string; currency: string; direction: "long" | "short"; status: TradeStatus;
@@ -114,8 +118,13 @@ export interface TradeSummary {
   currency: string; account_mode: string; simulated: boolean;
   closed: number; valued: number; wins: number; losses: number; realized: string; net: string | null;
 }
+/** Open trades per currency/mode/simulation; `unrealized` is null if any is unavailable. */
+export interface OpenSummary { currency: string; account_mode: string; simulated: boolean; open: number; unrealized: string | null }
+/** A pivot bucket (e.g. a sector) over every filtered trade, all statuses, ignoring the bucket filter. */
+export interface TradeBucket extends AttrValue { counts: Record<TradeStatus, number>; summary: TradeSummary[]; open: OpenSummary[] }
 export interface TradesPage extends ItemsPage<TradeRow> {
   total: number; limit: number; offset: number; counts: Record<TradeStatus, number>; summary: TradeSummary[];
   accounts: { broker_code: string; account_id: string; account_mode: string | null; simulated: boolean }[];
   generated_at: string;
+  pivots?: Record<string, TradeBucket[]>; unavailable_dimensions?: string[];
 }

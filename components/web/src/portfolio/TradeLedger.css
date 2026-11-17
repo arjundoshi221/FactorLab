@@ -31,3 +31,15 @@
 .ledger-meter__untagged { background: var(--warn); }
 .ledger-meter__not_taggable { background: var(--faint); }
 @media (max-width: 760px) { .ledger-pulse { grid-template-columns: 1fr; } }
+/* Sector pivot (tradePivot.tsx): the select sits with the other filters, buckets above the list. */
+.ledger-filters .portfolio-pivot { margin-left: 0; }
+.ledger-filters .portfolio-pivot .portfolio-selector { display: grid; gap: 4px; }
+.trade-pivot { margin: 4px 0 14px; }
+.trade-pivot__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.trade-pivot__head h3 { margin: 0; font-size: 13px; }
+.trade-pivot table th, .trade-pivot table td { padding: 6px 10px; vertical-align: top; }
+.trade-pivot__pick { padding: 0; border: 0; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; box-shadow: none; }
+.trade-pivot__pick:hover, .trade-pivot__pick:focus-visible { color: var(--accent); text-decoration: underline; }
+.trade-pivot tr.is-selected th, .trade-pivot tr.is-selected td { background: var(--hover); }
+.trade-pivot tr.is-selected .trade-pivot__pick { color: var(--accent); font-weight: 600; }
+.trade-bucket-label { display: block; color: var(--muted); font: 400 10px var(--mono); }

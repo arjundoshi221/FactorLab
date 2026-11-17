@@ -250,3 +250,56 @@ def enrich(
         for index, row in enumerate(rows)
     ]
     return enriched, failed
+
+
+INSTRUMENT_KEYS: tuple[str, ...] = (
+    "broker_code",
+    "listing_id",
+    "contract_id",
+    "vendor_id",
+    "trading_symbol",
+)
+
+
+def label_rows(
+    reader: Reader, rows: Sequence[dict[str, Any]], dims: Sequence[str]
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Each row's ``attributes``, resolving every distinct instrument once.
+
+    For long row lists (trades, orders) where many rows share an instrument; the
+    returned list is parallel to ``rows``. A dimension that failed is left out.
+    """
+    keys = [tuple(str(row.get(key) or "") for key in INSTRUMENT_KEYS) for row in rows]
+    unique = list(dict.fromkeys(keys))
+    labelled, failed = enrich(
+        reader, [dict(zip(INSTRUMENT_KEYS, key, strict=True)) for key in unique], dims
+    )
+    found = {key: row.get("attributes") or {} for key, row in zip(unique, labelled, strict=True)}
+    return [found[key] for key in keys], failed
+
+
+def parse_bucket(value: str) -> tuple[str, str | None] | None:
+    """``bucket=sector:45`` -> ("sector", "45"); ``sector:`` is Unclassified; else None."""
+    name, separator, bucket = value.partition(":")
+    if not separator or name not in ATTRIBUTES:
+        return None
+    return name, bucket or None
+
+
+def pivot_groups[T](
+    rows: Sequence[T], attributes: Sequence[dict[str, Any]], dim: str
+) -> list[tuple[dict[str, Any], list[T]]]:
+    """Rows per bucket of ``dim`` in the dimension's display order, Unclassified last."""
+    groups: dict[str | None, tuple[dict[str, Any], list[T]]] = {}
+    for row, labels in zip(rows, attributes, strict=True):
+        value = labels.get(dim) or UNCLASSIFIED
+        groups.setdefault(value["id"], (value, []))[1].append(row)
+    rank = {bucket["id"]: index for index, bucket in enumerate(ATTRIBUTES[dim].buckets())}
+    return sorted(
+        groups.values(),
+        key=lambda item: (
+            item[0]["id"] is None,
+            rank.get(item[0]["id"], len(rank)),
+            str(item[0]["label"]),
+        ),
+    )
