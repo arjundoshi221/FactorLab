@@ -637,13 +637,18 @@ function RiskBoard({ account, userId }: { account: BrokerAccount; userId: string
     {state.unconverted.length > 0 && <p className="pf-notice pf-notice--warn" role="status"><b>Missing FX rates.</b> No {state.unconverted.join(", ")} → {currency} rate in this snapshot; equity leverage and concentration are unavailable.</p>}
 
     <KeyMetrics state={state} limits={settings.limits} />
-    <div className="pf-grid pf-grid--wide">
-      <ExposureByGroup account={account} userId={userId} state={state} />
-      <div className="pf-stack"><Snapshot state={state} /><CapacityCard state={state} limits={settings.limits} /></div>
-    </div>
-    <div className="pf-grid pf-grid--wide">
-      <Concentration state={state} limits={settings.limits} pivot={holdingPivot} />
-      <Composition state={state} pivot={activePivot} />
+    {/* Two independent column stacks, so a tall side card never leaves a gap in the main column.
+        Below 1280px the stacks dissolve and the cards keep the reading order exposure, snapshot,
+        capacity, positions, composition. */}
+    <div className="pf-grid pf-grid--wide pf-board">
+      <div className="pf-stack pf-board__main">
+        <ExposureByGroup account={account} userId={userId} state={state} />
+        <Concentration state={state} limits={settings.limits} pivot={holdingPivot} />
+      </div>
+      <div className="pf-stack pf-board__side">
+        <Snapshot state={state} /><CapacityCard state={state} limits={settings.limits} />
+        <Composition state={state} pivot={activePivot} />
+      </div>
     </div>
     <Leverage state={state} limits={settings.limits} beta={beta} />
     <Fold title="Limits & operating envelope" open={limitCounts.red + limitCounts.amber > 0}

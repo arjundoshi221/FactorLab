@@ -17,13 +17,15 @@
   --line: #1a2027;
   --line-2: #262d36;
   --line-3: #38414b;
+  /* Boundary of text fields and selects: 3:1 against bg and panel (WCAG 1.4.11). */
+  --field-line: #58616c;
 
   /* Text */
   --ink: #e6e9ec;
   --ink-2: #c4cad0;
   --ink-3: #9ba4ac;
-  --muted: #77818b;
-  --faint: #545d67;
+  --muted: #85909a;
+  --faint: #77818b;
 
   /* Brand accent (amber) */
   --accent: #ffa028;
@@ -62,7 +64,7 @@
   --series-7: #9085e9;
   --series-8: #e66767;
   --grid: #1c232b;
-  --axis: #67717b;
+  --axis: #76818b;
 
   /* Legacy aliases kept so older rules resolve to the new roles */
   --lime: var(--accent);
@@ -71,16 +73,16 @@
   --red: var(--bad);
   --blue: var(--info);
 
-  /* Type */
+  /* Type. One role scale: 2xs labels · xs meta · s cells · m body · l stats and card heads · xl page titles · 2xl KPIs (the ceiling). */
   --sans: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
   --mono: "JetBrains Mono", "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --fs-2xs: 9px;
   --fs-xs: 10px;
   --fs-s: 11px;
   --fs-m: 12px;
-  --fs-l: 14px;
-  --fs-xl: 18px;
-  --fs-2xl: 24px;
+  --fs-l: 13px;
+  --fs-xl: 15px;
+  --fs-2xl: 20px;
 
   /* Space and size */
   --gutter: 16px;

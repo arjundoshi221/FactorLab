@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, type ReactNode } from "react";
+import { Component, useLayoutEffect, useState, type ReactNode } from "react";
 
 import { WEB_VERSION } from "../shared/build";
 import { useLocation } from "../shell/location";
@@ -25,6 +25,21 @@ function ThemeIcon({ theme }: { theme: PortfolioTheme }) {
     {theme === "dark" ? <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />
       : <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>}
   </svg>;
+}
+
+/** Keeps one page's render error from blanking the whole app; the shell and its navigation stay usable. */
+class PageErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return <main className="portfolio-page">
+      <div className="portfolio-notice portfolio-notice--error" role="alert">
+        <strong>This page stopped rendering.</strong> {this.state.error.message || "An unexpected error occurred."} Other portfolio pages still work; reloading usually clears it.{" "}
+        <button type="button" className="portfolio-button portfolio-button--secondary" onClick={() => window.location.reload()}>Reload page</button>
+      </div>
+    </main>;
+  }
 }
 
 /** Portfolio app chrome: its own header, tabs and light/dark theme, separate from the terminal shell. */
@@ -74,7 +89,7 @@ export function PortfolioShell({ children }: { children: ReactNode }) {
         </a>
       </div>
     </header>
-    <div className="pf-body">{children}</div>
+    <div className="pf-body"><PageErrorBoundary key={path}>{children}</PageErrorBoundary></div>
     <footer className="pf-foot"><span>FactorLab · Private portfolio workspace</span><span>Times in Asia/Kolkata</span><span>Web {WEB_VERSION ? `v${WEB_VERSION}` : "dev"}</span></footer>
   </div>;
 }

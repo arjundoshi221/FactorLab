@@ -4,7 +4,7 @@
 .trade-ledger .ledger-chips span { font: 11px var(--mono); color: var(--muted); }
 .trade-ledger .ledger-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 9px; margin-bottom: 12px; }
 .trade-ledger .ledger-filters .portfolio-selector { min-width: 150px; }
-.trade-ledger .ledger-filters input { min-height: 28px; padding: 0 8px; border: 1px solid var(--line-3); border-radius: var(--radius-s); background: var(--bg); color: var(--ink); }
+.trade-ledger .ledger-filters input { min-height: var(--control); padding: 0 10px; border: 1px solid var(--field-line); border-radius: var(--radius-s); background: var(--panel); color: var(--ink); }
 .trade-ledger .ledger-bulk { position: sticky; top: calc(var(--sticky) + 4px); z-index: 4; display: grid; gap: 8px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--lime); border-radius: var(--radius-s); background: var(--panel); }
 .trade-ledger .ledger-scroll { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); }
 .trade-ledger .ledger-table { width: 100%; min-width: 1100px; border-collapse: collapse; font-size: 13px; }

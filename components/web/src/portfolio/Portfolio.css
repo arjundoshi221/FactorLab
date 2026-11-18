@@ -3,7 +3,8 @@
 .portfolio-page h1, .portfolio-page h2, .portfolio-page h3, .portfolio-page h4, .portfolio-page p { margin: 0; }
 .portfolio-eyebrow { display: block; color: var(--accent); font: 600 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
 .portfolio-selector { display: grid; gap: 8px; min-width: 0; font-weight: 500; }
-.portfolio-selector > span { color: var(--ink-3); font-size: 11px; text-transform: capitalize; }
+.portfolio-selector > span { color: var(--ink-3); font-size: 11px; }
+.portfolio-selector > span::first-letter { text-transform: uppercase; }
 .portfolio-selector > span small { float: right; margin-left: 10px; color: var(--muted); font-size: 10px; font-weight: 400; }
 .portfolio-profile { flex: 0 1 260px; width: 260px; }
 .portfolio-page input:not([type="checkbox"]), .portfolio-page select, .portfolio-page textarea { width: 100%; min-width: 0; min-height: var(--control); border: 1px solid var(--field-line); border-radius: var(--radius-s); padding: 7px 10px; color: var(--ink); background: var(--panel); font: inherit; font-size: 13px; }
@@ -227,6 +228,7 @@
 /* Pivot by attribute (sector, ...): the overview's control and exposure table. */
 .portfolio-pivot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: auto; }
 .portfolio-pivot .portfolio-selector { display: flex; align-items: center; gap: 8px; }
+.portfolio-pivot .portfolio-selector > span { white-space: nowrap; }
 .portfolio-pivot .portfolio-period { margin-left: 0; }
 .portfolio-exposure { margin-top: 16px; }
 .portfolio-exposure table { min-width: 620px; }
@@ -250,7 +252,7 @@
 .portfolio-chip.is-dragging { opacity: .45; }
 .portfolio-chip__grip { color: var(--faint); font-size: 10px; letter-spacing: -2px; margin-right: 4px; }
 .portfolio-chip__name { margin-right: 2px; }
-.portfolio-page .portfolio-chip button { display: inline-grid; place-items: center; width: 20px; height: 20px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 13px; line-height: 1; cursor: pointer; box-shadow: none; }
+.portfolio-page .portfolio-chip button { display: inline-grid; place-items: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 13px; line-height: 1; cursor: pointer; box-shadow: none; }
 .portfolio-page .portfolio-chip button:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
 .portfolio-page .portfolio-chip button:disabled { opacity: .3; cursor: default; }
 .portfolio-page .portfolio-groupby__add { width: auto; min-height: 28px; padding: 0 8px; border: 1px dashed var(--line-3); border-radius: 999px; background: transparent; color: var(--muted); font-size: 12px; }

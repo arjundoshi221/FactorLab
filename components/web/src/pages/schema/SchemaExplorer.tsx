@@ -156,7 +156,7 @@ function ExplorerCanvas({ schema, catalog }: { schema: SchemaMapResponse; catalo
           ...(view.kind === "all" ? {} : { sourceHandle: `s:${item.source.column}`, targetHandle: `t:${item.target.column}`, label: item.source.column }),
           type: "smoothstep", data: { category: item.category },
           markerEnd: { type: MarkerType.ArrowClosed, width: 13, height: 13 },
-          labelStyle: { fill: "var(--ink-3)", fontSize: 9, fontFamily: "var(--mono)" },
+          labelStyle: { fill: "var(--ink-3)", fontSize: "var(--fs-2xs)", fontFamily: "var(--mono)" },
           labelBgStyle: { fill: "var(--panel-soft)", fillOpacity: 0.95 },
         }));
         if (view.kind === "all") {

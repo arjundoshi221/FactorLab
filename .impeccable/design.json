@@ -1,0 +1,446 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-18T00:00:00Z",
+  "title": "Design System: FactorLab Hub",
+  "extensions": {
+    "colorMeta": {
+      "terminal-amber": {
+        "role": "primary",
+        "displayName": "Terminal Amber",
+        "canonical": "oklch(78.5% 0.165 66)",
+        "tonalRamp": [
+          "#1f0100",
+          "#431500",
+          "#6b2f00",
+          "#964a00",
+          "#c26800",
+          "#e09134",
+          "#feb972",
+          "#ffe2a9"
+        ]
+      },
+      "amber-ink": {
+        "role": "primary",
+        "displayName": "Amber Ink"
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "Desk Black",
+        "tonalRamp": [
+          "#06080b",
+          "#090c0f",
+          "#0c0f13",
+          "#11151a",
+          "#151a21",
+          "#1b2129",
+          "#262d36",
+          "#38414b"
+        ]
+      },
+      "panel-soft": {
+        "role": "neutral",
+        "displayName": "Chrome Black"
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel"
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Raised"
+      },
+      "hover": {
+        "role": "neutral",
+        "displayName": "Hover"
+      },
+      "press": {
+        "role": "neutral",
+        "displayName": "Press"
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline"
+      },
+      "line-2": {
+        "role": "neutral",
+        "displayName": "Control Line"
+      },
+      "line-3": {
+        "role": "neutral",
+        "displayName": "Emphasis Line"
+      },
+      "field-line": {
+        "role": "neutral",
+        "displayName": "Field Line"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "oklch(93.3% 0.005 248)",
+        "tonalRamp": [
+          "#0a0b0c",
+          "#242526",
+          "#404244",
+          "#5f6164",
+          "#808385",
+          "#a3a5a8",
+          "#c7c9cb",
+          "#edeff0"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Ink 2"
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Ink 3"
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted"
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Faint"
+      },
+      "up": {
+        "role": "secondary",
+        "displayName": "Up Green",
+        "canonical": "oklch(68.4% 0.153 157)",
+        "tonalRamp": [
+          "#001301",
+          "#003111",
+          "#005328",
+          "#007741",
+          "#009c5d",
+          "#51bd84",
+          "#88dfad",
+          "#bbffd7"
+        ]
+      },
+      "down": {
+        "role": "secondary",
+        "displayName": "Down Red",
+        "canonical": "oklch(62.6% 0.193 23)",
+        "tonalRamp": [
+          "#270000",
+          "#500005",
+          "#7d0d1a",
+          "#ad2730",
+          "#de4248",
+          "#fc7573",
+          "#ffa39e",
+          "#ffd0ca"
+        ]
+      },
+      "flat": {
+        "role": "secondary",
+        "displayName": "Flat Grey"
+      },
+      "good": {
+        "role": "tertiary",
+        "displayName": "Status Good"
+      },
+      "warn": {
+        "role": "tertiary",
+        "displayName": "Status Warn",
+        "canonical": "oklch(80.6% 0.147 79)",
+        "tonalRamp": [
+          "#1a0500",
+          "#3b1d00",
+          "#603800",
+          "#875500",
+          "#b07500",
+          "#cf9b3b",
+          "#efc176",
+          "#ffe8ac"
+        ]
+      },
+      "bad": {
+        "role": "tertiary",
+        "displayName": "Status Bad"
+      },
+      "info": {
+        "role": "tertiary",
+        "displayName": "Status Info",
+        "canonical": "oklch(67.9% 0.148 252)",
+        "tonalRamp": [
+          "#000927",
+          "#00254f",
+          "#05427a",
+          "#1d63a8",
+          "#3585d7",
+          "#67a9f2",
+          "#96ceff",
+          "#c4f3ff"
+        ]
+      },
+      "series-1": {
+        "role": "data",
+        "displayName": "Series 1"
+      },
+      "series-2": {
+        "role": "data",
+        "displayName": "Series 2"
+      },
+      "series-3": {
+        "role": "data",
+        "displayName": "Series 3"
+      },
+      "series-4": {
+        "role": "data",
+        "displayName": "Series 4"
+      },
+      "series-5": {
+        "role": "data",
+        "displayName": "Series 5"
+      },
+      "series-6": {
+        "role": "data",
+        "displayName": "Series 6"
+      },
+      "series-7": {
+        "role": "data",
+        "displayName": "Series 7"
+      },
+      "series-8": {
+        "role": "data",
+        "displayName": "Series 8"
+      },
+      "grid": {
+        "role": "data",
+        "displayName": "Chart Grid"
+      },
+      "axis": {
+        "role": "data",
+        "displayName": "Chart Axis"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "KPI values on metric cards; the largest terminal type."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The single page title in the header strip."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Panel headings and chrome section tabs, uppercase."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Base text, sub-tabs and page descriptions."
+      },
+      "data": {
+        "displayName": "Data",
+        "purpose": "Table figures, codes and tape items; always tabular."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Column headers, stat labels, chips, status pills and the status line; uppercase."
+      }
+    },
+    "shadows": [
+      {
+        "name": "overlay",
+        "value": "0 16px 40px rgba(0, 0, 0, .55)",
+        "purpose": "Command palette, info popovers and menus only."
+      },
+      {
+        "name": "status-halo",
+        "value": "0 0 0 3px var(--good-soft)",
+        "purpose": "Soft ring around a lit status or open-market dot (swap -soft per status)."
+      },
+      {
+        "name": "active-underline",
+        "value": "inset 0 -2px 0 var(--accent)",
+        "purpose": "Active section tab and sub-tab."
+      },
+      {
+        "name": "control-ring",
+        "value": "inset 0 0 0 1px var(--line-2)",
+        "purpose": "Default button outline; line-3 on hover."
+      },
+      {
+        "name": "portfolio-card-dark",
+        "value": "0 1px 0 rgba(255, 255, 255, .03) inset, 0 12px 32px rgba(0, 0, 0, .35)",
+        "purpose": "Portfolio variant cards, dark theme."
+      },
+      {
+        "name": "portfolio-card-light",
+        "value": "0 1px 2px rgba(16, 24, 40, .05), 0 6px 20px rgba(16, 24, 40, .05)",
+        "purpose": "Portfolio variant cards, light theme."
+      }
+    ],
+    "motion": [
+      {
+        "name": "tape-scroll",
+        "value": "linear infinite translateX(-50%)",
+        "purpose": "Quote tape; pauses on hover, disabled under reduced motion."
+      },
+      {
+        "name": "critical-blink",
+        "value": "1.6s steps(2, start) infinite",
+        "purpose": "Health light in critical state only."
+      },
+      {
+        "name": "skeleton-shimmer",
+        "value": "1.4s ease-in-out infinite",
+        "purpose": "Loading skeleton rows."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact",
+        "value": "620px"
+      },
+      {
+        "name": "tablet",
+        "value": "900px"
+      },
+      {
+        "name": "narrow-desktop",
+        "value": "1100px"
+      },
+      {
+        "name": "portfolio-mobile",
+        "value": "760px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Default recessed square key for actions.",
+      "html": "<button class=\"ds-btn\">Refresh now</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; color: var(--ink, #e6e9ec); background: var(--raised, #11151a); border: 0; border-radius: 0; box-shadow: inset 0 0 0 1px var(--line-2, #262d36); font: 600 11px Inter, 'Segoe UI', system-ui, sans-serif; cursor: pointer; } .ds-btn:hover { background: var(--hover, #151a21); box-shadow: inset 0 0 0 1px var(--line-3, #38414b); } .ds-btn:focus-visible { outline: 1px solid var(--accent, #ffa028); outline-offset: 2px; } .ds-btn:disabled { opacity: .45; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Transparent hairline button for Retry, Close and minor actions.",
+      "html": "<button class=\"ds-btn-secondary\">Try again</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; height: 28px; padding: 0 11px; color: var(--ink-2, #c4cad0); background: transparent; border: 1px solid var(--line, #1a2027); border-radius: 0; font: 600 11px Inter, 'Segoe UI', system-ui, sans-serif; cursor: pointer; } .ds-btn-secondary:hover { color: var(--ink, #e6e9ec); border-color: var(--faint, #77818b); } .ds-btn-secondary:focus-visible { outline: 1px solid var(--accent, #ffa028); outline-offset: 2px; }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "custom",
+      "refersTo": "segmented",
+      "description": "Range and mode switch; the active option is filled amber.",
+      "html": "<div class=\"ds-seg\" role=\"group\" aria-label=\"Range\"><button>1D</button><button class=\"is-active\" aria-pressed=\"true\">5D</button><button>1M</button><button>1Y</button></div>",
+      "css": ".ds-seg { display: inline-flex; height: 28px; padding: 2px; gap: 2px; background: var(--bg, #06080b); border: 1px solid var(--line-2, #262d36); } .ds-seg button { height: 100%; padding: 0 10px; color: var(--muted, #85909a); background: transparent; border: 0; border-radius: 0; font: 600 10px 'JetBrains Mono', Consolas, monospace; letter-spacing: .04em; cursor: pointer; } .ds-seg button:hover { color: var(--ink, #e6e9ec); background: var(--hover, #151a21); } .ds-seg button.is-active { color: var(--accent-ink, #160d00); background: var(--accent, #ffa028); } .ds-seg button:focus-visible { outline: 1px solid var(--accent, #ffa028); outline-offset: 2px; }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Square recessed field with an inline mono label in toolbars.",
+      "html": "<label class=\"ds-field\"><span>Account</span><input value=\"U1234567\" /></label>",
+      "css": ".ds-field { display: flex; align-items: center; gap: 8px; } .ds-field span { color: var(--muted, #85909a); font: 500 9px 'JetBrains Mono', Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; } .ds-field input { height: 28px; min-width: 160px; padding: 0 8px; color: var(--ink, #e6e9ec); background: var(--bg, #06080b); border: 1px solid var(--field-line, #58616c); border-radius: 0; font: 400 11px Inter, 'Segoe UI', system-ui, sans-serif; color-scheme: dark; } .ds-field input:hover { border-color: var(--muted, #85909a); } .ds-field input:focus-visible { outline: 1px solid var(--accent, #ffa028); outline-offset: 2px; }"
+    },
+    {
+      "name": "Section Navigation",
+      "kind": "nav",
+      "refersTo": "section-tab-active",
+      "description": "Top chrome bar: brand mark plus HOME, DATA, PORTFOLIO and OPS tabs with an amber active underline.",
+      "html": "<nav class=\"ds-bar\"><a class=\"ds-brand\" href=\"#\"><span>FL</span><strong>FactorLab</strong></a><a href=\"#\" class=\"is-active\">Home</a><a href=\"#\">Data</a><a href=\"#\">Portfolio</a><a href=\"#\">Ops</a></nav>",
+      "css": ".ds-bar { display: flex; align-items: stretch; height: 36px; padding-left: 16px; background: var(--panel-soft, #090c0f); border-bottom: 1px solid var(--line, #1a2027); } .ds-brand { display: inline-flex; align-items: center; gap: 8px; padding-right: 18px; color: var(--ink, #e6e9ec); text-decoration: none; border-right: 1px solid var(--line, #1a2027); } .ds-brand span { width: 20px; height: 20px; display: grid; place-items: center; background: var(--accent, #ffa028); color: var(--accent-ink, #160d00); font: 800 9px 'JetBrains Mono', Consolas, monospace; } .ds-brand strong { font: 700 11px 'JetBrains Mono', Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; } .ds-bar > a:not(.ds-brand) { display: inline-flex; align-items: center; padding: 0 16px; color: var(--muted, #85909a); font: 600 11px 'JetBrains Mono', Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; text-decoration: none; border-right: 1px solid var(--line, #1a2027); } .ds-bar > a:not(.ds-brand):hover { color: var(--ink, #e6e9ec); background: var(--hover, #151a21); } .ds-bar > a.is-active { color: var(--accent, #ffa028); background: var(--panel, #0c0f13); box-shadow: inset 0 -2px 0 var(--accent, #ffa028); } .ds-bar a:focus-visible { outline: 1px solid var(--accent, #ffa028); outline-offset: -2px; }"
+    },
+    {
+      "name": "Status Chips",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Square mono chips; status variants pair the word with tint and outline.",
+      "html": "<span class=\"ds-chip\">Delayed</span> <span class=\"ds-chip ds-chip--ok\">Live</span> <span class=\"ds-chip ds-chip--warn\">Stale</span> <span class=\"ds-chip ds-chip--critical\">Missing</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; color: var(--ink-3, #9ba4ac); border: 1px solid var(--line-2, #262d36); font: 600 9px 'JetBrains Mono', Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; } .ds-chip--ok { color: #22b573; border-color: rgba(34,181,115,.38); background: rgba(34,181,115,.12); } .ds-chip--warn { color: #f2b33d; border-color: rgba(242,179,61,.38); background: rgba(242,179,61,.12); } .ds-chip--critical { color: #e5484d; border-color: rgba(229,72,77,.38); background: rgba(229,72,77,.12); }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Square hairline panel with a mono code and title header; the terminal's main container.",
+      "html": "<section class=\"ds-panel\"><header><code>IDX</code><h2>Tracked indexes</h2><a href=\"#\" aria-label=\"Open\">↗</a></header><div class=\"ds-panel__body\"><span class=\"ds-num ds-num--up\">▲ +0.84%</span> <span class=\"ds-num ds-num--down\">▼ −1.20%</span> <span class=\"ds-num ds-num--na\">—</span></div><footer>As of 14:32 IST</footer></section>",
+      "css": ".ds-panel { display: flex; flex-direction: column; background: var(--panel, #0c0f13); border: 1px solid var(--line, #1a2027); } .ds-panel header { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 4px 0 10px; background: var(--panel-soft, #090c0f); border-bottom: 1px solid var(--line, #1a2027); } .ds-panel header code { color: var(--accent, #ffa028); font: 700 9px 'JetBrains Mono', Consolas, monospace; letter-spacing: .1em; } .ds-panel header h2 { flex: 1; margin: 0; color: var(--ink-2, #c4cad0); font: 600 10px 'JetBrains Mono', Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; } .ds-panel header a { width: 22px; height: 22px; display: grid; place-items: center; color: var(--muted, #85909a); text-decoration: none; } .ds-panel header a:hover { color: var(--accent, #ffa028); background: var(--hover, #151a21); } .ds-panel__body { padding: 8px 10px; display: flex; gap: 14px; } .ds-panel footer { padding: 5px 10px; border-top: 1px solid var(--line, #1a2027); color: var(--muted, #85909a); font: 400 9px 'JetBrains Mono', Consolas, monospace; } .ds-num { font: 500 11px 'JetBrains Mono', Consolas, monospace; font-variant-numeric: tabular-nums; white-space: nowrap; } .ds-num--up { color: var(--up, #22b573); } .ds-num--down { color: var(--down, #e5484d); } .ds-num--na { color: var(--faint, #77818b); }"
+    },
+    {
+      "name": "Page Header Strip",
+      "kind": "custom",
+      "refersTo": "code-badge",
+      "description": "Signature header: amber page code, 15px title, mono stats split by hairlines.",
+      "html": "<header class=\"ds-head\"><span class=\"ds-code\">RSK</span><h1>Risk</h1><dl><div><dt>Net liq</dt><dd>1,204,330</dd></div><div class=\"is-up\"><dt>Day</dt><dd>▲ +0.42%</dd></div><div><dt>Margin</dt><dd>—</dd></div></dl></header>",
+      "css": ".ds-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; min-height: 44px; padding: 8px 0; border-bottom: 1px solid var(--line, #1a2027); } .ds-code { padding: 3px 6px; color: var(--accent-ink, #160d00); background: var(--accent, #ffa028); font: 800 10px 'JetBrains Mono', Consolas, monospace; letter-spacing: .08em; } .ds-head h1 { margin: 0; color: var(--ink, #e6e9ec); font: 600 15px Inter, 'Segoe UI', system-ui, sans-serif; letter-spacing: -.005em; } .ds-head dl { display: flex; margin: 0; } .ds-head dl > div { padding: 0 14px; border-left: 1px solid var(--line, #1a2027); } .ds-head dt { color: var(--muted, #85909a); font: 500 9px 'JetBrains Mono', Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; } .ds-head dd { margin: 2px 0 0; color: var(--ink, #e6e9ec); font: 600 13px 'JetBrains Mono', Consolas, monospace; font-variant-numeric: tabular-nums; } .ds-head .is-up dd { color: var(--up, #22b573); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Desk",
+    "overview": "The hub is an operator's desk at the start of a trading session. The room is dark, the screens are dense, and one warm light marks where to look. Surfaces are stacked near-blacks separated by hairlines. Type is small, numbers are monospaced and tabular, and the amber accent marks only the active thing: the current section, the command prompt, a page code, the selected segment. Everything else is grey until data gives it a colour.\n\nDensity is the point. Rows are 26px, controls 28px, and labels are 9–10px mono uppercase with wide tracking. Chrome is a stack of fixed bars: section bar, sub-tabs, quote tape, and a status line pinned to the bottom. Pages are grids of square panels with no gaps wasted. Colour means something. Green and red mean market direction or status, and they always travel with ▲/▼, a sign or a written label. A grey em dash means the value is unavailable.\n\nThe Portfolio app (`/portfolio*`) is a deliberate variant of this system, not a separate one. It redefines the same role tokens under `[data-pf-theme]` (navy dark and a light mode, periwinkle/blue accent, serif headings, rounded cards, roomier rows). Shared rules and charts re-theme through roles alone. See **Portfolio variant** under Components.",
+    "keyCharacteristics": [
+      "Near-black tonal stack (`bg` → `press`) with 1px hairlines; no shadows at rest.",
+      "One warm accent, Terminal Amber, used for focus, selection and identity only.",
+      "Mono uppercase micro-labels over tabular mono figures; Inter for prose and page titles.",
+      "Square corners everywhere; the only round shapes are status dots.",
+      "Colour carries meaning (direction, status, series) and is never the only signal.",
+      "Fixed chrome: 36px section bar, 30px sub-tabs, 26px tape, 22px status line."
+    ],
+    "rules": [
+      {
+        "name": "The One Lamp Rule",
+        "body": "Terminal Amber marks only what is active, focused or identifying (section, selection, prompt, page code). It is never used for data, status or decoration. If two amber things compete on a screen, one of them is wrong.",
+        "section": "colors"
+      },
+      {
+        "name": "The Never-Alone Rule",
+        "body": "Green, red and amber status never appear without a second signal: ▲/▼, a sign, a status word or a hollow-versus-filled shape. Up/down sits in the colour-vision-deficiency warning band, so a signal carried by colour alone counts as a bug.",
+        "section": "colors"
+      },
+      {
+        "name": "The Roles-Not-Hex Rule",
+        "body": "Page CSS references role tokens (`var(--panel)`, `var(--up)`) and never raw hex. A new colour is added to `tokens.css` first, and to the Portfolio theme's light and dark blocks if Portfolio uses it.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Every figure that could sit beside another figure uses the mono face with `font-variant-numeric: tabular-nums` and `white-space: nowrap`. A proportional number in a column is a bug.",
+        "section": "typography"
+      },
+      {
+        "name": "The Ceiling Rule",
+        "body": "Terminal type tops out at 20px for numbers and 15px for words. Hierarchy comes from case, tracking, weight and the ink ladder, not from size.",
+        "section": "typography"
+      },
+      {
+        "name": "The Seven Steps Rule",
+        "body": "Terminal CSS sets every font size through the role scale in `src/theme/tokens.css`: `--fs-2xs` 9px labels, `--fs-xs` 10px meta, `--fs-s` 11px cells, `--fs-m` 12px body, `--fs-l` 13px stats and card heads, `--fs-xl` 15px page titles, `--fs-2xl` 20px KPIs. A literal px font size in terminal CSS is a bug, and so is a size between steps.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Desk Rule",
+        "body": "If it does not float above the page, it does not cast a shadow. Separate things with a hairline or a ladder step.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** reference role tokens from `src/theme/tokens.css` (`var(--panel)`, `var(--up)`, `var(--fs-s)`) in page CSS, and add a new role there before using it.",
+      "**Do** keep terminal surfaces square (0px) and flat, separated by 1px `line` hairlines.",
+      "**Do** set every comparable figure in the mono face with tabular numerals and no wrapping (`.t-num`).",
+      "**Do** pair every up/down or status colour with ▲/▼, a sign or a status word, and draw up candles hollow.",
+      "**Do** show unavailable values as a `faint`/`muted` em dash or \"?\", and mute stale rows or tape items rather than hiding them.",
+      "**Do** label with 9–10px mono uppercase at 0.06–0.12em tracking, in `muted`.",
+      "**Do** give every interactive element the visible amber focus outline."
+    ],
+    "donts": [
+      "**Don't** use raw hex in page CSS. The `--lime`, `--green`, `--amber`, `--red` and `--blue` aliases exist only for older rules; new code uses the role names.",
+      "**Don't** use Terminal Amber for data, status or decoration. It marks active, focused and identifying elements only.",
+      "**Don't** add rounded corners, pills or resting shadows to terminal pages. Those belong to the Portfolio variant.",
+      "**Don't** exceed 20px type in the terminal, or set a terminal page title larger than 15px.",
+      "**Don't** load third-party fonts, scripts or icon CDNs. The CSP is `default-src 'self'`.",
+      "**Don't** show a missing value as 0 or colour it green."
+    ]
+  }
+}
