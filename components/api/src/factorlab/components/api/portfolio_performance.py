@@ -796,7 +796,7 @@ CASH_FLOW_LINE = {
 
 
 def performance_report(repo: Any, account: dict[str, Any], since: date) -> Performance:
-    currency = str(account.get("base_currency") or "").upper()
+    currency = text(account.get("base_currency")).upper()
     if not currency:
         return empty(None, since, ["No base currency is registered for this account."])
     source = PerformanceSource(repo, account)

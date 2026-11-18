@@ -164,7 +164,7 @@ class Client:
                     "broker_code": "ibkr",
                     "account_id": "U1",
                     "account_mode": "live",
-                    "base_currency": "SGD",
+                    "base_currency": b"SGD",  # FixedString(3) arrives as bytes
                 }
             ]
         elif "GROUP BY broker_code, account_id" in sql:
