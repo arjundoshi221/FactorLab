@@ -1,7 +1,7 @@
 ---
 id: F-049
 title: Portfolio performance tab and deeper risk analytics reconciled to IBKR
-status: review
+status: shipped
 priority: P1
 components: [api, web, ingest-broker]
 owner: unassigned
@@ -53,7 +53,7 @@ only refreshed when someone pressed "Sync IBKR history".
 - [x] Unconvertible amounts are named in warnings, never guessed; Flex `FixedString`
       currencies decode correctly.
 - [x] Risk and Performance tabs render the new cards; web and API suites pass.
-- [ ] Deployed and the endpoint answers on production.
+- [x] Deployed and the endpoint answers on production.
 
 ## Rollout
 
@@ -64,3 +64,6 @@ ingest trial of `ingest-broker`. No migrations.
 
 - 2026-11-19: created and implemented (Risk additions, performance service, IBKR
   reconciliation, analytics, Performance page, daily Flex schedule).
+- 2026-11-19: shipped: api/web trial `f78524a` (performance endpoint verified on production:
+  SGD, IBKR attribution, YTD TWR 8.33% = IBKR) and ingest trial
+  `ingest-trial/ingest-broker/f78524a2e16b` (runner logs the daily 06:30 New York schedule).
