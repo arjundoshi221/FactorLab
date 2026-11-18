@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_LIMITS, LIMIT_SPECS, computeRisk, contributionToReach, deployableCapacity, estimateBeta, explainMetric, hasReconciliationGap, overallStatus, statusOf, stressTests } from "./riskModel";
+import { DEFAULT_LIMITS, DEFAULT_STRESS, LIMIT_SPECS, assetClassAllocation, computeRisk, concentrationStats, currencyExposure, grossShare, contributionToReach, deployableCapacity, estimateBeta, explainMetric, hasReconciliationGap, overallStatus, statusOf, stressTests } from "./riskModel";
 import type { BrokerRow } from "./types";
 
 const balance = (metric: string, value: number, currency = "SGD", segment = ""): BrokerRow => ({ metric, segment, currency, value_num: String(value) });
@@ -154,5 +154,102 @@ describe("risk engine", () => {
     const missing = computeRisk("SGD", balances.filter(row => row.metric !== "ExchangeRate"), positions, ["BOXX"]);
     expect(explainMetric(missing, "equityLeverage").notes[0]).toMatch(/no USD → SGD rate/);
     expect(explainMetric(missing, "betaLeverage").notes).toContain("Betas are still being measured.");
+  });
+});
+
+describe("concentration, allocation and currency exposure", () => {
+  const state = computeRisk("SGD", [...balances, balance("AvailableFunds", 13_309)], positions, ["BOXX"], {});
+  const sgd = { BOXX: 50_289.23 * 1.3, LLY: 32_898.46 * 1.3, CSPX: 20_442.31 * 1.3, CRWD: 11_573.08 * 1.3, GRID: 3_731.54 * 1.3 };
+  const gross = Object.values(sgd).reduce((sum, value) => sum + value, 0);
+
+  it("reads available funds", () => {
+    expect(state.availableFunds).toBe(13_309);
+  });
+
+  it("measures gross-weight concentration over every priced position", () => {
+    const stats = concentrationStats(state)!;
+    expect(stats.count).toBe(5);
+    expect(stats.largest?.symbol).toBe("BOXX");
+    expect(stats.largest?.grossShare).toBeCloseTo(sgd.BOXX / gross, 6);
+    expect(stats.largest?.navShare).toBeCloseTo(sgd.BOXX / 43_637, 6);
+    expect(stats.top3).toBeCloseTo((sgd.BOXX + sgd.LLY + sgd.CSPX) / gross, 6);
+    expect(stats.top5).toBeCloseTo(1, 9);
+    const sumSquares = Object.values(sgd).reduce((sum, value) => sum + (value / gross) ** 2, 0);
+    expect(stats.effectiveN).toBeCloseTo(1 / sumSquares, 6);
+    expect(grossShare(state, state.holdings[1])).toBeCloseTo(sgd.LLY / gross, 6);
+  });
+
+  it("returns no weights when a position cannot be converted", () => {
+    const missing = computeRisk("SGD", balances.filter(row => row.metric !== "ExchangeRate"), positions, ["BOXX"], {});
+    expect(concentrationStats(missing)).toBeNull();
+    expect(assetClassAllocation(missing)).toBeNull();
+    expect(grossShare(missing, missing.holdings[0])).toBeNull();
+  });
+
+  it("splits asset classes with cash equivalents separate from the product type", () => {
+    const typed = computeRisk("SGD", balances, positions.map(row => ({ ...row, product_type: row.trading_symbol === "LLY" || row.trading_symbol === "CRWD" ? "common" : "etf" })), ["BOXX"], {});
+    const rows = assetClassAllocation(typed)!;
+    expect(rows.map(row => row.label)).toEqual(["Cash equivalents", "Stocks", "ETFs"]);
+    expect(rows[1].value).toBeCloseTo(sgd.LLY + sgd.CRWD, 6);
+    expect(rows.reduce((sum, row) => sum + row.grossShare, 0)).toBeCloseTo(1, 9);
+  });
+
+  it("nets USD positions against the USD margin debit once", () => {
+    const rows = currencyExposure(state);
+    expect(rows.map(row => row.currency)).toEqual(["SGD", "USD"]);
+    const usd = rows[1];
+    expect(usd.positions).toBeCloseTo(gross, 6);
+    expect(usd.cash).toBeCloseTo(-124_040 * 1.3, 6);
+    expect(usd.net).toBeCloseTo(gross - 124_040 * 1.3, 6);
+    expect(rows[0]).toMatchObject({ positions: 0, cash: 4_620, net: 4_620 });
+  });
+});
+
+describe("extended stress scenarios", () => {
+  const state = computeRisk("SGD", balances, positions, ["BOXX"], {});
+  const rows = stressTests(state, DEFAULT_LIMITS);
+  const usdPositions = 154_615, usdCash = -124_040 * 1.3, boxx = 50_289.23 * 1.3, equities = usdPositions - boxx;
+
+  it("reprices cash equivalents in their own scenario only", () => {
+    expect(rows.find(row => row.id === "cash-like")?.navImpact).toBeCloseTo(-0.02 * boxx, 6);
+    expect(rows.find(row => row.id === "eq-0.1")?.navImpact).toBeCloseTo(-0.1 * equities, 0);
+  });
+
+  it("moves USD positions and the USD debit with the dollar", () => {
+    const usd = rows.find(row => row.id === "usd")!;
+    expect(usd.label).toBe("USD −5% vs SGD");
+    expect(usd.navImpact).toBeCloseTo(-0.05 * (usdPositions + usdCash), 0);
+    expect(usd.navImpact).toBeGreaterThan(0); // the debit is larger than the USD assets
+  });
+
+  it("compounds price and FX moves in the combined scenario", () => {
+    const combined = rows.find(row => row.id === "combined")!;
+    const expected = equities * (0.9 * 0.97 - 1) + boxx * (0.99 * 0.97 - 1) + usdCash * -0.03;
+    expect(combined.navImpact).toBeCloseTo(expected, 0);
+  });
+
+  it("skips the USD shock for a USD-based account", () => {
+    const usdBase = computeRisk("USD", [balance("NetLiquidation", 10_000, "USD")], [position("LLY", 5_000)], [], {});
+    const ids = stressTests(usdBase, DEFAULT_LIMITS).map(row => row.id);
+    expect(ids).not.toContain("usd");
+    expect(ids).not.toContain("cash-like");
+    expect(ids).toContain("combined");
+  });
+
+  it("shocks the largest sector once every position is labelled", () => {
+    const tech = { sector: { id: "45", label: "Information Technology" } }, health = { sector: { id: "35", label: "Health Care" } };
+    const labelled = positions.map(row => ({ ...row, attributes: row.trading_symbol === "LLY" ? health : tech })) as unknown as BrokerRow[];
+    const sectorRows = stressTests(computeRisk("SGD", balances, labelled, ["BOXX"], {}), DEFAULT_LIMITS);
+    const sector = sectorRows.find(row => row.id === "sector")!;
+    // Tech (CSPX + CRWD + GRID, BOXX excluded) is larger than Health Care (LLY).
+    expect(sector.label).toBe("Information Technology −15%");
+    expect(sector.navImpact).toBeCloseTo(-0.15 * (20_442.31 + 11_573.08 + 3_731.54) * 1.3, 6);
+    expect(rows.find(row => row.id === "sector")).toBeUndefined();
+  });
+
+  it("uses edited shock sizes", () => {
+    const custom = stressTests(state, DEFAULT_LIMITS, { ...DEFAULT_STRESS, market: [0.15], usd: 0.1 });
+    expect(custom.filter(row => row.id.startsWith("eq-")).map(row => row.label)).toEqual(["Market −15%"]);
+    expect(custom.find(row => row.id === "usd")?.navImpact).toBeCloseTo(-0.1 * (usdPositions + usdCash), 0);
   });
 });

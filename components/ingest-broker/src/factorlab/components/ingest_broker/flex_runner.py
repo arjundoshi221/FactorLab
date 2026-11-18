@@ -13,6 +13,10 @@ Each job runs ``factorlab-ingest-broker engine run --dataset broker.flex_activit
 ``meta.ingestion_runs``, ``broker.*`` writes) is exactly the manual one. Job state
 is in memory only; a restart forgets the last job, never the data.
 
+With ``--daily-at HH:MM[,HH:MM]`` (New York time; compose passes ``IBKR_FLEX_DAILY_AT``) the runner
+also starts a sync itself once per day at each slot, through the same single-flight and
+cooldown rules, so statements stay current without anyone pressing the button.
+
 Usage:
     factorlab-ingest-broker flex-runner                       # production
     factorlab-ingest-broker flex-runner --dry-run --listen 127.0.0.1:8091
@@ -30,9 +34,11 @@ import time
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from datetime import time as clock_time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from factorlab.core.logging import configure_logging, log_context
 from factorlab.runtime import ExitCode, GracefulShutdown, Heartbeat, supervised
@@ -58,6 +64,7 @@ DEFAULT_TIMEOUT_SECONDS = 600.0
 ERROR_TAIL = 500
 
 log = logging.getLogger("factorlab.ibkr.flex_runner")
+NEW_YORK = ZoneInfo("America/New_York")
 
 
 @dataclass(slots=True)
@@ -186,6 +193,47 @@ class FlexRunner:
         }
 
 
+def parse_slots(raw: str) -> list[clock_time]:
+    """``"06:30,18:00"`` -> sorted times; empty -> no schedule."""
+    slots = []
+    for part in (item.strip() for item in raw.split(",")):
+        if not part:
+            continue
+        hour, sep, minute = part.partition(":")
+        if not sep or not hour.isdigit() or not minute.isdigit():
+            raise argparse.ArgumentTypeError(f"invalid slot {part!r} (want HH:MM)")
+        try:
+            slots.append(clock_time(int(hour), int(minute)))
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(f"invalid slot {part!r}") from exc
+    return sorted(set(slots))
+
+
+class DailySchedule:
+    """Fires each New York slot at most once per day, from the first check at or after it.
+
+    Slots already past when the process starts are skipped that day, so a restart never
+    triggers a burst of syncs.
+    """
+
+    def __init__(self, slots: Sequence[clock_time], now: datetime) -> None:
+        self.slots = list(slots)
+        local = now.astimezone(NEW_YORK)
+        self.fired: set[tuple[date, clock_time]] = {
+            (local.date(), slot) for slot in self.slots if slot <= local.time()
+        }
+
+    def due(self, now: datetime) -> list[clock_time]:
+        local = now.astimezone(NEW_YORK)
+        due = [
+            slot
+            for slot in self.slots
+            if slot <= local.time() and (local.date(), slot) not in self.fired
+        ]
+        self.fired.update((local.date(), slot) for slot in due)
+        return due
+
+
 def make_handler(runner: FlexRunner) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         server_version = "factorlab-flex-runner/1"
@@ -237,6 +285,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dry-run", action="store_true", help="Run the engine with --dry-run (writes nothing)"
     )
+    parser.add_argument(
+        "--daily-at",
+        type=parse_slots,
+        default=[],
+        help="Also start a sync daily at these New York times (HH:MM,...); default none",
+    )
     parser.add_argument("--log-level", default="INFO")
     return parser
 
@@ -253,10 +307,23 @@ def main(argv: list[str] | None = None) -> int:
     threading.Thread(target=server.serve_forever, name="flex-http", daemon=True).start()
     log.info("Flex runner listening on %s:%s", *args.listen)
     heartbeat = Heartbeat(SERVICE)
+    schedule = DailySchedule(args.daily_at, datetime.now(UTC))
+    if schedule.slots:
+        log.info(
+            "Scheduled Flex syncs daily at %s New York",
+            ", ".join(slot.strftime("%H:%M") for slot in schedule.slots),
+        )
     try:
         with GracefulShutdown(log) as shutdown:
             while not shutdown.triggered:
                 heartbeat.tick()
+                for slot in schedule.due(datetime.now(UTC)):
+                    status, body = runner.start()
+                    log.info(
+                        "Scheduled Flex sync (%s): %s",
+                        slot.strftime("%H:%M"),
+                        "started" if status == 202 else body.get("detail"),
+                    )
                 time.sleep(1.0)
     finally:
         server.shutdown()

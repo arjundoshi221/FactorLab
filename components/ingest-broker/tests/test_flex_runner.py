@@ -10,8 +10,11 @@ import pytest
 
 from factorlab.components.ingest_broker.flex_runner import (
     COMMAND,
+    DailySchedule,
     FlexRunner,
+    build_parser,
     make_handler,
+    parse_slots,
     parse_summary,
 )
 
@@ -147,3 +150,39 @@ def test_http_endpoints(server):
     assert call(f"{base}/runs/latest")[1]["state"] == "success"
     assert call(f"{base}/nope")[0] == 404
     assert call(f"{base}/runs/latest", "POST")[0] == 404
+
+
+def test_daily_slots_parse_and_reject_bad_input():
+    assert [slot.strftime("%H:%M") for slot in parse_slots(" 18:00,06:30,06:30,")] == [
+        "06:30",
+        "18:00",
+    ]
+    assert parse_slots("") == []
+    for bad in ("6", "25:00", "06:xx"):
+        with pytest.raises(Exception, match="invalid slot"):
+            parse_slots(bad)
+
+
+def test_daily_schedule_fires_each_new_york_slot_once_per_day():
+    # 05:00 New York (EDT, UTC-4) on 30 Oct 2026: the 06:30 slot is still ahead.
+    start = datetime(2026, 10, 30, 9, tzinfo=UTC)
+    schedule = DailySchedule(parse_slots("06:30"), start)
+    assert schedule.due(start + timedelta(hours=1)) == []  # 06:00
+    assert [
+        slot.strftime("%H:%M") for slot in schedule.due(start + timedelta(hours=1, minutes=31))
+    ] == ["06:30"]
+    assert schedule.due(start + timedelta(hours=3)) == []  # already fired today
+    assert len(schedule.due(start + timedelta(days=1, hours=2))) == 1  # next day
+
+
+def test_daily_schedule_skips_slots_already_past_at_start():
+    late = datetime(2026, 10, 30, 20, tzinfo=UTC)  # 16:00 New York
+    schedule = DailySchedule(parse_slots("06:30"), late)
+    assert schedule.due(late + timedelta(minutes=5)) == []  # a restart never fires a missed slot
+
+
+def test_daily_at_is_off_unless_given():
+    assert build_parser().parse_args([]).daily_at == []
+    assert build_parser().parse_args(["--daily-at", ""]).daily_at == []  # compose's "" disables
+    parsed = build_parser().parse_args(["--daily-at", "07:15"]).daily_at
+    assert [slot.strftime("%H:%M") for slot in parsed] == ["07:15"]

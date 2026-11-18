@@ -142,7 +142,7 @@ describe("FactorLab Hub", () => {
     window.history.replaceState({}, "", "/portfolio/trades?user_id=u1");
     render(<App />);
     const nav = within(await screen.findByRole("navigation", { name: "Portfolio navigation" }));
-    expect(nav.getAllByRole("link").map((link) => link.textContent)).toEqual(["Overview", "Risk", "Trades", "Themes", "Strategies", "Trade names"]);
+    expect(nav.getAllByRole("link").map((link) => link.textContent)).toEqual(["Overview", "Risk", "Performance", "Trades", "Themes", "Strategies", "Trade names"]);
     expect(nav.getByRole("link", { name: "Trades" })).toHaveAttribute("aria-current", "page");
     expect(nav.getByRole("link", { name: "Risk" })).toHaveAttribute("href", "/portfolio/risk?user_id=u1");
     expect(screen.queryByRole("navigation", { name: "Primary navigation" })).not.toBeInTheDocument();

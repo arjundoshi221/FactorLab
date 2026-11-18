@@ -30,8 +30,10 @@ component (image `ghcr.io/arjundoshi221/factorlab-ingest-broker`, manifest
     `--once` is the default; `--dry-run` connects and normalizes but writes nothing.
   - `engine`: the provider-agnostic engine (validate, run, daemon, replay).
   - `flex-runner [--listen 0.0.0.0:8091] [--cooldown-seconds 300] [--timeout-seconds 600]
-    [--dry-run]`: the backend HTTP runner for on-demand Flex syncs
-    ([flex_runner.py](src/factorlab/components/ingest_broker/flex_runner.py)).
+    [--daily-at HH:MM,...] [--dry-run]`: the backend HTTP runner for Flex syncs
+    ([flex_runner.py](src/factorlab/components/ingest_broker/flex_runner.py)). `--daily-at` (compose: `IBKR_FLEX_DAILY_AT`,
+    New York; compose default `06:30`, empty disables) also starts one sync per slot per day under the
+    same single-flight and cooldown rules; slots already past at start-up are skipped that day.
   - `link-instruments [--conid N ...] [--dry-run]` ([link_instruments.py](src/factorlab/components/ingest_broker/link_instruments.py)): links each conid's newest stored `broker.statement_rows` identity (with a `listingExchange`) via `link_instruments`, run `broker.instrument_link:ibkr`; idempotent; prints still-unlinked conids (exit 1).
 - Compose service `ibkr-snapshot` ([deploy/compose.yaml](deploy/compose.yaml)), profile
   `ibkr`: `snapshot --daemon --run-on-start --modes ${IBKR_SNAPSHOT_MODES:-paper,live}`,

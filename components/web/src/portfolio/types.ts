@@ -128,3 +128,31 @@ export interface TradesPage extends ItemsPage<TradeRow> {
   generated_at: string;
   pivots?: Record<string, TradeBucket[]>; unavailable_dimensions?: string[];
 }
+
+/** `GET /accounts/{broker}/{account}/performance?since=` — base currency, New York dates. */
+export interface PerformanceNavPoint { date: string; nav: number; contributions: number; twr: number; ret: number | null }
+export interface PerformanceMonth { month: string; start_nav: number; end_nav: number; flows: number; profit: number; twr: number }
+export interface AttributionLine { key: string; label: string; amount: number; note: string }
+export interface PerformanceReport {
+  currency: string | null; since: string; start: string | null; end: string | null;
+  opening_nav: number | null; closing_nav: number | null;
+  deposits: number; withdrawals: number; net_contributions: number;
+  net_profit: number | null; return_on_capital: number | null; twr: number | null; xirr: number | null;
+  /** IBKR's own daily TWR chained over the same days; null when statements do not cover them. */
+  ibkr_twr: number | null;
+  /** Interest charged or credited plus the change in interest accruals (negative = cost). */
+  financing_cost: number | null;
+  /** "ibkr": IBKR's daily change-in-NAV lines; "cash": cash records with a residual. */
+  attribution_source: "ibkr" | "cash";
+  attribution: AttributionLine[]; nav: PerformanceNavPoint[]; monthly: PerformanceMonth[];
+  warnings: string[]; basis: string[];
+  risk: RiskStats | null; benchmarks: Benchmark[];
+}
+/** Statistical risk over the report's daily time-weighted returns. Fractions; VaR/ES positive = loss. */
+export interface RiskStats {
+  observations: number; daily_vol: number | null; annual_vol: number | null;
+  var95: number | null; es95: number | null; var95_amount: number | null; es95_amount: number | null;
+  max_drawdown: number | null; drawdown_peak: string | null; drawdown_trough: string | null; current_drawdown: number | null;
+  beta: number | null; correlation: number | null; benchmark: string | null; enough_history: boolean;
+}
+export interface Benchmark { code: string; label: string; note: string; twr: number | null; excess: number | null; points: { date: string; value: number }[] }

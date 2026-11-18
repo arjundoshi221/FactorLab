@@ -180,6 +180,9 @@ kbd { padding: 1px 5px; color: var(--ink-3); background: var(--raised); border: 
 .t-chart--down { --tone: var(--down); }
 .t-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .t-chart--empty { display: grid; place-items: center; color: var(--faint); font: 400 var(--fs-xs) var(--mono); border: 1px dashed var(--line-2); }
+.t-chart__legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 8px; padding: 0; list-style: none; color: var(--ink-3); font: 400 var(--fs-xs) var(--mono); }
+.t-chart__legend li { display: inline-flex; align-items: center; gap: 6px; }
+.t-chart__legend b { color: var(--ink); font-weight: 600; }
 .t-chart__grid { stroke: var(--grid); stroke-width: 1; }
 .t-chart__axis { fill: var(--axis); font: 400 var(--fs-2xs) var(--mono); }
 .t-chart__ref { stroke: var(--line-3); stroke-width: 1; stroke-dasharray: 3 4; }

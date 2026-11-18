@@ -55,7 +55,8 @@ services:
   ibkr-flex-runner:
     image: ${FACTORLAB_INGEST_BROKER_IMAGE:-${FACTORLAB_IMAGE:-factorlab:latest}}
     entrypoint: ["factorlab-ingest-broker"]
-    command: ["flex-runner"]
+    # Daily Flex sync at these New York times; IBKR_FLEX_DAILY_AT="" disables it.
+    command: ["flex-runner", "--daily-at", "${IBKR_FLEX_DAILY_AT-06:30}"]
     restart: unless-stopped
     networks: [backend]
     expose: ["8091"]

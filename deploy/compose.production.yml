@@ -218,6 +218,8 @@ services:
     - factorlab-ingest-broker
     command:
     - flex-runner
+    - --daily-at
+    - ${IBKR_FLEX_DAILY_AT-06:30}
     restart: unless-stopped
     networks:
     - backend

@@ -58,7 +58,10 @@ export type BetaMap = Record<string, number>;
 export const ASSUMED_BETA = 1;
 
 export interface Holding {
-  symbol: string; listingId: string | null; beta: number | null; betaSource: BetaSource | null; currency: string; quantity: number | null; native: number | null;
+  symbol: string; listingId: string | null;
+  /** Broker product type (common, etf, option, future, forex…); null when unreported. */
+  productType?: string | null;
+  beta: number | null; betaSource: BetaSource | null; currency: string; quantity: number | null; native: number | null;
   /** Native → base rate used for this position; null when no rate is known. */
   fx: number | null;
   value: number | null; cashLike: boolean; maint: number | null;
@@ -77,6 +80,8 @@ export type PnlSource = "broker" | "positions";
 export interface RiskState {
   base: string;
   nav: number | null; gross: number | null; initMargin: number | null; maintMargin: number | null; excess: number | null;
+  /** Broker AvailableFunds: equity with loan value less initial margin (headroom for new positions). */
+  availableFunds: number | null;
   totalCash: number | null; cash: CashLine[]; borrowing: number | null;
   holdings: Holding[]; positionsGross: number; equityExposure: number; equityNet: number; cashLikeValue: number;
   /** Σ value × beta over non-cash positions; null while betas are not yet known. */
@@ -115,6 +120,7 @@ export function computeRisk(base: string, balances: BrokerRow[], positions: Brok
   const initMargin = balance(balances, "InitMarginReq", base);
   const maintMargin = balance(balances, "MaintMarginReq", base);
   const excess = balance(balances, "ExcessLiquidity", base);
+  const availableFunds = balance(balances, "AvailableFunds", base);
   const totalCash = balance(balances, "TotalCashValue", base);
 
   const cash: CashLine[] = balances
@@ -143,7 +149,7 @@ export function computeRisk(base: string, balances: BrokerRow[], positions: Brok
     const betaSource: BetaSource | null = cashLike ? "cash" : betas === null ? null : measured !== undefined ? "measured" : "assumed";
     const beta = betaSource === null ? null : betaSource === "cash" ? 0 : measured ?? ASSUMED_BETA;
     return {
-      symbol, listingId, beta, betaSource, currency, quantity: num(row.position), native, fx, value: toBase(native),
+      symbol, listingId, productType: row.product_type ? String(row.product_type) : null, beta, betaSource, currency, quantity: num(row.position), native, fx, value: toBase(native),
       cashLike,
       maint: toBase(num(row.maintenance_margin_contribution)), unrealized: toBase(num(row.unrealized_pnl)),
       realized: toBase(num(row.realized_pnl_ytd)),
@@ -182,7 +188,7 @@ export function computeRisk(base: string, balances: BrokerRow[], positions: Brok
   const largest = holdings.filter(holding => !holding.cashLike && holding.value !== null).reduce((max, holding) => Math.max(max, Math.abs(holding.value as number)), 0);
 
   return {
-    base, nav, gross, initMargin, maintMargin, excess, totalCash, cash, borrowing,
+    base, nav, gross, initMargin, maintMargin, excess, availableFunds, totalCash, cash, borrowing,
     holdings, positionsGross, equityExposure, equityNet, cashLikeValue, betaExposure, assumedBetas, unconverted: [...unconverted], unreconciled,
     unrealized, unrealizedSource, realized,
     metrics: {
@@ -282,36 +288,178 @@ export function deployableCapacity(state: RiskState, limits: Limits): Capacity {
   return { constraints, binding, amount: binding ? Math.max(0, binding.amount as number) : null };
 }
 
+/* ---------- concentration & allocation ---------- */
+
+export interface ConcentrationStats {
+  /** Priced positions counted (cash equivalents included: weights are of gross securities). */
+  count: number;
+  largest: { symbol: string; grossShare: number; navShare: number | null } | null;
+  top3: number; top5: number;
+  /** 1 ÷ Σ w², with w = |value| ÷ Σ |value| over every priced position. */
+  effectiveN: number;
+}
+
+/** Gross-weight concentration over all priced positions; null when a position cannot be converted or none is priced. */
+export function concentrationStats(state: RiskState): ConcentrationStats | null {
+  if (state.unconverted.length) return null;
+  const values = state.holdings.filter(holding => holding.value !== null && holding.value !== 0)
+    .map(holding => ({ symbol: holding.symbol, size: Math.abs(holding.value as number) }))
+    .sort((a, b) => b.size - a.size);
+  const totalSize = values.reduce((sum, item) => sum + item.size, 0);
+  if (!values.length || totalSize <= 0) return null;
+  const weights = values.map(item => item.size / totalSize);
+  const top = (n: number) => weights.slice(0, n).reduce((sum, weight) => sum + weight, 0);
+  const nav = state.nav !== null && state.nav > 0 ? state.nav : null;
+  return {
+    count: values.length,
+    largest: { symbol: values[0].symbol, grossShare: weights[0], navShare: nav === null ? null : values[0].size / nav },
+    top3: top(3), top5: top(5),
+    effectiveN: 1 / weights.reduce((sum, weight) => sum + weight * weight, 0),
+  };
+}
+
+/** Share of gross securities value (Σ |value| of priced positions); null when unknown. */
+export function grossShare(state: RiskState, holding: Holding): number | null {
+  if (holding.value === null || state.unconverted.length || state.positionsGross <= 0) return null;
+  return Math.abs(holding.value) / state.positionsGross;
+}
+
+export interface AllocationRow { key: string; label: string; value: number; grossShare: number; navShare: number | null }
+
+const ASSET_CLASS_LABEL: Record<string, string> = { common: "Stocks", etf: "ETFs", option: "Options", future: "Futures", forex: "FX", bond: "Bonds" };
+
+/** Gross value by asset class: cash equivalents first, then the broker product type. Null when a position cannot be converted. */
+export function assetClassAllocation(state: RiskState): AllocationRow[] | null {
+  if (state.unconverted.length || state.positionsGross <= 0) return null;
+  const buckets = new Map<string, { label: string; value: number }>();
+  for (const holding of state.holdings) {
+    if (holding.value === null || holding.value === 0) continue;
+    const key = holding.cashLike ? "cash-like" : holding.productType ?? "unknown";
+    const label = holding.cashLike ? "Cash equivalents" : ASSET_CLASS_LABEL[key] ?? (key === "unknown" ? "Unclassified" : key[0].toUpperCase() + key.slice(1));
+    const bucket = buckets.get(key) ?? { label, value: 0 };
+    bucket.value += Math.abs(holding.value);
+    buckets.set(key, bucket);
+  }
+  const nav = state.nav !== null && state.nav > 0 ? state.nav : null;
+  return [...buckets.entries()].map(([key, bucket]) => ({ key, label: bucket.label, value: bucket.value, grossShare: bucket.value / state.positionsGross, navShare: nav === null ? null : bucket.value / nav }))
+    .sort((a, b) => b.value - a.value);
+}
+
+export interface CurrencyRow {
+  currency: string;
+  /** Σ signed position value in this currency, in base; null if any cannot be converted. */
+  positions: number | null;
+  /** Signed cash balance in this currency (a margin debit is negative), in base. */
+  cash: number | null;
+  /** positions + cash: the account's net exposure to this currency. Never subtracts the debit twice. */
+  net: number | null;
+  navShare: number | null;
+}
+
+/** Net exposure per currency: positions plus signed cash, both in base. Base currency first. */
+export function currencyExposure(state: RiskState): CurrencyRow[] {
+  const rows = new Map<string, { positions: number | null; cash: number | null }>();
+  const row = (currency: string) => { const found = rows.get(currency) ?? { positions: 0, cash: 0 }; rows.set(currency, found); return found; };
+  for (const holding of state.holdings) {
+    if (holding.native === null) continue;
+    const entry = row(holding.currency || "unknown");
+    entry.positions = entry.positions === null || holding.value === null ? null : entry.positions + holding.value;
+  }
+  for (const line of state.cash) {
+    const entry = row(line.currency);
+    entry.cash = entry.cash === null || line.value === null ? null : entry.cash + line.value;
+  }
+  const nav = state.nav !== null && state.nav > 0 ? state.nav : null;
+  return [...rows.entries()].map(([currency, entry]) => {
+    const net = entry.positions === null || entry.cash === null ? null : entry.positions + entry.cash;
+    return { currency, positions: entry.positions, cash: entry.cash, net, navShare: net === null || nav === null ? null : net / nav };
+  }).sort((a, b) => (a.currency === state.base ? -1 : b.currency === state.base ? 1 : Math.abs(b.net ?? 0) - Math.abs(a.net ?? 0)));
+}
+
+/* ---------- stress tests ---------- */
+
+/** Shock sizes as positive fractions (0.05 = a 5% fall). Editable per account. */
+export interface StressConfig {
+  market: number[];
+  /** Largest non-cash position gaps down. */
+  gap: number;
+  /** The largest sector (by gross non-cash exposure) falls; needs sector labels on the positions. */
+  sector: number;
+  /** Cash-equivalent ETFs (BOXX etc.) reprice down. */
+  cashLike: number;
+  /** USD falls against the base currency; applies to USD positions and USD cash (a USD debit shrinks). */
+  usd: number;
+  combined: { market: number; cashLike: number; usd: number };
+}
+
+export const DEFAULT_STRESS: StressConfig = { market: [0.05, 0.1, 0.2, 0.35], gap: 0.3, sector: 0.15, cashLike: 0.02, usd: 0.05, combined: { market: 0.1, cashLike: 0.01, usd: 0.03 } };
+
 export interface StressRow {
   id: string; label: string; navImpact: number; navImpactPct: number; navAfter: number;
   grossLeverageAfter: number | null; excessAfter: number | null; excessRatioAfter: number | null;
   result: "cushion" | "pressure" | "breach" | "call"; firstBreach: string | null;
 }
 
-/** Instantaneous price shocks; cash equivalents are held flat. Maintenance margin scales with each shocked
- * position (its reported contribution, else the account average rate). Approximate by construction. */
-export function stressTests(state: RiskState, limits: Limits): StressRow[] {
-  const { nav, excess } = state;
+interface Scenario { id: string; label: string; price: (holding: Holding) => number; fx: (currency: string) => number }
+
+const pctLabel = (size: number) => `${+(size * 100).toFixed(2)}%`;
+
+/** The largest sector by gross non-cash exposure, when every non-cash position carries a sector label. */
+function largestSector(holdings: Holding[]): { id: string; label: string } | null {
+  const equity = holdings.filter(holding => !holding.cashLike && holding.value !== null);
+  if (!equity.length || equity.some(holding => !holding.attributes?.sector)) return null;
+  const sizes = new Map<string, { label: string; size: number }>();
+  for (const holding of equity) {
+    const sector = holding.attributes!.sector;
+    if (sector.id === null) continue;
+    const entry = sizes.get(sector.id) ?? { label: sector.label, size: 0 };
+    entry.size += Math.abs(holding.value as number);
+    sizes.set(sector.id, entry);
+  }
+  const best = [...sizes.entries()].sort((a, b) => b[1].size - a[1].size)[0];
+  return best ? { id: best[0], label: best[1].label } : null;
+}
+
+/** Instantaneous price and FX shocks. Each position moves by (1 + price move) × (1 + FX move) in base;
+ * non-base cash moves by its FX move. Maintenance margin scales with each position's value (its reported
+ * contribution, else the account average rate). Approximate by construction: margin rates do not change. */
+export function stressTests(state: RiskState, limits: Limits, config: StressConfig = DEFAULT_STRESS): StressRow[] {
+  const { nav, excess, base } = state;
   if (nav === null || nav <= 0) return [];
   const exposure = state.gross ?? state.positionsGross;
   const maintRate = state.maintMargin !== null && exposure > 0 ? state.maintMargin / exposure : 0;
-  const equity = state.holdings.filter(holding => !holding.cashLike && holding.value !== null);
-  const largest = equity[0];
-  const scenarios: { id: string; label: string; shock: (holding: Holding) => number }[] = [
+  const priced = state.holdings.filter(holding => holding.value !== null);
+  const largest = priced.find(holding => !holding.cashLike);
+  const sector = largestSector(state.holdings);
+  const hasUsd = base !== "USD" && (priced.some(holding => holding.currency === "USD") || state.cash.some(line => line.currency === "USD"));
+  const flat = () => 0;
+  const usdMove = (size: number) => (currency: string) => (currency === "USD" ? -size : 0);
+  const market = (size: number) => (holding: Holding) => (holding.cashLike ? 0 : Math.max(-1, -size * (holding.beta ?? ASSUMED_BETA)));
+  const scenarios: Scenario[] = [
     // Market moves scale by each position's beta (1.0 until betas are measured or when none is available).
-    ...[0.05, 0.1, 0.2, 0.35].map(size => ({ id: `eq-${size}`, label: `Market −${size * 100}%`, shock: (holding: Holding) => Math.max(-1, -size * (holding.beta ?? ASSUMED_BETA)) })),
-    ...(largest ? [{ id: "gap", label: `${largest.symbol} gaps −30%`, shock: (holding: Holding) => (holding === largest ? -0.3 : 0) }] : []),
+    ...config.market.map(size => ({ id: `eq-${size}`, label: `Market −${pctLabel(size)}`, price: market(size), fx: flat })),
+    ...(largest ? [{ id: "gap", label: `${largest.symbol} gaps −${pctLabel(config.gap)}`, price: (holding: Holding) => (holding === largest ? -config.gap : 0), fx: flat }] : []),
+    ...(sector ? [{ id: "sector", label: `${sector.label} −${pctLabel(config.sector)}`, price: (holding: Holding) => (!holding.cashLike && holding.attributes?.sector?.id === sector.id ? -config.sector : 0), fx: flat }] : []),
+    ...(priced.some(holding => holding.cashLike) ? [{ id: "cash-like", label: `Cash equivalents −${pctLabel(config.cashLike)}`, price: (holding: Holding) => (holding.cashLike ? -config.cashLike : 0), fx: flat }] : []),
+    ...(hasUsd ? [{ id: "usd", label: `USD −${pctLabel(config.usd)} vs ${base}`, price: flat, fx: usdMove(config.usd) }] : []),
+    {
+      id: "combined", label: `Combined: market −${pctLabel(config.combined.market)}, cash equivalents −${pctLabel(config.combined.cashLike)}${hasUsd ? `, USD −${pctLabel(config.combined.usd)}` : ""}`,
+      price: (holding: Holding) => (holding.cashLike ? -config.combined.cashLike : market(config.combined.market)(holding)),
+      fx: hasUsd ? usdMove(config.combined.usd) : flat,
+    },
   ];
-  return scenarios.map(({ id, label, shock }) => {
+  return scenarios.map(({ id, label, price, fx }) => {
     let navImpact = 0, grossChange = 0, maintRelief = 0;
-    for (const holding of equity) {
-      const move = shock(holding);
+    for (const holding of priced) {
+      const move = (1 + price(holding)) * (1 + (holding.currency === base ? 0 : fx(holding.currency))) - 1;
+      if (move === 0) continue;
       const value = holding.value as number;
       navImpact += value * move;
       grossChange += Math.abs(value * (1 + move)) - Math.abs(value);
       const maint = holding.maint !== null ? Math.abs(holding.maint) : Math.abs(value) * maintRate;
       maintRelief += -move * maint;
     }
+    for (const line of state.cash) if (line.value !== null && line.currency !== base) navImpact += line.value * fx(line.currency);
     const navAfter = nav + navImpact;
     const grossLeverageAfter = state.gross === null && !state.holdings.length ? null : navAfter > 0 ? (exposure + grossChange) / navAfter : null;
     const excessAfter = excess === null ? null : excess + navImpact + maintRelief;

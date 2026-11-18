@@ -44,6 +44,7 @@ export const sections: NavSection[] = [
     items: [
       { href: "/portfolio", label: "Overview", code: "PORT", keywords: "book accounts positions balances orders", active: (path) => path === "/portfolio" },
       { href: "/portfolio/risk", label: "Risk", code: "RISK", keywords: "leverage margin limits stress concentration liquidity", active: (path) => path === "/portfolio/risk" },
+      { href: "/portfolio/performance", label: "Performance", code: "PERF", keywords: "returns twr xirr profit attribution benchmark drawdown volatility var", active: (path) => path === "/portfolio/performance" },
       { href: "/portfolio/trades", label: "Trades", code: "TRD", keywords: "ledger executions tagging open closed round trip positions holding", active: (path) => path === "/portfolio/trades" },
       { href: "/portfolio/themes", label: "Themes", code: "THM", keywords: "pnl", active: (path) => path === "/portfolio/themes" },
       { href: "/portfolio/strategies", label: "Strategies", code: "STRT", keywords: "pnl", active: (path) => path === "/portfolio/strategies" },

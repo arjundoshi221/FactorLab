@@ -3,10 +3,12 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "
 import { errorMessage, useRemote } from "../shared/api";
 import { formatTime } from "../shared/format";
 import {
-  DEFAULT_CASH_LIKE, DEFAULT_LIMITS, LIMIT_SPECS, computeRisk, contributionToReach, deployableCapacity, explainMetric, hasReconciliationGap,
-  overallStatus, statusOf, stressTests, type CalcTerm, type Calculation, type Limit, type LimitKey, type LimitSpec, type Limits, type RiskState, type Status,
+  DEFAULT_CASH_LIKE, DEFAULT_LIMITS, DEFAULT_STRESS, LIMIT_SPECS, assetClassAllocation, computeRisk, concentrationStats, contributionToReach, currencyExposure, deployableCapacity, explainMetric, grossShare, hasReconciliationGap,
+  overallStatus, statusOf, stressTests, type CalcTerm, type StressConfig, type Calculation, type Limit, type LimitKey, type LimitSpec, type Limits, type RiskState, type Status,
 } from "./riskModel";
 import { BENCHMARK, useBetas, type BetaResult } from "./betas";
+import { RiskStatsCard, performanceUrl, sinceFor } from "./Performance";
+import type { PerformanceReport } from "./types";
 import type { AccountSummary, Attributed, BrokerAccount, CatalogEntry, CatalogKind, Dimension, ItemsPage, PnlReport, Profile, SnapshotPage } from "./types";
 import { useUrlParams } from "../shared/urlState";
 import type { Holding } from "./riskModel";
@@ -57,7 +59,25 @@ function StatusTag({ status, children }: { status: Status; children?: ReactNode 
 
 /* ---------- settings (per account, this browser) ---------- */
 
-interface RiskSettings { limits: Limits; cashLike: string[] }
+interface RiskSettings { limits: Limits; cashLike: string[]; stress: StressConfig }
+
+const fraction = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0 && value <= 1;
+function readStress(saved: unknown): StressConfig {
+  const raw = (saved ?? {}) as Partial<StressConfig>;
+  const combined = (raw.combined ?? {}) as Partial<StressConfig["combined"]>;
+  return {
+    market: Array.isArray(raw.market) && raw.market.length && raw.market.every(fraction) ? raw.market : DEFAULT_STRESS.market,
+    gap: fraction(raw.gap) ? raw.gap : DEFAULT_STRESS.gap,
+    sector: fraction(raw.sector) ? raw.sector : DEFAULT_STRESS.sector,
+    cashLike: fraction(raw.cashLike) ? raw.cashLike : DEFAULT_STRESS.cashLike,
+    usd: fraction(raw.usd) ? raw.usd : DEFAULT_STRESS.usd,
+    combined: {
+      market: fraction(combined.market) ? combined.market : DEFAULT_STRESS.combined.market,
+      cashLike: fraction(combined.cashLike) ? combined.cashLike : DEFAULT_STRESS.combined.cashLike,
+      usd: fraction(combined.usd) ? combined.usd : DEFAULT_STRESS.combined.usd,
+    },
+  };
+}
 const settingsKey = (account: BrokerAccount) => `factorlab.portfolio.risk.v1:${account.broker_code}:${account.account_id}`;
 
 function loadSettings(account: BrokerAccount): RiskSettings {
@@ -70,10 +90,10 @@ function loadSettings(account: BrokerAccount): RiskSettings {
         const saved = parsed.limits?.[spec.key];
         if (saved && Number.isFinite(saved.target) && Number.isFinite(saved.hard)) limits[spec.key] = { target: saved.target, hard: saved.hard };
       }
-      return { limits, cashLike: Array.isArray(parsed.cashLike) ? parsed.cashLike.map(String) : DEFAULT_CASH_LIKE };
+      return { limits, cashLike: Array.isArray(parsed.cashLike) ? parsed.cashLike.map(String) : DEFAULT_CASH_LIKE, stress: readStress(parsed.stress) };
     }
   } catch { /* storage blocked or corrupt: use defaults */ }
-  return { limits: DEFAULT_LIMITS, cashLike: DEFAULT_CASH_LIKE };
+  return { limits: DEFAULT_LIMITS, cashLike: DEFAULT_CASH_LIKE, stress: DEFAULT_STRESS };
 }
 
 function saveSettings(account: BrokerAccount, settings: RiskSettings | null) {
@@ -185,6 +205,7 @@ function Snapshot({ state }: { state: RiskState }) {
       {state.cash.map(line => <div key={line.currency} className="is-sub"><dt>{line.currency} cash{line.native < 0 ? " (debit)" : ""}</dt>
         <dd className={line.native < 0 ? "is-negative" : ""}>{money(line.native, line.currency)}</dd></div>)}
       <div><dt>Excess liquidity</dt><dd>{money(state.excess, base)}</dd></div>
+      <div className="is-pnl"><dt>Available funds<small>Headroom for new positions (after initial margin)</small></dt><dd className={state.availableFunds !== null && state.availableFunds < 0 ? "is-negative" : ""}>{money(state.availableFunds, base)}</dd></div>
       <div className="is-pnl"><dt>Unrealized PnL<small>{state.unrealizedSource === "broker" ? "Broker account-wide, open positions" : state.unrealizedSource === "positions" ? "Σ open positions" : "Not reported"}</small></dt>
         <dd className={pnlTone(state.unrealized)}>{signedMoney(state.unrealized, base)}</dd></div>
       <div className="is-pnl"><dt>Realized PnL · YTD<small>Σ instruments still held; closed-out names are on Themes</small></dt>
@@ -271,7 +292,7 @@ function LimitsTable({ state, settings, onSave, onReset }: {
   function save() {
     if (!parsed || problem) return;
     const limits = Object.fromEntries(LIMIT_SPECS.map(spec => [spec.key, parsed[spec.key] as Limit])) as Limits;
-    onSave({ limits, cashLike: cashDraft.split(/[\s,]+/).map(symbol => symbol.trim().toUpperCase()).filter(Boolean) });
+    onSave({ ...settings, limits, cashLike: cashDraft.split(/[\s,]+/).map(symbol => symbol.trim().toUpperCase()).filter(Boolean) });
     setDraft(null);
   }
   const editing = draft !== null;
@@ -326,7 +347,7 @@ function Concentration({ state, limits, pivot }: { state: RiskState; limits: Lim
     const beta = priced.some(holding => holding.beta === null) || !weight ? null : priced.reduce((sum, holding) => sum + Math.abs(holding.value as number) * (holding.beta as number), 0) / weight;
     return <tr key={key} className="pf-group-row">
       <th scope="rowgroup"><span className="pf-limits__name">{label}</span><small>{rows.length} {rows.length === 1 ? "position" : "positions"}</small></th>
-      <td className="num">{money(gross)}</td><td className="num">{pct(shareOf(gross))}</td>
+      <td className="num">{money(gross)}</td><td className="num">{pct(gross === null || state.unconverted.length || state.positionsGross <= 0 ? null : gross / state.positionsGross)}</td><td className="num">{pct(shareOf(gross))}</td>
       <td className="num" title="Value-weighted beta of the non-cash positions">{beta === null ? "—" : beta.toFixed(2)}</td>
       <td className={`num ${pnlTone(total(rows.map(holding => holding.unrealized)))}`}>{signedMoney(total(rows.map(holding => holding.unrealized)))}</td>
       <td className={`num ${pnlTone(total(rows.map(holding => holding.realized)))}`}>{signedMoney(total(rows.map(holding => holding.realized)))}</td>
@@ -339,6 +360,7 @@ function Concentration({ state, limits, pivot }: { state: RiskState; limits: Lim
         return <tr key={`${holding.symbol}-${index}`} className={nested ? "pf-group-member" : undefined}>
           <th scope="row"><span className="pf-limits__name">{holding.symbol}</span><small>{holding.cashLike ? "Cash equivalent" : holding.currency}{holding.currency && holding.currency !== state.base && holding.native !== null ? ` · ${money(holding.native, holding.currency, true)}` : ""}</small></th>
           <td className="num">{money(holding.value)}</td>
+          <td className="num">{pct(grossShare(state, holding))}</td>
           <td className={`num pf-ink--${status}`}>{pct(share)}</td>
           <td className="num">{holding.beta === null ? "…" : holding.beta.toFixed(2)}{holding.betaSource === "assumed" && <small>assumed</small>}</td>
           <td className={`num ${pnlTone(holding.unrealized)}`}>{signedMoney(holding.unrealized)}</td>
@@ -352,13 +374,41 @@ function Concentration({ state, limits, pivot }: { state: RiskState; limits: Lim
     {pivot.failed && <p className="pf-notice pf-notice--warn pf-exposure__note" role="alert">{pivot.failed.label} classification is unavailable right now, so positions are not grouped.</p>}
     {pivot.pending && <p className="pf-muted pf-exposure__note" role="status">Labelling positions…</p>}
     {state.holdings.length ? <div className="pf-table-scroll"><table className="pf-table" aria-label={dimension ? `Positions and concentration by ${dimension.label.toLowerCase()}` : "Positions and concentration"}>
-      <thead><tr><th scope="col">{dimension ? `${dimension.label} › position` : "Position"}</th><th scope="col" className="num">Value ({state.base})</th><th scope="col" className="num">% NAV</th><th scope="col" className="num">Beta</th><th scope="col" className="num">Unrealized</th><th scope="col" className="num">Realized YTD</th><th scope="col" className="num">Limit</th><th scope="col">Status</th></tr></thead>
+      <thead><tr><th scope="col">{dimension ? `${dimension.label} › position` : "Position"}</th><th scope="col" className="num">Value ({state.base})</th><th scope="col" className="num" title="Share of gross securities value">% gross</th><th scope="col" className="num">% NAV</th><th scope="col" className="num">Beta</th><th scope="col" className="num">Unrealized</th><th scope="col" className="num">Realized YTD</th><th scope="col" className="num">Limit</th><th scope="col">Status</th></tr></thead>
       {groups ? groups.map(group => <tbody key={group.key} aria-label={group.value.label}>
         {subtotal(group.rows, group.gross, group.value.label, `${group.key}/total`)}
         {group.rows.map((holding, index) => line(holding, `${group.key}#${index}`, true))}
       </tbody>) : <tbody>{state.holdings.map((holding, index) => line(holding, index, false))}</tbody>}
     </table></div> : <p className="pf-muted pf-pad">No open positions in the latest snapshot.</p>}
+    <p className="pf-foot-note">% gross is the share of gross securities value; % NAV is exposure relative to your own capital, so with leverage a position can exceed 100% of NAV.</p>
     {dimension && <p className="pf-foot-note">Group rows sum |value| in {state.base}; a position without an FX rate makes its group's total unavailable. Single-name limits still apply per position.</p>}
+  </Card>;
+}
+
+function Allocation({ state }: { state: RiskState }) {
+  const stats = concentrationStats(state);
+  const classes = assetClassAllocation(state);
+  const currencies = currencyExposure(state);
+  const base = state.base;
+  return <Card title="Concentration & allocation" aside={<span className="pf-muted">{base}</span>}>
+    {stats ? <dl className="pf-ledger">
+      <div className="is-pnl"><dt>Largest position<small>{stats.largest?.symbol} · share of gross{stats.largest?.navShare != null ? ` · ${pct(stats.largest.navShare, 0)} of NAV` : ""}</small></dt><dd>{pct(stats.largest?.grossShare ?? null)}</dd></div>
+      <div className="is-pnl"><dt>Top 3<small>Share of gross</small></dt><dd>{pct(stats.top3)}</dd></div>
+      <div className="is-pnl"><dt>Top 5<small>Share of gross</small></dt><dd>{pct(stats.top5)}</dd></div>
+      <div className="is-pnl"><dt>Effective holdings<small>1 ÷ Σ w² across {stats.count} positions</small></dt><dd>{stats.effectiveN.toFixed(1)}</dd></div>
+    </dl> : <p className="pf-muted pf-pad">{state.unconverted.length ? `No ${state.unconverted.join(", ")} → ${base} rate, so weights are unavailable.` : "No priced positions."}</p>}
+    {classes && classes.length > 0 && <div className="pf-table-scroll"><table className="pf-table" aria-label="Allocation by asset class">
+      <thead><tr><th scope="col">Asset class</th><th scope="col" className="num">Value</th><th scope="col" className="num">% gross</th><th scope="col" className="num">% NAV</th></tr></thead>
+      <tbody>{classes.map(row => <tr key={row.key}><th scope="row">{row.label}</th><td className="num">{money(row.value, undefined, true)}</td><td className="num">{pct(row.grossShare)}</td><td className="num">{pct(row.navShare, 0)}</td></tr>)}</tbody>
+    </table></div>}
+    {currencies.length > 0 && <div className="pf-table-scroll"><table className="pf-table" aria-label="Net currency exposure">
+      <thead><tr><th scope="col">Currency</th><th scope="col" className="num">Positions</th><th scope="col" className="num">Cash</th><th scope="col" className="num">Net</th><th scope="col" className="num">% NAV</th></tr></thead>
+      <tbody>{currencies.map(row => <tr key={row.currency}><th scope="row">{row.currency}</th>
+        <td className="num">{money(row.positions, undefined, true)}</td>
+        <td className={`num ${row.cash !== null && row.cash < 0 ? "is-negative" : ""}`}>{money(row.cash, undefined, true)}</td>
+        <td className="num"><b>{money(row.net, undefined, true)}</b></td><td className="num">{pct(row.navShare, 0)}</td></tr>)}</tbody>
+    </table></div>}
+    <p className="pf-foot-note">Weights use every priced position, cash equivalents included. Net currency exposure is positions plus signed cash (a margin debit is negative cash), in {base}; together the rows come to roughly net liquidation.</p>
   </Card>;
 }
 
@@ -449,23 +499,47 @@ function OperatingRange({ state, limits }: { state: RiskState; limits: Limits })
 
 const STRESS_LABEL = { cushion: ["green", "Within cushion"], pressure: ["amber", "Near margin pressure"], breach: ["red", "Breaches hard limit"], call: ["red", "Margin call / forced deleveraging"] } as const;
 
-function StressTable({ state, limits }: { state: RiskState; limits: Limits }) {
-  const rows = stressTests(state, limits);
-  return <Card title="Stress tests" aside={<span className="pf-muted">Instantaneous, approximate</span>} className="pf-card--stress">
+const percentText = (value: number) => String(+(value * 100).toFixed(2));
+const STRESS_FIELDS: { key: string; label: string; list?: boolean; read: (config: StressConfig) => string; write: (config: StressConfig, values: number[]) => StressConfig }[] = [
+  { key: "market", label: "Market falls (comma-separated)", list: true, read: config => config.market.map(percentText).join(", "), write: (config, values) => ({ ...config, market: values }) },
+  { key: "gap", label: "Largest position gap", read: config => percentText(config.gap), write: (config, [value]) => ({ ...config, gap: value }) },
+  { key: "sector", label: "Largest sector fall", read: config => percentText(config.sector), write: (config, [value]) => ({ ...config, sector: value }) },
+  { key: "cashLike", label: "Cash equivalents fall", read: config => percentText(config.cashLike), write: (config, [value]) => ({ ...config, cashLike: value }) },
+  { key: "usd", label: "USD fall vs base", read: config => percentText(config.usd), write: (config, [value]) => ({ ...config, usd: value }) },
+  { key: "cMarket", label: "Combined: market", read: config => percentText(config.combined.market), write: (config, [value]) => ({ ...config, combined: { ...config.combined, market: value } }) },
+  { key: "cCash", label: "Combined: cash equivalents", read: config => percentText(config.combined.cashLike), write: (config, [value]) => ({ ...config, combined: { ...config.combined, cashLike: value } }) },
+  { key: "cUsd", label: "Combined: USD", read: config => percentText(config.combined.usd), write: (config, [value]) => ({ ...config, combined: { ...config.combined, usd: value } }) },
+];
+
+function StressTable({ state, limits, config, onSave }: { state: RiskState; limits: Limits; config: StressConfig; onSave: (config: StressConfig) => void }) {
+  const rows = stressTests(state, limits, config);
+  const [draft, setDraft] = useState<Record<string, string> | null>(null);
+  const parsed = draft && STRESS_FIELDS.reduce<StressConfig | null>((next, field) => {
+    if (next === null) return null;
+    const values = draft[field.key].split(/[\s,]+/).filter(Boolean).map(Number);
+    if (!values.length || (!field.list && values.length > 1) || values.some(value => !Number.isFinite(value) || value <= 0 || value > 100)) return null;
+    return field.write(next, values.map(value => value / 100));
+  }, config);
+  return <Card title="Stress tests" aside={draft
+    ? <><button type="button" className="pf-btn pf-btn--ghost" onClick={() => { onSave(DEFAULT_STRESS); setDraft(null); }}>Reset to defaults</button><button type="button" className="pf-btn pf-btn--ghost" onClick={() => setDraft(null)}>Cancel</button><button type="button" className="pf-btn pf-btn--primary" disabled={!parsed} onClick={() => { if (parsed) { onSave(parsed); setDraft(null); } }}>Save shocks</button></>
+    : <><span className="pf-muted">Instantaneous, approximate</span><button type="button" className="pf-btn" onClick={() => setDraft(Object.fromEntries(STRESS_FIELDS.map(field => [field.key, field.read(config)])))}>Edit shocks</button></>} className="pf-card--stress">
+    {draft && <div className="pf-limits__cash">{STRESS_FIELDS.map(field => <label key={field.key}><span>{field.label} (%)</span>
+      <input value={draft[field.key]} inputMode="decimal" aria-label={`${field.label} percent`} onChange={event => setDraft({ ...draft, [field.key]: event.target.value })} /></label>)}
+      {!parsed && <p className="pf-inline-error" role="alert">Enter each fall as a percentage above 0 and at most 100.</p>}</div>}
     {rows.length ? <div className="pf-table-scroll"><table className="pf-table" aria-label="Stress tests">
       <thead><tr><th scope="col">Scenario</th><th scope="col" className="num">NAV impact</th><th scope="col" className="num">Gross after</th><th scope="col" className="num">Excess liq. after</th><th scope="col">Result</th></tr></thead>
       <tbody>{rows.map(row => {
         const [status, label] = STRESS_LABEL[row.result];
         return <tr key={row.id}>
           <th scope="row"><span className="pf-limits__name">{row.label}</span>{row.firstBreach && <small>First breach: {row.firstBreach}</small>}</th>
-          <td className="num"><span className="is-negative">{signedPct(row.navImpactPct)}</span><small>{money(row.navImpact, undefined, true)}</small></td>
+          <td className="num"><span className={pnlTone(row.navImpact)}>{signedPct(row.navImpactPct)}</span><small>{money(row.navImpact, undefined, true)}</small></td>
           <td className="num">{times(row.grossLeverageAfter)}</td>
           <td className="num">{row.excessAfter === null ? "—" : <>{money(row.excessAfter, undefined, true)}<small>{pct(row.excessRatioAfter)} NAV</small></>}</td>
           <td><StatusTag status={status}>{label}</StatusTag></td>
         </tr>;
       })}</tbody>
     </table></div> : <p className="pf-muted pf-pad">Net liquidation is needed to run stress tests.</p>}
-    <p className="pf-foot-note">Market scenarios move each position by its beta × the market move; cash equivalents held flat; maintenance margin scales with each shocked position. Ignores FX, volatility and margin-rate changes.</p>
+    <p className="pf-foot-note">Market scenarios move each position by its beta × the market move. Cash equivalents stay flat except in their own scenario and the combined one. The USD shock moves USD positions and USD cash, so a USD debit shrinks in {state.base}. The sector scenario appears once positions carry sector labels. Maintenance margin scales with each shocked position; margin-rate changes are ignored. Shock sizes are saved for this account in this browser.</p>
   </Card>;
 }
 
@@ -585,6 +659,14 @@ function Fold({ title, summary, open, children }: { title: string; summary: Reac
     <div className="pf-fold__body">{children}</div></details>;
 }
 
+/** Volatility, VaR, expected shortfall, drawdown and beta over the last year of daily returns. */
+function HistoricalRisk({ account, userId }: { account: BrokerAccount; userId: string }) {
+  const remote = useRemote<PerformanceReport>(performanceUrl(account, userId, sinceFor("1y")), 300_000);
+  if (remote.loading && !remote.data) return <Card title="Statistical risk · 1 year"><p className="pf-muted pf-pad" role="status">Measuring daily returns…</p></Card>;
+  if (!remote.data) return <Card title="Statistical risk · 1 year"><p className="pf-muted pf-pad">{errorMessage(remote.error, "Return history is unavailable.")}</p></Card>;
+  return <RiskStatsCard stats={remote.data.risk} currency={remote.data.currency} title="Statistical risk · 1 year" />;
+}
+
 /* ---------- page ---------- */
 
 function RiskBoard({ account, userId }: { account: BrokerAccount; userId: string }) {
@@ -594,7 +676,9 @@ function RiskBoard({ account, userId }: { account: BrokerAccount; userId: string
   const dimensions = useDimensions();
   const [params, update] = useUrlParams();
   const chosen = dimensions.find(item => item.id === params.get("by"));
-  const positions = useRemote<SnapshotPage>(`${base}/positions?${filter}${chosen ? `&dims=${encodeURIComponent(chosen.id)}` : ""}`, 60_000);
+  // Sector labels are always requested: the sector stress scenario needs them.
+  const dims = [...new Set([chosen?.id, dimensions.some(item => item.id === "sector") ? "sector" : undefined].filter((id): id is string => Boolean(id)))].join(",");
+  const positions = useRemote<SnapshotPage>(`${base}/positions?${filter}${dims ? `&dims=${encodeURIComponent(dims)}` : ""}`, 60_000);
   const failedPivot = chosen && positions.data?.unavailable_dimensions?.includes(chosen.id) ? chosen : undefined;
   // Group only once every position carries the label, so an unlabelled one is never shown as Unclassified.
   const activePivot = chosen && !failedPivot && positions.data?.items.every(row => (row as Attributed).attributes?.[chosen.id]) ? chosen : undefined;
@@ -623,7 +707,7 @@ function RiskBoard({ account, userId }: { account: BrokerAccount; userId: string
     const status = statusOf(state.metrics[spec.key], settings.limits[spec.key], spec.direction);
     if (status === "red" || status === "amber") limitCounts[status] += 1;
   }
-  const stress = stressTests(state, settings.limits);
+  const stress = stressTests(state, settings.limits, settings.stress);
   const worst = stress.find(row => row.result === "call" || row.result === "breach") ?? stress.find(row => row.result === "pressure");
   const stressSummary = !stress.length ? "Needs net liquidation" : worst ? `First problem: ${worst.label}` : `All ${stress.length} scenarios within cushion`;
   return <div className="pf-risk">
@@ -648,19 +732,21 @@ function RiskBoard({ account, userId }: { account: BrokerAccount; userId: string
       <div className="pf-stack pf-board__side">
         <Snapshot state={state} /><CapacityCard state={state} limits={settings.limits} />
         <Composition state={state} pivot={activePivot} />
+        <Allocation state={state} />
       </div>
     </div>
     <Leverage state={state} limits={settings.limits} beta={beta} />
+    <HistoricalRisk account={account} userId={userId} />
     <Fold title="Limits & operating envelope" open={limitCounts.red + limitCounts.amber > 0}
       summary={limitCounts.red + limitCounts.amber === 0 ? "All measured limits within target" : [limitCounts.red && `${limitCounts.red} hard ${limitCounts.red === 1 ? "limit" : "limits"} breached`, limitCounts.amber && `${limitCounts.amber} above target`].filter(Boolean).join(" · ")}>
       <div className="pf-grid pf-grid--mid">
         <LimitsTable state={state} settings={settings} onSave={next => { setSettings(next); saveSettings(account, next); }}
-          onReset={() => { const next = { limits: DEFAULT_LIMITS, cashLike: DEFAULT_CASH_LIKE }; setSettings(next); saveSettings(account, null); }} />
+          onReset={() => { const next = { limits: DEFAULT_LIMITS, cashLike: DEFAULT_CASH_LIKE, stress: settings.stress }; setSettings(next); saveSettings(account, next); }} />
         <OperatingRange state={state} limits={settings.limits} />
       </div>
     </Fold>
     <Fold title="Stress tests & triggers" open={verdict.status === "red"} summary={stressSummary}>
-      <div className="pf-grid pf-grid--mid"><StressTable state={state} limits={settings.limits} /><Triggers state={state} limits={settings.limits} /></div>
+      <div className="pf-grid pf-grid--mid"><StressTable state={state} limits={settings.limits} config={settings.stress} onSave={stress => { const next = { ...settings, stress }; setSettings(next); saveSettings(account, next); }} /><Triggers state={state} limits={settings.limits} /></div>
     </Fold>
   </div>;
 }
