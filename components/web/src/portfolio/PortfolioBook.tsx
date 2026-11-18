@@ -8,6 +8,8 @@ import { Amount, EmptyState, GroupByChips, PortfolioHeader, PortfolioIcon, Profi
 import { sumDecimals, treeKeys, useDimensions, useGroupBy, type Level } from "./pivot";
 import { DISPLAY_CURRENCIES, FX_UNAVAILABLE, inCurrency } from "./fx";
 import { attributeLevel, pnlSections, tagLevel, TAG_LEVELS, type PnlNode, type PnlSection, type PnlTotals } from "./pnlPivot";
+import { GroupTrades } from "./GroupTrades";
+import { ytdStart } from "./pnlSplit";
 import "./Portfolio.css";
 
 const API = "/hub/api/v1/portfolio";
@@ -256,7 +258,7 @@ function PnlReport({ kind, userId, selected, onSelect }: { kind: CatalogKind; us
     <label className="portfolio-selector"><span className="sr-only">Display currency</span><select aria-label="Display currency" value={currency} onChange={event => chooseCurrency(event.target.value)}>
       {currencies.map(code => <option key={code} value={code}>{code}</option>)}</select></label></div>
     {Boolean(accounts.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">{errorMessage(accounts.error)}</p>}
-    {selected && !account ? <p className="portfolio-empty-inline" role={unavailable ? "alert" : "status"}>{accounts.loading ? "Loading account…" : "The selected account is unavailable. Choose an account to view its PnL."}</p> : <PnlValues key={`${filter}/${period}`} kind={kind} userId={userId} filter={filter} period={period} currency={currency} />}
+    {selected && !account ? <p className="portfolio-empty-inline" role={unavailable ? "alert" : "status"}>{accounts.loading ? "Loading account…" : "The selected account is unavailable. Choose an account to view its PnL."}</p> : <PnlValues key={`${filter}/${period}`} kind={kind} userId={userId} filter={filter} period={period} currency={currency} account={account} />}
     <details className="portfolio-calculation"><summary>How PnL is calculated</summary><p>All time: cumulative PnL from recorded stock and ETF fills. Total = realized + unrealized − commissions. YTD: realized PnL from closing fills and commissions on fills since 1 January (New York trading day); lots opened earlier keep their original cost. Unrealized is the current mark of open lots, so the YTD figure is net realized = realized − fees. An instrument that cannot be valued (for example, shares bought before the recorded history) is left out of its group's PnL and named under the group, but its fees still count. Matching uses FIFO within the same account, instrument, currency and three tags; use the same tags on closing orders. Retagging recalculates the recorded history.</p>
       <p>Values are shown in the selected currency, converted at each account's latest broker exchange rate (from the statement or Gateway snapshot); a holding with no recent rate is excluded and flagged, never guessed. Paper/live accounts and simulations stay separate. Missing data is unavailable, never zero. Dividends, financing and FX conversion are excluded. Currency conversions are not positions: they are left out of the table, and their commissions are listed with the account fees (data subscriptions, broker fees, commission adjustments from Flex statements) below it, outside the totals. Snapshot quantity reconciliation cannot prove complete inception history.</p>
       <p>IBKR column: IBKR’s own figures from Flex statements, already net of commissions, so IBKR = realized + unrealized with no fees subtracted. Realized is each fill’s FIFO realized PnL, shown under the tags of the order that closed it. IBKR matches lots across the whole account, not per tag, so for an instrument held under several tags its realized PnL can land on a different tag than ours. Unrealized is IBKR’s open-position cost basis valued at the same price as ours, shown under the tag that holds the position. The reconciliation compares each instrument’s all-time total, which does not depend on lot matching, so the two should agree.</p></details>
@@ -278,7 +280,7 @@ function symbolList(rows: { trading_symbol: string }[]): string {
 const ownLevel = { themes: "theme", strategies: "strategy", "trade-names": "trade_name" } as const;
 type SortKey = "realized" | "unrealized" | "commissions" | "total" | "ibkr_total";
 
-function PnlValues({ kind, userId, filter, period, currency }: { kind: CatalogKind; userId: string; filter: string; period: Period; currency: string }) {
+function PnlValues({ kind, userId, filter, period, currency, account }: { kind: CatalogKind; userId: string; filter: string; period: Period; currency: string; account: BrokerAccount | undefined }) {
   const ytd = period === "ytd";
   const dimensions = useDimensions();
   const own = ownLevel[kind];
@@ -292,6 +294,13 @@ function PnlValues({ kind, userId, filter, period, currency }: { kind: CatalogKi
   const names = useRemote<ItemsPage<CatalogEntry>>(catalog("trade-names"), 60_000);
   const catalogs = { themes, strategies, "trade-names": names };
   const metric = ytd ? "Net realized YTD" : "Total PnL";
+  // The trades panel's tag; a PnL row's "Trades" button sets it and brings the panel into view.
+  const [tradeTag, setTradeTag] = useState("");
+  const tradesPanel = useRef<HTMLElement>(null);
+  const showTrades = (id: string) => {
+    setTradeTag(id);
+    requestAnimationFrame(() => { tradesPanel.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }); tradesPanel.current?.focus({ preventScroll: true }); });
+  };
   // Every holding in the display currency at the broker's rates; same-tag groups merge across currencies.
   const groups = remote.data ? inCurrency(remote.data.items, currency, remote.data.fx_rates ?? []) : [];
   const unavailable = remote.data?.unavailable_dimensions ?? [];
@@ -320,7 +329,8 @@ function PnlValues({ kind, userId, filter, period, currency }: { kind: CatalogKi
     {failed.map(dimension => <p key={dimension.id} className="portfolio-notice portfolio-notice--error" role="alert">{dimension.label} classification is unavailable right now, so the report is shown without that level.</p>)}
     {pending.length > 0 && remote.data && <p className="portfolio-empty-inline" role="status">Labelling holdings by {pending.map(dimension => dimension.label.toLowerCase()).join(" and ")}…</p>}
     {remote.loading && !remote.data ? <p className="portfolio-empty-inline" role="status">Calculating PnL…</p> : remote.data?.items.length === 0 ? <EmptyState title="No performance to show yet">PnL appears here when this profile has recorded fills or holdings.</EmptyState>
-      : remote.data && <PnlTree key={shown.map(level => level.id).join(",")} sections={sections} levels={shown} ytd={ytd} userId={userId} metric={metric} />}
+      : remote.data && <PnlTree key={shown.map(level => level.id).join(",")} sections={sections} levels={shown} ytd={ytd} userId={userId} metric={metric} tradesLevel={own} activeTag={tradeTag} onTrades={showTrades} />}
+    <GroupTrades ref={tradesPanel} kind={kind} userId={userId} account={account} ytd={ytd} entries={catalogs[kind].data?.items ?? []} tag={tradeTag} onTag={setTradeTag} />
     {remote.data?.reconciliation && <Reconciliation rows={remote.data.reconciliation} statements={remote.data.statements ?? []} />}
     {remote.data && <AccountFees rows={remote.data.account_fees ?? []} ytd={ytd} />}
   </>;
@@ -329,7 +339,11 @@ function PnlValues({ kind, userId, filter, period, currency }: { kind: CatalogKi
 const sortLast = (node: { value: AttrValue }) => node.value.id === null ? 1 : 0;
 
 /** The PnL report as one tree table: a section per currency, the same columns at every depth. */
-function PnlTree({ sections, levels, ytd, userId, metric }: { sections: PnlSection[]; levels: Level<PnlDetail>[]; ytd: boolean; userId: string; metric: string }) {
+function PnlTree({ sections, levels, ytd, userId, metric, tradesLevel, activeTag, onTrades }: {
+  sections: PnlSection[]; levels: Level<PnlDetail>[]; ytd: boolean; userId: string; metric: string;
+  /** The page's own tag level: its rows get a "Trades" button for the trades panel. */
+  tradesLevel: string; activeTag: string; onTrades: (id: string) => void;
+}) {
   const [open, setOpen] = useState<Set<string>>(() => new Set(levels.length > 1 ? sections.flatMap(section => section.nodes.map(node => node.key)) : []));
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "total", desc: true });
   const suffix = ytd ? " YTD" : "";
@@ -375,6 +389,8 @@ function PnlTree({ sections, levels, ytd, userId, metric }: { sections: PnlSecti
             <th scope="row" style={{ paddingLeft: `${12 + node.depth * 20}px` }}><div className="portfolio-tree-name">
               {expandable ? <button type="button" className="portfolio-expand" aria-expanded={isOpen} aria-label={`${isOpen ? "Collapse" : "Expand"} ${name.join(" › ")} (${where})`} onClick={() => toggle(node.key)}><PortfolioIcon name="chevron" /></button> : <span className="portfolio-tree-spacer" />}
               <div><strong>{node.value.label}</strong><div className="portfolio-group-meta"><span>{count}</span>
+                {levels[node.depth]?.id === tradesLevel && node.value.id && <button type="button" className={`portfolio-row-action${activeTag === node.value.id ? " is-active" : ""}`} aria-pressed={activeTag === node.value.id}
+                  aria-label={`Show trades in ${node.value.label}`} onClick={() => onTrades(node.value.id!)}><PortfolioIcon name="arrow" />Trades</button>}
                 {node.totals.issues.length > 0 && <span className="portfolio-stale" title={node.totals.issues.map(issue => issueLabels[issue] ?? issue).join(" · ")}>{badgeFor(node.totals.issues)}</span>}</div>
                 <ExcludedNote rows={node.totals.excluded} total={node.totals.total} /></div></div></th>
             {cells(node.totals, node.totals.ibkr_excluded)}</tr>,
@@ -415,12 +431,6 @@ const badgePriority: [string, string][] = [
 ];
 function badgeFor(issues: string[]): string {
   return badgePriority.find(([issue]) => issues.includes(issue))?.[1] ?? "Review data";
-}
-
-/** First New York trading date of the current year, as the API's `since`. */
-function ytdStart(): string {
-  const year = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric" }).format(new Date());
-  return `${year}-01-01`;
 }
 
 /** IBKR's figure beside ours; the title carries its realized/unrealized split and why parts are missing. */

@@ -227,3 +227,31 @@ it("pivots the allocation by sector in the base currency, rows expanding to posi
   expect(within(within(positions).getByRole("rowgroup", { name: "Information Technology" })).getByText("SAP")).toBeInTheDocument();
   expect(vi.mocked(fetch)).toHaveBeenCalledWith(expect.stringMatching(/\/trades\?.*dims=sector/), expect.anything());
 });
+
+it("splits the account's PnL into broker unrealized and recorded realized YTD, linking to Themes", async () => {
+  const requests: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    requests.push(url);
+    const path = new URL(url, "http://localhost");
+    if (path.pathname.endsWith("/summary")) return { ok: true, json: async () => ({ account: accounts[0], balances: snapshot([
+      { metric: "NetLiquidation", value_num: "100000.000000", currency: "USD" },
+      { metric: "UnrealizedPnL", value_num: "300.000000", currency: "USD" }]) }) };
+    if (path.pathname.endsWith("/pnl/themes")) return { ok: true, json: async () => ({
+      items: [{ id: "t1", name: "AI", account_mode: "paper", simulated: true, currency: "USD", realized: "-120", unrealized: "300", commissions: "20", total: "-140", issues: [], details: [] }],
+      fx_rates: [] }) };
+    return { ok: true, json: async () => response(url) };
+  }));
+  render(<Portfolio />);
+  const split = within(await screen.findByLabelText("PnL split"));
+  expect(await split.findByText("−140.00")).toHaveClass("portfolio-amount--negative");
+  expect(split.getByText("300.00")).toHaveClass("portfolio-amount--positive");
+  expect(split.getByText("160.00")).toBeInTheDocument();
+  expect(split.getByRole("img", { name: "Unrealized 68%, realized 32% of absolute PnL" })).toBeInTheDocument();
+  const pnl = new URL(requests.find(url => url.includes("/pnl/themes"))!, "http://localhost");
+  expect(pnl.searchParams.get("account_id")).toBe("SIM_A");
+  expect(pnl.searchParams.get("since")).toMatch(/^\d{4}-01-01$/);
+  const link = new URL(split.getByRole("link", { name: /By theme/ }).getAttribute("href")!, "http://localhost");
+  expect(link.pathname).toBe("/portfolio/themes");
+  expect(link.searchParams.get("period")).toBe("ytd");
+  expect(link.searchParams.get("account")).toBe(JSON.stringify(["ibkr", "SIM_A"]));
+});

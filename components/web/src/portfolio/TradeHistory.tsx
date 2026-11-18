@@ -113,7 +113,7 @@ export function TradeTable({ rows, label, showAccount = true, dimension }: { row
   </table></div>;
 }
 
-function Summary({ rows }: { rows: TradeSummary[] }) {
+export function Summary({ rows }: { rows: TradeSummary[] }) {
   if (!rows.length) return null;
   return <dl className="trade-summary" aria-label="Closed trade results">{rows.map(row => {
     const rate = row.valued ? row.wins / row.valued : null;

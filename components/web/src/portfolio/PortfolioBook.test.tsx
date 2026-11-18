@@ -327,3 +327,39 @@ it("shows the report unpivoted and says so when sector classification fails", as
   expect(await screen.findByText(/Sector classification is unavailable right now/)).toBeInTheDocument();
   expect(screen.getByRole("treegrid", { name: "PnL by theme" })).toBeInTheDocument();
 });
+
+it("lists a theme's open and closed trades from its PnL row, scoped to the report", async () => {
+  const requests: string[] = [];
+  const row = { key: "ibkr:SIM_A:NVDA:closed", broker_code: "ibkr", account_id: "SIM_A", account_mode: "paper", simulated: true, trading_symbol: "NVDA", listing_id: null,
+    security_id: null, contract_id: null, product_type: "STK", currency: "USD", direction: "long", status: "closed", opened_at: "2026-10-01T14:00:00Z", closed_at: "2026-10-11T14:00:00Z",
+    last_fill_at: "2026-10-11T14:00:00Z", quantity: "0", max_quantity: "20", entry_quantity: "20", exit_quantity: "20", avg_entry_price: "105", avg_exit_price: "112.5", open_cost: "0",
+    market_price: null, price_time: null, realized: "150", unrealized: "0", commissions: [{ currency: "USD", amount: "4" }], net: "146", return_pct: "0.07", theme_id: "theme",
+    strategy_id: "strategy", trade_name_id: "trade", theme_name: "AI", strategy_name: "Momentum", trade_name_name: "Chip basket", tags_mixed: false, orders: ["1"], fill_count: 1, fills: [], fills_truncated: false, issues: [] };
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    requests.push(url);
+    const path = new URL(url, "http://localhost");
+    return { ok: true, json: async () => url.endsWith("/profiles") ? { items: [{ user_id: A, display_name: "Alice" }] }
+      : path.pathname.endsWith("/accounts") ? { items: [account] }
+      : path.pathname.includes("/catalogs/") ? { items: entries[path.pathname.split("/").pop() as keyof typeof entries] }
+      : path.pathname.includes("/pnl/") ? { items: [group], account_fees: [] }
+      : path.pathname.endsWith("/trades") ? { items: path.searchParams.get("status") === "open" ? [] : [row], total: 1, limit: 20, offset: 0, counts: { open: 0, closed: 1 },
+        summary: [{ currency: "USD", account_mode: "paper", simulated: true, closed: 1, valued: 1, wins: 1, losses: 0, realized: "150", net: "146" }], accounts: [], generated_at: "2026-10-20T00:00:00Z" }
+      : { items: [] } };
+  }));
+  render(<PortfolioGroups kind="themes" />);
+  const panel = within(await screen.findByRole("region", { name: "Open and closed trades" }));
+  expect(await panel.findByRole("table", { name: "Open and closed trades in every theme" })).toHaveTextContent("NVDA");
+  fireEvent.click(await screen.findByRole("button", { name: "Show trades in AI" }));
+  expect(await panel.findByRole("table", { name: "Open and closed trades in AI" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Show trades in AI" })).toHaveAttribute("aria-pressed", "true");
+  expect(panel.getByLabelText("Filter trades by theme")).toHaveValue("theme");
+  const trades = new URL(requests.filter(url => url.includes("/trades?")).at(-1)!, "http://localhost");
+  expect(trades.searchParams.get("theme_id")).toBe("theme");
+  expect(panel.getByText("Closed · USD · paper · simulated")).toBeInTheDocument();
+  fireEvent.click(panel.getByRole("button", { name: "Open 0" }));
+  expect(await panel.findByText("No trades match")).toBeInTheDocument();
+  const full = new URL(panel.getByRole("link", { name: /Open in Trades/ }).getAttribute("href")!, "http://localhost");
+  expect(full.searchParams.get("view")).toBe("positions");
+  expect(full.searchParams.get("theme_id")).toBe("theme");
+  expect(full.searchParams.get("status")).toBe("open");
+});

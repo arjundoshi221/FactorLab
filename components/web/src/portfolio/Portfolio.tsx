@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 
-import type { AccountSummary, Attributed, BrokerAccount, BrokerRow, Dimension, ExecutionPage, ItemsPage, Profile, SnapshotPage } from "./types";
+import type { AccountSummary, Attributed, BrokerAccount, BrokerRow, Dimension, ExecutionPage, ItemsPage, PnlReport, Profile, SnapshotPage } from "./types";
+import { realizedYtd, splitShares, ytdStart, type RealizedYtd } from "./pnlSplit";
 import { Segmented } from "../components/ui";
 import { ApiError, errorMessage, fetchJson, useRemote } from "../shared/api";
 import { AreaChart, Treemap } from "../shared/charts";
@@ -46,8 +47,9 @@ function SnapshotTime({ data }: { data: SnapshotPage }) {
   </p>;
 }
 
-function AccountMetrics({ account, summary, positions, orders }: {
+function AccountMetrics({ account, summary, positions, orders, realized }: {
   account: BrokerAccount; summary: AccountSummary | null; positions: SnapshotPage | null; orders: SnapshotPage | null;
+  realized: RealizedState;
 }) {
   const currency = account.base_currency;
   function metric(name: string) {
@@ -68,13 +70,60 @@ function AccountMetrics({ account, summary, positions, orders }: {
   const gross = brokerNumber("GrossPositionValue") ?? baseRows?.reduce((total, row) => total + Math.abs(toNumber(row.market_value) ?? 0), 0) ?? null;
   const fromBroker = (name: string) => brokerNumber(name) !== null;
   return <dl className="portfolio-overview" aria-label="Account overview">
-    <div><dt>Net liquidation <span>{currency}</span></dt><dd><Amount value={metric("NetLiquidation")} /></dd><small>Broker account value</small></div>
+    <div className="portfolio-overview__hero"><dt>Net liquidation <span>{currency}</span></dt><dd><Amount value={metric("NetLiquidation")} /></dd><small>Broker account value</small></div>
     <div><dt>Cash balance <span>{currency}</span></dt><dd><Amount value={metric("TotalCashValue")} /></dd><small>Total broker-reported cash</small></div>
     <div><dt>Gross exposure <span>{currency}</span></dt><dd>{gross === null ? "—" : compactMoney(gross)}</dd><small>{fromBroker("GrossPositionValue") ? "Broker-reported, all positions" : `Sum of |market value|, ${currency || "base"} positions`}</small></div>
-    <div><dt>Unrealized <span>{currency}</span></dt><dd><Amount value={unrealized === null ? null : unrealized.toFixed(2)} signed /></dd><small>{fromBroker("UnrealizedPnL") ? "Broker-reported, all positions" : `Broker-reported, ${currency || "base"} positions`}</small></div>
     <div><dt>Open positions</dt><dd>{positions?.snapshot_time ? positions.items.length : "—"}</dd><small>In the latest snapshot</small></div>
     <div><dt>Working orders</dt><dd>{orders?.snapshot_time ? orders.items.length : "—"}</dd><small>In the latest snapshot</small></div>
+    <PnlSplit currency={currency} unrealized={unrealized} unrealizedNote={fromBroker("UnrealizedPnL") ? "Broker-reported, all positions" : `Broker-reported, ${currency || "base"} positions`} realized={realized} />
   </dl>;
+}
+
+interface RealizedState { value: RealizedYtd | null; loading: boolean; failed: boolean; owned: boolean; href: string }
+
+/** Account PnL split into the open mark (unrealized) and what closing fills locked in this year (realized). */
+function PnlSplit({ currency, unrealized, unrealizedNote, realized }: { currency: string | null | undefined; unrealized: number | null; unrealizedNote: string; realized: RealizedState }) {
+  const year = ytdStart().slice(0, 4);
+  const value = realized.value;
+  const net = toNumber(value?.net ?? null);
+  const shares = splitShares(unrealized, net);
+  const combined = unrealized === null || net === null ? null : unrealized + net;
+  const tone = (number: number | null) => number === null ? "is-unknown" : number < 0 ? "is-negative" : "is-positive";
+  const realizedNote = !realized.owned ? "Assign this account to a profile to record fills"
+    : realized.failed && !value ? "Recorded PnL is unavailable right now"
+    : realized.loading && !value ? "Calculating from recorded fills…"
+    : !value ? "No recorded fills for this account yet"
+    : value.excluded.length ? `Excludes ${value.excluded.length <= 3 ? value.excluded.join(", ") : `${value.excluded.length} instruments`} (cannot be valued)`
+    : "Recorded fills, FIFO, net of fees";
+  return <div className="portfolio-overview__pnl" aria-label="PnL split">
+    <dt className="is-unrealized"><span className="portfolio-pnl-key is-unrealized" aria-hidden="true" />Unrealized <span>{currency}</span></dt>
+    <dd className="is-unrealized"><Amount value={unrealized === null ? null : unrealized.toFixed(2)} signed /></dd>
+    <small className="is-unrealized">{unrealizedNote}</small>
+    <dt className="is-realized"><span className="portfolio-pnl-key is-realized" aria-hidden="true" />Realized · YTD {year} <span>{currency}</span></dt>
+    <dd className="is-realized"><Amount value={value?.net ?? null} signed />{value?.partial && value.net !== null && <span className="portfolio-pnl-partial" title="Some instruments are left out">partial</span>}</dd>
+    <small className="is-realized">{value?.realized != null && value.fees != null ? <><Amount value={value.realized} signed /> realized − <Amount value={value.fees} /> fees · </> : null}<span className={value?.excluded.length || (realized.failed && !value) ? "portfolio-stale" : ""}>{realizedNote}</span></small>
+    <dt className="is-split">Open + realized YTD <span>{currency}</span></dt>
+    <dd className="is-split"><Amount value={combined === null ? null : combined.toFixed(2)} signed /></dd>
+    <dd className="is-split-bar">
+      {shares ? <span className="portfolio-pnl-bar" role="img" aria-label={`Unrealized ${Math.round(shares.unrealized * 100)}%, realized ${Math.round(shares.realized * 100)}% of absolute PnL`}>
+        <i className={`is-unrealized ${tone(unrealized)}`} style={{ width: `${shares.unrealized * 100}%` }} /><i className={`is-realized ${tone(net)}`} style={{ width: `${shares.realized * 100}%` }} />
+      </span> : <span className="portfolio-pnl-bar is-empty" aria-hidden="true" />}
+      <span className="portfolio-pnl-legend">{shares ? <><span>Unrealized {Math.round(shares.unrealized * 100)}%</span><span>Realized {Math.round(shares.realized * 100)}%</span></> : <span>Split unavailable until both sides are known</span>}
+        {realized.href && <a className="portfolio-text-link" href={realized.href}>By theme<PortfolioIcon name="arrow" /></a>}</span>
+    </dd>
+  </div>;
+}
+
+/** The account's recorded realized PnL since 1 January, in its base currency. */
+function useRealizedYtd(account: BrokerAccount, userId: string, revision: number): RealizedState {
+  const owner = account.user_id ?? (userId && userId !== "unassigned" ? userId : "");
+  const scope = owner ? new URLSearchParams({ user_id: owner, broker_code: account.broker_code, account_id: account.account_id, since: ytdStart() }) : null;
+  const remote = useRemote<PnlReport>(scope ? `${API}/pnl/themes?${scope}` : null, 60_000);
+  usePortfolioRefresh(revision, remote.refresh);
+  // A payload whose items are not PnL groups is not a report: show it as unavailable, never guess.
+  const report = remote.data && Array.isArray(remote.data.items) && remote.data.items.every(group => Array.isArray(group?.details) && Array.isArray(group?.issues)) ? remote.data : null;
+  const href = owner ? `/portfolio/themes?${new URLSearchParams({ user_id: owner, account: JSON.stringify([account.broker_code, account.account_id]), period: "ytd", ...(account.base_currency ? { ccy: account.base_currency } : {}) })}` : "";
+  return { value: realizedYtd(report, account.base_currency), loading: remote.loading, failed: Boolean(remote.error) || Boolean(remote.data && !report), owned: Boolean(owner), href };
 }
 
 type EquityRange = "1m" | "3m" | "1y" | "max";
@@ -201,6 +250,7 @@ function AccountDetails({ account, userId, dimension }: { account: BrokerAccount
   const positions = useRemote<SnapshotPage>(`${base}/positions?${filter}${dims}`, 60_000);
   const grouped = labelledBy(dimension, positions.data);
   const orders = useRemote<SnapshotPage>(`${base}/open-orders?${filter}`, 60_000);
+  const realized = useRealizedYtd(account, userId, tradeRevision);
   const refreshAccount = () => { summary.refresh(); positions.refresh(); orders.refresh(); setOffset(0); setTradeRevision(value => value + 1); };
   return <section aria-label="Selected account" className="portfolio-details">
     <header className="portfolio-account-heading"><div className="portfolio-account-identity"><span className="portfolio-broker-mark" aria-hidden="true">{account.broker_code.slice(0, 2).toUpperCase()}</span><div>
@@ -209,7 +259,7 @@ function AccountDetails({ account, userId, dimension }: { account: BrokerAccount
       <div className="portfolio-account-update">{summary.data && <SnapshotTime data={summary.data.balances} />}<button className="portfolio-button portfolio-button--secondary" type="button" onClick={refreshAccount} disabled={summary.refreshing || positions.refreshing || orders.refreshing}><PortfolioIcon name="refresh" />Refresh account</button>{account.broker_code === "ibkr" && !account.simulated && <FlexSync onSynced={refreshAccount} />}<a className="portfolio-button portfolio-button--ghost" href={`/portfolio/trades?${new URLSearchParams({ user_id: userId, account: JSON.stringify([account.broker_code, account.account_id]) })}`}>View all trades</a></div>
     </header>
     {[summary, positions, orders].some(remote => remote.error) && <p className="portfolio-notice portfolio-notice--error" role="alert">Account refresh failed. Showing any last successful snapshots for this account.</p>}
-    <AccountMetrics account={account} summary={summary.data} positions={positions.data} orders={orders.data} />
+    <AccountMetrics account={account} summary={summary.data} positions={positions.data} orders={orders.data} realized={realized} />
     <Performance base={base} filter={filter} positions={positions.data} balances={summary.data?.balances.items ?? []} currency={account.base_currency ?? ""} dimension={dimension} />
     <div className="portfolio-workspace">
       <OrderTagging account={account} revision={tradeRevision} />

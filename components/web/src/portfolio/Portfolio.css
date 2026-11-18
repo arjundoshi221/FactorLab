@@ -6,7 +6,7 @@
 .portfolio-selector > span { color: var(--ink-3); font-size: 11px; text-transform: capitalize; }
 .portfolio-selector > span small { float: right; margin-left: 10px; color: var(--muted); font-size: 10px; font-weight: 400; }
 .portfolio-profile { flex: 0 1 260px; width: 260px; }
-.portfolio-page input:not([type="checkbox"]), .portfolio-page select, .portfolio-page textarea { width: 100%; min-width: 0; min-height: var(--control); border: 1px solid var(--line-2); border-radius: var(--radius-s); padding: 7px 10px; color: var(--ink); background: var(--panel); font: inherit; font-size: 13px; }
+.portfolio-page input:not([type="checkbox"]), .portfolio-page select, .portfolio-page textarea { width: 100%; min-width: 0; min-height: var(--control); border: 1px solid var(--field-line); border-radius: var(--radius-s); padding: 7px 10px; color: var(--ink); background: var(--panel); font: inherit; font-size: 13px; }
 .portfolio-page select { padding-right: 15px; cursor: pointer; }
 .portfolio-page input::placeholder, .portfolio-page textarea::placeholder { color: var(--muted); }
 .portfolio-page textarea { min-height: 62px; resize: vertical; line-height: 1.6; }
@@ -300,3 +300,60 @@
 /* Open positions grouped by the page pivot (Records `groups`). */
 .portfolio-record-group th { padding: 7px 10px; background: var(--panel-soft); color: var(--ink); font-weight: 600; text-align: left; }
 .portfolio-record-group th span { margin-left: 8px; color: var(--muted); font: 400 10px var(--mono); }
+
+/* Overview: net liquidation leads the first row; the PnL split band spans the second. */
+.portfolio-overview > .portfolio-overview__hero { grid-column: span 2; }
+.portfolio-overview > .portfolio-overview__pnl { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-flow: column; grid-template-rows: auto auto auto; gap: 0; padding: 0; overflow: hidden; }
+.portfolio-overview__pnl > * { margin: 0; padding: 0 18px; }
+.portfolio-overview__pnl > dt { grid-row: 1; padding-top: 16px; justify-content: flex-start; align-items: center; gap: 7px; }
+.portfolio-overview__pnl > dt > span:last-child { margin-left: auto; }
+.portfolio-overview__pnl > dd { grid-row: 2; display: flex; align-items: baseline; gap: 8px; padding-top: 8px; }
+.portfolio-overview__pnl > small, .portfolio-overview__pnl > .is-split-bar { grid-row: 3; padding-top: 8px; padding-bottom: 16px; line-height: 1.5; }
+.portfolio-overview__pnl > .is-unrealized { grid-column: 1; }
+.portfolio-overview__pnl > .is-realized { grid-column: 2; border-left: 1px solid var(--line); }
+.portfolio-overview__pnl > .is-split, .portfolio-overview__pnl > .is-split-bar { grid-column: 3; border-left: 1px solid var(--line); background: var(--press); }
+.portfolio-overview__pnl small .portfolio-amount { font-size: inherit; }
+.portfolio-pnl-key { display: inline-block; width: 8px; height: 8px; border-radius: 2px; border: 1.5px solid var(--ink-3); }
+.portfolio-pnl-key.is-realized { background: var(--ink-3); }
+.portfolio-pnl-partial { padding: 1px 6px; border: 1px solid var(--line); border-radius: var(--radius-s); color: var(--amber); font: 500 10px var(--sans); letter-spacing: .03em; }
+.portfolio-overview__pnl > .is-split-bar { display: flex; flex-direction: column; align-items: stretch; gap: 7px; font: inherit; }
+.portfolio-pnl-bar { display: flex; gap: 2px; height: 8px; overflow: hidden; border-radius: 4px; background: var(--line); }
+.portfolio-pnl-bar i { display: block; height: 100%; min-width: 2px; }
+.portfolio-pnl-bar .is-positive { background: var(--green); }
+.portfolio-pnl-bar .is-negative { background: var(--red); }
+.portfolio-pnl-bar .is-unknown { background: var(--line-3); }
+/* Realized is solid; unrealized (not locked in) is hatched, so the split reads without colour. */
+.portfolio-pnl-bar i.is-unrealized { background-image: repeating-linear-gradient(135deg, transparent 0 3px, color-mix(in srgb, var(--panel) 45%, transparent) 3px 5px); }
+.portfolio-pnl-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--muted); font-size: 11px; }
+.portfolio-pnl-legend .portfolio-text-link { margin-left: auto; }
+@media (max-width: 1100px) {
+  .portfolio-overview { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .portfolio-overview > .portfolio-overview__hero { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+  .portfolio-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .portfolio-overview > .portfolio-overview__pnl { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto auto auto auto auto; }
+  .portfolio-overview__pnl > * { padding-left: 12px; padding-right: 12px; }
+  .portfolio-overview__pnl > .is-split, .portfolio-overview__pnl > .is-split-bar { grid-column: 1 / -1; border-left: 0; border-top: 0; }
+  .portfolio-overview__pnl > dt.is-split { grid-row: 4; border-top: 1px solid var(--line); padding-top: 12px; }
+  .portfolio-overview__pnl > dd.is-split { grid-row: 5; }
+  .portfolio-overview__pnl > .is-split-bar { grid-row: 6; padding-bottom: 12px; }
+  .portfolio-overview__pnl > dt { padding-top: 12px; }
+  .portfolio-overview__pnl > small.is-unrealized, .portfolio-overview__pnl > small.is-realized { padding-bottom: 12px; }
+}
+
+/* Themes / Strategies / Trade names: open & closed trades under the PnL table. */
+.portfolio-group-trades { display: grid; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); scroll-margin-top: 16px; outline: none; }
+.portfolio-group-trades .portfolio-section-heading { flex-wrap: wrap; align-items: flex-end; }
+.portfolio-group-trades__scope { color: var(--muted); font: 500 13px var(--sans); letter-spacing: 0; }
+.portfolio-group-trades__tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.portfolio-group-trades .trade-summary { margin: 0; }
+.portfolio-group-trades__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.portfolio-group-trades__foot .portfolio-text-link { margin-left: auto; }
+.portfolio-page .portfolio-row-action { display: inline-flex; align-items: center; gap: 4px; min-height: 0; padding: 1px 7px; border: 1px solid var(--line); border-radius: var(--radius-s); background: transparent; color: var(--ink-3); font: 500 11px var(--sans); cursor: pointer; box-shadow: none; }
+.portfolio-page .portfolio-row-action svg { width: 11px; height: 11px; }
+.portfolio-page .portfolio-row-action:hover, .portfolio-page .portfolio-row-action.is-active { border-color: var(--accent-line); color: var(--ink); background: var(--press); }
+@media (max-width: 700px) {
+  .portfolio-group-trades__tools { width: 100%; margin-left: 0; }
+  .portfolio-group-trades__tools .portfolio-selector, .portfolio-group-trades__tools select { flex: 1 1 100%; }
+}
