@@ -73,3 +73,8 @@ extra_symbols:
   - RSPU
   # Whole-market proxy for the r3k composites
   - IWV
+  # Portfolio performance benchmarks (F-049): S&P 500, global equity, and cash (BOXX
+  # accrues instead of distributing, so its price is a total return)
+  - SPY
+  - VT
+  - BOXX

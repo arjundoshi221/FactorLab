@@ -114,7 +114,7 @@ function ReturnsChart({ report }: { report: PerformanceReport }) {
         <td className={`num ${tone(bench.excess)}`}>{pct(bench.excess, 2, true)}</td>
       </tr>)}</tbody>
     </table></div> : <p className="pf-muted pf-pad">No benchmark prices for this period.</p>}
-    <p className="pf-foot-note">Benchmarks are converted to {report.currency} at IBKR's daily rates and compared on the same dates. They are price series, so they exclude dividends. The beta-scaled line is the benchmark at the account's measured risk.</p>
+    <p className="pf-foot-note">Benchmarks are converted to {report.currency} at IBKR's daily rates and compared on the same dates. Equity benchmarks are price series, so they leave out dividends; the cash benchmark (BOXX) accrues rather than distributes, so it is a total return. The beta-scaled line is the S&P 500 at the account's measured risk.</p>
   </Card>;
 }
 

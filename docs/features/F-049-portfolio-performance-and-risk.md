@@ -42,8 +42,9 @@ only refreshed when someone pressed "Sync IBKR history".
 
 ## Non-goals
 
-- New ingestion of benchmark ETFs (SPY, ACWI/VT, BIL/SGOV) or total-return series: only
-  series already in `market.bars` are used. Follow-up.
+- Total-return equity benchmarks: Schwab has no S&P 500 total-return index and serves no
+  distributions, and the production EODHD key is rejected (HTTP 401), so equity ETF
+  benchmarks are price series. A renewed EODHD key would allow a dividend feed.
 - Pre-2026 history backfill; server-side limits (`risk.budgets`).
 
 ## Acceptance criteria
@@ -67,3 +68,7 @@ ingest trial of `ingest-broker`. No migrations.
 - 2026-11-19: shipped: api/web trial `f78524a` (performance endpoint verified on production:
   SGD, IBKR attribution, YTD TWR 8.33% = IBKR) and ingest trial
   `ingest-trial/ingest-broker/f78524a2e16b` (runner logs the daily 06:30 New York schedule).
+- 2026-11-19: benchmarks SPY (S&P 500, `$SPX` until its history backfills), VT (global
+  equity) and BOXX (cash, a total return because it accrues) added to `extra_symbols` in
+  `deploy/us-universe.yaml` and the host's `/etc/factorlab/us-universe.yaml` (backup
+  `us-universe.yaml.bak-20261119`); universe published them; IWV dropped from the page.

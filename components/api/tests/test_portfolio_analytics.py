@@ -105,9 +105,9 @@ def test_report_gains_risk_and_a_risk_matched_benchmark():
     )
     enriched = add_analytics(report, {"$SPX": closes}, lambda _day: 1.35, start)
     assert enriched.risk is not None and enriched.risk.beta == pytest.approx(1.5)
-    assert enriched.risk.benchmark == "S&P 500"
+    assert enriched.risk.benchmark == "S&P 500 (index)"  # SPY has no history yet: $SPX stands in
     codes = [item.code for item in enriched.benchmarks]
-    assert codes == ["$SPX", "risk_matched"]
+    assert codes == ["sp500", "risk_matched"]
     spx, matched = enriched.benchmarks
     assert spx.twr == pytest.approx(bench / 100 - 1)
     assert enriched.twr is not None and spx.twr is not None
@@ -128,3 +128,56 @@ def test_report_without_benchmark_prices_still_has_risk():
     enriched = add_analytics(report, {}, lambda _day: 1.35, date(2025, 12, 31))
     assert enriched.benchmarks == [] and enriched.risk is not None
     assert any("No benchmark" in warning for warning in enriched.warnings)
+
+
+def _report(days=30):
+    start = date(2025, 12, 31)
+    navs, closes, nav = (
+        [(start, 1000.0)],
+        {"SPY": [(start, 100.0)], "$SPX": [(start, 5000.0)], "BOXX": [(start, 110.0)]},
+        1000.0,
+    )
+    for index in range(days):
+        day = start + timedelta(days=index + 1)
+        move = 0.01 * math.sin(index + 1)
+        nav *= 1 + move
+        navs.append((day, nav))
+        closes["SPY"].append((day, closes["SPY"][-1][1] * (1 + move)))
+        closes["$SPX"].append((day, closes["$SPX"][-1][1] * (1 + move / 2)))
+        closes["BOXX"].append((day, closes["BOXX"][-1][1] * 1.0001))
+    report = build(
+        currency="SGD",
+        since=date(2026, 1, 1),
+        nav_rows=navs,
+        flow_rows=[],
+        cash_lines={},
+        book=RateBook(base="SGD"),
+    )
+    return report, closes, start
+
+
+def test_spy_is_preferred_and_cash_never_sets_beta():
+    report, closes, start = _report()
+    enriched = add_analytics(report, closes, lambda _day: 1.35, start)
+    labels = {item.code: item.label for item in enriched.benchmarks}
+    assert labels["sp500"] == "S&P 500 (SPY)"
+    assert labels["cash"] == "Cash (BOXX)"
+    assert enriched.risk is not None and enriched.risk.benchmark == "S&P 500 (SPY)"
+    assert enriched.risk.beta == pytest.approx(1.0)
+    cash = next(item for item in enriched.benchmarks if item.code == "cash")
+    assert cash.twr == pytest.approx(1.0001**30 - 1)
+
+
+def test_index_stands_in_until_the_etf_covers_the_period():
+    report, closes, start = _report()
+    closes["SPY"] = closes["SPY"][10:]  # history starts after the period's start
+    enriched = add_analytics(report, closes, lambda _day: 1.35, start)
+    sp500 = next(item for item in enriched.benchmarks if item.code == "sp500")
+    assert sp500.label == "S&P 500 (index)" and sp500.note == "Price index; excludes dividends"
+
+
+def test_cash_only_gives_no_beta():
+    report, closes, start = _report()
+    enriched = add_analytics(report, {"BOXX": closes["BOXX"]}, lambda _day: 1.35, start)
+    assert [item.code for item in enriched.benchmarks] == ["cash"]
+    assert enriched.risk is not None and enriched.risk.beta is None

@@ -862,7 +862,7 @@ def performance_report(repo: Any, account: dict[str, Any], since: date) -> Perfo
     closes: dict[str, list[tuple[date, float]]] = {}
     try:
         found = IndexRepository(repo.client).tracked(
-            [code for code, _, _ in BENCHMARKS], start - timedelta(days=10), report.end or start
+            BENCHMARK_SYMBOLS, start - timedelta(days=10), report.end or start
         )
         closes = {code: [(p.trade_date, p.value) for p in points] for code, points in found.items()}
     except Exception:  # noqa: BLE001 - a benchmark read never fails the report
@@ -870,12 +870,43 @@ def performance_report(repo: Any, account: dict[str, Any], since: date) -> Perfo
     return add_analytics(report, closes, lambda day: book.rate("USD", day)[0], start)
 
 
-# Benchmarks with daily closes in market.bars (Schwab, USD). Price series: no dividends.
-BENCHMARKS: list[tuple[str, str, str]] = [
-    ("$SPX", "S&P 500", "Price index; excludes dividends"),
-    ("IWV", "Russell 3000 (IWV)", "ETF price; excludes dividends"),
-    ("RSP", "S&P 500 equal weight (RSP)", "ETF price; excludes dividends"),
+@dataclass(frozen=True)
+class BenchmarkSpec:
+    """A benchmark: its Schwab symbols in order of preference (the first that covers the
+    period is used, so an index can stand in while an ETF's history backfills)."""
+
+    code: str
+    label: str
+    note: str
+    symbols: tuple[str, ...]
+    kind: Literal["equity", "cash"] = "equity"
+
+
+# Daily closes in market.bars (Schwab, USD). Equity ETFs are price series (distributions
+# are not ingested); BOXX accrues instead of distributing, so its price is a total return.
+BENCHMARKS: list[BenchmarkSpec] = [
+    BenchmarkSpec(
+        "sp500",
+        "S&P 500 (SPY)",
+        "ETF price; excludes about 1.1% a year of dividends",
+        ("SPY", "$SPX"),
+    ),
+    BenchmarkSpec(
+        "global", "Global equity (VT)", "ETF price; excludes about 2% a year of dividends", ("VT",)
+    ),
+    BenchmarkSpec(
+        "sp500_ew", "S&P 500 equal weight (RSP)", "ETF price; excludes dividends", ("RSP",)
+    ),
+    BenchmarkSpec(
+        "cash",
+        "Cash (BOXX)",
+        "T-bill-like box-spread fund; accrues rather than distributes, so this is a total return",
+        ("BOXX",),
+        "cash",
+    ),
 ]
+BENCHMARK_SYMBOLS = sorted({symbol for spec in BENCHMARKS for symbol in spec.symbols})
+SYMBOL_LABEL = {"$SPX": "S&P 500 (index)"}
 
 
 def add_analytics(
@@ -884,27 +915,40 @@ def add_analytics(
     usd_rate: Callable[[date], float | None],
     start: date,
 ) -> Performance:
-    """Add statistical risk and benchmarks (USD closes converted with ``usd_rate``)."""
+    """Add statistical risk and benchmarks (USD closes converted with ``usd_rate``).
+
+    Beta and the risk-matched line use the first equity benchmark; cash never sets beta."""
     days = [point.date for point in report.nav]
     benchmarks: list[Benchmark] = []
     primary: list[float | None] | None = None
     primary_label: str | None = None
-    for code, label, note in BENCHMARKS:
-        series = closes.get(code) or []
-        if not series:
-            continue
-        values = benchmark_values(days, series, usd_rate)
-        base = benchmark_values([start], series, usd_rate)[0]
-        points = rebased(days, values, base)
-        if not points:
-            continue
-        twr = points[-1].value
-        excess = report.twr - twr if report.twr is not None else None
-        benchmarks.append(
-            Benchmark(code=code, label=label, note=note, twr=twr, excess=excess, points=points)
-        )
-        if primary is None:
-            primary, primary_label = daily_changes(values, base), label
+    for spec in BENCHMARKS:
+        for symbol in spec.symbols:
+            series = closes.get(symbol) or []
+            values = benchmark_values(days, series, usd_rate) if series else []
+            base = benchmark_values([start], series, usd_rate)[0] if series else None
+            if base is None or not values or values[-1] is None:
+                continue  # this symbol does not cover the period: try the next
+            points = rebased(days, values, base)
+            twr = points[-1].value
+            label = (
+                SYMBOL_LABEL.get(symbol, spec.label) if symbol != spec.symbols[0] else spec.label
+            )
+            benchmarks.append(
+                Benchmark(
+                    code=spec.code,
+                    label=label,
+                    note=spec.note
+                    if symbol == spec.symbols[0]
+                    else "Price index; excludes dividends",
+                    twr=twr,
+                    excess=report.twr - twr if report.twr is not None else None,
+                    points=points,
+                )
+            )
+            if primary is None and spec.kind == "equity":
+                primary, primary_label = daily_changes(values, base), label
+            break
     risk = risk_stats(
         [(point.date, point.twr, point.ret) for point in report.nav],
         report.closing_nav,
