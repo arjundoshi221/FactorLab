@@ -142,6 +142,20 @@ it("reads the Gateway's account-wide unrealized PnL from the BASE ledger row, no
   expect(overview.getByText("Unrealized").parentElement).toHaveTextContent("Broker-reported, all positions");
 });
 
+it("sums every position's unrealized PnL at its Flex FX rate when the broker sends no account-wide figure", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const path = new URL(url, "http://localhost");
+    if (path.pathname.endsWith("/positions")) return { ok: true, json: async () => snapshot([
+      { trading_symbol: "LLY", position: 30, market_value: "41482.50", unrealized_pnl: "100.00", currency: "INR", fx_rate_to_base: "0.5" },
+      { trading_symbol: "TCS", position: 5, market_value: "-90000.00", unrealized_pnl: "-40.00", currency: "INR", fx_rate_to_base: "0.5" }]) };
+    return { ok: true, json: async () => response(url) };
+  }));
+  render(<Portfolio />);
+  const overview = within(await screen.findByLabelText("Account overview"));
+  expect(await overview.findByText("30.00")).toHaveClass("portfolio-amount--positive");
+  expect(overview.getByText("Unrealized").parentElement).toHaveTextContent("Sum of broker-reported positions, at broker FX");
+});
+
 it("shows unknown, not zero, when no position is in the base currency", async () => {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     const path = new URL(url, "http://localhost");

@@ -96,8 +96,17 @@ class PortfolioRepository:
                 "SELECT broker_code, account_id, user_id, simulated FROM ref.broker_account_owners FINAL"
             )
         }
+        # base_currency and booking_country are FixedString columns and arrive as bytes;
+        # str(b"SGD") would be "b'SGD'" and silently break currency matching downstream.
         registered = {
-            (account["broker_code"], account["account_id"]): account
+            (account["broker_code"], account["account_id"]): {
+                **account,
+                **{
+                    field: account[field].rstrip(b"\0").decode("ascii", "replace")
+                    for field in ("base_currency", "booking_country")
+                    if isinstance(account.get(field), bytes)
+                },
+            }
             for account in self.query(
                 "SELECT broker_code, account_id, account_mode, base_currency, booking_country, active FROM ref.broker_accounts FINAL"
             )

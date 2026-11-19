@@ -102,3 +102,10 @@ def test_equity_rejects_unknown_range_and_foreign_profile(make_api):
         client.get(f"/hub/api/v1/portfolio/accounts/ibkr/U1/equity?user_id={other}").status_code
         == 404
     )
+
+
+def test_account_decodes_fixed_string_base_currency():
+    # ClickHouse returns FixedString(3) as bytes; str(b"SGD") is "b'SGD'", which made every
+    # YTD PnL group unconvertible on the Overview (no FX rate quotes "SGD" in base "b'SGD'").
+    account = PortfolioRepository(Client(base_currency=b"SGD")).account("ibkr", "U1", USER)
+    assert account["base_currency"] == "SGD"

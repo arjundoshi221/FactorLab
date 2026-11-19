@@ -11,6 +11,7 @@ import { OrderTagging } from "./PortfolioBook";
 import { AccountTrades } from "./TradeHistory";
 import { Amount, EmptyState, PivotControl, PortfolioHeader, PortfolioIcon, ProfileSelect, setPortfolioQuery, usePortfolioRefresh } from "./PortfolioUI";
 import { exposureBy, type ExposureBucket } from "./exposurePivot";
+import { positionRate } from "./riskModel";
 import { attributeOf, pivotRows, useDimensions, usePivotParams } from "./pivot";
 import "./Portfolio.css";
 
@@ -66,16 +67,27 @@ function AccountMetrics({ account, summary, positions, orders, realized }: {
   const base = positions?.snapshot_time && currency ? positions.items.filter(row => row.currency === currency) : null;
   const baseRows = base?.length ? base : null;
   const brokerNumber = (name: string) => toNumber(metric(name) ?? null);
-  const unrealized = brokerNumber("UnrealizedPnL") ?? baseRows?.reduce((total, row) => total + (toNumber(row.unrealized_pnl) ?? 0), 0) ?? null;
+  // A Flex statement has no account-wide unrealized PnL, but each position carries its own and its
+  // `fx_rate_to_base` (else the broker's ExchangeRate, as on Risk). Use the sum only when every
+  // position converts; one unconvertible position falls back to the base-currency sum.
+  const converted = positions?.snapshot_time && currency && positions.items.length
+    ? positions.items.map(row => {
+      const pnl = toNumber(row.unrealized_pnl), rate = positionRate(currency, summary?.balances.items ?? [], String(row.currency ?? ""), row);
+      return pnl === null || rate === null ? null : pnl * rate;
+    }) : null;
+  const allPositions = converted?.every(value => value !== null) ? converted.reduce<number>((total, value) => total + (value ?? 0), 0) : null;
+  const unrealized = brokerNumber("UnrealizedPnL") ?? allPositions ?? baseRows?.reduce((total, row) => total + (toNumber(row.unrealized_pnl) ?? 0), 0) ?? null;
   const gross = brokerNumber("GrossPositionValue") ?? baseRows?.reduce((total, row) => total + Math.abs(toNumber(row.market_value) ?? 0), 0) ?? null;
   const fromBroker = (name: string) => brokerNumber(name) !== null;
+  const unrealizedNote = fromBroker("UnrealizedPnL") ? "Broker-reported, all positions"
+    : allPositions !== null ? "Sum of broker-reported positions, at broker FX" : `Broker-reported, ${currency || "base"} positions`;
   return <dl className="portfolio-overview" aria-label="Account overview">
     <div className="portfolio-overview__hero"><dt>Net liquidation <span>{currency}</span></dt><dd><Amount value={metric("NetLiquidation")} /></dd><small>Broker account value</small></div>
     <div><dt>Cash balance <span>{currency}</span></dt><dd><Amount value={metric("TotalCashValue")} /></dd><small>Total broker-reported cash</small></div>
     <div><dt>Gross exposure <span>{currency}</span></dt><dd>{gross === null ? "—" : compactMoney(gross)}</dd><small>{fromBroker("GrossPositionValue") ? "Broker-reported, all positions" : `Sum of |market value|, ${currency || "base"} positions`}</small></div>
     <div><dt>Open positions</dt><dd>{positions?.snapshot_time ? positions.items.length : "—"}</dd><small>In the latest snapshot</small></div>
     <div><dt>Working orders</dt><dd>{orders?.snapshot_time ? orders.items.length : "—"}</dd><small>In the latest snapshot</small></div>
-    <PnlSplit currency={currency} unrealized={unrealized} unrealizedNote={fromBroker("UnrealizedPnL") ? "Broker-reported, all positions" : `Broker-reported, ${currency || "base"} positions`} realized={realized} />
+    <PnlSplit currency={currency} unrealized={unrealized} unrealizedNote={unrealizedNote} realized={realized} />
   </dl>;
 }
 
