@@ -12,7 +12,7 @@ USER = "d677331a-a04f-454a-8a1e-02425be2c101"
 
 
 class Client:
-    def __init__(self, base_currency="USD"):
+    def __init__(self, base_currency: str | bytes | None = "USD"):
         self.base_currency = base_currency
         self.calls = []
 
